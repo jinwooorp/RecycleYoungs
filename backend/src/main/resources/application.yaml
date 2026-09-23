@@ -1,3 +1,6 @@
 spring:
   application:
     name: backend
+app:
+  cors:
+    allowed-origins: ${FRONTEND_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
