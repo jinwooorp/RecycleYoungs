@@ -1,0 +1,66 @@
+// use prisma-8
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 1. 점포 데이터 (소상공인시장진흥공단 상가 정보)
+model Store {
+  id           String  @id @default(uuid())
+  storeName    String  // 상호명
+  industryCode String  // 업종 분류 코드
+  industryName String  // 업종명 (카페, 한식, 미용실 등)
+  address      String  // 도로명 주소
+  latitude     Float   // 위도
+  longitude    Float   // 경도
+
+  // PostGIS 공간 인덱스용 Point Geometry (SRID 4326 = WGS84)
+  location     Unsupported("geometry(Point, 4326)")?
+
+  createdAt    DateTime @default(now())
+
+  @@index([industryName])
+  @@index([location], type: Gist) // 반경 Spatial Query 속도 최적화
+}
+
+// 2. 서울시 상권 정보
+model CommercialArea {
+  id         String        @id // 상권코드 (예: "3110001")
+  areaName   String        // 상권명
+  areaType   String        // 상권구분 (골목상권, 발달상권 등)
+  metrics    AreaMetrics[]
+}
+
+// 3. 서울시 상권분석 분기 통계 (매출, 인구, 집객시설)
+model AreaMetrics {
+  id                 String         @id @default(uuid())
+  areaId             String         // 상권코드 FK
+  commercialArea     CommercialArea @relation(fields: [areaId], references: [id])
+  year               Int            // 연도 (예: 2024)
+  quarter            Int            // 분기 (예: 1, 2, 3, 4)
+
+  // 시장 수요
+  monthlySales       BigInt?        // 추정 총 매출액
+  salesCount         Int?           // 추정 매출 건수
+  footTraffic        Int?           // 유동인구
+  residentPopulation Int?           // 상주인구
+  workPopulation     Int?           // 직장인구
+
+  // 경쟁 & 성장성
+  openStores         Int?           // 개업 점포 수
+  closeStores        Int?           // 폐업 점포 수
+  totalStores        Int?           // 전체 점포 수
+
+  // 접근성
+  subwayCount        Int?           // 지하철역 수
+  busStopCount       Int?           // 버스정류장 수
+
+  createdAt          DateTime       @default(now())
+
+  @@unique([areaId, year, quarter])
+}

@@ -1,0 +1,36 @@
+{
+  "name": "recycleyoungs",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "import:stores": "tsx scripts/import-stores.ts",
+    "import:sales": "tsx scripts/import-sales.ts",
+    "import:population": "tsx scripts/import-population.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jinwooorp/RecycleYoungs.git"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/jinwooorp/RecycleYoungs/issues"
+  },
+  "homepage": "https://github.com/jinwooorp/RecycleYoungs#readme",
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@prisma/client": "^7.10.0",
+    "csv-parse": "^7.0.2",
+    "dotenv": "^18.0.3",
+    "format": "^0.2.2",
+    "pg": "^8.23.0",
+    "pg-format": "^1.0.4"
+  }
+}
