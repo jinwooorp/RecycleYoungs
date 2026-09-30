@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: startup-analysis-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-startup_analysis}
+      POSTGRES_USER: ${DB_USER:-app}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-app}
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  etl:
+    profiles: ["etl"]
+    build:
+      context: ./etl
+    container_name: startup-analysis-etl
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-startup_analysis}
+      DB_USER: ${DB_USER:-app}
+      DB_PASSWORD: ${DB_PASSWORD:-app}
+      DATA_DIR: /app/data/raw/dataset
+      AREA_SOURCE_CRS: ${AREA_SOURCE_CRS:-}
+      STORE_CHUNK_SIZE: ${STORE_CHUNK_SIZE:-50000}
+    volumes:
+      - ./data:/app/data:ro
+
+volumes:
+  postgres_data:

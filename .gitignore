@@ -1,0 +1,32 @@
+# Dependencies and build output
+node_modules/
+dist/
+build/
+.gradle/
+.venv/
+venv/
+
+# Python runtime files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local configuration
+.env
+.env.*
+!.env.example
+.DS_Store
+.idea/
+*.log
+
+# Local datasets; keep the input directory in Git.
+/dataset.zip
+/data/archives/
+/data/processed/
+/data/raw/*
+!/data/raw/README.md
+!/data/raw/dataset/
+/data/raw/dataset/*
+!/data/raw/dataset/.gitkeep
