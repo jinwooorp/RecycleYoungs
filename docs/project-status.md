@@ -1,15 +1,15 @@
 # 프로젝트 분석·정리 기록
 
-확인일: 2026-10-03(Asia/Seoul). 이전 검증과 이번 검증은 아래에서 구분합니다.
+확인일: 2026-10-04(Asia/Seoul). 이전 검증과 이번 검증은 아래에서 구분합니다.
 
 ## 전체 분석
 
-프로젝트는 개발 골격과 원본 CSV·초기 스키마·ETL이 있는 단계입니다. 행정동 조회 API는 실제 DB로 검증했으며 React 서비스 화면 연결은 아직 없습니다. 초기 기능은 같은 행정동·업종·분기의 매출과 점포 통계를 조회하는 흐름으로 진행할 수 있습니다.
+행정동 자료 적재·DB migration·조회 API와 React 조건 선택·결과 표를 실제 데이터로 연결했습니다. 같은 행정동·업종·분기의 점포·추정매출을 조회할 수 있으며 공통 4개 분기 추세와 새 환경의 전체 흐름 재현은 다음 단계입니다.
 
 | 영역 | 확인한 상태 | 우선 남은 일 |
 | --- | --- | --- |
-| Backend | CORS·JdbcClient·Flyway, 목록·통계 API 4개, 일반/실제 DB/API 테스트 | React 연동 지원 |
-| Frontend | Vite 템플릿·개발 프록시 | 조건 선택·결과 표·상태 처리 |
+| Backend | CORS·JdbcClient·Flyway, 목록·통계 API 4개, 일반/실제 DB/API 테스트 | 공통 분기 추세·재현 지원 |
+| Frontend | 조건 선택·점포/추정매출 표, 상태 처리·개발 프록시 | 공통 4개 분기 추세 |
 | ETL | CSV 사전 검사·선택 실행·변환·일괄 트랜잭션, 행정동 매출·점포 실제 DB 검증 완료 | 나머지 자료의 실제 적재 검증 |
 | DB | 7개 테이블·인덱스·서울시 업종 4개 매핑 | 출처·적재 이력·스냅샷 버전·경계 |
 | 원본 | CSV 6개, 해시·행 수·기간·코드 연결 확인 | 좌표계·단위·경계 버전·이용 조건 확인 |
@@ -142,3 +142,25 @@ checksum은 내부 id를 포함한 `to_jsonb(t)`를 복합 키(분기·행정동
 컴파일 warning은 없었고 테스트 JVM은 Mockito가 사용하는 bootstrap classpath에 대한 CDS 안내 warning을 출력했습니다. 코드·DB 오류가 아니며 테스트는 모두 통과했습니다. 원본 CSV·ETL·frontend·Flyway SQL·dependency·DB volume을 변경하지 않았습니다. 출처·dataset metadata 유예는 그대로이며 React·추세·공간 분석·점수는 검증하지 않았습니다. 로드맵 5단계를 완료했고 다음은 6단계입니다. commit·push는 하지 않았습니다.
 
 후속 작업과 완료 기준은 [로드맵](roadmap.md), 실행 방법은 [개발 안내](development.md)를 확인합니다.
+
+## 2026-10-04 React 조건 선택·결과 표 검증
+
+시작 시 `main`·HEAD `d808b76`의 작업 디렉터리는 깨끗했고 기존 PostgreSQL은 healthy였습니다. Vite starter를 React core·fetch·AbortController·Vanilla CSS 화면으로 교체했습니다. 타입·API client·상태 hook·폼·결과를 분리하고 기존 네 API와 `/api` 프록시만 사용했습니다. 테스트용 Vitest·React Testing Library·jest-dom·jsdom을 개발 의존성에 추가했고 production 의존성은 React/React DOM으로 유지했습니다.
+
+| 검증 | 실제 결과 |
+| --- | --- |
+| 자동 테스트 | 화면·API client 36개 통과: 병렬 lookup·미선택·조회·로딩·재시도·400/500/network 오류·잘못된 JSON·INTEGER/BIGINT 경계·NULL/0·부분/전체 NO_ROW·취소/늦은 응답 |
+| BIGINT 경계 | `9007199254740993` → `9,007,199,254,740,993원`, Number 변환 없음; 계약 밖의 숫자·문자열은 오류로 처리 |
+| Frontend 검증 | `npm run lint`, `npm run test`, `npm run build` 통과; strict TypeScript NULL 검사 활성화 |
+| 실제 lookup | 브라우저에 행정동 425개·내부 업종 4개·분기 4개 표시, 세 조건은 미선택으로 시작 |
+| 정상 실제 화면 | 청운효자동/CAFE/20251: 점포 114개, 추정매출 4,535,266,422원, 매출 건수 302,642건 |
+| 부분 NO_ROW | 면목5동/CAFE/20251: 점포 17개·개폐업 0개, 매출 영역만 자료 없음 |
+| 전체 NO_ROW | 신정6동/PUB/20251: 기준 조건 유지, 양쪽 자료 없음, HTTP 200 |
+| 실제 프록시 | Vite 주소에서 목록 3개·위 통계 3개·미정의 query의 400 INVALID_PARAMETER 응답 대조 |
+| 오류/복구 | 검증용 Spring 일시 중단 시 통계 오류와 lookup 오류 구분, Spring 재시작 후 목록 다시 시도·조회 복구 |
+| 브라우저 | 초기 loading·선택·조회·결과 확인, 정상 조회 console error 없음. 실패 주입의 proxy 500은 예상 오류이며 390px/1280px 가로 넘침 없음 |
+| 기존 DB | 점포 141,218행·매출 67,113행, 전체 행 checksum·대표 샘플·Flyway baseline 1 이력 동일 |
+
+checksum은 5단계와 같은 `to_jsonb(t)`·복합 키 정렬 기준으로 점포 `b7419d5c6d318eb63ba117d67eaf8110`, 매출 `e22cd2c794f2bef23efd3de54c5af957`가 유지됐습니다. 현 DB에는 대상 metric NULL·2^53 초과 샘플이 없어 이 경계와 순수 network 실패는 frontend 자동 테스트로 검증했습니다. 격리 DB나 기존 데이터를 변경하지 않았습니다.
+
+backend production/test·API 계약·Flyway SQL·DB schema·ETL·CSV·volume은 변경하지 않았습니다. roadmap 6단계를 완료했고 다음은 공통 4개 분기 추세와 새 환경 vertical slice 재현입니다. 지도·점수·metadata UI는 구현하지 않았으며 commit·push하지 않았습니다.

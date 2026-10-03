@@ -58,12 +58,19 @@ npm ci
 npm run dev
 ```
 
-기본 주소는 Vite 5173, Spring 8080, DB 5432입니다. DB는 localhost에 바인딩합니다. Spring은 JDBC로 공용 DB에 연결하고 Flyway 이력을 검증·적용합니다. 통계 API는 아직 없으므로 실행만으로 실제 분석 기능이 제공되지는 않습니다.
+기본 주소는 Vite 5173, Spring 8080, DB 5432입니다. DB는 localhost에 바인딩합니다. Spring은 JDBC로 공용 DB에 연결하고 Flyway 이력을 검증·적용합니다. React는 `/api` 개발 프록시를 통해 목록·행정동 통계를 조회합니다. 세 조건을 선택한 뒤 조회하기를 누릅니다([Frontend 안내](../frontend/README.md)).
 
 ## 검증
 
 ```sh
 make check-frontend
+```
+
+위 명령은 lint·build를 실행합니다. frontend의 화면·API client 테스트는 DB 없이 별도로 실행합니다.
+
+```sh
+cd frontend
+npm run test
 ```
 
 ```sh

@@ -30,7 +30,9 @@
 
 서비스 DB는 하나를 사용하고 자료별 테이블로 구분합니다. 스키마의 단일 기준은 `backend/src/main/resources/db/migration/`의 Flyway SQL입니다. 기존 `sql/001_schema.sql`은 내용 변경 없이 `V1__initial_schema.sql`로 이전했습니다. Spring과 독립 migration 명령이 같은 SQL을 사용하며 Compose는 초기 SQL을 실행하지 않습니다. 기존 DB는 V1 구조 대조 후 명시적 baseline 1로 편입했습니다.
 
-Spring 조회는 JdbcClient로 SQL을 직접 작성합니다. 통계 ETL의 연도별 DELETE/재삽입으로 내부 `id`는 바뀔 수 있으므로 DB의 안정적인 조회 기준은 행정동 코드·서울시 업종 코드·분기입니다. [API 계약](api-contract.md)의 외부 식별자는 행정동 code·내부 업종 code·문자열 분기이며, 단일 서울시 매핑으로 DB 키와 연결합니다. surrogate `id`는 노출하지 않고 모호한 매핑을 임의 합산하지 않습니다. 행정동 lookup·통계 API 4개는 이 계약으로 구현했고 React 연결은 다음 단계입니다.
+Spring 조회는 JdbcClient로 SQL을 직접 작성합니다. 통계 ETL의 연도별 DELETE/재삽입으로 내부 `id`는 바뀔 수 있으므로 DB의 안정적인 조회 기준은 행정동 코드·서울시 업종 코드·분기입니다. [API 계약](api-contract.md)의 외부 식별자는 행정동 code·내부 업종 code·문자열 분기이며, 단일 서울시 매핑으로 DB 키와 연결합니다. surrogate `id`는 노출하지 않고 모호한 매핑을 임의 합산하지 않습니다. 행정동 lookup·통계 API 4개와 React 조건 선택·결과 표를 이 계약으로 연결했습니다.
+
+React는 작은 fetch client·상태 hook·폼/결과 component로 나눕니다. lookup은 병렬 요청하고 통계는 명시적 조회 버튼으로 요청합니다. 조건 변경·새 조회·unmount 시 이전 결과와 요청을 정리합니다. BIGINT는 상태에서 string을 유지하고 범위 검증·표시에 BigInt를 사용합니다. 행 없음·metric NULL·실제 0·요청 실패는 각각 구분하며 Vanilla CSS 표현을 교체해도 API/state logic을 유지할 수 있습니다. 지도·추세·metadata UI는 아직 없습니다.
 
 | 자료 | 키·공간 단위 |
 | --- | --- |
