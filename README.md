@@ -24,7 +24,7 @@ RecycleYoungs/
 
 | 영역 | 현재 기능 | 다음 작업 |
 | --- | --- | --- |
-| Backend | 실행 클래스, CORS, JdbcClient·Flyway, 실제 DB smoke test | API 계약·통계 조회 API |
+| Backend | 실행 클래스, CORS, JdbcClient·Flyway, 실제 DB smoke test, API 계약 문서 | 통계 조회 API 구현 |
 | Frontend | Vite 기본 화면, `/api` 프록시 | 조건 선택·통계 표·오류 상태 |
 | ETL | 입력 검증, 업종 매핑, 좌표 변환, 행정동 실제 적재·복구 검증 | 나머지 자료의 실제 DB 적재 검증 |
 | DB | 7개 테이블, 공간·조회 인덱스, 서울시 업종 4개 매핑 | 적재 이력·스냅샷 버전·상권 경계 |
@@ -88,6 +88,7 @@ React는 `http://localhost:5173`, Spring은 `http://localhost:8080`을 사용합
 - [아키텍처와 분석 정책](docs/architecture.md): 역할, 공간·기간·점수 기준
 - [데이터 목록](docs/data-catalog.md): 실제 파일, 연결 검사, 출처와 한계
 - [구현 로드맵](docs/roadmap.md): 현재 완료 항목과 다음 단계
+- [행정동 API 계약](docs/api-contract.md): 목록·통계 조회, 식별자·결측·오류·metadata 범위
 - [ETL 안내](etl/README.md): 입력 검증, 선택 적재, 테스트
 - [DB 스키마 안내](sql/README.md): 초기화와 마이그레이션 전환
 - [이전 코드 보존 안내](legacy/README.md): 기존 실험 프로젝트

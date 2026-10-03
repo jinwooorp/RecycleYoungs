@@ -40,6 +40,6 @@ cd backend
 
 일반 `test`는 DB 자동 설정을 제외한 context 검사입니다. 별도 `dbTest`는 실제 JdbcClient 조회·업종 매핑·PostGIS와 Flyway 상태를 확인하며 기본 기대 건수는 141,218/67,113입니다. 다른 DB는 `DB_HOST`·`DB_PORT`·`DB_NAME`과 `EXPECTED_STORE_STATS_ROWS`·`EXPECTED_SALES_ROWS`를 지정합니다. 새 DB 검증에서는 두 기대 건수를 0으로 설정합니다. `dbTest`는 매번 실행하며 기본 `test`나 `build`에 포함되지 않습니다.
 
-통계 ETL 재실행 시 내부 `id`가 재발급되므로 stable identifier로 가정하거나 외부 식별자로 사용하지 않습니다. 논리적 조회 기준은 `quarter_code + dong_code + source_industry_code`이며 API 표현은 다음 계약 단계에서 결정합니다.
+통계 ETL 재실행 시 내부 `id`가 재발급되므로 stable identifier로 가정하거나 외부 식별자로 사용하지 않습니다. DB 조회 기준은 `quarter_code + dong_code + source_industry_code`이며 [API 계약](../docs/api-contract.md)은 내부 업종 code·문자열 행정동/분기와 BIGINT 문자열을 사용합니다. 계약만 확정했고 API 구현은 다음 단계입니다.
 
 프로젝트 전체 실행은 [루트 README](../README.md), 정책은 [아키텍처](../docs/architecture.md)를 확인합니다.
