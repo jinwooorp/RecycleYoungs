@@ -2,7 +2,7 @@
 
 공공데이터로 서울의 창업 후보지를 비교하는 팀 프로젝트입니다. 서비스 가칭은 **“여기 창업해도 돼?”**입니다.
 
-현재는 Spring·React 개발 골격, PostgreSQL/PostGIS 초기 스키마, CSV 검증·적재용 Python ETL이 준비되어 있습니다. 원본 CSV 6개를 확보했고 **행정동 매출·점포의 실제 DB 적재·원본 대조·재실행·rollback 검증을 마쳤으며, 분석 API·서비스 화면 연결은 아직 완료되지 않았습니다.**
+현재는 Spring·React 개발 골격, PostgreSQL/PostGIS·Flyway 스키마 관리, CSV 검증·적재용 Python ETL이 준비되어 있습니다. **행정동 매출·점포 적재 검증과 Spring JDBC의 실제 DB 연결, 기존·새 DB migration 검증을 마쳤으며, 분석 API·서비스 화면 연결은 아직 완료되지 않았습니다.**
 
 ## 구성
 
@@ -11,7 +11,7 @@ RecycleYoungs/
 ├── backend/               # Spring Boot API (Java 21)
 ├── frontend/              # React + TypeScript + Vite
 ├── etl/                   # Python CSV 검증·수동 배치 적재
-├── sql/                   # 현재 개발 DB의 초기 스키마
+├── sql/                   # DB 준비·기존 DB baseline 안내
 ├── data/
 │   ├── manifest.json      # 원본 파일 해시·기간·건수
 │   └── raw/dataset/       # CSV는 Git 제외, .gitkeep만 추적
@@ -24,7 +24,7 @@ RecycleYoungs/
 
 | 영역 | 현재 기능 | 다음 작업 |
 | --- | --- | --- |
-| Backend | 실행 클래스, CORS, 기본 테스트 | DB 접근·마이그레이션·통계 조회 API |
+| Backend | 실행 클래스, CORS, JdbcClient·Flyway, 실제 DB smoke test | API 계약·통계 조회 API |
 | Frontend | Vite 기본 화면, `/api` 프록시 | 조건 선택·통계 표·오류 상태 |
 | ETL | 입력 검증, 업종 매핑, 좌표 변환, 행정동 실제 적재·복구 검증 | 나머지 자료의 실제 DB 적재 검증 |
 | DB | 7개 테이블, 공간·조회 인덱스, 서울시 업종 4개 매핑 | 적재 이력·스냅샷 버전·상권 경계 |
@@ -47,13 +47,19 @@ RecycleYoungs/
    make db
    ```
 
-4. DB에 연결하지 않고 CSV를 검증합니다.
+4. Spring 서버 없이 스키마를 준비합니다. 새 DB는 `db-migrate`로 V1부터 적용합니다. `db-baseline`은 V1과 동일하다고 검증된 기존 DB의 일회성 편입에만 사용하며 `CONFIRM_BASELINE=verified-v1`이 없으면 실행을 거부합니다([baseline 안내](sql/README.md)). 현재 검증된 개발 DB는 baseline 1 편입을 마쳤습니다.
+
+   ```sh
+   make db-migrate
+   ```
+
+5. DB에 연결하지 않고 CSV를 검증합니다.
 
    ```sh
    make etl-validate
    ```
 
-5. 처음에는 공간 좌표가 필요 없는 **행정동 매출·점포 통계**부터 적재합니다.
+6. 처음에는 공간 좌표가 필요 없는 **행정동 매출·점포 통계**부터 적재합니다. `make etl`은 적재 전에 migration 상태를 확인·적용합니다.
 
    ```sh
    make etl ETL_ARGS="--only store_stats_dong sales_dong"
@@ -61,7 +67,7 @@ RecycleYoungs/
 
 상권 좌표까지 적재하려면 원천 좌표계 메타데이터를 확인하고 `.env`의 `AREA_SOURCE_CRS`를 지정합니다. CSV 자체에는 좌표계가 기록되어 있지 않습니다. 선택한 작업들은 하나의 트랜잭션으로 처리하며 성공 시 반영됩니다.
 
-Spring과 React는 각각 별도 터미널에서 실행합니다.
+Spring과 React는 각각 별도 터미널에서 실행합니다. Spring 실행 전 `.env`와 같은 `DB_PASSWORD`를 셸·IDE 환경에 지정합니다. DB 기본값을 바꿨다면 나머지 `DB_*`도 맞춥니다([환경 설정](docs/development.md#설정)).
 
 ```sh
 make backend

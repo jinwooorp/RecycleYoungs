@@ -11,12 +11,35 @@ services:
       - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./sql:/docker-entrypoint-initdb.d:ro
+    # Schema and extensions come from Flyway, not the image's init scripts.
+    tmpfs:
+      - /docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 5s
       timeout: 5s
       retries: 20
+
+  db-migrate:
+    profiles: ["migration"]
+    # Match the Flyway version managed by Spring Boot 4.1.1.
+    image: flyway/flyway:12.4.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-startup_analysis}
+      FLYWAY_USER: ${DB_USER:-app}
+      FLYWAY_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the project .env}
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+      FLYWAY_SCHEMAS: public
+      FLYWAY_DEFAULT_SCHEMA: public
+      FLYWAY_BASELINE_VERSION: "1"
+      FLYWAY_BASELINE_ON_MIGRATE: "false"
+      FLYWAY_CLEAN_DISABLED: "true"
+    volumes:
+      - ./backend/src/main/resources/db/migration:/flyway/sql:ro
+    command: migrate
 
   etl:
     profiles: ["etl"]

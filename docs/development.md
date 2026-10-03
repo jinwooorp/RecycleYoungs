@@ -15,12 +15,13 @@
 
 ## 설정
 
-`cp .env.example .env`로 로컬 설정을 생성합니다. `.env`는 Git에서 제외되며 Compose가 읽습니다.
+`cp .env.example .env`로 로컬 설정을 생성합니다. `.env`는 Git에서 제외됩니다. Compose는 루트 `.env`를 읽으며 프로세스 환경 변수로 덮어쓸 수 있습니다. Spring은 `.env`를 자동으로 읽지 않습니다. `make backend`·`make check-db`·Gradle 실행 전 셸·IDE의 프로세스 환경에 같은 `DB_PASSWORD`를 지정하고, 기본값을 바꿨다면 나머지 `DB_*`도 맞춥니다. 비밀번호에는 코드 기본값을 두지 않습니다. dotenv와 Java properties는 따옴표·escape 해석이 달라 `.env`를 properties로 import하지 않습니다.
 
 | 변수 | 의미 |
 | --- | --- |
 | `DB_NAME`, `DB_USER`, `DB_PASSWORD` | 공용 개발 DB 식별자·계정 |
 | `DB_PORT` | 호스트에서 DB에 접속할 포트, 컨테이너 내부는 5432 |
+| `DB_HOST` | Docker 밖의 Spring 접속 주소, 기본 localhost; ETL 컨테이너는 postgres |
 | `AREA_SOURCE_CRS` | 영역 CSV 원천 좌표계, 상권 좌표 적재 전 명시 |
 | `STORE_CHUNK_SIZE` | 개별 점포 CSV 청크 크기 |
 | `DATA_DIR` | 로컬 Python 실행 시 입력 폴더 변경, 기본 `data/raw/dataset/` |
@@ -34,11 +35,16 @@
 
 ```sh
 make db
+make db-migrate
 make etl-validate
 make etl ETL_ARGS="--only store_stats_dong sales_dong"
 ```
 
-DB 시작은 ETL을 자동으로 실행하지 않습니다. ETL은 선택 실행하는 Compose 서비스입니다. `make etl-validate`는 DB 컨테이너를 시작하거나 DB에 연결하지 않습니다. 처음에는 Docker 이미지 빌드와 패키지 내려받기에 네트워크가 필요합니다.
+DB 시작은 ETL을 자동으로 실행하지 않습니다. `make db-migrate`는 Flyway Docker로 backend SQL을 적용하며 Spring 서버·Java 실행이 필요 없습니다. `make etl`도 migration을 먼저 실행합니다. 초기 SQL로 만든 기존 DB의 일회성 편입은 [스키마 안내](../sql/README.md)를 확인하며, 새 DB에는 baseline을 실행하지 않습니다. `make db-info`로 버전과 상태를 조회합니다.
+
+`db-baseline`은 일반적인 새 DB 초기화 명령이 아닙니다. 기존 schema가 V1과 동일함을 검증한 뒤에만 `make db-baseline CONFIRM_BASELINE=verified-v1`을 사용합니다. 확인 값이 없거나 다르면 DB 명령을 실행하지 않고 실패합니다. 새 DB는 `make db-migrate`로 V1부터 적용합니다.
+
+ETL은 선택 실행하는 Compose 서비스입니다. `make etl-validate`는 DB 컨테이너를 시작하거나 DB에 연결하지 않습니다. 처음에는 Docker 이미지 빌드와 패키지 내려받기에 네트워크가 필요합니다.
 
 백엔드·프론트엔드는 각각 별도 터미널에서 실행합니다.
 
@@ -52,7 +58,7 @@ npm ci
 npm run dev
 ```
 
-기본 주소는 Vite 5173, Spring 8080, DB 5432입니다. DB는 localhost에 바인딩합니다. 아직 Spring에는 DB 연결·통계 API가 구현되지 않았으므로 실행만으로 실제 분석 기능이 제공되지는 않습니다.
+기본 주소는 Vite 5173, Spring 8080, DB 5432입니다. DB는 localhost에 바인딩합니다. Spring은 JDBC로 공용 DB에 연결하고 Flyway 이력을 검증·적용합니다. 통계 API는 아직 없으므로 실행만으로 실제 분석 기능이 제공되지는 않습니다.
 
 ## 검증
 
@@ -64,6 +70,14 @@ make check-frontend
 cd backend
 ./gradlew test
 ```
+
+일반 `test`의 context 검사는 DataSource/Flyway 자동 설정을 제외해 DB 없이 실행합니다. 실제 DB 검증은 별도 `dbTest` source set으로 분리했습니다. 행정동 자료를 적재한 개발 DB에서 다음을 실행합니다.
+
+```sh
+make check-db
+```
+
+`dbTest`는 JdbcClient로 141,218/67,113행, 업종 매핑·PostGIS와 Flyway version 1·validate·pending 없음 상태를 검사합니다. 다른 검증 DB를 사용할 때는 `DB_HOST`·`DB_PORT`·`DB_NAME`과 `EXPECTED_STORE_STATS_ROWS`·`EXPECTED_SALES_ROWS`를 환경으로 지정합니다. 새 빈 DB의 기대 행 수는 각각 0입니다. 테스트는 통계 데이터를 쓰지 않지만 Spring 시작 시 미적용 migration이 있으면 적용합니다.
 
 ETL 로컬 환경은 다음과 같이 준비합니다.
 
@@ -79,7 +93,7 @@ Gradle은 기본 사용자 캐시를 사용합니다. 실행 환경의 캐시 �
 
 ## Git와 원본 관리
 
-- 코드는 backend·frontend·etl, 스키마는 현재 sql, 문서는 docs에서 관리합니다.
+- 코드는 backend·frontend·etl, 스키마는 backend의 `db/migration`, 문서는 docs에서 관리합니다. sql에는 운영 안내만 둡니다.
 - `data/raw/dataset/.gitkeep`과 `data/raw/README.md`는 추적하며 실제 CSV·ZIP·정제 결과는 제외합니다.
 - 원본 CSV를 코드 정리 과정에서 수정하지 않습니다. 새 파일은 출처·기간·해시를 확인한 뒤 의도적으로 교체합니다.
 - `.env`, Python 캐시·가상환경, node_modules·빌드 결과는 제외합니다.

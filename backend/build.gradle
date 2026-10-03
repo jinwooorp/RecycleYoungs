@@ -20,8 +20,11 @@ repositories {
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    implementation 'org.springframework.boot:spring-boot-starter-flyway'
     compileOnly 'org.projectlombok:lombok'
     runtimeOnly 'org.postgresql:postgresql'
+    runtimeOnly 'org.flywaydb:flyway-database-postgresql'
     annotationProcessor 'org.projectlombok:lombok'
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testCompileOnly 'org.projectlombok:lombok'
@@ -31,4 +34,27 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+sourceSets {
+    dbTest {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
+configurations {
+    dbTestImplementation.extendsFrom testImplementation
+    dbTestRuntimeOnly.extendsFrom testRuntimeOnly
+}
+
+tasks.register('dbTest', Test) {
+    description = 'Run opt-in smoke tests against an actual PostgreSQL database'
+    group = 'verification'
+    testClassesDirs = sourceSets.dbTest.output.classesDirs
+    classpath = sourceSets.dbTest.runtimeClasspath
+    useJUnitPlatform()
+    // DB state and environment can change without changes to the test classes.
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
 }

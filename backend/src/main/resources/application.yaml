@@ -1,6 +1,19 @@
 spring:
   application:
     name: backend
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:startup_analysis}
+    username: ${DB_USER:app}
+    password: ${DB_PASSWORD}
+  flyway:
+    locations: classpath:db/migration
+    schemas: public
+    default-schema: public
+    baseline-on-migrate: false
+    clean-disabled: true
+  sql:
+    init:
+      mode: never
 app:
   cors:
     allowed-origins: ${FRONTEND_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
