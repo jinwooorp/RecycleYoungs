@@ -4,11 +4,11 @@
 
 ## 전체 분석
 
-프로젝트는 개발 골격과 원본 CSV·초기 스키마·ETL이 있는 단계입니다. Spring API와 React 서비스 화면의 연결은 아직 없습니다. 초기 기능은 같은 행정동·업종·분기의 매출과 점포 통계를 조회하는 흐름으로 진행할 수 있습니다.
+프로젝트는 개발 골격과 원본 CSV·초기 스키마·ETL이 있는 단계입니다. 행정동 조회 API는 실제 DB로 검증했으며 React 서비스 화면 연결은 아직 없습니다. 초기 기능은 같은 행정동·업종·분기의 매출과 점포 통계를 조회하는 흐름으로 진행할 수 있습니다.
 
 | 영역 | 확인한 상태 | 우선 남은 일 |
 | --- | --- | --- |
-| Backend | 실행 클래스·CORS·JdbcClient·Flyway, 일반/실제 DB 테스트, API 계약 문서 | 조회 API 구현 |
+| Backend | CORS·JdbcClient·Flyway, 목록·통계 API 4개, 일반/실제 DB/API 테스트 | React 연동 지원 |
 | Frontend | Vite 템플릿·개발 프록시 | 조건 선택·결과 표·상태 처리 |
 | ETL | CSV 사전 검사·선택 실행·변환·일괄 트랜잭션, 행정동 매출·점포 실제 DB 검증 완료 | 나머지 자료의 실제 적재 검증 |
 | DB | 7개 테이블·인덱스·서울시 업종 4개 매핑 | 출처·적재 이력·스냅샷 버전·경계 |
@@ -116,5 +116,29 @@ SQL 중심 집계·복합 키·향후 PostGIS 조회에 맞춰 Spring JDBC/JdbcC
 기간 metadata는 DB 분기만 제공하는 선택 A로 정했습니다. Dataset metadata 테이블·V2를 첫 API의 필수 선행 작업으로 두지 않고 출처·적재 이력·version 응답은 후속 DB 관리로 유예합니다. 보관 CSV의 상세 집계 정의·다운로드 이력은 추가 확인이 필요하며 공식 페이지의 현재 정보로 이를 대체하지 않습니다.
 
 문서만 갱신했습니다. API/DTO/SQL 구현·schema 변경·migration·ETL·React·API integration test·commit·push는 수행하지 않았습니다. 로드맵 4단계는 계약 확정, 다음은 5단계 API 구현입니다.
+
+## 2026-10-03 행정동 조회 API 구현·검증
+
+시작 시 `main`·HEAD `962b1f7`의 작업 디렉터리는 깨끗했고 기존 PostgreSQL 컨테이너는 healthy였습니다. [API 계약](api-contract.md)을 바꾸지 않고 `GET /api/admin-dongs`, `/api/industries`, `/api/quarters`, `/api/admin-dong-stats`를 구현했습니다. Controller·strict query 검증·Service·JdbcClient Repository·응답 record·공통 예외 처리로 책임을 나눴습니다.
+
+서울시 단일 매핑과 실제 통계 행을 기준으로 lookup을 만들고, 읽기 전용 REPEATABLE READ transaction으로 무결성 검사·목록·통계의 일관된 조회를 유지합니다. 최신 분기 이름을 사용하고 같은 분기에서는 점포 이름을 우선합니다. 모호한 매핑·industry_id 불일치·동일 테이블/분기/행정동 이름 충돌·중복 통계 행을 임의 선택하지 않습니다. DB INTEGER는 nullable number, BIGINT는 nullable 정확한 10진 문자열이며 자료가 없는 유효 조합은 200과 `NO_ROW`입니다.
+
+| 검증 | 결과 |
+| --- | --- |
+| TDD | 목록 MVC 테스트 4개·통계 MVC 테스트 8개·strict query 테스트 29개가 구현 전 404로 실패한 뒤 통과 |
+| 일반 `./gradlew test --rerun-tasks` | 33개 통과; 비밀번호 미지정·접속 불가 port에서도 통과 |
+| 기존 DB `./gradlew dbTest` | 연결/Flyway/PostGIS 3개 + 실제 MVC/JSON 13개 통과; 격리 fixture 10개는 기본 실행에서 제외 |
+| 정상 목록 | 행정동 425개, 내부 업종 CAFE/HAIR/KFOOD/PUB, 분기 20251~20254; code 정렬·응답 필드 확인 |
+| 정상 통계 | 청운효자동·CAFE·20251: 점포 114개, 추정매출 문자열 `4535266422`, 건수 문자열 `302642` 등 DB/계약 예시 일치 |
+| 자료 없음 | 면목5동·CAFE·20251의 매출만 NO_ROW, 신정6동·PUB·20251은 양쪽 NO_ROW; 모두 200 |
+| 입력 오류 | 필수값·빈 값·중복·미정의 query·형식·지원 여부·검증 우선순위 및 raw code/GYM 구분 확인 |
+| 격리 PostgreSQL fixture | 별도 컨테이너·임의 localhost port·tmpfs에 기존 V1 적용 후 10개 통과. NULL/0·`9007199254740993`·음수 BIGINT·명칭/매핑 오류·빈 lookup 확인. 테스트 transaction rollback 후 0/0행·매핑 4개 유지, 임시 컨테이너 정리, 기존 DB에 fixture 쓰기 없음 |
+| 중복 행 경계 | V1 UNIQUE를 제거하지 않고 query 경계만 대체한 단위 테스트로 DATA_INTEGRITY_ERROR 확인 |
+| 실제 HTTP | 목록 3개·정상 통계·부분/전체 NO_ROW·목록 미정의 query·잘못된 분기 등 8개 요청 통과, 검증 backend 종료 |
+| 기존 데이터 불변 | 점포 141,218행·매출 67,113행, 전체 행 checksum·Flyway baseline 1 이력·대표 샘플 동일 |
+
+checksum은 내부 id를 포함한 `to_jsonb(t)`를 복합 키(분기·행정동·원본 업종) 순으로 연결해 MD5로 비교했습니다. 시작/종료 값은 점포 `b7419d5c6d318eb63ba117d67eaf8110`, 매출 `e22cd2c794f2bef23efd3de54c5af957`로 같습니다. 이전 검증과 정렬 방식이 다르므로 이전 checksum과 직접 비교하지 않습니다.
+
+컴파일 warning은 없었고 테스트 JVM은 Mockito가 사용하는 bootstrap classpath에 대한 CDS 안내 warning을 출력했습니다. 코드·DB 오류가 아니며 테스트는 모두 통과했습니다. 원본 CSV·ETL·frontend·Flyway SQL·dependency·DB volume을 변경하지 않았습니다. 출처·dataset metadata 유예는 그대로이며 React·추세·공간 분석·점수는 검증하지 않았습니다. 로드맵 5단계를 완료했고 다음은 6단계입니다. commit·push는 하지 않았습니다.
 
 후속 작업과 완료 기준은 [로드맵](roadmap.md), 실행 방법은 [개발 안내](development.md)를 확인합니다.

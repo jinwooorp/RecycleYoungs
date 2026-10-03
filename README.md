@@ -2,7 +2,7 @@
 
 공공데이터로 서울의 창업 후보지를 비교하는 팀 프로젝트입니다. 서비스 가칭은 **“여기 창업해도 돼?”**입니다.
 
-현재는 Spring·React 개발 골격, PostgreSQL/PostGIS·Flyway 스키마 관리, CSV 검증·적재용 Python ETL이 준비되어 있습니다. **행정동 매출·점포 적재 검증과 Spring JDBC의 실제 DB 연결, 기존·새 DB migration 검증을 마쳤으며, 분석 API·서비스 화면 연결은 아직 완료되지 않았습니다.**
+현재는 Spring·React 개발 골격, PostgreSQL/PostGIS·Flyway 스키마 관리, CSV 검증·적재용 Python ETL이 준비되어 있습니다. **행정동 매출·점포 적재와 DB migration 검증을 마쳤고, 행정동·업종·분기 목록 및 통계 조회 API를 실제 PostgreSQL로 검증했습니다. React 서비스 화면 연결은 다음 단계입니다.**
 
 ## 구성
 
@@ -24,7 +24,7 @@ RecycleYoungs/
 
 | 영역 | 현재 기능 | 다음 작업 |
 | --- | --- | --- |
-| Backend | 실행 클래스, CORS, JdbcClient·Flyway, 실제 DB smoke test, API 계약 문서 | 통계 조회 API 구현 |
+| Backend | CORS, JdbcClient·Flyway, 목록·통계 API, 실제 DB/API 테스트 | React 연동 지원 |
 | Frontend | Vite 기본 화면, `/api` 프록시 | 조건 선택·통계 표·오류 상태 |
 | ETL | 입력 검증, 업종 매핑, 좌표 변환, 행정동 실제 적재·복구 검증 | 나머지 자료의 실제 DB 적재 검증 |
 | DB | 7개 테이블, 공간·조회 인덱스, 서울시 업종 4개 매핑 | 적재 이력·스냅샷 버전·상권 경계 |
@@ -79,7 +79,7 @@ npm ci
 npm run dev
 ```
 
-React는 `http://localhost:5173`, Spring은 `http://localhost:8080`을 사용합니다. `/api` 프록시·CORS 설정은 있지만 서비스 API는 아직 없습니다.
+React는 `http://localhost:5173`, Spring은 `http://localhost:8080`을 사용합니다. `/api` 프록시·CORS 설정과 계약에 따른 조회 API 4개가 있으며 React 서비스 화면은 아직 연결하지 않았습니다.
 
 ## 문서
 

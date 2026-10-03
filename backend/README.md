@@ -1,6 +1,6 @@
 # Backend
 
-Java 21·Spring Boot 프로젝트입니다. 현재 범위는 공용 PostgreSQL 연결·migration과 실제 DB smoke test입니다. Controller·API DTO·통계 조회 API는 아직 없습니다.
+Java 21·Spring Boot 프로젝트입니다. 현재 범위는 공용 PostgreSQL 연결·migration과 행정동 lookup·통계 조회 API 4개입니다. 계약은 [행정동 API 계약](../docs/api-contract.md)을 따릅니다.
 
 ## 선택한 방식
 
@@ -38,8 +38,31 @@ cd backend
 ./gradlew dbTest
 ```
 
-일반 `test`는 DB 자동 설정을 제외한 context 검사입니다. 별도 `dbTest`는 실제 JdbcClient 조회·업종 매핑·PostGIS와 Flyway 상태를 확인하며 기본 기대 건수는 141,218/67,113입니다. 다른 DB는 `DB_HOST`·`DB_PORT`·`DB_NAME`과 `EXPECTED_STORE_STATS_ROWS`·`EXPECTED_SALES_ROWS`를 지정합니다. 새 DB 검증에서는 두 기대 건수를 0으로 설정합니다. `dbTest`는 매번 실행하며 기본 `test`나 `build`에 포함되지 않습니다.
+일반 `test`는 DB 자동 설정을 제외하고 JdbcClient 경계만 대체한 context 검사와 strict query·오류 응답·중복 행 처리 검사입니다. DB 없이 실행됩니다. 별도 `dbTest`는 실제 JdbcClient 조회·업종 매핑·PostGIS·Flyway와 Spring MVC JSON 계약을 확인하며 기본 기대 건수는 141,218/67,113입니다. 다른 DB는 `DB_HOST`·`DB_PORT`·`DB_NAME`과 `EXPECTED_STORE_STATS_ROWS`·`EXPECTED_SALES_ROWS`를 지정합니다. 빈 DB의 연결 검증은 두 기대 건수를 0으로 설정하고 `--tests '*PostgresConnectionTests'`로 실행합니다. 현재 데이터에 대한 `AdminDongApiTests`는 검증된 populated DB를 사용합니다. `dbTest`는 매번 실행하며 기본 `test`나 `build`에 포함되지 않습니다.
 
-통계 ETL 재실행 시 내부 `id`가 재발급되므로 stable identifier로 가정하거나 외부 식별자로 사용하지 않습니다. DB 조회 기준은 `quarter_code + dong_code + source_industry_code`이며 [API 계약](../docs/api-contract.md)은 내부 업종 code·문자열 행정동/분기와 BIGINT 문자열을 사용합니다. 계약만 확정했고 API 구현은 다음 단계입니다.
+통계 ETL 재실행 시 내부 `id`가 재발급되므로 stable identifier로 가정하거나 외부 식별자로 사용하지 않습니다. DB 조회 기준은 `quarter_code + dong_code + source_industry_code`이며 [API 계약](../docs/api-contract.md)은 내부 업종 code·문자열 행정동/분기와 BIGINT 문자열을 사용합니다. 계약의 네 GET API를 구현했고 React 연결은 다음 단계입니다.
+
+## 조회 API와 테스트 범위
+
+`com.example.backend.admindong`의 Controller → Service → JdbcClient Repository로 구성합니다. 목록은 조회 가능한 서울시 매핑 범위의 합집합이며, 읽기 전용 REPEATABLE READ transaction에서 매핑·복합 키·행정동 이름 무결성을 확인한 후 목록/통계를 조회합니다. SQL 입력은 bind parameter를 사용합니다.
+
+- `GET /api/admin-dongs`, `/api/industries`, `/api/quarters`: 정렬된 lookup 배열, query가 있으면 400
+- `GET /api/admin-dong-stats?dongCode=11110515&industryCode=CAFE&quarterCode=20251`: 점포·추정매출 합동 응답
+- 구조 → 필수값 → 형식 → 지원 여부로 검증하며 BIGINT는 문자열, metric NULL·실제 0·부분/전체 `NO_ROW`를 구분합니다.
+- `test` 33개, populated DB `dbTest` 16개를 검증했습니다. 실제 HTTP smoke도 통과했습니다.
+
+`AdminDongFixtureTests` 10개는 `API_FIXTURE_TEST=true`이고 `DB_NAME`이 `recycleyoungs_api_fixture_`로 시작할 때만 활성화됩니다. 조건이 맞지 않으면 Spring context 초기화 전에 건너뜁니다. fixture test의 Spring context는 Flyway를 실행하지 않으므로 **V1을 미리 적용한 별도 격리 PostgreSQL을 준비해야 합니다**. NULL·큰 BIGINT·데이터 오류를 만들기 때문에 기존 populated DB에서는 실행하지 않습니다. fixture 쓰기 전 실제 DB 이름 prefix와 두 통계 테이블의 0행을 다시 확인하고 각 테스트의 변경을 rollback합니다.
+
+`recycleyoungs_api_fixture_local` 이름의 격리 DB를 준비한 뒤 `API_FIXTURE_PORT`·`API_FIXTURE_USER`·`API_FIXTURE_PASSWORD`를 그 DB의 값으로 지정합니다.
+
+```sh
+API_FIXTURE_TEST=true DB_NAME=recycleyoungs_api_fixture_local \
+  DB_HOST=localhost DB_PORT="${API_FIXTURE_PORT:?격리 DB port 지정}" \
+  DB_USER="${API_FIXTURE_USER:?격리 DB 계정 지정}" \
+  DB_PASSWORD="${API_FIXTURE_PASSWORD:?격리 DB 비밀번호 지정}" \
+  ./gradlew dbTest --tests '*AdminDongFixtureTests'
+```
+
+기존 volume을 재사용하거나 삭제하지 않습니다. 검증 후 직접 만든 격리 컨테이너만 정리합니다. API 계약·migration·ETL·React는 이 테스트로 변경하지 않습니다.
 
 프로젝트 전체 실행은 [루트 README](../README.md), 정책은 [아키텍처](../docs/architecture.md)를 확인합니다.

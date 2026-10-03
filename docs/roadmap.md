@@ -12,7 +12,7 @@
 - [x] 행정동 매출·점포 실제 PostgreSQL 적재·원본 수치·재실행·rollback 검증
 - [x] Spring JDBC/JdbcClient DB 접근·Flyway 책임 이전, 기존·새 DB 검증
 - [x] 행정동 목록·통계 API 계약 확정
-- [ ] 통계 조회 API 구현
+- [x] 행정동·업종·분기 목록과 통계 조회 API 구현
 - [ ] React 서비스 화면
 
 파일·스키마·ETL 코드가 존재하는 것과 서비스 연결 완료를 구분합니다. 전체 기능의 완료율을 임의로 계산하지 않습니다.
@@ -37,7 +37,9 @@
 
 3단계도 2026-10-03에 완료했습니다. JdbcClient·Flyway를 선택하고 초기 SQL을 backend V1로 이전했습니다. 기존 DB는 V1 대조 후 baseline 1로 편입했고 데이터 보존·Spring 조회를 확인했습니다. 별도 임시 DB에서 Spring 없이 migration 및 Spring 연결을 검증했습니다.
 
-4단계는 [행정동 API 계약](api-contract.md)으로 확정했습니다. 내부 업종 code·문자열 분기·BIGINT 문자열, 통계 부분별 NO_ROW와 metric NULL, 공통 오류를 결정하고 실제 DB와 예시를 대조했습니다. 첫 조회는 DB의 분기를 제공하며 출처·dataset version 응답은 후속 metadata 관리로 유예합니다. API는 아직 구현하지 않았고 다음 작업은 5단계의 목록·통계 조회 API 구현입니다.
+4단계는 [행정동 API 계약](api-contract.md)으로 확정했습니다. 내부 업종 code·문자열 분기·BIGINT 문자열, 통계 부분별 NO_ROW와 metric NULL, 공통 오류를 결정하고 실제 DB와 예시를 대조했습니다. 첫 조회는 DB의 분기를 제공하며 출처·dataset version 응답은 후속 metadata 관리로 유예합니다. 5단계의 목록·통계 조회 API도 실제 PostgreSQL과 Spring MVC/HTTP로 검증했습니다. 다음 작업은 6단계 React 조건 선택과 결과 표입니다.
+
+5단계는 네 GET API·JdbcClient 조회·strict query·정상/부분·전체 NO_ROW·BIGINT 문자열·NULL/0·무결성 오류 처리를 검증했습니다. 일반 테스트 33개, populated DB 테스트 16개, 격리 DB 경계값 테스트 10개, 실제 HTTP 요청 8개가 통과했고 기존 DB 건수·전체 행 checksum·Flyway 이력이 유지됐습니다([검증 결과](project-status.md)). API 계약·V1·ETL·React는 변경하지 않았습니다.
 
 3단계에서 출처·기간 메타데이터의 제공 경로와 DB 관리 필요 여부, 상세 적재 이력·스냅샷 버전 관리의 후속 연결을 검토했습니다([설계와 남은 결정](architecture.md)). 최소 dataset metadata 테이블은 아직 도입하지 않았습니다. 사용자 API 요청 중 원본 CSV를 직접 읽지 않으며 React는 DB에 직접 접근하지 않습니다. 결측은 임의로 0으로 바꾸지 않습니다.
 
