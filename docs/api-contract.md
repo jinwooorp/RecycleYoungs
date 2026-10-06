@@ -2,6 +2,8 @@
 
 확정일: 2026-10-03. 로드맵 1차 4단계에서 확정한 계약이며, 5단계 API 구현과 6단계 React 연결을 완료했습니다. PostgreSQL의 V1 스키마와 적재 데이터를 대조했습니다.
 
+현재 구현된 GET API는 아래의 목록 3개와 단건 통계 1개, 총 4개입니다. 2026-10-06에 확정한 [공통 4개 분기 추세 계약](#행정동-공통-4개-분기-추세-api)은 다음 구현 대상 1개이며 아직 production endpoint가 없습니다. 추세 구현 후 GET API는 총 5개가 됩니다. 로드맵 7단계의 화면·새 환경 재현은 완료하지 않았습니다.
+
 ## 범위와 공통 규칙
 
 첫 화면은 같은 행정동·내부 업종·분기의 점포와 추정매출을 함께 조회합니다. 상권 통계·개별 매장·거리·Polygon·점수·추천은 포함하지 않습니다. 행정동과 상권을 하나의 통계 리소스로 추상화하지 않습니다.
@@ -220,3 +222,321 @@ number는 DB INTEGER 범위의 정수이며 BIGINT 문자열은 부호를 포함
 | 식별자 | DB의 복합 키는 원본 업종 기준, 외부는 내부 업종 기준. 단일 서울시 매핑으로 대응하며 surrogate id는 반환하지 않음 |
 
 SQL·Repository·DTO Java는 5단계에서 구현했습니다. 테스트는 정상·입력 오류·부분/전체 NO_ROW·metric NULL·0·BIGINT 정밀도와 매핑 오류를 구분하며, 실제 DB/API integration 검증 결과는 [프로젝트 기록](project-status.md)에 있습니다.
+
+## 행정동 공통 4개 분기 추세 API
+
+계약 확정일: 2026-10-06. 로드맵 7단계 중 API 계약만 확정합니다. Backend·Frontend 구현, migration·ETL 변경, 전체 흐름의 새 환경 재현은 수행하지 않았습니다. 위 네 API의 경로·지원 범위·응답·오류 계약은 유지합니다.
+
+### endpoint와 선택 근거
+
+```text
+GET /api/admin-dong-trends?dongCode=11110515&industryCode=CAFE
+```
+
+행정동 하나와 내부 업종 하나의 **2025년 4개 분기**를 하나의 리소스로 반환합니다. 행정동 2~3곳은 같은 업종·기간으로 이 endpoint를 각 행정동에 한 번씩 요청합니다. 후보 비교·다중 행정동 batch API·상권 통계·평균·증감률·점수는 이번 계약에 포함하지 않습니다.
+
+| 결정 | 대안과 비교 | 선택 이유 |
+| --- | --- | --- |
+| 단일 trend endpoint | Frontend가 단건 통계 API를 네 번 호출해 결합 | 한 요청의 읽기 전용 snapshot 안에서 매핑·무결성·네 분기를 함께 검증. 부분 HTTP 실패를 프론트에서 결합하거나 서로 다른 적재 상태를 한 시계열로 섞지 않음 |
+| B: 2025년 4분기 고정 | A: 현재 지원 공통 분기 전체를 동적으로 반환 | 확보한 두 원본이 공유하는 2025년 기간을 재현·비교 기준으로 고정. 다른 연도 적재가 응답 길이·비교 기간을 묵시적으로 바꾸지 않음 |
+| 기존 통계 metric 전체 | 점포 수·추정매출 두 값만 반환 | 이미 정의한 점포 5개·매출 4개와 NULL 의미를 그대로 재사용. 네 item으로 한정되어 전송량이 작고 건수·개폐업 표시를 위해 단건 API를 다시 호출할 필요가 없음 |
+
+기존 `/api/quarters`는 유효한 서울시 매핑이 연결된 **두 통계의 분기 합집합**입니다. 두 테이블·행정동·업종마다 행이 있는 분기 교집합을 보장하지 않습니다. A를 채택하려면 공통 분기의 교집합을 어느 범위(전체/업종/행정동)에서 계산할지 추가로 정해야 하고, 행 유무에 따라 비교 기간이 달라질 수 있습니다. 따라서 이 목록을 추세 배열의 생성 기준으로 사용하거나 기존 목록 계약을 교집합으로 변경하지 않습니다.
+
+### 요청과 검증 순서
+
+| 필수 query | 형식 | 지원 여부 |
+| --- | --- | --- |
+| `dongCode` | string, 전체 문자열 `[0-9]{8}` | 기존 `/api/admin-dongs`의 조회 가능한 code |
+| `industryCode` | string, 전체 문자열 `[A-Z][A-Z0-9_]{0,29}` | 기존 내부 업종에 등록되고 서울시 단일 매핑·통계 행으로 조회 가능한 code |
+
+현재 지원 업종은 단건 API와 같은 `CAFE`, `HAIR`, `KFOOD`, `PUB`입니다. 로드맵의 최초 검증 대상이 CAFE라고 해서 나머지 지원 업종을 추세에서 제외하지 않습니다. `CS100010`은 원본 코드이므로 요청 식별자로 받지 않습니다. `GYM`은 등록됐지만 서울시 매핑이 없어 `UNSUPPORTED_INDUSTRY`입니다.
+
+각 필수값은 정확히 한 번 전달합니다. trim·대소문자 보정·기본 업종·최신 분기 자동 선택은 없습니다. 허용 query는 이 두 개뿐이며 `quarterCode`, `year`, `fromQuarter`, `toQuarter`, `limit` 등은 미정의 query입니다.
+
+기존 `QueryValidator`의 실제 우선순위를 두 필드에 적용합니다.
+
+1. **요청 구조:** 허용 필드의 중복을 dongCode → industryCode 순으로 검사한 다음, 미정의 key가 있으면 key 문자열 오름차순의 첫 key를 반환합니다. 같은 값의 반복도 중복입니다.
+2. **필수값:** 누락·빈 문자열을 dongCode → industryCode 순으로 검사합니다.
+3. **형식:** dongCode → industryCode 순으로 전체 문자열 형식을 검사합니다. 공백 문자열은 비어 있지 않으므로 형식 오류입니다.
+4. **lookup·무결성:** 기존 전역 서울시 매핑·통계 lookup 무결성을 같은 읽기 전용 transaction에서 확인합니다. 여기서 무결성/DB 오류가 나면 지원 여부 검사 전에 500을 반환할 수 있습니다.
+5. **지원 여부:** dongCode → industryCode 순으로 `UNKNOWN_DONG`, `UNKNOWN_INDUSTRY`, `UNSUPPORTED_INDUSTRY`를 구분합니다.
+
+예를 들어 `dongCode` 누락과 `quarterCode` 전달이 동시에 있으면 요청 구조 오류가 먼저이므로 `400 INVALID_PARAMETER`, `field="quarterCode"`입니다. `dongCode` 중복까지 있으면 중복 오류인 `field="dongCode"`가 우선합니다. 단건 API의 세 필드 검증에는 영향을 주지 않습니다.
+
+### 반환 기간·정렬·이름
+
+정상 응답의 `quarters`는 **항상 정확히 4개 item**이며 code 순서는 `"20251"`, `"20252"`, `"20253"`, `"20254"`입니다. code는 string, label은 각각 `2025년 1분기`부터 `2025년 4분기`입니다. 중복·분기 생략·배열 순서의 임의 변경은 허용하지 않습니다.
+
+- 분기는 응답의 지원 기간 축이며 해당 행의 존재를 보증하지 않습니다. 해당 행정동·업종의 한 분기에서 양쪽 행이 없어도 item을 유지합니다.
+- 이 endpoint의 지원 기간은 DB 목록과 독립적으로 고정됩니다. 한 분기에서 DB 전체에 행이 없더라도 유효한 행정동·업종 요청에는 그 분기를 유지하고 해당 행 부재를 `NO_ROW`로 반환합니다. 원본 전수 적재의 완전성은 후속 재현 검증에서 확인하며 API가 완전성을 보증하거나 새로운 결측 사유를 만들어내지 않습니다.
+- DB에 2024년·2026년 자료가 추가돼도 이 응답은 2025년만 반환합니다. 해당 연도는 이 추세 계약의 지원 기간이 아니며 향후 기간 확대는 별도 계약 변경입니다. `quarterCode=20261`처럼 기간을 query로 전달하면 값과 관계없이 미정의 query 오류입니다.
+- 행정동·업종 지원 여부는 기존 lookup을 그대로 사용합니다. 따라서 다른 분기의 자료로 lookup에 포함된 유효 식별자도 2025년 조합이 없으면 전체 NO_ROW가 될 수 있습니다. 반대로 빈 DB에서 조회 가능한 행정동이 없으면 `UNKNOWN_DONG`이며 존재하지 않는 lookup을 만들어내지 않습니다.
+- `dong.name`은 기존 lookup의 최신 분기 이름(같은 분기는 점포 이름 우선)을 사용합니다. 2025년 내부나 기간 밖에서 이름이 바뀌어도 표시용 이름 하나를 반환하며 분기별 역사적 이름을 새로 만들지 않습니다. code가 식별자이고 이름은 표시용입니다.
+
+### 응답 JSON과 필드
+
+성공은 HTTP 200, UTF-8 `application/json`입니다. `data` wrapper·pagination·요약 상태·source code·surrogate id는 없습니다. 현재 populated DB에서 읽기 전용으로 대조한 청운효자동/CAFE의 **예정 응답**입니다. 새 endpoint를 호출해 얻은 실제 HTTP 응답은 아닙니다.
+
+```json
+{
+  "dong": {
+    "code": "11110515",
+    "name": "청운효자동"
+  },
+  "industry": {
+    "code": "CAFE",
+    "name": "카페"
+  },
+  "quarters": [
+    {
+      "quarter": {
+        "code": "20251",
+        "label": "2025년 1분기"
+      },
+      "storeStats": {
+        "storeCount": 114,
+        "similarStoreCount": 115,
+        "openingStoreCount": 2,
+        "closingStoreCount": 4,
+        "franchiseStoreCount": 1
+      },
+      "salesStats": {
+        "estimatedSalesAmount": "4535266422",
+        "transactionCount": "302642",
+        "weekdayEstimatedSalesAmount": "2853077729",
+        "weekendEstimatedSalesAmount": "1682188693"
+      },
+      "missingReasons": {
+        "storeStats": null,
+        "salesStats": null
+      }
+    },
+    {
+      "quarter": {
+        "code": "20252",
+        "label": "2025년 2분기"
+      },
+      "storeStats": {
+        "storeCount": 114,
+        "similarStoreCount": 115,
+        "openingStoreCount": 2,
+        "closingStoreCount": 2,
+        "franchiseStoreCount": 1
+      },
+      "salesStats": {
+        "estimatedSalesAmount": "4603714789",
+        "transactionCount": "356622",
+        "weekdayEstimatedSalesAmount": "2868971210",
+        "weekendEstimatedSalesAmount": "1734743579"
+      },
+      "missingReasons": {
+        "storeStats": null,
+        "salesStats": null
+      }
+    },
+    {
+      "quarter": {
+        "code": "20253",
+        "label": "2025년 3분기"
+      },
+      "storeStats": {
+        "storeCount": 115,
+        "similarStoreCount": 116,
+        "openingStoreCount": 2,
+        "closingStoreCount": 2,
+        "franchiseStoreCount": 1
+      },
+      "salesStats": {
+        "estimatedSalesAmount": "4195134430",
+        "transactionCount": "293013",
+        "weekdayEstimatedSalesAmount": "2897027346",
+        "weekendEstimatedSalesAmount": "1298107084"
+      },
+      "missingReasons": {
+        "storeStats": null,
+        "salesStats": null
+      }
+    },
+    {
+      "quarter": {
+        "code": "20254",
+        "label": "2025년 4분기"
+      },
+      "storeStats": {
+        "storeCount": 118,
+        "similarStoreCount": 119,
+        "openingStoreCount": 5,
+        "closingStoreCount": 2,
+        "franchiseStoreCount": 1
+      },
+      "salesStats": {
+        "estimatedSalesAmount": "4724282512",
+        "transactionCount": "340786",
+        "weekdayEstimatedSalesAmount": "2941978790",
+        "weekendEstimatedSalesAmount": "1782303722"
+      },
+      "missingReasons": {
+        "storeStats": null,
+        "salesStats": null
+      }
+    }
+  ]
+}
+```
+
+| 필드 | 타입·의미 |
+| --- | --- |
+| `dong` | null 불가 `{code, name}`. 기존 행정동 lookup과 같은 외부 식별자 |
+| `industry` | null 불가 `{code, name}`. 내부 업종; 원본 source code는 노출하지 않음 |
+| `quarters` | null 불가, 위 순서의 정확히 4개 item |
+| `quarters[].quarter` | null 불가 `{code, label}`. 2025년 고정 기간 |
+| `quarters[].storeStats` | 객체 또는 null. 기존 단건의 점포 5개 필드·INTEGER number/null·단위 개를 그대로 사용 |
+| `quarters[].salesStats` | 객체 또는 null. 기존 단건의 매출 4개 필드·BIGINT decimal string/null을 그대로 사용 |
+| `quarters[].missingReasons` | null 불가. `storeStats`, `salesStats` 키를 항상 제공하며 각 값은 null 또는 `"NO_ROW"` |
+
+점포 필드는 `storeCount`, `similarStoreCount`, `openingStoreCount`, `closingStoreCount`, `franchiseStoreCount`입니다. 매출 필드는 `estimatedSalesAmount`, `transactionCount`, `weekdayEstimatedSalesAmount`, `weekendEstimatedSalesAmount`입니다. 존재하는 객체에서는 모든 필드를 제공하며 값이 null이어도 생략하지 않습니다. INTEGER 범위도 기존 단건과 같습니다.
+
+### 분기별 결측·0·BIGINT
+
+| 상태 | 분기 item의 표현 | HTTP |
+| --- | --- | --- |
+| 양쪽 행 존재 | 두 객체, 두 missingReasons 모두 null | 200 |
+| 점포만 존재 | 점포 객체 유지, 매출 객체 null·매출 이유 `NO_ROW` | 200 |
+| 매출만 존재 | 매출 객체 유지, 점포 객체 null·점포 이유 `NO_ROW` | 200 |
+| 한 분기 양쪽 행 없음 | 두 객체 null·두 이유 `NO_ROW`; 해당 분기를 생략하지 않음 | 200 |
+| 네 분기 모두 양쪽 행 없음 | dong/industry와 네 item 유지; 각 item의 두 객체 null·두 이유 `NO_ROW` | 200 |
+| 행 존재·개별 metric NULL | 해당 metric만 null·그 section의 missingReasons는 null | 200 |
+| 행 존재·실제 0 | 점포 number `0`, 금액/건수 string `"0"` | 200 |
+
+행 존재는 row 자체로 판정합니다. 첫 metric의 NULL/0 여부로 행을 판단하거나 missing 값을 0으로 채우지 않습니다. HTTP 오류·network 실패는 정상 empty 응답과 별개입니다. network 실패는 frontend의 전송 상태이며 Backend가 NO_ROW나 network용 API error code로 만들어내지 않습니다.
+
+매출 4개 BIGINT 필드는 signed 64-bit 정수를 정확한 10진 문자열로 직렬화합니다. 범위는 `-9223372036854775808`~`9223372036854775807`이며 `"9007199254740993"`도 그대로 전달합니다. 지수·소수·자리 구분 없는 정수 문자열을 사용하고 number/double·Number·parseInt·parseFloat로 변환하지 않습니다. 계산 지표를 추가하거나 차트 입력에 맞춰 정밀도를 줄이지 않습니다. 차트 표현은 추후 Frontend에서 원본 문자열과 정확한 tooltip/표시를 보존하는 별도 정책으로 정합니다.
+
+실제 둔촌1동/CAFE의 20251은 점포 행이 존재하고 `storeCount=0`, 매출 행은 없습니다. 네 item 중 첫 item의 예정 표현은 다음과 같습니다. 나머지 세 분기는 양쪽 행이 존재하며 아래 DB 대조 표에 기록했습니다.
+
+```json
+{
+  "quarter": {
+    "code": "20251",
+    "label": "2025년 1분기"
+  },
+  "storeStats": {
+    "storeCount": 0,
+    "similarStoreCount": 2,
+    "openingStoreCount": 2,
+    "closingStoreCount": 0,
+    "franchiseStoreCount": 2
+  },
+  "salesStats": null,
+  "missingReasons": {
+    "storeStats": null,
+    "salesStats": "NO_ROW"
+  }
+}
+```
+
+실제 신정6동/PUB는 네 분기 모두 양쪽 행이 없습니다. 각 item은 아래와 같고 `quarter`만 `20251`~`20254`의 순서로 달라집니다. HTTP 200이며 `quarters=[]`, 404, 400으로 바꾸지 않습니다.
+
+```json
+{
+  "quarter": {
+    "code": "20251",
+    "label": "2025년 1분기"
+  },
+  "storeStats": null,
+  "salesStats": null,
+  "missingReasons": {
+    "storeStats": "NO_ROW",
+    "salesStats": "NO_ROW"
+  }
+}
+```
+
+### 단위·기간·metadata
+
+기존 단건의 단위와 해석을 그대로 따릅니다. 점포 수는 개, 추정매출 금액은 원, 거래 건수는 건입니다. 각 값은 해당 `quarters[].quarter.code`에 귀속된 **원본 보고값**입니다. 원본의 `당월` 열 이름을 월평균·분기 총액·연간액으로 재해석하지 않습니다. 네 금액의 합·평균·점포당 매출·증감률을 계산해 응답하지 않습니다.
+
+추정매출은 실제 매출·이익·창업 수익·성공 가능성이 아니며 개업/폐업 점포 수는 성공률/실패율이 아닙니다. 서로 다른 공간 단위인 행정동과 상권 통계를 결합하지 않습니다. 기존 dataset metadata 유예를 유지하며 source·적재 시각·dataset version을 만들거나 CSV/manifest를 요청 중 읽지 않습니다. 고정 분기 축도 다운로드 이력·적재 완전성·경계 버전을 보증하지 않습니다.
+
+### 오류와 원자적 실패
+
+기존 `{code, message, field}` 3필드 오류 응답과 한국어 표시용 메시지를 사용합니다. 새 error code는 없습니다.
+
+| HTTP | code | 발생 조건 | field |
+| --- | --- | --- | --- |
+| 400 | `INVALID_PARAMETER` | 두 필수 query의 누락·빈 값·중복, 모든 미정의 query | 해당 query key |
+| 400 | `INVALID_DONG_CODE` | 행정동 형식 오류 | dongCode |
+| 400 | `UNKNOWN_DONG` | 기존 행정동 lookup에서 조회 불가 | dongCode |
+| 400 | `INVALID_INDUSTRY_CODE` | 내부 업종 형식 오류 | industryCode |
+| 400 | `UNKNOWN_INDUSTRY` | 내부 업종 미등록; 원본 코드 CS100010도 해당 | industryCode |
+| 400 | `UNSUPPORTED_INDUSTRY` | 내부 업종은 등록됐지만 서울시 매핑/행 존재 기준으로 조회 불가 | industryCode |
+| 500 | `DATA_INTEGRITY_ERROR` | 기존 매핑·식별자·행정동 이름·분기/행 무결성 오류 | null |
+| 500 | `INTERNAL_ERROR` | DB 연결 실패 등 예상하지 못한 서버 오류 | null |
+
+`quarterCode=20251`을 추가한 요청은 다음 오류이며 `INVALID_QUARTER`/`UNSUPPORTED_QUARTER`로 처리하지 않습니다. 이 두 분기 오류 code는 기존 단건 API에만 그대로 남습니다.
+
+```json
+{"code":"INVALID_PARAMETER","message":"정의되지 않은 요청 파라미터입니다.","field":"quarterCode"}
+```
+
+모호한 서울시 매핑, mapped source의 industry_id 불일치(NULL 포함), 복합 키 중복, 같은 table/quarter/dong 내 이름 충돌, 잘못된 저장 분기 code를 임의 선택·합산·정정하지 않습니다. 기존 lookup의 **전체 유효 서울시 매핑 행** 검사를 유지하므로 요청한 조합/2025년 밖의 무결성 오류도 500이 될 수 있습니다. 분기 사이의 이름 변경이나 같은 분기의 점포·매출 간 이름 차이는 기존 최신 이름·점포 우선 정책을 적용하며 그 자체로 오류가 아닙니다.
+
+무결성 검사나 분기 통계 조회 중 무결성/DB 오류가 발생하면 **전체 요청**을 해당 500 오류로 실패시킵니다. 요청 검증의 400 정책은 위 표대로 유지합니다. 정상 분기 일부만 반환하거나 오류 분기를 NO_ROW로 대체하지 않습니다. SQL·stack trace·접속 정보는 응답에 노출하지 않습니다.
+
+### DB 매핑·다음 구현의 조회 전략
+
+논리적 key는 `dong_code + source_industry_code + quarter_code`입니다. 내부 `industryCode`를 `industry_mappings.source='SEOUL'`의 유일한 source code에 연결하고 적재 행의 industry_id 일치를 확인합니다. CAFE는 `CS100010`에 연결됩니다. surrogate id는 행 존재 확인에 사용할 수 있지만 JSON에는 노출하지 않습니다.
+
+한 요청에서 Controller의 strict query → Service의 lookup·매핑/무결성·지원 여부 확인 → JdbcClient Repository의 여러 분기 조회 → 분기별 응답 조립 순으로 확장하는 것을 권합니다. 기존 단건 DTO의 StoreStats·SalesStats·MissingReasons·Quarter 의미를 재사용하고 추세 리소스와 분기 item만 추가합니다. 이 문서는 Java 타입·메서드 구현을 추가하지 않습니다.
+
+- 기존처럼 읽기 전용 **REPEATABLE READ transaction 하나**에서 lookup·매핑 검사·두 테이블 통계를 읽습니다. 별도 transaction으로 분리하면 적재 사이의 상태를 섞을 수 있습니다.
+- lookup을 한 번만 확인하고, 각 테이블에서 dong/source와 **정확한 네 quarter code**를 bind parameter로 필터링해 quarter 오름차순으로 가져옵니다. 통계 SQL은 store/sales 각 1회, 총 2회를 권장하며 lookup·무결성 SQL은 별도입니다.
+- 단일 분기 store/sales를 네 번씩 호출하는 최대 8회 통계 SQL도 의미상 구현 가능하지만 불필요한 왕복이 있습니다. Service의 기존 단건 조회를 네 번 호출하면 lookup까지 반복되므로 우선안으로 삼지 않습니다.
+- 두 결과를 quarter key로 매핑하고 계약의 고정 기간을 순회해 없는 row를 null/NO_ROW로 채웁니다. INNER JOIN으로 양쪽 행이 있는 분기만 남기지 않고 metric NULL을 0으로 채우지 않습니다. 같은 테이블/quarter의 중복을 맵의 마지막 값으로 덮어쓰지 않습니다.
+- 같은 snapshot의 단건 응답과 추세 item은 동일 metric·NULL/NO_ROW 값을 가져야 합니다. 서로 다른 시점의 별도 HTTP 요청 사이까지 snapshot 동일성을 보장하지는 않습니다.
+
+두 테이블에 이미 `(dong_code, source_industry_code, quarter_code)` 조회 인덱스와 복합 키 UNIQUE가 있습니다. 이 필터·정렬의 접근 경로를 제공하므로 현재 4분기 조회 때문에 새 column/table/index나 **V2 migration은 필요하지 않습니다**. 실제 성능은 구현 후 실행 계획으로 확인하며 근거 없이 index를 추가하지 않습니다.
+
+### 2026-10-06 실제 DB 대조
+
+기존 populated PostgreSQL에서 `transaction_read_only=on`인 REPEATABLE READ transaction으로 SELECT만 수행했습니다. 원본·DB를 변경하거나 ETL·Spring·React를 실행하지 않았습니다. 조회 시작/종료 행 수는 점포 141,218행·매출 67,113행으로 같습니다. CAFE → SEOUL/CS100010, 두 통계 테이블의 20251~20254를 확인했고 전역 매핑 모호성·industry_id 불일치·중복 키·이름 충돌은 0건이었습니다. DB 행 수와 현 상태 대조이며 이번에 CSV 원본을 다시 전수 대조한 것은 아닙니다.
+
+두 원본의 공통 기간이 4분기라는 것과 모든 dong/industry/quarter 조합에 양쪽 행이 있다는 것은 다릅니다. CAFE 점포는 분기마다 425행, 매출은 420/421/421/421행입니다. 아래는 로드맵의 대표 행정동 세 곳과 한 분기 결측 사례입니다. 금액·건수는 JSON string의 원본값을 자리 구분 없이 적었습니다.
+
+| 행정동(code) / 내부 업종 | 분기 | 점포 수(개) | 추정매출(원) | 매출 건수(건) | 행 존재 |
+| --- | --- | ---: | ---: | ---: | --- |
+| 청운효자동(11110515) / CAFE | 20251 | 114 | 4535266422 | 302642 | 양쪽 |
+| 청운효자동(11110515) / CAFE | 20252 | 114 | 4603714789 | 356622 | 양쪽 |
+| 청운효자동(11110515) / CAFE | 20253 | 115 | 4195134430 | 293013 | 양쪽 |
+| 청운효자동(11110515) / CAFE | 20254 | 118 | 4724282512 | 340786 | 양쪽 |
+| 사직동(11110530) / CAFE | 20251 | 178 | 9462371274 | 954826 | 양쪽 |
+| 사직동(11110530) / CAFE | 20252 | 178 | 12737397038 | 1259992 | 양쪽 |
+| 사직동(11110530) / CAFE | 20253 | 178 | 12539560367 | 1287652 | 양쪽 |
+| 사직동(11110530) / CAFE | 20254 | 176 | 12509194587 | 1193317 | 양쪽 |
+| 삼청동(11110540) / CAFE | 20251 | 89 | 5548781022 | 296777 | 양쪽 |
+| 삼청동(11110540) / CAFE | 20252 | 86 | 10137624187 | 571397 | 양쪽 |
+| 삼청동(11110540) / CAFE | 20253 | 87 | 7078408048 | 405292 | 양쪽 |
+| 삼청동(11110540) / CAFE | 20254 | 84 | 7808131897 | 444369 | 양쪽 |
+| 둔촌1동(11740690) / CAFE | 20251 | 0 | NO_ROW | NO_ROW | 점포만 |
+| 둔촌1동(11740690) / CAFE | 20252 | 3 | 452140306 | 82613 | 양쪽 |
+| 둔촌1동(11740690) / CAFE | 20253 | 7 | 452142858 | 70594 | 양쪽 |
+| 둔촌1동(11740690) / CAFE | 20254 | 8 | 452142858 | 70417 | 양쪽 |
+
+추가로 면목5동(`11260550`)/CAFE는 네 분기의 점포 수가 17/16/16/15이고 매출은 모두 NO_ROW입니다. 신정6동(`11470670`)/PUB(서울시 `CS100009`)는 네 분기 모두 양쪽 NO_ROW입니다. NULL·signed BIGINT 경계값은 이 실제 사례에서 확인한 값이 아니므로 추후 격리 fixture/응답 경계 테스트에서 다룹니다.
+
+### 다음 구현의 테스트 계약
+
+기존 단건 테스트는 회귀 기준으로 유지합니다. 같은 parser·직렬화 규칙을 모든 계층에 복사하는 대신 책임별로 다음을 추가합니다. 아직 테스트 코드나 fixture를 작성/실행하지 않았습니다.
+
+| 계층 | 추가할 검증 | 이유·경계 |
+| --- | --- | --- |
+| request / MVC (DB 없음) | dong/industry 각각 누락·빈 값·중복·형식 오류; 공백·소문자·길이 경계; quarterCode와 다른 미정의 query; 복합 오류 우선순위 | 두 필드 strict query와 새 경로의 wiring을 검증. 구조/형식 오류는 Service 호출 전에 400 |
+| Service / Repository 단위 | 고정 네 분기·오름차순·없는 분기 유지; 첫/중간/마지막 분기의 NO_ROW 조립; 한 분기 양쪽 NO_ROW·네 분기 모두 NO_ROW; 2024/2026행 배제; 중복 row 거부; 내부 실패/무결성 예외의 원자적 실패 | period 축을 DB 결과 행에서만 만들거나 Map에 중복을 덮어쓰는 실수를 방지. 기존 UNIQUE를 제거하지 않고 중복 query 경계를 대체 |
+| 기존 populated DB + MockMvc JSON | 청운효자동 정상 4분기 전 필드·code/label 순서·JSON string; 둔촌1동의 부분 NO_ROW와 실제 0; 면목5동의 section 부재; 신정6동 전체 NO_ROW; unknown dong/industry·원본 업종 code·GYM unsupported | 실제 JdbcClient 매핑·Service 조립·직렬화를 함께 확인. 변경 없는 populated DB에서 단건 API 네 분기의 값과 추세 API 각 item을 대조. 기존 DB에 fixture 쓰기 없음 |
+| 별도 격리 fixture DB | 행 존재·metric NULL·0/"0"; `9007199254740993`·signed BIGINT 최대/최소의 정확한 JSON string; 특정 분기의 한쪽/양쪽 부재; DB 전체에서 한 분기가 없는 경우에도 고정 축 유지; 미래 연도만 있는 lookup; 명칭 선택; 모호한 mapping·industry_id NULL/불일치·분기/이름 무결성 오류 | 실제 driver가 nullable INTEGER/Long을 읽는 경계를 검증. 기존 opt-in·DB prefix·빈 DB·rollback 보호를 재사용하고 populated DB에서는 실행하지 않음 |
+| HTTP 오류 smoke | 유효 요청의 200; 미정의 quarterCode의 400; 무결성 실패와 DB 연결 실패의 500·안전한 3필드 오류 body | MockMvc 검증을 바탕으로 실제 서버 경계는 대표 요청만 확인. 연결 실패 주입은 검증용 환경에서만 수행 |
+| 후속 Frontend API 경계 | 네 item의 code/순서/길이·nullable 객체와 missingReasons 일치·string/range 검사; BIGINT를 number·지수·소수·잘못된 문자열·범위 초과로 받은 응답 거부 | 유효 BIGINT column은 잘못된 숫자 문자열을 생산하지 않으므로 잘못된 응답은 API 경계 mock으로 검증. Backend를 double/string 우회 모델로 바꾸지 않음 |
+| 후속 Frontend UI / hook | 정상·부분/전체 NO_ROW·metric NULL·실제 0·HTTP/network 오류 구분; 정확한 BIGINT 표시; 요청 취소/늦은 응답; 없는 분기를 생략하거나 0으로 연결하지 않음 | 시각화 방식을 정한 뒤 필요한 회귀 사례만 추가. 이번 계약 단계에서 chart/표/component/hook/dependency를 구현하지 않음 |
+
+통계 조회의 무결성 오류는 정상 item 일부와 섞이지 않아야 합니다. DB 연결 실패는 INTERNAL_ERROR, 존재하지 않는 통계 조합은 정상 NO_ROW입니다. Backend 구현과 실제 API 검증 이후 화면을 구현하고, CSV → ETL → DB → API → React의 새 환경 재현은 별도 7-2 작업으로 남깁니다.

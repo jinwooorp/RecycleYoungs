@@ -1,6 +1,6 @@
 # Backend
 
-Java 21·Spring Boot 프로젝트입니다. 현재 범위는 공용 PostgreSQL 연결·migration과 행정동 lookup·통계 조회 API 4개입니다. 계약은 [행정동 API 계약](../docs/api-contract.md)을 따릅니다.
+Java 21·Spring Boot 프로젝트입니다. 현재 구현 범위는 공용 PostgreSQL 연결·migration과 행정동 lookup·통계 조회 API 4개입니다. 계약은 [행정동 API 계약](../docs/api-contract.md)을 따릅니다. 2025년 공통 4개 분기 추세 API 1개는 계약만 확정했으며 다음 구현 대상입니다. 구현 후 GET API는 총 5개가 됩니다.
 
 ## 선택한 방식
 
@@ -40,7 +40,7 @@ cd backend
 
 일반 `test`는 DB 자동 설정을 제외하고 JdbcClient 경계만 대체한 context 검사와 strict query·오류 응답·중복 행 처리 검사입니다. DB 없이 실행됩니다. 별도 `dbTest`는 실제 JdbcClient 조회·업종 매핑·PostGIS·Flyway와 Spring MVC JSON 계약을 확인하며 기본 기대 건수는 141,218/67,113입니다. 다른 DB는 `DB_HOST`·`DB_PORT`·`DB_NAME`과 `EXPECTED_STORE_STATS_ROWS`·`EXPECTED_SALES_ROWS`를 지정합니다. 빈 DB의 연결 검증은 두 기대 건수를 0으로 설정하고 `--tests '*PostgresConnectionTests'`로 실행합니다. 현재 데이터에 대한 `AdminDongApiTests`는 검증된 populated DB를 사용합니다. `dbTest`는 매번 실행하며 기본 `test`나 `build`에 포함되지 않습니다.
 
-통계 ETL 재실행 시 내부 `id`가 재발급되므로 stable identifier로 가정하거나 외부 식별자로 사용하지 않습니다. DB 조회 기준은 `quarter_code + dong_code + source_industry_code`이며 [API 계약](../docs/api-contract.md)은 내부 업종 code·문자열 행정동/분기와 BIGINT 문자열을 사용합니다. 계약의 네 GET API를 구현했고 React 연결은 다음 단계입니다.
+통계 ETL 재실행 시 내부 `id`가 재발급되므로 stable identifier로 가정하거나 외부 식별자로 사용하지 않습니다. DB 조회 기준은 `quarter_code + dong_code + source_industry_code`이며 [API 계약](../docs/api-contract.md)은 내부 업종 code·문자열 행정동/분기와 BIGINT 문자열을 사용합니다. 기존 네 GET API를 구현하고 React 조건 선택·결과 표까지 연결했습니다. 추세 API 구현·화면과 새 환경 전체 흐름 재현은 후속 작업입니다.
 
 ## 조회 API와 테스트 범위
 
