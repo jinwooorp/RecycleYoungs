@@ -31,4 +31,9 @@ public class AdminDongController {
     public ApiResponses.Stats stats(@RequestParam MultiValueMap<String, String> query) {
         return service.stats(QueryValidator.stats(query));
     }
+
+    @GetMapping("/api/admin-dong-trends")
+    public ApiResponses.Trend trends(@RequestParam MultiValueMap<String, String> query) {
+        return service.trends(QueryValidator.trends(query));
+    }
 }

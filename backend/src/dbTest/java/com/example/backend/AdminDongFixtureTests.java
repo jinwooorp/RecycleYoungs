@@ -49,6 +49,16 @@ class AdminDongFixtureTests {
             """).update();
     }
 
+    private void sales(int quarter, Long amount, Long count, Long weekday, Long weekend) {
+        jdbc.sql("""
+            INSERT INTO sales_dong(quarter_code,dong_code,dong_name,source_industry_code,industry_id,
+                sales_amount,transaction_count,weekday_sales_amount,weekend_sales_amount)
+            SELECT :quarter,'11110515','매출 이름',source_code,industry_id,:amount,:count,:weekday,:weekend
+            FROM industry_mappings WHERE source='SEOUL' AND source_code='CS100010'
+            """).param("quarter", quarter).param("amount", amount).param("count", count)
+            .param("weekday", weekday).param("weekend", weekend).update();
+    }
+
     @Test
     void emptyDatabaseProvidesEmptyLookupArrays() throws Exception {
         for (var path : new String[]{"/api/admin-dongs","/api/industries","/api/quarters"}) {
@@ -144,10 +154,85 @@ class AdminDongFixtureTests {
         integrityForAllEndpoints();
     }
 
+    @Test
+    void trendsReadNullZeroAndSignedBigintsWithMissingMiddleQuarter() throws Exception {
+        store(20251,"11110515","점포 이름","CS100010");
+        jdbc.sql("UPDATE store_stats_dong SET similar_store_count=0").update();
+        sales(20251, Long.MAX_VALUE, 9007199254740993L, 0L, null);
+        sales(20252, Long.MIN_VALUE, 0L, null, Long.MAX_VALUE);
+        store(20254,"11110515","점포 이름","CS100010");
+        mvc.perform(get("/api/admin-dong-trends").param("dongCode","11110515").param("industryCode","CAFE"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.quarters.length()").value(4))
+            .andExpect(jsonPath("$.quarters[0].storeStats.storeCount").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$.quarters[0].storeStats.similarStoreCount").value(0))
+            .andExpect(jsonPath("$.quarters[0].missingReasons.storeStats").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$.quarters[0].salesStats.estimatedSalesAmount").value("9223372036854775807"))
+            .andExpect(jsonPath("$.quarters[0].salesStats.transactionCount").value("9007199254740993"))
+            .andExpect(jsonPath("$.quarters[0].salesStats.weekdayEstimatedSalesAmount").value("0"))
+            .andExpect(jsonPath("$.quarters[0].salesStats.weekendEstimatedSalesAmount").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$.quarters[1].storeStats").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$.quarters[1].missingReasons.storeStats").value("NO_ROW"))
+            .andExpect(jsonPath("$.quarters[1].salesStats.estimatedSalesAmount").value("-9223372036854775808"))
+            .andExpect(jsonPath("$.quarters[1].salesStats.transactionCount").value("0"))
+            .andExpect(jsonPath("$.quarters[1].missingReasons.salesStats").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$.quarters[2].quarter.code").value("20253"))
+            .andExpect(jsonPath("$.quarters[2].missingReasons.storeStats").value("NO_ROW"))
+            .andExpect(jsonPath("$.quarters[2].missingReasons.salesStats").value("NO_ROW"))
+            .andExpect(jsonPath("$.quarters[3].storeStats").isMap())
+            .andExpect(jsonPath("$.quarters[3].missingReasons.storeStats").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$.quarters[3].missingReasons.salesStats").value("NO_ROW"));
+    }
+
+    @Test
+    void trendsExcludeOtherYearsAndUseTheLatestLookupName() throws Exception {
+        store(20244,"11110515","옛 이름","CS100010");
+        store(20254,"11110515","2025 이름","CS100010");
+        store(20261,"11110515","최신 이름","CS100010");
+        sales(20261, Long.MAX_VALUE, 1L, null, null);
+        mvc.perform(get("/api/admin-dong-trends").param("dongCode","11110515").param("industryCode","CAFE"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.dong.name").value("최신 이름"))
+            .andExpect(jsonPath("$.quarters.length()").value(4))
+            .andExpect(jsonPath("$.quarters[0].quarter.code").value("20251"))
+            .andExpect(jsonPath("$.quarters[3].quarter.code").value("20254"))
+            .andExpect(jsonPath("$.quarters[3].storeStats").isMap());
+        mvc.perform(get("/api/quarters")).andExpect(content().json("""
+            [{"code":"20244","label":"2024년 4분기"},{"code":"20254","label":"2025년 4분기"},
+             {"code":"20261","label":"2026년 1분기"}]
+            """, org.springframework.test.json.JsonCompareMode.STRICT));
+    }
+
+    @Test
+    void futureOnlyLookupStillProvidesFourMissing2025Items() throws Exception {
+        store(20261,"11110515","최신 이름","CS100010");
+        var result = mvc.perform(get("/api/admin-dong-trends").param("dongCode","11110515").param("industryCode","CAFE"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.quarters.length()").value(4));
+        for (int i = 0; i < 4; i++) {
+            result.andExpect(jsonPath("$.quarters["+i+"].quarter.code").value("2025"+(i+1)))
+                .andExpect(jsonPath("$.quarters["+i+"].storeStats").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.quarters["+i+"].salesStats").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.quarters["+i+"].missingReasons.storeStats").value("NO_ROW"))
+                .andExpect(jsonPath("$.quarters["+i+"].missingReasons.salesStats").value("NO_ROW"));
+        }
+    }
+
+    @Test
+    void emptyDatabaseCannotInventAValidTrendDong() throws Exception {
+        mvc.perform(get("/api/admin-dong-trends").param("dongCode","11110515").param("industryCode","CAFE"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("UNKNOWN_DONG"));
+    }
+
+    @Test
+    void integrityOutside2025StillRejectsTheWholeTrend() throws Exception {
+        store(20261,"11110515","이름","CS100010");
+        store(20261,"11110515","충돌","CS100009");
+        integrityForAllEndpoints();
+    }
+
     private void integrityForAllEndpoints() throws Exception {
-        for (var path : new String[]{"/api/admin-dongs","/api/industries","/api/quarters","/api/admin-dong-stats"}) {
+        for (var path : new String[]{"/api/admin-dongs","/api/industries","/api/quarters","/api/admin-dong-stats","/api/admin-dong-trends"}) {
             var request=get(path);
             if (path.endsWith("stats")) request.param("dongCode","11110515").param("industryCode","CAFE").param("quarterCode","20251");
+            if (path.endsWith("trends")) request.param("dongCode","11110515").param("industryCode","CAFE");
             mvc.perform(request).andExpect(status().isInternalServerError()).andExpect(content().json("""
                 {"code":"DATA_INTEGRITY_ERROR","message":"데이터 무결성 오류입니다.","field":null}
                 """, org.springframework.test.json.JsonCompareMode.STRICT));

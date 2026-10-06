@@ -12,5 +12,8 @@ public final class ApiResponses {
     public record MissingReasons(String storeStats, String salesStats) {}
     public record Stats(NamedCode dong, NamedCode industry, Quarter quarter,
                         StoreStats storeStats, SalesStats salesStats, MissingReasons missingReasons) {}
+    public record TrendQuarter(Quarter quarter, StoreStats storeStats,
+                               SalesStats salesStats, MissingReasons missingReasons) {}
+    public record Trend(NamedCode dong, NamedCode industry, java.util.List<TrendQuarter> quarters) {}
     public record Error(String code, String message, String field) {}
 }

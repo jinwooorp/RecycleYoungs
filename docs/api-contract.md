@@ -2,7 +2,7 @@
 
 확정일: 2026-10-03. 로드맵 1차 4단계에서 확정한 계약이며, 5단계 API 구현과 6단계 React 연결을 완료했습니다. PostgreSQL의 V1 스키마와 적재 데이터를 대조했습니다.
 
-현재 구현된 GET API는 아래의 목록 3개와 단건 통계 1개, 총 4개입니다. 2026-10-06에 확정한 [공통 4개 분기 추세 계약](#행정동-공통-4개-분기-추세-api)은 다음 구현 대상 1개이며 아직 production endpoint가 없습니다. 추세 구현 후 GET API는 총 5개가 됩니다. 로드맵 7단계의 화면·새 환경 재현은 완료하지 않았습니다.
+현재 구현된 GET API는 아래의 목록 3개·단건 통계 1개와 [공통 4개 분기 추세](#행정동-공통-4개-분기-추세-api) 1개, 총 5개입니다. 2026-10-06에 확정한 추세 계약을 Backend에서 구현·검증했습니다. 로드맵 7단계의 Frontend 추세 표시·새 환경 재현은 완료하지 않았습니다.
 
 ## 범위와 공통 규칙
 
@@ -38,6 +38,7 @@
 | 조회 가능한 내부 업종 | GET | `/api/industries` | 없음 | 200 | 400, 500 |
 | 조회 가능한 분기 | GET | `/api/quarters` | 없음 | 200 | 400, 500 |
 | 한 조건의 행정동 통계 | GET | `/api/admin-dong-stats` | 아래 필수 query 3개 | 200(부분/전체 자료 없음 포함) | 400, 500 |
+| 행정동 4개 분기 추세 | GET | `/api/admin-dong-trends` | dongCode, industryCode 필수 | 200(부분/전체 자료 없음 포함) | 400, 500 |
 
 세 목록 API(`/api/admin-dongs`, `/api/industries`, `/api/quarters`)는 query parameter를 받지 않습니다. query parameter가 없으면 정상적으로 목록을 반환합니다. 미정의 query parameter가 전달되면 통계 API의 strict query 검증과 동일하게 `400 INVALID_PARAMETER`를 반환하며, `field`에는 전달된 미정의 query parameter 이름을 사용합니다.
 
@@ -225,7 +226,7 @@ SQL·Repository·DTO Java는 5단계에서 구현했습니다. 테스트는 정�
 
 ## 행정동 공통 4개 분기 추세 API
 
-계약 확정일: 2026-10-06. 로드맵 7단계 중 API 계약만 확정합니다. Backend·Frontend 구현, migration·ETL 변경, 전체 흐름의 새 환경 재현은 수행하지 않았습니다. 위 네 API의 경로·지원 범위·응답·오류 계약은 유지합니다.
+계약 확정일: 2026-10-06. 이 계약에 따른 Backend API와 테스트를 구현하고 실제 DB/HTTP로 검증했습니다. Frontend 추세 표시·전체 흐름의 새 환경 재현은 후속 작업이며 migration·ETL 변경은 없습니다. 기존 네 API의 경로·지원 범위·응답·오류 계약은 유지합니다.
 
 ### endpoint와 선택 근거
 
@@ -276,7 +277,7 @@ GET /api/admin-dong-trends?dongCode=11110515&industryCode=CAFE
 
 ### 응답 JSON과 필드
 
-성공은 HTTP 200, UTF-8 `application/json`입니다. `data` wrapper·pagination·요약 상태·source code·surrogate id는 없습니다. 현재 populated DB에서 읽기 전용으로 대조한 청운효자동/CAFE의 **예정 응답**입니다. 새 endpoint를 호출해 얻은 실제 HTTP 응답은 아닙니다.
+성공은 HTTP 200, UTF-8 `application/json`입니다. `data` wrapper·pagination·요약 상태·source code·surrogate id는 없습니다. 아래는 계약 확정 시 populated DB에서 읽기 전용으로 대조한 청운효자동/CAFE의 응답 예시이며, 구현 후 실제 trend HTTP 응답도 이 값과 일치함을 확인했습니다.
 
 ```json
 {
@@ -413,7 +414,7 @@ GET /api/admin-dong-trends?dongCode=11110515&industryCode=CAFE
 
 매출 4개 BIGINT 필드는 signed 64-bit 정수를 정확한 10진 문자열로 직렬화합니다. 범위는 `-9223372036854775808`~`9223372036854775807`이며 `"9007199254740993"`도 그대로 전달합니다. 지수·소수·자리 구분 없는 정수 문자열을 사용하고 number/double·Number·parseInt·parseFloat로 변환하지 않습니다. 계산 지표를 추가하거나 차트 입력에 맞춰 정밀도를 줄이지 않습니다. 차트 표현은 추후 Frontend에서 원본 문자열과 정확한 tooltip/표시를 보존하는 별도 정책으로 정합니다.
 
-실제 둔촌1동/CAFE의 20251은 점포 행이 존재하고 `storeCount=0`, 매출 행은 없습니다. 네 item 중 첫 item의 예정 표현은 다음과 같습니다. 나머지 세 분기는 양쪽 행이 존재하며 아래 DB 대조 표에 기록했습니다.
+실제 둔촌1동/CAFE의 20251은 점포 행이 존재하고 `storeCount=0`, 매출 행은 없습니다. 네 item 중 첫 item의 응답 표현은 다음과 같습니다. 나머지 세 분기는 양쪽 행이 존재하며 아래 DB 대조 표에 기록했습니다.
 
 ```json
 {
@@ -484,19 +485,19 @@ GET /api/admin-dong-trends?dongCode=11110515&industryCode=CAFE
 
 무결성 검사나 분기 통계 조회 중 무결성/DB 오류가 발생하면 **전체 요청**을 해당 500 오류로 실패시킵니다. 요청 검증의 400 정책은 위 표대로 유지합니다. 정상 분기 일부만 반환하거나 오류 분기를 NO_ROW로 대체하지 않습니다. SQL·stack trace·접속 정보는 응답에 노출하지 않습니다.
 
-### DB 매핑·다음 구현의 조회 전략
+### DB 매핑·조회 전략
 
 논리적 key는 `dong_code + source_industry_code + quarter_code`입니다. 내부 `industryCode`를 `industry_mappings.source='SEOUL'`의 유일한 source code에 연결하고 적재 행의 industry_id 일치를 확인합니다. CAFE는 `CS100010`에 연결됩니다. surrogate id는 행 존재 확인에 사용할 수 있지만 JSON에는 노출하지 않습니다.
 
-한 요청에서 Controller의 strict query → Service의 lookup·매핑/무결성·지원 여부 확인 → JdbcClient Repository의 여러 분기 조회 → 분기별 응답 조립 순으로 확장하는 것을 권합니다. 기존 단건 DTO의 StoreStats·SalesStats·MissingReasons·Quarter 의미를 재사용하고 추세 리소스와 분기 item만 추가합니다. 이 문서는 Java 타입·메서드 구현을 추가하지 않습니다.
+현재 구현은 Controller의 strict query 검증(QueryValidator) → Service의 lookup·매핑/무결성·지원 여부 확인 → JdbcClient Repository의 여러 분기 조회 → 고정 분기별 응답 조립 순서입니다. 기존 단건 DTO의 StoreStats·SalesStats·MissingReasons·Quarter 의미를 재사용하고 추세 리소스와 분기 item만 추가했습니다.
 
 - 기존처럼 읽기 전용 **REPEATABLE READ transaction 하나**에서 lookup·매핑 검사·두 테이블 통계를 읽습니다. 별도 transaction으로 분리하면 적재 사이의 상태를 섞을 수 있습니다.
-- lookup을 한 번만 확인하고, 각 테이블에서 dong/source와 **정확한 네 quarter code**를 bind parameter로 필터링해 quarter 오름차순으로 가져옵니다. 통계 SQL은 store/sales 각 1회, 총 2회를 권장하며 lookup·무결성 SQL은 별도입니다.
+- lookup을 한 번만 확인하고, 각 테이블에서 dong/source와 **정확한 네 quarter code**를 bind parameter로 필터링해 quarter 오름차순으로 가져옵니다. 통계 SQL은 store/sales 각 1회, 총 2회이며 lookup·무결성 SQL은 별도입니다.
 - 단일 분기 store/sales를 네 번씩 호출하는 최대 8회 통계 SQL도 의미상 구현 가능하지만 불필요한 왕복이 있습니다. Service의 기존 단건 조회를 네 번 호출하면 lookup까지 반복되므로 우선안으로 삼지 않습니다.
 - 두 결과를 quarter key로 매핑하고 계약의 고정 기간을 순회해 없는 row를 null/NO_ROW로 채웁니다. INNER JOIN으로 양쪽 행이 있는 분기만 남기지 않고 metric NULL을 0으로 채우지 않습니다. 같은 테이블/quarter의 중복을 맵의 마지막 값으로 덮어쓰지 않습니다.
 - 같은 snapshot의 단건 응답과 추세 item은 동일 metric·NULL/NO_ROW 값을 가져야 합니다. 서로 다른 시점의 별도 HTTP 요청 사이까지 snapshot 동일성을 보장하지는 않습니다.
 
-두 테이블에 이미 `(dong_code, source_industry_code, quarter_code)` 조회 인덱스와 복합 키 UNIQUE가 있습니다. 이 필터·정렬의 접근 경로를 제공하므로 현재 4분기 조회 때문에 새 column/table/index나 **V2 migration은 필요하지 않습니다**. 실제 성능은 구현 후 실행 계획으로 확인하며 근거 없이 index를 추가하지 않습니다.
+두 테이블에 이미 `(dong_code, source_industry_code, quarter_code)` 조회 인덱스와 복합 키 UNIQUE가 있습니다. 이 필터·정렬의 접근 경로를 제공하므로 현재 4분기 조회 때문에 새 column/table/index나 **V2 migration은 필요하지 않습니다**. 실제 성능은 실행 계획으로 확인하며 근거 없이 index를 추가하지 않습니다.
 
 ### 2026-10-06 실제 DB 대조
 
@@ -523,13 +524,13 @@ GET /api/admin-dong-trends?dongCode=11110515&industryCode=CAFE
 | 둔촌1동(11740690) / CAFE | 20253 | 7 | 452142858 | 70594 | 양쪽 |
 | 둔촌1동(11740690) / CAFE | 20254 | 8 | 452142858 | 70417 | 양쪽 |
 
-추가로 면목5동(`11260550`)/CAFE는 네 분기의 점포 수가 17/16/16/15이고 매출은 모두 NO_ROW입니다. 신정6동(`11470670`)/PUB(서울시 `CS100009`)는 네 분기 모두 양쪽 NO_ROW입니다. NULL·signed BIGINT 경계값은 이 실제 사례에서 확인한 값이 아니므로 추후 격리 fixture/응답 경계 테스트에서 다룹니다.
+추가로 면목5동(`11260550`)/CAFE는 네 분기의 점포 수가 17/16/16/15이고 매출은 모두 NO_ROW입니다. 신정6동(`11470670`)/PUB(서울시 `CS100009`)는 네 분기 모두 양쪽 NO_ROW입니다. NULL·signed BIGINT 경계값은 이 실제 사례에서 확인한 값이 아니며, 별도 격리 fixture/Backend 응답 경계 테스트에서 검증했습니다.
 
-### 다음 구현의 테스트 계약
+### 테스트 계약과 검증 상태
 
-기존 단건 테스트는 회귀 기준으로 유지합니다. 같은 parser·직렬화 규칙을 모든 계층에 복사하는 대신 책임별로 다음을 추가합니다. 아직 테스트 코드나 fixture를 작성/실행하지 않았습니다.
+기존 단건 테스트는 회귀 기준으로 유지합니다. 같은 parser·직렬화 규칙을 모든 계층에 복사하는 대신 아래 책임별 검증을 사용합니다. Backend 일반·populated/격리 DB 테스트와 실제 HTTP 대조를 수행했습니다([Backend 검증 결과](../backend/README.md#조회-api와-테스트-범위)). 후속 Frontend 검증은 아직 구현하지 않았습니다.
 
-| 계층 | 추가할 검증 | 이유·경계 |
+| 계층 | 검증 항목 | 이유·경계 |
 | --- | --- | --- |
 | request / MVC (DB 없음) | dong/industry 각각 누락·빈 값·중복·형식 오류; 공백·소문자·길이 경계; quarterCode와 다른 미정의 query; 복합 오류 우선순위 | 두 필드 strict query와 새 경로의 wiring을 검증. 구조/형식 오류는 Service 호출 전에 400 |
 | Service / Repository 단위 | 고정 네 분기·오름차순·없는 분기 유지; 첫/중간/마지막 분기의 NO_ROW 조립; 한 분기 양쪽 NO_ROW·네 분기 모두 NO_ROW; 2024/2026행 배제; 중복 row 거부; 내부 실패/무결성 예외의 원자적 실패 | period 축을 DB 결과 행에서만 만들거나 Map에 중복을 덮어쓰는 실수를 방지. 기존 UNIQUE를 제거하지 않고 중복 query 경계를 대체 |
@@ -539,4 +540,4 @@ GET /api/admin-dong-trends?dongCode=11110515&industryCode=CAFE
 | 후속 Frontend API 경계 | 네 item의 code/순서/길이·nullable 객체와 missingReasons 일치·string/range 검사; BIGINT를 number·지수·소수·잘못된 문자열·범위 초과로 받은 응답 거부 | 유효 BIGINT column은 잘못된 숫자 문자열을 생산하지 않으므로 잘못된 응답은 API 경계 mock으로 검증. Backend를 double/string 우회 모델로 바꾸지 않음 |
 | 후속 Frontend UI / hook | 정상·부분/전체 NO_ROW·metric NULL·실제 0·HTTP/network 오류 구분; 정확한 BIGINT 표시; 요청 취소/늦은 응답; 없는 분기를 생략하거나 0으로 연결하지 않음 | 시각화 방식을 정한 뒤 필요한 회귀 사례만 추가. 이번 계약 단계에서 chart/표/component/hook/dependency를 구현하지 않음 |
 
-통계 조회의 무결성 오류는 정상 item 일부와 섞이지 않아야 합니다. DB 연결 실패는 INTERNAL_ERROR, 존재하지 않는 통계 조합은 정상 NO_ROW입니다. Backend 구현과 실제 API 검증 이후 화면을 구현하고, CSV → ETL → DB → API → React의 새 환경 재현은 별도 7-2 작업으로 남깁니다.
+통계 조회의 무결성 오류는 정상 item 일부와 섞이지 않아야 합니다. DB 연결 실패는 INTERNAL_ERROR, 존재하지 않는 통계 조합은 정상 NO_ROW입니다. Backend 구현과 실제 API 검증을 완료했습니다. Frontend 추세 화면 구현과 CSV → ETL → DB → API → React의 새 환경 재현은 후속 작업으로 남깁니다.

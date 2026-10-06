@@ -12,27 +12,37 @@ final class QueryValidator {
     private QueryValidator() {}
 
     record StatsQuery(String dongCode, String industryCode, String quarterCode) {}
+    record TrendQuery(String dongCode, String industryCode) {}
 
     static void noQuery(MultiValueMap<String, String> query) { rejectUnknown(query, List.of()); }
 
     static StatsQuery stats(MultiValueMap<String, String> query) {
-        for (var field : FIELDS) {
+        validate(query, FIELDS);
+        return new StatsQuery(query.getFirst("dongCode"), query.getFirst("industryCode"), query.getFirst("quarterCode"));
+    }
+
+    static TrendQuery trends(MultiValueMap<String, String> query) {
+        validate(query, FIELDS.subList(0, 2));
+        return new TrendQuery(query.getFirst("dongCode"), query.getFirst("industryCode"));
+    }
+
+    private static void validate(MultiValueMap<String, String> query, List<String> fields) {
+        for (var field : fields) {
             if (query.containsKey(field) && query.get(field).size() != 1) {
                 throw invalid("요청 파라미터는 정확히 한 번 전달해야 합니다.", field);
             }
         }
-        rejectUnknown(query, FIELDS);
-        for (var field : FIELDS) {
+        rejectUnknown(query, fields);
+        for (var field : fields) {
             if (query.getFirst(field) == null || query.getFirst(field).isEmpty()) {
                 throw invalid("필수 요청 파라미터가 없거나 비어 있습니다.", field);
             }
         }
-        for (int i = 0; i < FIELDS.size(); i++) {
-            if (!FORMATS.get(i).matcher(query.getFirst(FIELDS.get(i))).matches()) {
-                throw new InvalidQueryException(CODES.get(i), "요청 파라미터 형식이 올바르지 않습니다.", FIELDS.get(i));
+        for (int i = 0; i < fields.size(); i++) {
+            if (!FORMATS.get(i).matcher(query.getFirst(fields.get(i))).matches()) {
+                throw new InvalidQueryException(CODES.get(i), "요청 파라미터 형식이 올바르지 않습니다.", fields.get(i));
             }
         }
-        return new StatsQuery(query.getFirst("dongCode"), query.getFirst("industryCode"), query.getFirst("quarterCode"));
     }
 
     private static void rejectUnknown(MultiValueMap<String, String> query, List<String> allowed) {
