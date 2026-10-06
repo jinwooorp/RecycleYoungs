@@ -1,6 +1,6 @@
 # 행정동 통계 API 계약
 
-확정일: 2026-10-03. 로드맵 1차 4단계의 계약이며 API는 아직 구현하지 않았습니다. 현재 PostgreSQL의 V1 스키마와 적재 데이터를 대조했습니다.
+확정일: 2026-10-03. 로드맵 1차 4단계에서 확정한 계약이며, 5단계 API 구현과 6단계 React 연결을 완료했습니다. PostgreSQL의 V1 스키마와 적재 데이터를 대조했습니다.
 
 ## 범위와 공통 규칙
 
@@ -209,7 +209,7 @@ number는 DB INTEGER 범위의 정수이며 BIGINT 문자열은 부호를 포함
 
 후속 metadata 작업은 자료별 출처·단위·원천 집계 정의·파일 해시·기간·적재 이력/버전을 확인해 DB에서 관리하는 경로로 연결합니다. 요청 중 CSV·manifest·외부 원천 페이지를 읽는 우회는 금지합니다. 이번에는 metadata schema·V2를 작성하지 않았습니다.
 
-## 다음 구현의 DB 매핑
+## 구현의 DB 매핑
 
 | API/정보 | DB 정보와 연결 기준 |
 | --- | --- |
@@ -219,4 +219,4 @@ number는 DB INTEGER 범위의 정수이며 BIGINT 문자열은 부호를 포함
 | 통계 조회 | 내부 업종 code → SEOUL 원본 코드 → 두 통계의 quarter_code/dong_code/source_industry_code. industry_id 연결도 일치해야 함 |
 | 식별자 | DB의 복합 키는 원본 업종 기준, 외부는 내부 업종 기준. 단일 서울시 매핑으로 대응하며 surrogate id는 반환하지 않음 |
 
-실제 SQL·Repository·DTO Java 설계는 5단계에서 구현합니다. 이후 테스트는 정상·입력 오류·부분/전체 NO_ROW·metric NULL·0·BIGINT 정밀도와 매핑 오류를 구분해야 합니다. API integration test는 아직 실행하지 않았습니다.
+SQL·Repository·DTO Java는 5단계에서 구현했습니다. 테스트는 정상·입력 오류·부분/전체 NO_ROW·metric NULL·0·BIGINT 정밀도와 매핑 오류를 구분하며, 실제 DB/API integration 검증 결과는 [프로젝트 기록](project-status.md)에 있습니다.

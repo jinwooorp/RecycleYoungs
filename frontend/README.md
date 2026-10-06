@@ -1,6 +1,6 @@
 # Frontend
 
-React + TypeScript + Vite로 행정동·업종·분기를 선택하고 점포·추정매출 표를 조회합니다. API의 단일 기준은 [행정동 API 계약](../docs/api-contract.md)입니다. 지도·추세·점수·metadata UI는 포함하지 않습니다.
+React + TypeScript + Vite로 행정동·업종·분기를 선택하고 점포·추정매출 표를 조회합니다. Tailwind CSS v4와 shadcn/ui Button·Card를 점진적으로 적용했습니다. API의 단일 기준은 [행정동 API 계약](../docs/api-contract.md)입니다. Chart·분기 추세·지도·후보 비교·점수·metadata UI는 포함하지 않습니다.
 
 ## 실행
 
@@ -32,9 +32,19 @@ npm run dev
 | `src/hooks/useAdminDongStats.ts` | lookup·선택·조회 상태, AbortController와 늦은 응답 방지 |
 | `src/components/SearchForm.tsx` | label이 연결된 select와 조회 버튼 |
 | `src/components/StatsResult.tsx` | 기준 조건·통계 표·자료 없음·정밀한 숫자 표시 |
-| `src/App.tsx`, `src/App.css`, `src/index.css` | 화면 조립·상태 안내·Vanilla CSS |
+| `src/components/ui/button.tsx`, `card.tsx` | shadcn/ui 기반 공통 Button·Card |
+| `src/lib/utils.ts` | clsx·tailwind-merge 기반 className 조합 |
+| `src/App.tsx`, `src/App.css`, `src/index.css` | 화면 조립·상태 안내·Tailwind 레이아웃·light theme·CSS layer |
 
-React core만 사용합니다. CSS는 기본 반응형·focus·숫자 가독성에 한정했고 자체 UI framework를 만들지 않았습니다. 향후 Tailwind + shadcn/ui 검토 시 폼·결과의 표현 계층을 교체하고 타입·API client·상태 hook은 유지할 수 있습니다.
+상태 처리는 React core·fetch·AbortController를 유지합니다. 타입·API client·상태 hook은 표현 계층과 분리되어 있으며 UI 기반 도입으로 동작을 바꾸지 않았습니다. 별도 상태·폼 라이브러리나 theme provider를 추가하지 않았습니다.
+
+Tailwind는 공식 `@tailwindcss/vite` 플러그인과 `@import "tailwindcss"`로 구성합니다. shadcn/ui는 공식 new-york-v4 Button·Card 소스를 수동 도입하고 `components.json`을 설정했습니다. Button은 light theme·44px 최소 클릭 영역·명확한 disabled/focus 스타일로 조정했고 animation·미사용 variant는 제외했습니다. Card의 `asChild`는 Radix Slot으로 기존 `section`·`aria-labelledby`를 유지합니다. 별도 Button/Card wrapper는 없습니다.
+
+실제 적용은 조회/재시도 Button과 조회 조건/점포/추정매출 Card까지입니다. 조건 입력은 native `select`, 통계 표는 `table`·`caption`·`th scope="row"`를 유지합니다. Select·Combobox·Chart·지도 SDK는 도입하지 않았습니다.
+
+`src/index.css`는 녹색 계열의 light theme 토큰과 `base`/접근성 utility를, `src/App.css`는 native 입력·통계 표·상태 안내의 `components` layer를 관리합니다. Preflight의 margin·box-sizing·font reset과 중복된 규칙은 정리했습니다. 레이아웃/패딩은 Tailwind utility를 사용하며 layer 밖 전역 스타일로 공통 Button/Card를 덮어쓰지 않습니다. 모바일/데스크톱 전환은 기존 760px 경계를 유지합니다.
+
+`@/*`는 `src/*`를 가리킵니다. TypeScript의 루트/app 설정, Vite, 별도 Vitest 설정에 동일한 alias를 적용했고 기존 상대 import는 유지했습니다. TypeScript 6에서 불필요한 `baseUrl`은 추가하지 않았습니다. Vite `/api` proxy도 그대로입니다.
 
 ## 검증
 
@@ -55,3 +65,7 @@ Vitest·React Testing Library·jest-dom·jsdom은 개발 테스트용입니다. 
 | 신정6동 `11470670` / `PUB` | 양쪽 자료 없음, 정상 empty 결과 |
 
 검증용 Spring을 일시 중단해 통계/lookup 오류와 재시도 복구를 확인했고, 390px·1280px 배치를 확인했습니다. metric NULL·2^53 초과 값·순수 network 실패는 자동 테스트로 검증했습니다. 기존 DB 행 수·전체 checksum·Flyway 이력이 유지됐습니다. 상세 결과는 [프로젝트 기록](../docs/project-status.md), 다음 작업은 [로드맵](../docs/roadmap.md)을 확인합니다.
+
+2026-10-06 Tailwind/shadcn 도입 후에도 기존 테스트 36개를 수정 없이 통과했고 lint·build를 통과했습니다. 실제 Vite `/api` 프록시 → Spring → 기존 PostgreSQL로 위 세 조건의 HTTP 200 응답과 브라우저 표시를 다시 확인했습니다. 검증용 Spring은 Flyway를 비활성화하고 JDBC 세션을 읽기 전용으로 실행했습니다.
+
+실제 브라우저의 390px·1280px에서 native select·카드 배치·가로 넘침 없음과 3px 키보드 focus를 확인했습니다. DB에 없는 signed BIGINT 최대/최소값·metric NULL·실제 0·지연/HTTP 오류 표시는 저장소 밖 임시 API fixture를 사용하는 별도 Vite 서버로 확인했습니다. 이 fixture 확인은 실제 DB 사례와 구분하며 production 코드·DB에 fixture를 추가하지 않았습니다. 정상 화면에서 console error/warning은 없었습니다.
