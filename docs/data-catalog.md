@@ -57,7 +57,7 @@
 
 현재 `commercial_areas.location GEOMETRY(POINT, 4326)`은 ETL이 원본 X/Y를 EPSG:4326 경위도로 변환해 저장하도록 정의된 **상권 대표 POINT**이며 경계 Polygon이 아닙니다. 이 POINT로 후보 좌표의 상권 포함 여부를 판정할 수 없습니다. `AREA_SOURCE_CRS`의 공란 기본값과 미설정 시 적재 거부는 유지합니다. 2026-10-07 임시 파일 분석에서 EPSG:5181 → EPSG:4326 변환 1,650행의 sanity·독립 투영 수치를 검산하고 대표 8점의 행정동 포함을 확인했습니다. 추가 전수 대조의 홍지문 `3110531` 1점은 CSV 지정 부암동 밖/확보 경계의 홍은1동 안이며 원천 참조 기준·경계 버전 차이 원인은 미확인입니다. 환경 설정·ETL 실행·재적재·DB 변경은 없고 보관 CSV의 최초 배포 이력도 여전히 미확인입니다([실제 검사와 범위](project-status.md#2026-10-07-공간-데이터-24단계-실제-검증)).
 
-기존 CSV 6개에는 Polygon이 없지만, 2026-10-07에 공식 행정동 경계 ZIP을 별도 로컬 raw 공간으로 확보했습니다. 후속 홍지문 조사에서 확보한 OA-15560 공식 상권 ZIP도 재사용해 전체 feature의 MVP 최소 품질·코드 대조를 수행했으며 invalid 6건은 미해결입니다. 실제 경계 버전 호환은 이 검사와 구분합니다([검증 절차](spatial-data-validation.md)).
+기존 CSV 6개에는 Polygon이 없지만, 2026-10-07에 공식 행정동 경계 ZIP을 별도 로컬 raw 공간으로 확보했습니다. 후속 홍지문 조사에서 확보한 OA-15560 공식 상권 ZIP도 재사용해 전체 feature의 MVP 최소 품질·코드 대조를 수행했습니다. 후속 6건 검사에서 원본 invalid는 불변으로 유지하고 별도 파생 operational geometry의 acceptance를 확인했습니다. 실제 경계 버전 호환은 이 검사와 구분합니다([검증 절차](spatial-data-validation.md)).
 
 `data/manifest.json`은 2026-09-30의 입력 검사 기록으로 유지합니다. 당시 `source_coordinate_crs: null`과 5181/5186 충돌 이력을 이번 문서 확인만으로 덮어쓰지 않습니다. 공식 CRS의 기계 검증 방식과 manifest 반영은 후속 단계에서 결정합니다.
 
@@ -109,7 +109,11 @@ OA-15560의 현재 공식 CSV에서 홍지문 `3110531`은 보관 행과 완전�
 | 상권 매출 고유 코드 / Polygon 교집합 / 매출 코드 누락 | 1577 / 1577 / 0 |
 | 매출 없는 Polygon | 73개, 오류로 취급하지 않음 |
 
-invalid 6건은 `3110137 성수초등학교`, `3110270 혜원여고`, `3110234 중랑역 4번`, `3110407 도봉역 2번`, `3110515 홍은중학교`, `3110542 마포구청역 7번`이며 모두 ring self-intersection·매출 코드에 해당합니다. 원본 repair는 하지 않았으므로 **5단계 미완료**입니다. 코드 연결 가능성과 geometry의 공간 판정 가능성을 구분하며 역사적 버전은 known limitation으로 유지합니다. 홍지문 `3110531`은 코드가 존재하고 geometry가 valid하지만 H5·canonical 행정구역 속성 선택 유보는 유지합니다.
+invalid 6건은 `3110137 성수초등학교`, `3110270 혜원여고`, `3110234 중랑역 4번`, `3110407 도봉역 2번`, `3110515 홍은중학교`, `3110542 마포구청역 7번`이며 모두 ring self-intersection·매출 코드에 해당합니다. 원본을 보존한 채 `make_valid(method="linework", keep_collapsed=True)`의 별도 파생 geometry를 검증해 6건 모두 **ACCEPTABLE**, **5단계 완료: operational geometry 정책**으로 기록합니다. 코드 연결 가능성과 geometry의 공간 판정 가능성을 구분하며 역사적 버전은 known limitation으로 유지합니다. 홍지문 `3110531`은 코드가 존재하고 geometry가 valid하지만 H5·canonical 행정구역 속성 선택 유보는 유지합니다.
+
+파생 6건은 모두 valid / non-empty Polygon 1개·hole 1개·non-polygon component 0입니다. 원본의 self-touch closed loop를 hole로 명시한 것으로 경계 linework·고유 vertex·bbox가 보존됐습니다. 원본 대비 절대 면적 차이는 최대 `1.7462298274040222e-10m²`이며 면적은 진단 지표로만 사용했습니다. Shapely structure·진단용 buffer(0)·격리 PostGIS 기본 linework와 topological equality=true·symmetric difference empty/0m², 총 577개 공간 관계 표본의 PostGIS mismatch 0을 확인했습니다.
+
+원본 품질 수치 valid 1644 / invalid 6은 그대로이며 repaired SHP로 덮어쓰지 않았습니다. source/raw와 파생 operational을 구분하고 source SHA·code·CRS·method/인자·도구 버전·원본/결과 WKB SHA를 보존하는 정책입니다. 같은 고정 입력·버전의 재실행 WKB도 일치했습니다. 예상 밖 GeometryCollection·line/point나 공간 의미 변화는 별도 REVIEW_REQUIRED이며 buffer(0)을 production 방식으로 채택하지 않습니다. 상세 결과는 [6건 파생 검증 기록](project-status.md#2026-10-07-invalid-상권-6건-operational-geometry-검증), 산출물은 Git 제외 로컬 `data/raw/spatial/six-repair-validation-20261007/`에 있습니다. 역사적 경계 검증 완료나 DB 적재 완료를 의미하지 않습니다.
 
 ## SEMAS CAFE 6단계 검사 결과
 

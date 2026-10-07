@@ -629,3 +629,120 @@ I21201의 원본 표준산업분류 분포는 I56221 20533행·I56229 1750행·�
 **6단계 완료: CAFE 범위**입니다. 공식 분류표·통합 범주를 채택한 MVP 정책·포함/제외 규칙·2026-06 분포·좌표 품질·offline 반경 계산 가능성을 확인했습니다. 전체 업종 매핑 완료나 production 적재/조회 완료로 표시하지 않습니다.
 
 상권 5단계의 남은 문제는 invalid 6건 처리 정책이며 역사적 버전 근거를 새 필수 blocker로 추가하지 않습니다. 새 검증 결과·공식 첨부·provenance는 Git 제외 `data/raw/spatial/stage56-validation-20261007/`의 `results.json`, `provenance.json`, `candidates.json`, `semas-classification.xlsx` 등에 보존했습니다. 기존 raw 산출물을 덮어쓰거나 `.gitignore`·manifest를 변경하지 않았습니다.
+
+## 2026-10-07 invalid 상권 6건 operational geometry 검증
+
+시작 상태는 `main` / `c6ae60cf58ca085db1d827c300c3ee1511e48f44`, 초기 `git status --short` 출력 없음입니다. 기존 OA-15560 원본과 5단계 결과를 재사용해 알려진 feature index 6개만 읽었습니다. 1650개 전수 geometry/코드 집합 검사는 반복하지 않았고, 상권 매출도 이 6개 코드의 분기 존재/행 수만 추출했습니다. 검사 시각은 2026-10-07T19:10:45.454236+09:00~2026-10-07T19:22:45.428952+09:00(Asia/Seoul)입니다.
+
+### 원본 보존·도구와 격리 환경
+
+OA-15560 원본 ZIP SHA-256 `38bb8fab4e45a1171af4989cd7fa1275f68e5d644aa770f5431ce7ccc38384dd` 및 기존 SHP/SHX/DBF/PRJ/CPG member hash를 대조했습니다. 원본 ZIP·5개 파일·영역 CSV·상권 매출 CSV의 크기/SHA를 검사 전후 및 완료 시점에 다시 대조했고 모두 동일합니다. raw를 수정하거나 repaired SHP로 대체하지 않았습니다. 원본 EPSG:5181, 거리 m·면적 m²에서만 repair를 검사했습니다.
+
+- Python 3.13.16 / Shapely 2.1.2 / GEOS 3.13.1 / pyshp 3.1.6 / pyproj 3.7.0 / PROJ 9.4.1.
+- 기존 프로젝트 밖 임시 venv를 사용했습니다. 시각 대조용 Matplotlib 3.10.7만 해당 임시 환경에 추가했으며 production dependency는 바꾸지 않았습니다.
+- 비교용 image `postgis/postgis:16-3.4`, PostgreSQL 16.4 / PostGIS 3.4.3 / GEOS 3.9.0 / PROJ 7.2.1.
+- `docker run --rm` 컨테이너와 project label `recycleyoungs-six-repair-i7hyjy2p`, network `none`, host port 없음, `/var/lib/postgresql/data` tmpfs, 기존/별도 named volume mount 없음.
+- 임시 DB `repair_validation`의 Unix socket에 `docker exec psql`로만 연결했습니다. 여섯 WKB literal의 SELECT/CTE 검사이며 table·migration·적재 작업은 하지 않았습니다. 검사 후 해당 임시 컨테이너만 stop/자동 제거했고 기존 `startup-analysis-postgres`와 기존 volume 목록은 유지됐습니다. 기존 개발 DB에는 연결하지 않았습니다.
+
+[Shapely make_valid](https://shapely.readthedocs.io/en/stable/reference/shapely.make_valid.html)의 `linework`와 `structure`를 각각 `keep_collapsed=True`로 실행했습니다. [PostGIS ST_MakeValid](https://postgis.net/docs/ST_MakeValid.html)는 기본 linework로 비교했습니다. 임시 환경의 GEOS 3.9.0은 structure에 필요한 GEOS 3.10 이상 조건을 충족하지 않아 PostGIS structure 비교는 수행하지 않았습니다. 두 구현은 같은 GEOS 알고리즘 계열이므로 완전히 독립적인 알고리즘 검증이 아니라 구현/버전 호환 대조입니다.
+
+### 6건 원본과 self-intersection의 실제 구조
+
+6건 모두 원본은 invalid Polygon 1개·ring 1개·명시된 hole 0개이며 reason은 `Ring Self-intersection`입니다. 원본 area는 유효하지 않은 형상의 진단 수치이며 실제 영역의 ground truth로 취급하지 않습니다.
+
+| 코드 / 이름 | raw area m² | raw ring vertex 수* | 반복 vertex index | self-touch 원본 좌표 | loop area m² / 둘레 m | 전체 bbox 대각선 m |
+| --- | --- | --- | --- | --- | --- | --- |
+| `3110137` 성수초등학교 | 330982.766709656338 | 144 | [0, 8] | (205520.8139, 449403.567399999) | 12898.182058 / 470.769186 | 1131.265014 |
+| `3110270` 혜원여고 | 35643.832793595917 | 85 | [0, 25] | (208557.9972, 454737.521500001) | 5784.420276 / 352.112210 | 414.322346 |
+| `3110234` 중랑역 4번 | 58421.426861916028 | 87 | [0, 8] | (206619.9998, 454998.6647) | 4298.598846 / 270.485759 | 627.874112 |
+| `3110407` 도봉역 2번 | 454339.648021544563 | 367 | [0, 36] | (203568.7644, 464305.1741) | 1750.136106 / 190.338610 | 1300.479599 |
+| `3110515` 홍은중학교 | 64938.467160828674 | 137 | [0, 25] | (194089.5152, 454792.16159999906) | 1738.768568 / 171.964974 | 682.703992 |
+| `3110542` 마포구청역 7번 | 123656.428756203270 | 148 | [0, 19] | (191209.785, 451263.96140000003) | 4909.151117 / 282.154459 | 787.299291 |
+
+*마지막 폐합 좌표를 제외한 ring vertex 수이며 동일 좌표의 재방문을 포함합니다. 원본 feature/ring의 segment index·양끝 좌표·길이·문제 위치까지 거리와 원본 전체 bbox는 로컬 `results.json`에 보존했습니다. 두 코드의 reason 문자열 좌표와 실제 vertex 간 최대 약 `5.82e-11m` 차이는 출력 반올림 차이로 구분했으며 진단 anchor만 원본의 최근접 vertex로 식별했습니다. source 좌표를 snap/수정하지 않았습니다.
+
+문제는 미세한 line spike 제거로 설명되지 않습니다. 첫 꼭짓점에서 내부 closed loop를 돌아 같은 꼭짓점으로 복귀한 뒤 외곽을 도는 한 ring의 self-touch 표현입니다. 여섯 loop는 유효한 Polygon이고 counterclockwise이며, make_valid 결과의 hole과 각각 topological equality가 참입니다. 면적 1738.77~12898.18m²인 의미 있는 loop를 버리거나 채운 것이 아니라 외곽과 hole로 분리해 보존했습니다. 큰 bow-tie 영역을 임의 선택해 없앤 결과는 관찰되지 않았습니다. 원본 경계 linework와 모든 고유 vertex가 결과에 그대로 남았습니다.
+
+원본 bbox와 linework/structure/PostGIS 보정 bbox를 실제 좌표값으로 비교했습니다. 아래 bbox는 각 원본과 모든 보정 후보에 공통이며 변화는 `(0,0,0,0)m`입니다.
+
+| 코드 | bbox `(xmin,ymin,xmax,ymax)` EPSG:5181 |
+| --- | --- |
+| `3110137` | `(205097.7793, 449187.318299999, 205961.7926, 449917.55220000097)` |
+| `3110270` | `(208470.6102, 454530.752, 208715.9066, 454864.657199999)` |
+| `3110234` | `(206246.9093, 454789.076400001, 206821.6645, 455041.825999999)` |
+| `3110407` | `(203107.6069, 463509.5525, 203977.5963, 464476.17840000096)` |
+| `3110515` | `(194070.1112, 454482.09930000105, 194293.7685, 455127.1281)` |
+| `3110542` | `(190970.6954, 451082.60170000105, 191641.7294, 451494.3705)` |
+
+### make_valid·buffer(0) 정량 대조
+
+linework·structure·진단용 buffer(0)은 6건 모두 valid / non-empty Polygon 1개, 외곽 ring 1개 + hole 1개입니다. MultiPolygon 0·GeometryCollection 0·non-polygon component 0이며 polygonal component만 추출하거나 line/point를 버린 사례는 없습니다.
+
+| 코드 | linework area m² | linework 절대 Δm² / 상대 Δ% | structure 절대 Δm² / 상대 Δ% | buffer(0) 절대 Δm² |
+| --- | --- | --- | --- | --- |
+| `3110137` | 330982.766709656280 | 5.82076609135e-11 / 1.75863116657e-14 | 5.82076609135e-11 / 1.75863116657e-14 | 5.82076609135e-11 |
+| `3110270` | 35643.832793595910 | 7.27595761418e-12 / 2.04129495734e-14 | 0 / 0 | 0 |
+| `3110234` | 58421.426861916014 | 1.45519152284e-11 / 2.49085241666e-14 | 0 / 0 | 0 |
+| `3110407` | 454339.648021544388 | 1.7462298274e-10 / 3.84344583399e-14 | 5.82076609135e-11 / 1.28114861133e-14 | 5.82076609135e-11 |
+| `3110515` | 64938.467160828623 | 5.09317032993e-11 / 7.84307137604e-14 | 7.27595761418e-12 / 1.12043876801e-14 | 7.27595761418e-12 |
+| `3110542` | 123656.428756203313 | 4.36557456851e-11 / 3.53040647577e-14 | 8.73114913702e-11 / 7.06081295153e-14 | 8.73114913702e-11 |
+
+각 원본 bbox와 세 결과 bbox는 동일하며 xmin/ymin/xmax/ymax 변화는 모두 0m입니다. 면적 차이만으로 합격시키지 않았습니다. 경계/vertex 보존·동일 hole·아래 공간 관계 및 방법 간 동일성을 함께 근거로 판단했고 임의의 단일 면적 threshold를 도입하지 않았습니다. 원본과 결과의 경계선 equality가 참이며, linework/structure/buffer(0)의 polygonal equality가 모두 참·symmetric difference는 empty/0m²·Hausdorff distance 0m입니다. 면적 산출의 작은 차이는 이러한 동일성 근거에 따라 부동소수점 계산 순서 차이로 해석했습니다.
+
+**buffer(0)은 진단 비교용이며 production canonical repair 방식으로 채택하지 않습니다.** 이번 6건에서는 component/공간 영역 차이가 없었지만 다른 입력에도 같다고 일반화하지 않습니다.
+
+### 대표 POINT·내부/hole·문제 지점 주변 영향
+
+| 코드 | CSV X / Y | 후보 within / contains / covers | raw representative / centroid covers | 안정적 내부 표본 | hole 제외 표본 | PostGIS 전체 관계 표본 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `3110137` | 205519 / 449630 | true / true / true | true / true | 36 모두 포함 | 14 모두 제외 | 101 |
+| `3110270` | 208593 / 454695 | true / true / true | true / true | 31 모두 포함 | 11 모두 제외 | 93 |
+| `3110234` | 206502 / 454920 | true / true / true | true / true | 26 모두 포함 | 15 모두 제외 | 92 |
+| `3110407` | 203614 / 463983 | true / true / true | true / true | 34 모두 포함 | 14 모두 제외 | 99 |
+| `3110515` | 194180 / 454791 | true / true / true | true / true | 31 모두 포함 | 16 모두 제외 | 98 |
+| `3110542` | 191345 / 451292 | true / true / true | true / true | 30 모두 포함 | 13 모두 제외 | 94 |
+
+원본 representative point·centroid와 고정 7×7 bbox grid에서 source ring의 독립 even-odd ray 판정으로 내부이고 경계 위가 아닌 점을 골랐습니다. 총 188개 내부 표본이 보정 후에도 포함됐습니다. 원본 closed loop의 대표점/고정 grid 83개는 source even-odd와 결과 모두 영역 밖(hole)으로 유지됐습니다. invalid 원본의 GEOS predicate만을 ground truth로 사용하지 않았습니다.
+
+문제 지점 주변은 교차점 자체와 0.0001/0.001/0.01/0.1/1/5m의 8방향 offset으로 코드별 49개·총 294개를 검사했습니다. 이 값은 표본 간격이며 acceptance threshold가 아닙니다. linework·structure·buffer(0)의 within/contains/covers 차이는 0입니다. 원본의 정확한 self-touch vertex는 모든 후보에서 within=false / contains=false / covers=true로 경계 관계를 유지했습니다. 원본/결과 ring vertex·전체 형상은 진단 그림으로도 대조했습니다.
+
+### PostGIS 비교와 deterministic 재현
+
+6건 모두 임시 PostGIS ST_MakeValid 결과가 valid / non-empty Polygon 1개·hole 1개·non-polygon 0입니다. Shapely linework 및 structure와 ST_Equals=true, symmetric difference empty/0m², bbox 변화 0m이며 대표 POINT 관계도 모두 true입니다. 이 입력/버전에서 PostGIS WKB bytes는 Shapely linework WKB와도 동일했습니다. 다른 버전에도 WKB 순서까지 같다고 일반화하지 않습니다.
+
+CSV 대표점 6개·정확한 self-touch vertex 6개·내부 188개·hole 83개·문제 지점 주변 294개, 총 **577개 표본 레코드**의 within/contains/covers를 임시 PostGIS와 대조했고 각각 mismatch 0입니다. 교차점 등 같은 좌표가 여러 표본 역할에 등장하는 중복을 포함한 기록 수입니다. 동일 source WKB를 같은 버전/명시 인자로 세 번 호출하고 별도 Python 프로세스에서 재실행해 linework·structure 각각 6건 모두 출력 WKB SHA 동일성을 확인했습니다. 고정 source SHA/raw WKB·방법·인자·도구 버전·파생 WKB SHA를 기록해야 재현 가능한 profile이 됩니다.
+
+### 매출 사용 영향·최종 decision
+
+상권 매출 값을 재검산하지 않고 아래 여섯 코드의 분기별 원본 레코드 수만 확인했습니다. 모두 네 분기에 존재하므로 미지원 처리하면 아래 상권의 Q1~Q4 공간 선택/연결에 영향을 줍니다. 표의 수는 업종별 CSV 행 수이며 매출액·점포 수가 아닙니다.
+
+| 코드 | 20251 | 20252 | 20253 | 20254 |
+| --- | --- | --- | --- | --- |
+| `3110137` | 23 | 23 | 24 | 23 |
+| `3110270` | 6 | 7 | 7 | 7 |
+| `3110234` | 6 | 7 | 6 | 5 |
+| `3110407` | 21 | 20 | 20 | 20 |
+| `3110515` | 3 | 2 | 2 | 2 |
+| `3110542` | 19 | 17 | 18 | 18 |
+
+| 코드 / 이름 | raw valid | operational method / type | operational valid | 절대 area Δm² | 대표 POINT covers | PostGIS agreement | decision |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `3110137` 성수초등학교 | false | linework / Polygon | true | 5.82076609135e-11 | true | equality·표본 관계 일치 | ACCEPTABLE |
+| `3110270` 혜원여고 | false | linework / Polygon | true | 7.27595761418e-12 | true | equality·표본 관계 일치 | ACCEPTABLE |
+| `3110234` 중랑역 4번 | false | linework / Polygon | true | 1.45519152284e-11 | true | equality·표본 관계 일치 | ACCEPTABLE |
+| `3110407` 도봉역 2번 | false | linework / Polygon | true | 1.7462298274e-10 | true | equality·표본 관계 일치 | ACCEPTABLE |
+| `3110515` 홍은중학교 | false | linework / Polygon | true | 5.09317032993e-11 | true | equality·표본 관계 일치 | ACCEPTABLE |
+| `3110542` 마포구청역 7번 | false | linework / Polygon | true | 4.36557456851e-11 | true | equality·표본 관계 일치 | ACCEPTABLE |
+
+**ACCEPTABLE=6 / REVIEW_REQUIRED=0 / UNSUPPORTED=0**입니다. 단일 숫자 cutoff 없이 유효한 Polygon 확보·원본 linework/vertex/bbox와 hole 의미 보존·대표점/내부/교차점 관계·대체 방법 및 PostGIS 호환·고정 입력 재현을 종합해 판정했습니다.
+
+### operational geometry 정책과 5단계 완료 범위
+
+1. OA-15560 원본 ZIP/SHP와 source geometry는 불변으로 보존합니다. 파생 operational geometry는 source와 구분해 기록하며 원본이 수정되거나 raw invalid가 valid로 바뀌었다고 표현하지 않습니다.
+2. 이번에 검증된 source ZIP SHA·6개 code·raw WKB SHA profile에서는 `make_valid(method="linework", keep_collapsed=True)`의 Polygon 결과를 파생 operational 후보로 채택합니다. 임시 PostGIS 기본 linework와 호환되는 것을 확인했습니다. 기존 valid 1644건은 이전 검증을 재사용하며 불필요하게 repair하지 않습니다.
+3. 이번 6건은 GeometryCollection/line/point가 없어 polygon-only 추출·discard가 필요하지 않았습니다. 향후 예상 밖 component나 공간 의미 변화가 나오면 자동 추출/제거·buffer(0) fallback 없이 REVIEW_REQUIRED로 별도 검토합니다. 이번 acceptance를 다른 invalid 입력에 자동 적용하지 않습니다.
+4. source dataset ID·파일 SHA·feature index/code·CRS·raw WKB SHA·검사 상태·method/인자/버전·operational WKB SHA와 연결 근거를 보존합니다. source/raw와 validated operational의 분리 방향은 확정하되 별도 column/table 및 quality enum의 실제 스키마는 다음 7단계에서 결정합니다.
+
+**5단계 완료: operational geometry 정책**으로 기록합니다. 6건 모두 ACCEPTABLE·원본 보존·파생 생성 규칙·동일 입력 재현·raw/operational 분리 방향을 충족했습니다. 실제 production 적재·Flyway V2·API 구현 완료나 역사적 경계 버전 완전 검증을 뜻하지 않습니다. **전체 공간 B·4단계 미완료 known limitation/MVP blocker 아님·홍지문 H5·6단계 CAFE 범위 완료는 유지**합니다.
+
+새 결과·원본/파생 WKB·PostGIS 비교·재현 기록·진단 그림은 Git 제외 `data/raw/spatial/six-repair-validation-20261007/`의 `results.json`, `derived-operational-geometries.json`, `six-fixtures.json`, `postgis-results.jsonl`, `postgis-point-results.jsonl`, `replay-results.json`, `six-geometry-overview.png` 등에 보존했습니다. 이 JSON은 파생 검증 산출물이며 repaired SHP나 production raw 입력으로 저장하지 않았습니다. 분석/SQL 스크립트는 프로젝트 밖 임시 디렉터리에만 있습니다. 기존 공간 검증 산출물·manifest·architecture·production code/dependency는 변경하지 않았고 Git stage/commit/push도 하지 않았습니다.
