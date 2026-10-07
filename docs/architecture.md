@@ -48,7 +48,7 @@ React는 작은 fetch client·상태 hook·폼/결과 component로 나눕니다.
 
 ## 공간 기준
 
-최종 지도 분석에서 경쟁 점포 수·비율·밀집도는 후보 좌표 중심 300m·500m·1km 반경을 기준으로 합니다. 매출·인구·개폐업·시설은 경계와 코드 호환성이 검증된 공식 지역 단위로 제공합니다.
+최종 지도 분석에서 경쟁 점포 수·비율·밀집도는 후보 좌표 중심 300m·500m·1km 반경을 기준으로 합니다. 매출·인구·개폐업·시설은 공식 지역 코드 단위로 제공하며, 좌표 판정용 경계와 통계 당시 경계의 검증 수준을 구분합니다.
 
 - 반경을 변경해도 공식 지역 집계값은 그대로일 수 있습니다. 지역 매출·인구를 반경 면적 비율로 임의 배분하지 않습니다.
 - 현재 영역 CSV는 대표 지점과 면적만 제공하며 Polygon 경계가 없습니다. POINT만으로 후보 좌표의 포함 상권을 판정하지 않습니다.
@@ -58,6 +58,17 @@ React는 작은 fetch client·상태 hook·폼/결과 component로 나눕니다.
 
 MVP에서는 **행정동 Polygon을 먼저 검증**합니다. 현재 vertical slice의 `store_stats_dong`·`sales_dong`과 목록·단건 stats·4분기 trend API가 425개 행정동·2025 Q1~Q4를 사용하므로, 향후 `후보 좌표 → 행정동 Polygon 포함 판정 → dong_code → 기존 stats / trend`로 연결할 수 있습니다. `sales_commercial_area`는 스키마·ETL 입력이 존재하지만 현재 통계 API의 중심이 아니며, 상권 단위 점포 통계도 추가 확보가 필요합니다. 상권 Polygon은 이후 상권 단위 분석을 위해 검증합니다.
 
+MVP의 공간 경계는 다음 두 수준으로 구분합니다.
+
+| 구분 | 의미와 현재 OA-22160의 사용 정책 |
+| --- | --- |
+| operational geometry | 현재 공식 제공 자료로서 geometry/code/name 검증을 통과한 OA-22160 행정동 Polygon을 향후 **좌표 → 행정동 API**의 공간 판정용 경계로 사용 |
+| historically verified statistical boundary | 2025 점포/매출 통계의 실제 집계에 사용한 정확한 역사적 경계. OA-22160은 이 수준으로 검증되지 않았으며 해당 경계라고 주장하지 않음 |
+
+2025 통계와 확보 Polygon의 행정동 code/name 425개는 일치하지만 경계 기준 시점·재집계 정책의 공식 근거는 **unresolved**입니다. 전체 공간 검증 **B**, 로드맵 **4단계 미완료**를 유지하면서 이 제약을 문서와 향후 데이터 provenance에 기록하고, MVP 공간 기능 구현의 blocker로 사용하지 않습니다. 공식 경계 기준이 후속 확인되면 provenance와 판정 정책을 갱신합니다.
+
+홍지문 `3110531`은 **H5**를 유지합니다. 원인이 해결되기 전 OA-15560 상권 자료의 `SIGNGU_CD` 또는 `ADSTRD_CD` 중 어느 하나를 canonical 행정구역 속성으로 임의 선택하지 않습니다. 이 정책은 상권 Polygon 전체나 상권 코드 자체의 사용 금지를 의미하지 않습니다.
+
 대표 지점과 실제 경계는 다음처럼 분리하는 설계안을 검토합니다. 아래 경계 테이블은 현재 존재하지 않으며 이번에는 테이블·migration을 만들지 않습니다.
 
 | 개념 | 역할 |
@@ -65,7 +76,7 @@ MVP에서는 **행정동 Polygon을 먼저 검증**합니다. 현재 vertical sl
 | `commercial_areas` | 상권 코드·이름·대표 POINT 유지; POINT와 면적만으로 경계를 재구성하지 않음 |
 | `commercial_area_boundaries` (설계안) | 별도 공식 Polygon/MultiPolygon, 상권 코드와 경계 출처·시점·버전 연결 |
 
-Polygon은 확보 즉시 적재하지 않습니다. 코드 집합·이름·geometry type·SRID·중복·시점/버전의 [도입 전 검증 절차](spatial-data-validation.md)를 통과한 뒤 공간 스키마와 Flyway V2를 설계합니다. 같은 코드라도 경계 버전에 따라 공간 범위가 달라질 수 있으므로 통계와 연결할 버전을 별도로 결정합니다.
+Polygon은 확보 즉시 적재하지 않습니다. 코드 집합·이름·geometry type·SRID·중복의 검사 결과와 시점/버전의 확인 수준을 [도입 전 검증 절차](spatial-data-validation.md)에 따라 구분해 기록하고 공간 스키마와 Flyway V2를 설계합니다. OA-22160의 운영용 도입은 위 operational geometry 정책을 따르며 역사적 경계 근거의 unresolved 상태가 MVP 구현을 막지 않습니다. 같은 코드라도 경계 버전에 따라 공간 범위가 달라질 수 있으므로 사용한 geometry 버전과 통계의 역사적 경계 확인 상태를 별도로 관리합니다.
 
 ## 업종·기간·출처
 

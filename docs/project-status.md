@@ -473,3 +473,9 @@ MOIS의 10자리 코드를 잘라 8자리 통계 코드에 자동 매칭하지 �
 전체 공간 검증은 **B 유지**, 로드맵 **4단계 미완료**입니다. 현재 배포본 동일성·행정기관 변경 코드·공식 형식 간 참조 차이는 확인했지만, 2025 통계의 참조 경계/재집계 정책과 OA-22160 geometry의 사용 적합성을 공식 근거로 연결하지 못했습니다. 2단계 대표 샘플 범위 완료·3단계 공식 원본 확보 완료는 유지합니다. 다음에는 제공기관의 공식 설명/과업 원문에서 참조 경계 버전·분동 반영/재집계 방식과 홍지문의 POINT/행정동 귀속 정의·CSV/SHP 차이의 이유를 확인해야 합니다. 이번 조사에서 담당자에게 문의를 발송하지 않았습니다.
 
 새 다운로드·HTML·PDF·hash/비교 JSON은 Git 제외 로컬 `data/raw/spatial/stage4-research-20261007/`에 보존했습니다. 주요 기록은 `download-provenance.json`, `file-comparison.json`, `mois-comparison.json`, `current-area-csv-comparison.json`, `hongjimun-results.json`입니다. 분석 스크립트는 프로젝트 밖 `/tmp/recycleyoungs-stage4-research-mnh9y8nb/`에만 있습니다. 기존 `oa-22160-provenance.json`·`validation-results.json`은 덮어쓰지 않았습니다. 미세 중첩 13쌍은 이번 조사에서 추가 분석하지 않았으며 향후 공간 판정/정밀도 정책 검토 항목으로 유지합니다.
+
+## 2026-10-07 결정: MVP 운영용 경계 사용
+
+경계 버전·2025 참조 경계/재집계 공식 근거는 **unresolved**, 전체 공간 검증은 **B**, 로드맵 **4단계 미완료**, 홍지문은 **H5**로 유지합니다. 프로젝트 일정상 역사적 경계 근거 부족을 MVP 구현 blocker로 두지 않기로 결정했습니다. OA-22160은 geometry/code/name 검증을 통과한 현재 공식 **operational geometry**로 향후 좌표 → 행정동 API에 사용하고, 2025 점포/매출 통계 당시의 정확한 역사 경계라고 표현하지 않습니다.
+
+425개 code/name 일치와 역사적 경계 미확인의 제약은 문서·향후 provenance에 유지하며 공식 경계 기준이 후속 확인되면 provenance와 판정 정책을 갱신합니다. 추가 공식 자료 조사·기관 문의는 후속 선택 작업입니다. 홍지문 행정구역 속성의 canonical 임의 선택 유보는 유지하되 상권 Polygon 전체·상권 코드의 사용 금지로 확대하지 않습니다.
