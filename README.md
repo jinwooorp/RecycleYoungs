@@ -2,7 +2,7 @@
 
 공공데이터로 서울의 창업 후보지를 비교하는 팀 프로젝트입니다. 서비스 가칭은 **“여기 창업해도 돼?”**입니다.
 
-현재는 Spring·React, PostgreSQL/PostGIS·Flyway 스키마 관리, CSV 검증·적재용 Python ETL이 준비되어 있습니다. **행정동 매출·점포 적재와 DB migration 검증을 마쳤고, React 조건 선택·결과 표를 실제 Vite 프록시 → Spring API → PostgreSQL로 연결했습니다. 공통 4개 분기 추세 API와 Frontend 표까지 연결했으며 새 환경 재현은 다음 단계입니다.**
+현재는 Spring·React, PostgreSQL/PostGIS·Flyway 스키마 관리, CSV 검증·적재용 Python ETL이 준비되어 있습니다. **행정동 매출·점포 적재와 DB migration 검증을 마쳤고, React 조건 선택·결과 표를 실제 Vite 프록시 → Spring API → PostgreSQL로 연결했습니다. 공통 4개 분기 추세 API와 Frontend 표까지 연결하고 새 checkout·새 DB에서 전체 흐름 재현도 검증했습니다.**
 
 ## 구성
 
@@ -24,8 +24,8 @@ RecycleYoungs/
 
 | 영역 | 현재 기능 | 다음 작업 |
 | --- | --- | --- |
-| Backend | CORS, JdbcClient·Flyway, 목록·단건/4분기 통계 API, 실제 DB/API 테스트 | 새 환경 재현 지원 |
-| Frontend | 조건 선택·단건/4분기 점포·추정매출 표, 로딩·오류·자료 없음, `/api` 프록시 | 새 환경 재현·후속 시각화 검토 |
+| Backend | CORS, JdbcClient·Flyway, 목록·단건/4분기 통계 API, 실제 DB/API·새 환경 검증 | 지도·공간 조회 계약 |
+| Frontend | 조건 선택·단건/4분기 점포·추정매출 표, 상태 처리·프록시·새 환경 검증 | 지도·후보 비교·후속 시각화 검토 |
 | ETL | 입력 검증, 업종 매핑, 좌표 변환, 행정동 실제 적재·복구 검증 | 나머지 자료의 실제 DB 적재 검증 |
 | DB | 7개 테이블, 공간·조회 인덱스, 서울시 업종 4개 매핑 | 적재 이력·스냅샷 버전·상권 경계 |
 
@@ -85,6 +85,7 @@ React는 `http://localhost:5173`, Spring은 `http://localhost:8080`을 사용합
 
 - [프로젝트 분석·정리 기록](docs/project-status.md): 전체 구현 상태와 이번 검증 결과
 - [개발·검증 안내](docs/development.md): 실행 명령, 환경 변수, Git 관리
+- [새 환경 재현 안내](docs/reproduction.md): 원본 준비부터 fresh DB·ETL·API·React 검산까지
 - [아키텍처와 분석 정책](docs/architecture.md): 역할, 공간·기간·점수 기준
 - [데이터 목록](docs/data-catalog.md): 실제 파일, 연결 검사, 출처와 한계
 - [구현 로드맵](docs/roadmap.md): 현재 완료 항목과 다음 단계
@@ -93,4 +94,4 @@ React는 `http://localhost:5173`, Spring은 `http://localhost:8080`을 사용합
 - [DB 스키마 안내](sql/README.md): 초기화와 마이그레이션 전환
 - [이전 코드 보존 안내](legacy/README.md): 기존 실험 프로젝트
 
-첫 목표는 **행정동 2~3곳·카페·공통 분기 하나의 매출과 점포 통계를 ETL → DB → Spring → React로 연결하는 것**입니다. 이후 상권 경계·지도·경쟁 점포·인구·점수 기능을 순서대로 확장합니다.
+1차 목표인 **행정동 대표 지역·카페의 단건/2025년 4분기 통계를 CSV → ETL → DB → Spring → React로 연결하고 새 환경에서 재현하는 작업**을 완료했습니다. 이후 상권 경계·지도·경쟁 점포·인구·점수 기능을 순서대로 확장합니다.

@@ -1,15 +1,15 @@
 # 프로젝트 분석·정리 기록
 
-확인일: 2026-10-04(Asia/Seoul). 이전 검증과 이번 검증은 아래에서 구분합니다.
+확인일: 2026-10-07(Asia/Seoul). 이전 검증과 이번 검증은 아래에서 구분합니다.
 
 ## 전체 분석
 
-행정동 자료 적재·DB migration·조회 API와 React 조건 선택·결과 표를 실제 데이터로 연결했습니다. 같은 행정동·업종·분기의 점포·추정매출을 조회할 수 있으며 공통 4개 분기 추세와 새 환경의 전체 흐름 재현은 다음 단계입니다.
+행정동 자료 적재·DB migration·조회 API와 React 단건/4분기 통계를 실제 데이터로 연결했습니다. 같은 행정동·업종의 선택 분기 상세 통계와 2025년 4개 분기 추세를 조회할 수 있습니다. 같은 개발 PC의 독립 clean clone과 별도 fresh PostgreSQL volume에서 CSV → ETL → PostgreSQL → Spring API → React 전체 흐름을 재현해 로드맵 7단계를 완료했습니다.
 
 | 영역 | 확인한 상태 | 우선 남은 일 |
 | --- | --- | --- |
-| Backend | CORS·JdbcClient·Flyway, 목록·통계 API 4개, 일반/실제 DB/API 테스트 | 공통 분기 추세·재현 지원 |
-| Frontend | 조건 선택·점포/추정매출 표, 상태 처리·개발 프록시 | 공통 4개 분기 추세 |
+| Backend | CORS·JdbcClient·Flyway, 목록·단건/4분기 통계 API 5개, 일반/실제 DB/API·새 환경 재현 검증 | 2차 지도·공간 기능을 위한 데이터·계약 준비 |
+| Frontend | 조건 선택·단건/4분기 점포·추정매출 표, 상태 처리·개발 프록시·새 환경 재현 검증 | 지도·후보 비교 등 2차 UI |
 | ETL | CSV 사전 검사·선택 실행·변환·일괄 트랜잭션, 행정동 매출·점포 실제 DB 검증 완료 | 나머지 자료의 실제 적재 검증 |
 | DB | 7개 테이블·인덱스·서울시 업종 4개 매핑 | 출처·적재 이력·스냅샷 버전·경계 |
 | 원본 | CSV 6개, 해시·행 수·기간·코드 연결 확인 | 좌표계·단위·경계 버전·이용 조건 확인 |
@@ -182,3 +182,55 @@ backend production/test·API 계약·Flyway SQL·DB schema·ETL·CSV·volume은 
 | 기존 DB 보존 | 점포 141,218행·매출 67,113행 및 전체 checksum·Flyway 이력·sequence 값이 검증 전후 동일 |
 
 검증용 Spring은 Flyway를 비활성화하고 JDBC 세션을 읽기 전용으로 실행했습니다. SELECT/API 조회만 수행했고 checksum은 기존 `to_jsonb(t)`·복합 키 정렬 기준으로 점포 `b7419d5c6d318eb63ba117d67eaf8110`, 매출 `e22cd2c794f2bef23efd3de54c5af957`가 유지됐습니다. Backend·schema·ETL·CSV·dependency는 변경하지 않았고 Chart는 설치하지 않았습니다. 로드맵 7단계의 새 환경 전체 재현과 팀원용 재현 문서는 남아 있습니다. git add·commit·push는 하지 않았습니다.
+
+
+## 2026-10-07 새 환경 vertical slice 재현
+
+시작은 원 저장소 main·HEAD `c8b7afa28e5f40d96bba2ec928be00de72b3dcea`·clean working tree였습니다. `git clone --no-hardlinks`로 독립 clone을 만들고 기존 `.env`·node_modules·Backend build·ETL venv를 복사하지 않았습니다. 원 저장소 production code/config는 변경하지 않고 같은 commit의 V1·ETL·Spring·React만 사용했습니다. 팀원용 일반 절차와 개발 PC의 격리 절차는 [새 환경 재현 안내](reproduction.md)에 모았습니다.
+
+| 환경 | 실제 기록 |
+| --- | --- |
+| 임시 clone | `/var/folders/w9/t457fthn6wv3hbnzdmpqvctw0000gn/T/recycleyoungs-repro-20261007-4i1j8aon/repo` |
+| Compose project | `recycleyoungs-repro-20261007-4i1j8aon` |
+| 재현 postgres container | `recycleyoungs-repro-20261007-4i1j8aon-postgres` (ID `4dbd49171d42`) |
+| 재현 DB | `recycleyoungs_repro` / app / localhost:55432 |
+| 재현 volume | `recycleyoungs-repro-20261007-4i1j8aon_postgres_data` → `/var/lib/postgresql/data` |
+| 기존 보호 대상 | `startup-analysis-postgres` (ID `983e738d45ac`), `recycleyoungs_postgres_data`, localhost:5432, 시작/종료 healthy |
+| 실행 버전 | Java 21.0.12, Node 24.20.0, npm 11.19.0, ETL Python 3.12.15, Docker 29.8.2/Compose 5.5.1, PostgreSQL 16.4/PostGIS 3.4, Flyway 12.4.0 |
+
+container name만 바꾸는 임시 `.repro-compose.override.yml`과 별도 project·`.env`로 격리했습니다. Compose가 해석한 이름·port·volume을 시작 전에 검증하고 실제 mount도 대조했습니다. 기존 `.env`는 읽거나 변경하지 않았습니다. 적재 전 Vite proxy의 lookup 3개와 React는 자료 없는 상태여서 기존 populated DB로 연결되지 않았음도 확인했습니다.
+
+| 검증 | 실제 결과 |
+| --- | --- |
+| 원본 CSV 6개 | 원본과 복사본의 파일명·크기·SHA-256·컬럼·행 수 모두 manifest/data-catalog 일치. 원본은 읽기·복사만 수행 |
+| fresh migration | make db·db-migrate·db-info 성공. V1 type SQL / success true / pending 없음, BASELINE 사용 없음 |
+| 빈 schema | 점포/매출 0행, 프로젝트 테이블 7개·V1 명시 index 8개·PostGIS·업종 seed 5개/서울시 mapping 4개 |
+| CSV validation | make etl-validate 성공, DB 연결 없음. 5개 ETL job 입력 849,805행·4분기 검사. 제외된 길단위인구까지 포함한 CSV 6개는 별도 manifest/구조 검사 |
+| fresh ETL | make etl ETL_ARGS="--only store_stats_dong sales_dong" 성공·transaction commit. 다른 job·좌표계 추측 없음 |
+| 적재 결과 | 점포 141,218행·매출 67,113행, 각각 행정동 425개·20251~20254·논리 key 중복 0개 |
+| 원본 ↔ DB | CP949 DictReader로 청운효자동/CS100010의 점포 5개·매출 4개 metric × 4분기(36개 값) 직접 대조·동일 |
+| Backend 일반 test | 72개 통과·실패/skip 0개. fresh build에서 실제 실행 |
+| reproduction dbTest | 20개 통과·fixture 15개 skip (전체 35개, 실패 0). 명시한 reproduction DB·읽기 전용 JDBC 세션 사용, fixture 쓰기 없음 |
+| Spring | 8080 startup URL이 localhost:55432/recycleyoungs_repro임을 확인. V1 validate·migration 없음 |
+| 실제 API | Vite → Spring의 5개 endpoint, 총 10개 HTTP 200 조회. lookup 425행정동/4업종/4분기, 단건 네 분기와 trend의 전 필드·BIGINT JSON string 일치 |
+| Frontend fresh install | node_modules 없이 npm ci 성공, lint·80개 테스트(2개 파일)·build 모두 통과 |
+| 실제 React | 청운효자동 정상·면목5동 부분 NO_ROW·신정6동/PUB 전체 NO_ROW 정상 표시. 4분기 축 유지·오류 alert 없음 |
+| 브라우저 | 390px/1280px 페이지 가로 넘침 없음·모바일 표 내부 키보드 스크롤·native select·한국어 줄바꿈·3px focus 유지, console error/warning 없음 |
+| 연쇄 대조 | CSV = fresh DB = stats = trend = React. 청운효자동의 36개 trend cell도 정확한 formatting으로 일치 |
+
+| 분기 | CSV/DB/API/React 점포 수 | CSV/DB/API 추정매출 정수·문자열 | React 추정매출 |
+| --- | --- | --- | --- |
+| 20251 | 114 | 4535266422 | 4,535,266,422원 |
+| 20252 | 114 | 4603714789 | 4,603,714,789원 |
+| 20253 | 115 | 4195134430 | 4,195,134,430원 |
+| 20254 | 118 | 4724282512 | 4,724,282,512원 |
+
+20251 매출 건수도 CSV/DB `302642` = 두 API string `"302642"` = React `302,642건`으로 일치했습니다. 면목5동/CAFE는 점포 17·16·16·15와 매출 네 분기 행 부재, 신정6동/PUB는 점포·매출 네 분기 행 부재를 DB에서 직접 확인하고 API·브라우저의 정상 NO_ROW로 대조했습니다.
+
+기존 개발 DB는 SELECT와 READ ONLY transaction만 사용했습니다. container ID·mount·port·state와 점포 141,218행/매출 67,113행, 전체 행 checksum·Flyway 이력·sequence 값이 전후 동일했습니다. 기존과 같은 `to_jsonb(t)`·복합 키 정렬 기준 checksum은 점포 `b7419d5c6d318eb63ba117d67eaf8110`, 매출 `e22cd2c794f2bef23efd3de54c5af957`입니다. reproduction ETL은 별도 project network의 postgres에만 연결했고 기존 DB에는 적재·migration을 하지 않았습니다.
+
+검증용 Spring/Vite와 브라우저 탭을 종료했고 reproduction project만 docker compose down으로 종료했습니다. 기존 DB는 계속 healthy이며 reproduction volume `recycleyoungs-repro-20261007-4i1j8aon_postgres_data`은 삭제하지 않고 보존했습니다. 임시 clone·설정·빌드 결과를 원 저장소로 복사하지 않았습니다.
+
+npm ci는 기존 lockfile에 대해 high 취약점 1개와 fsevents install-script 안내를 출력했습니다. audit fix·dependency 변경은 하지 않았고 lint/test/build는 통과했습니다. ARM 호스트의 PostGIS AMD64 이미지 안내와 테스트 JVM CDS 안내도 있었으나 검증 실패는 없었습니다. ETL 첫 이미지 빌드의 패키지 다운로드는 느렸지만 같은 Dockerfile/requirements로 완료했습니다. 이 검증은 기존 개발 PC의 독립 clone·fresh volume 재현이며 별도 팀원 PC에서 실행했다고 주장하지 않습니다.
+
+로드맵 7단계를 완료했습니다. 상권 좌표계/Polygon·지도·Chart·metadata·나머지 ETL 실제 적재는 후속 범위입니다. production code·migration·Compose·Makefile·dependency 변경은 없고 문서만 갱신했습니다. git add·commit·push는 하지 않았습니다.

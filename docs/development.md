@@ -1,6 +1,6 @@
 # 개발·검증 안내
 
-모든 `make` 명령은 프로젝트 루트에서 실행합니다. `Makefile`은 일반 명령의 단축 경로이며 `make help`로 목록을 확인할 수 있습니다.
+모든 `make` 명령은 프로젝트 루트에서 실행합니다. `Makefile`은 일반 명령의 단축 경로이며 `make help`로 목록을 확인할 수 있습니다. 새 checkout·새 DB에서 CSV → ETL → API → React 전체 vertical slice를 처음부터 재현하려면 [새 환경 재현 안내](reproduction.md)를 따릅니다. 일반 개발 절차와 기존 DB를 보호하는 격리 검증 절차를 구분합니다.
 
 ## 환경
 

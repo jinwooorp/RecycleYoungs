@@ -75,4 +75,4 @@ Vitest·React Testing Library·jest-dom·jsdom은 개발 테스트용입니다. 
 
 2026-10-07 4분기 추세 표 연결 후 lint·80개 테스트·build를 통과했습니다. 고정 축 위반 응답 거부·BIGINT 경계·NULL/0·분기별/전체 NO_ROW·한쪽 API 실패·공유 요청 취소·늦은 응답·중복 제출을 검증했습니다. 실제 Vite 프록시 → Spring → 기존 PostgreSQL에서 청운효자동/CAFE의 점포 114·114·115·118개와 추정매출 4,535,266,422·4,603,714,789·4,195,134,430·4,724,282,512원, 면목5동/CAFE의 점포 자료 및 매출 네 분기 NO_ROW, 신정6동/PUB의 네 분기 양쪽 NO_ROW를 HTTP와 브라우저에서 확인했습니다. 상세 분기는 모두 20251로 유지했습니다.
 
-390px·1280px에서 페이지 가로 넘침 없음·네 분기 유지·표 내부 스크롤·키보드 focus·정상 화면 console error/warning 없음을 확인했습니다. signed BIGINT 최대/최소·2^53 초과·metric NULL·실제 0의 브라우저 표시는 저장소 밖 임시 API fixture로 확인했으며 기존 DB와 구분합니다. DB 행 수·전체 checksum·Flyway 이력·sequence 값은 검증 전후 동일했습니다. Chart와 새 환경의 전체 vertical slice 재현은 아직 남아 있습니다.
+390px·1280px에서 페이지 가로 넘침 없음·네 분기 유지·표 내부 스크롤·키보드 focus·정상 화면 console error/warning 없음을 확인했습니다. signed BIGINT 최대/최소·2^53 초과·metric NULL·실제 0의 브라우저 표시는 저장소 밖 임시 API fixture로 확인했으며 기존 DB와 구분합니다. DB 행 수·전체 checksum·Flyway 이력·sequence 값은 검증 전후 동일했습니다. Chart는 아직 미도입이며 새 환경의 전체 vertical slice는 이후 동일 commit으로 재현했습니다([재현 안내](../docs/reproduction.md)).

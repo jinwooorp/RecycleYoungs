@@ -34,7 +34,7 @@ Spring 조회는 JdbcClient로 SQL을 직접 작성합니다. 통계 ETL의 연�
 
 React는 작은 fetch client·상태 hook·폼/결과 component로 나눕니다. lookup은 병렬 요청하고 명시적 조회 버튼으로 선택 분기 단건 통계와 같은 행정동·업종의 2025년 4분기 추세를 병렬 요청합니다. 두 요청은 결과·오류를 독립적으로 유지하고 하나의 AbortController를 공유하며 모두 끝날 때까지 중복 제출을 막습니다. 조건 변경·새 조회·unmount 시 이전 결과와 요청을 정리합니다. BIGINT는 상태에서 string을 유지하고 범위 검증·표시에 BigInt를 사용합니다. 행 없음·metric NULL·실제 0·요청 실패는 각각 구분합니다. 표현 계층은 Tailwind CSS v4와 shadcn/ui Button·Card를 점진 적용했으며 API/state logic과 native select·semantic table을 유지했습니다. 추세는 점포 5개·추정매출 4개 지표의 semantic table로 표시하며 모바일에서는 표 내부만 가로 스크롤합니다. 지도·Chart·metadata UI는 아직 없습니다.
 
-현재 Backend 구현 API는 5개입니다. [추세 API 계약](api-contract.md#행정동-공통-4개-분기-추세-api)에 따라 `GET /api/admin-dong-trends`는 행정동·내부 업종을 받아 2025년 4개 분기의 기존 점포·추정매출 구조를 반환합니다. 하나의 읽기 전용 REPEATABLE READ transaction에서 기존 lookup·무결성을 확인한 뒤 두 테이블을 각각 한 번의 다중 분기 통계 SQL로 읽습니다. 분기별 NO_ROW를 생략하지 않고 BIGINT 문자열을 유지하며 중복 row 등 무결성 오류는 전체 요청을 실패시킵니다. Frontend도 응답의 고정 네 분기·code/label 순서·metric 범위·NO_ROW 일관성을 검증한 뒤 표시합니다. 새 환경의 vertical slice 재현은 후속 작업입니다.
+현재 Backend 구현 API는 5개입니다. [추세 API 계약](api-contract.md#행정동-공통-4개-분기-추세-api)에 따라 `GET /api/admin-dong-trends`는 행정동·내부 업종을 받아 2025년 4개 분기의 기존 점포·추정매출 구조를 반환합니다. 하나의 읽기 전용 REPEATABLE READ transaction에서 기존 lookup·무결성을 확인한 뒤 두 테이블을 각각 한 번의 다중 분기 통계 SQL로 읽습니다. 분기별 NO_ROW를 생략하지 않고 BIGINT 문자열을 유지하며 중복 row 등 무결성 오류는 전체 요청을 실패시킵니다. Frontend도 응답의 고정 네 분기·code/label 순서·metric 범위·NO_ROW 일관성을 검증한 뒤 표시합니다. 새 환경의 vertical slice도 clean checkout·별도 fresh DB·V1 SQL migration에서 CSV → ETL → API → React까지 검증했습니다([재현 절차](reproduction.md)).
 
 | 자료 | 키·공간 단위 |
 | --- | --- |

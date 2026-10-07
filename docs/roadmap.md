@@ -43,7 +43,7 @@
 
 6단계는 2026-10-04에 완료했습니다. React core·Vanilla CSS로 세 조건 선택과 점포/추정매출 표를 구현했습니다. lookup·통계 로딩/오류, network 실패, NULL/0, 부분·전체 NO_ROW, BIGINT 정밀도와 요청 취소를 자동 테스트하고 lint·build를 통과했습니다. 브라우저에서 Vite `/api` 프록시 → Spring → PostgreSQL의 정상·부분/전체 NO_ROW와 오류/재시도·기본 반응형을 확인했으며 기존 DB checksum·Flyway 이력은 유지됐습니다([검증 결과](project-status.md)). 지도·추세·metadata UI는 구현하지 않았습니다.
 
-7단계는 진행 중입니다. 2026-10-07에 고정 2025년 4분기 Backend API와 Frontend semantic table 연결·실제 조회 검증까지 완료했습니다. 기존 선택 분기 상세 조회는 유지하고 Chart는 도입하지 않았습니다. 새 환경에서 CSV → ETL → PostgreSQL → Spring API → React 전체 흐름을 재현하고 팀원용 재현 문서를 확인하는 작업은 남아 있으므로 7단계 전체는 완료하지 않았습니다([검증 기록](project-status.md#2026-10-07-frontend-4분기-추세-표-검증)).
+7단계는 2026-10-07에 완료했습니다. 고정 2025년 4분기 API·Frontend semantic table과 기존 선택 분기 상세 조회를 유지하고, clean tracked checkout·별도 fresh PostgreSQL volume·V1 SQL migration에서 CSV → ETL → PostgreSQL → Spring API → React를 처음부터 재현했습니다. 원본 9개 metric의 4분기 값과 실제 화면을 대조하고 Backend/Frontend 테스트·대표 정상/NO_ROW·390px/1280px를 검증했으며 기존 개발 DB는 보존했습니다. 팀원 절차는 [새 환경 재현 안내](reproduction.md), 실제 결과는 [검증 기록](project-status.md#2026-10-07-새-환경-vertical-slice-재현)에 있습니다. Chart·지도·metadata는 별도 후속 범위입니다.
 
 3단계에서 출처·기간 메타데이터의 제공 경로와 DB 관리 필요 여부, 상세 적재 이력·스냅샷 버전 관리의 후속 연결을 검토했습니다([설계와 남은 결정](architecture.md)). 최소 dataset metadata 테이블은 아직 도입하지 않았습니다. 사용자 API 요청 중 원본 CSV를 직접 읽지 않으며 React는 DB에 직접 접근하지 않습니다. 결측은 임의로 0으로 바꾸지 않습니다.
 
