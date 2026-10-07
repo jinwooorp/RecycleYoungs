@@ -164,3 +164,21 @@ checksum은 내부 id를 포함한 `to_jsonb(t)`를 복합 키(분기·행정동
 checksum은 5단계와 같은 `to_jsonb(t)`·복합 키 정렬 기준으로 점포 `b7419d5c6d318eb63ba117d67eaf8110`, 매출 `e22cd2c794f2bef23efd3de54c5af957`가 유지됐습니다. 현 DB에는 대상 metric NULL·2^53 초과 샘플이 없어 이 경계와 순수 network 실패는 frontend 자동 테스트로 검증했습니다. 격리 DB나 기존 데이터를 변경하지 않았습니다.
 
 backend production/test·API 계약·Flyway SQL·DB schema·ETL·CSV·volume은 변경하지 않았습니다. roadmap 6단계를 완료했고 다음은 공통 4개 분기 추세와 새 환경 vertical slice 재현입니다. 지도·점수·metadata UI는 구현하지 않았으며 commit·push하지 않았습니다.
+
+
+## 2026-10-07 Frontend 4분기 추세 표 검증
+
+시작은 main·HEAD `2f1997c9097d0f24e1a44e41cdd3c840a654ec96`·clean working tree였습니다. 기존 세 조건과 선택 분기 상세 통계를 유지하고 같은 행정동·업종의 2025년 4분기 추세를 semantic table로 연결했습니다. 검색 한 번에 stats와 trend를 병렬 요청하며 결과·오류는 독립적으로 유지합니다. 공유 AbortController와 요청 식별로 조건 변경·unmount·늦은 응답을 처리하고 두 요청이 끝날 때까지 중복 제출을 막습니다.
+
+| 검증 | 결과 |
+| --- | --- |
+| Frontend 자동 검증 | lint PASS, 테스트 80개 PASS, build PASS. 기존 단건 회귀, 고정 네 분기 응답 경계, 한쪽 성공/실패, 취소/늦은 응답, NULL/0/NO_ROW, BIGINT 경계 검증 |
+| 실제 Vite → Spring → PostgreSQL | 세 행정동의 상세 20251과 추세 요청 총 6개 HTTP 200. 상세 값과 추세 첫 분기 일치, 고정 축·BIGINT string 확인 |
+| 청운효자동 / CAFE | 점포 114·114·115·118개, 추정매출 문자열 `4535266422`·`4603714789`·`4195134430`·`4724282512`의 정확한 화면 표시 |
+| 면목5동 / CAFE | 점포 17·16·16·15개, 매출 네 분기 NO_ROW; HTTP 오류로 표시하지 않음 |
+| 신정6동 / PUB | 네 분기 양쪽 NO_ROW, 4개 열·정상 자료 없음 안내 유지 |
+| 실제 브라우저 | 390px·1280px 페이지 가로 넘침 없음, 표 내부 가로 스크롤·키보드 접근 및 focus, native select 유지, 정상 화면 console error/warning 없음 |
+| 정밀도 브라우저 fixture | 별도 임시 Vite API fixture에서 signed BIGINT 최대/최소·`9007199254740993`·metric NULL·실제 0 표시 및 390px/1280px 배치 확인. 실제 DB 사례와 구분 |
+| 기존 DB 보존 | 점포 141,218행·매출 67,113행 및 전체 checksum·Flyway 이력·sequence 값이 검증 전후 동일 |
+
+검증용 Spring은 Flyway를 비활성화하고 JDBC 세션을 읽기 전용으로 실행했습니다. SELECT/API 조회만 수행했고 checksum은 기존 `to_jsonb(t)`·복합 키 정렬 기준으로 점포 `b7419d5c6d318eb63ba117d67eaf8110`, 매출 `e22cd2c794f2bef23efd3de54c5af957`가 유지됐습니다. Backend·schema·ETL·CSV·dependency는 변경하지 않았고 Chart는 설치하지 않았습니다. 로드맵 7단계의 새 환경 전체 재현과 팀원용 재현 문서는 남아 있습니다. git add·commit·push는 하지 않았습니다.

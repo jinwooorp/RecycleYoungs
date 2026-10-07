@@ -4,12 +4,16 @@
   .page-header { margin-bottom: 32px; }
   .eyebrow { color: var(--primary); font-size: .875rem; font-weight: 700; margin-bottom: 8px; }
   .page-header h1 { font-size: clamp(1.65rem, 4vw, 2.25rem); font-weight: 700; line-height: 1.35; margin-bottom: 16px; }
+  .page-header h1, .result-header h2 { word-break: keep-all; text-wrap: balance; }
+  .page-header > p:last-child, .result-header > p:not(.eyebrow), .data-note { word-break: keep-all; text-wrap: pretty; }
   main h2 { font-size: 1.35rem; font-weight: 700; margin-bottom: 20px; }
   .stats-panel h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 16px; }
   .page-header > p:last-child, .result-header > p:last-child { color: var(--muted-foreground); }
   .form-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
   .form-field label { font-weight: 600; }
-  .form-field select { width: 100%; padding: 8px 32px 8px 12px; color: inherit; background: var(--card); border: 1px solid var(--input); border-radius: 4px; }
+  .select-wrapper { position: relative; }
+  .select-wrapper::after { content: ''; position: absolute; top: 50%; right: 14px; width: 7px; height: 7px; border-right: 1.5px solid var(--muted-foreground); border-bottom: 1.5px solid var(--muted-foreground); transform: translateY(-70%) rotate(45deg); pointer-events: none; }
+  .form-field select { appearance: none; width: 100%; padding: 8px 40px 8px 12px; color: inherit; background: var(--card); border: 1px solid var(--input); border-radius: 4px; }
   .form-field select:disabled { background: var(--accent); color: var(--muted-foreground); }
   .notice, .initial-message { padding: 16px; color: var(--muted-foreground); background: var(--accent); border-radius: 4px; margin: 20px 0 0; }
   .initial-message { text-align: center; background: transparent; }
@@ -24,6 +28,11 @@
   .stats-panel td { text-align: right; font-variant-numeric: tabular-nums; font-weight: 650; overflow-wrap: anywhere; }
   .empty-message { color: var(--muted-foreground); padding: 24px 0; }
   .data-note { margin-top: 20px; font-size: .875rem; color: var(--muted-foreground); }
+  .trend-table-scroll { min-width: 0; max-width: 100%; overflow-x: auto; }
+  .stats-panel .trend-table { min-width: 760px; }
+  .stats-panel .trend-table th, .stats-panel .trend-table td { padding: 14px 12px; white-space: nowrap; }
+  .stats-panel .trend-table td { overflow-wrap: normal; }
+  .stats-panel .trend-table th:first-child { min-width: 168px; }
 
   @media (max-width: 760px) {
     .stats-panel th, .stats-panel td { font-size: .9375rem; }

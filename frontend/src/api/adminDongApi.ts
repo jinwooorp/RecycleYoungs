@@ -1,4 +1,4 @@
-import type { AdminDong, AdminDongStats, ApiError, Industry, Quarter, StatsQuery } from '../types/api'
+import type { AdminDong, AdminDongStats, AdminDongTrend, ApiError, Industry, Quarter, StatsQuery, TrendQuery } from '../types/api'
 
 export class ApiFailure extends Error {
   readonly kind: 'http' | 'network' | 'response'
@@ -33,9 +33,8 @@ function decimal(value: unknown) {
   return exact >= -9223372036854775808n && exact <= 9223372036854775807n
 }
 
-function stats(value: unknown): value is AdminDongStats {
-  if (!record(value) || !namedCode(value.dong) || !namedCode(value.industry) || !quarter(value.quarter)
-    || !record(value.missingReasons)) return false
+function statSections(value: Record<string, unknown>) {
+  if (!record(value.missingReasons)) return false
   const store = value.storeStats
   const sales = value.salesStats
   const validStore = store === null || (record(store) &&
@@ -45,6 +44,19 @@ function stats(value: unknown): value is AdminDongStats {
   return validStore && validSales
     && value.missingReasons.storeStats === (store === null ? 'NO_ROW' : null)
     && value.missingReasons.salesStats === (sales === null ? 'NO_ROW' : null)
+}
+
+function stats(value: unknown): value is AdminDongStats {
+  return record(value) && namedCode(value.dong) && namedCode(value.industry) && quarter(value.quarter) && statSections(value)
+}
+
+const trendCodes = ['20251', '20252', '20253', '20254']
+function trend(value: unknown): value is AdminDongTrend {
+  return record(value) && namedCode(value.dong) && namedCode(value.industry)
+    && Array.isArray(value.quarters) && value.quarters.length === 4
+    && value.quarters.every((item, index) => record(item) && quarter(item.quarter)
+      && item.quarter.code === trendCodes[index] && item.quarter.label === `2025년 ${index + 1}분기`
+      && statSections(item))
 }
 
 const errorCodes = new Set([
@@ -95,4 +107,8 @@ export const getQuarters = (signal?: AbortSignal) => get<Quarter[]>('/api/quarte
 export const getAdminDongStats = (query: StatsQuery, signal?: AbortSignal) => {
   const parameters = new URLSearchParams({ dongCode: query.dongCode, industryCode: query.industryCode, quarterCode: query.quarterCode })
   return get<AdminDongStats>(`/api/admin-dong-stats?${parameters}`, stats, signal)
+}
+export const getAdminDongTrend = (query: TrendQuery, signal?: AbortSignal) => {
+  const parameters = new URLSearchParams({ dongCode: query.dongCode, industryCode: query.industryCode })
+  return get<AdminDongTrend>(`/api/admin-dong-trends?${parameters}`, trend, signal)
 }

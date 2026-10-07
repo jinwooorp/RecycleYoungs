@@ -2,7 +2,7 @@
 
 확정일: 2026-10-03. 로드맵 1차 4단계에서 확정한 계약이며, 5단계 API 구현과 6단계 React 연결을 완료했습니다. PostgreSQL의 V1 스키마와 적재 데이터를 대조했습니다.
 
-현재 구현된 GET API는 아래의 목록 3개·단건 통계 1개와 [공통 4개 분기 추세](#행정동-공통-4개-분기-추세-api) 1개, 총 5개입니다. 2026-10-06에 확정한 추세 계약을 Backend에서 구현·검증했습니다. 로드맵 7단계의 Frontend 추세 표시·새 환경 재현은 완료하지 않았습니다.
+현재 구현된 GET API는 아래의 목록 3개·단건 통계 1개와 [공통 4개 분기 추세](#행정동-공통-4개-분기-추세-api) 1개, 총 5개입니다. 2026-10-06에 확정한 추세 계약을 Backend에서 구현·검증했습니다. 2026-10-07에 Frontend 추세 표 연결도 검증했습니다. 로드맵 7단계의 새 환경 재현은 아직 남아 있습니다.
 
 ## 범위와 공통 규칙
 
@@ -226,7 +226,7 @@ SQL·Repository·DTO Java는 5단계에서 구현했습니다. 테스트는 정�
 
 ## 행정동 공통 4개 분기 추세 API
 
-계약 확정일: 2026-10-06. 이 계약에 따른 Backend API와 테스트를 구현하고 실제 DB/HTTP로 검증했습니다. Frontend 추세 표시·전체 흐름의 새 환경 재현은 후속 작업이며 migration·ETL 변경은 없습니다. 기존 네 API의 경로·지원 범위·응답·오류 계약은 유지합니다.
+계약 확정일: 2026-10-06. 이 계약에 따른 Backend API와 테스트를 구현하고 실제 DB/HTTP로 검증했습니다. Frontend는 2026-10-07에 고정 4분기 semantic table로 연결·검증했습니다. 전체 흐름의 새 환경 재현은 후속 작업이며 migration·ETL 변경은 없습니다. 기존 네 API의 경로·지원 범위·응답·오류 계약은 유지합니다.
 
 ### endpoint와 선택 근거
 
@@ -528,7 +528,7 @@ GET /api/admin-dong-trends?dongCode=11110515&industryCode=CAFE
 
 ### 테스트 계약과 검증 상태
 
-기존 단건 테스트는 회귀 기준으로 유지합니다. 같은 parser·직렬화 규칙을 모든 계층에 복사하는 대신 아래 책임별 검증을 사용합니다. Backend 일반·populated/격리 DB 테스트와 실제 HTTP 대조를 수행했습니다([Backend 검증 결과](../backend/README.md#조회-api와-테스트-범위)). 후속 Frontend 검증은 아직 구현하지 않았습니다.
+기존 단건 테스트는 회귀 기준으로 유지합니다. 같은 parser·직렬화 규칙을 모든 계층에 복사하는 대신 아래 책임별 검증을 사용합니다. Backend 일반·populated/격리 DB 테스트와 실제 HTTP 대조를 수행했습니다([Backend 검증 결과](../backend/README.md#조회-api와-테스트-범위)). Frontend API 경계·UI/hook 테스트와 실제 API/브라우저 대조도 수행했습니다([Frontend 검증 결과](../frontend/README.md#검증)).
 
 | 계층 | 검증 항목 | 이유·경계 |
 | --- | --- | --- |
@@ -537,7 +537,7 @@ GET /api/admin-dong-trends?dongCode=11110515&industryCode=CAFE
 | 기존 populated DB + MockMvc JSON | 청운효자동 정상 4분기 전 필드·code/label 순서·JSON string; 둔촌1동의 부분 NO_ROW와 실제 0; 면목5동의 section 부재; 신정6동 전체 NO_ROW; unknown dong/industry·원본 업종 code·GYM unsupported | 실제 JdbcClient 매핑·Service 조립·직렬화를 함께 확인. 변경 없는 populated DB에서 단건 API 네 분기의 값과 추세 API 각 item을 대조. 기존 DB에 fixture 쓰기 없음 |
 | 별도 격리 fixture DB | 행 존재·metric NULL·0/"0"; `9007199254740993`·signed BIGINT 최대/최소의 정확한 JSON string; 특정 분기의 한쪽/양쪽 부재; DB 전체에서 한 분기가 없는 경우에도 고정 축 유지; 미래 연도만 있는 lookup; 명칭 선택; 모호한 mapping·industry_id NULL/불일치·분기/이름 무결성 오류 | 실제 driver가 nullable INTEGER/Long을 읽는 경계를 검증. 기존 opt-in·DB prefix·빈 DB·rollback 보호를 재사용하고 populated DB에서는 실행하지 않음 |
 | HTTP 오류 smoke | 유효 요청의 200; 미정의 quarterCode의 400; 무결성 실패와 DB 연결 실패의 500·안전한 3필드 오류 body | MockMvc 검증을 바탕으로 실제 서버 경계는 대표 요청만 확인. 연결 실패 주입은 검증용 환경에서만 수행 |
-| 후속 Frontend API 경계 | 네 item의 code/순서/길이·nullable 객체와 missingReasons 일치·string/range 검사; BIGINT를 number·지수·소수·잘못된 문자열·범위 초과로 받은 응답 거부 | 유효 BIGINT column은 잘못된 숫자 문자열을 생산하지 않으므로 잘못된 응답은 API 경계 mock으로 검증. Backend를 double/string 우회 모델로 바꾸지 않음 |
-| 후속 Frontend UI / hook | 정상·부분/전체 NO_ROW·metric NULL·실제 0·HTTP/network 오류 구분; 정확한 BIGINT 표시; 요청 취소/늦은 응답; 없는 분기를 생략하거나 0으로 연결하지 않음 | 시각화 방식을 정한 뒤 필요한 회귀 사례만 추가. 이번 계약 단계에서 chart/표/component/hook/dependency를 구현하지 않음 |
+| Frontend API 경계 | 네 item의 code/순서/길이·nullable 객체와 missingReasons 일치·string/range 검사; BIGINT를 number·지수·소수·잘못된 문자열·범위 초과로 받은 응답 거부 | 유효 BIGINT column은 잘못된 숫자 문자열을 생산하지 않으므로 잘못된 응답은 API 경계 mock으로 검증. Backend를 double/string 우회 모델로 바꾸지 않음 |
+| Frontend UI / hook | 정상·부분/전체 NO_ROW·metric NULL·실제 0·HTTP/network 오류 구분; 정확한 BIGINT 표시; 요청 취소/늦은 응답; 없는 분기를 생략하거나 0으로 연결하지 않음 | semantic table로 고정 네 분기를 표시. 단건/추세의 독립 성공·오류와 공유 취소를 검증하며 Chart·dependency는 추가하지 않음 |
 
-통계 조회의 무결성 오류는 정상 item 일부와 섞이지 않아야 합니다. DB 연결 실패는 INTERNAL_ERROR, 존재하지 않는 통계 조합은 정상 NO_ROW입니다. Backend 구현과 실제 API 검증을 완료했습니다. Frontend 추세 화면 구현과 CSV → ETL → DB → API → React의 새 환경 재현은 후속 작업으로 남깁니다.
+통계 조회의 무결성 오류는 정상 item 일부와 섞이지 않아야 합니다. DB 연결 실패는 INTERNAL_ERROR, 존재하지 않는 통계 조합은 정상 NO_ROW입니다. Backend 구현과 실제 API 검증을 완료했습니다. Frontend 추세 표 연결과 실제 API/브라우저 검증도 완료했습니다. Chart 여부 결정과 CSV → ETL → DB → API → React의 새 환경 재현은 후속 작업으로 남깁니다.

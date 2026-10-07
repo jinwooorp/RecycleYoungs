@@ -1,13 +1,6 @@
 import type { AdminDongStats } from '../types/api'
 import { Card } from '@/components/ui/card'
-
-const numberFormat = new Intl.NumberFormat('ko-KR')
-function count(value: number | null) {
-  return value === null ? '자료 없음' : `${numberFormat.format(value)}개`
-}
-function decimal(value: string | null, unit: '원' | '건') {
-  return value === null ? '자료 없음' : `${numberFormat.format(BigInt(value))}${unit}`
-}
+import { formatCount as count, formatDecimal as decimal } from '../lib/formatStats'
 
 export function StatsResult({ stats }: { stats: AdminDongStats }) {
   const { dong, industry, quarter, storeStats, salesStats } = stats

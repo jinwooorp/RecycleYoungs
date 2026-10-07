@@ -28,4 +28,16 @@ export interface AdminDongStats {
 }
 export interface ApiError { code: string; message: string; field: string | null }
 export interface StatsQuery { dongCode: string; industryCode: string; quarterCode: string }
+export interface TrendQuery { dongCode: string; industryCode: string }
+export interface TrendQuarter {
+  quarter: Quarter
+  storeStats: StoreStats | null
+  salesStats: SalesStats | null
+  missingReasons: MissingReasons
+}
+export interface AdminDongTrend {
+  dong: AdminDong
+  industry: Industry
+  quarters: TrendQuarter[]
+}
 export interface Lookups { adminDongs: AdminDong[]; industries: Industry[]; quarters: Quarter[] }

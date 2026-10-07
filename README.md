@@ -2,7 +2,7 @@
 
 공공데이터로 서울의 창업 후보지를 비교하는 팀 프로젝트입니다. 서비스 가칭은 **“여기 창업해도 돼?”**입니다.
 
-현재는 Spring·React, PostgreSQL/PostGIS·Flyway 스키마 관리, CSV 검증·적재용 Python ETL이 준비되어 있습니다. **행정동 매출·점포 적재와 DB migration 검증을 마쳤고, React 조건 선택·결과 표를 실제 Vite 프록시 → Spring API → PostgreSQL로 연결했습니다. 공통 4개 분기 추세와 새 환경 재현은 다음 단계입니다.**
+현재는 Spring·React, PostgreSQL/PostGIS·Flyway 스키마 관리, CSV 검증·적재용 Python ETL이 준비되어 있습니다. **행정동 매출·점포 적재와 DB migration 검증을 마쳤고, React 조건 선택·결과 표를 실제 Vite 프록시 → Spring API → PostgreSQL로 연결했습니다. 공통 4개 분기 추세 API와 Frontend 표까지 연결했으며 새 환경 재현은 다음 단계입니다.**
 
 ## 구성
 
@@ -24,8 +24,8 @@ RecycleYoungs/
 
 | 영역 | 현재 기능 | 다음 작업 |
 | --- | --- | --- |
-| Backend | CORS, JdbcClient·Flyway, 목록·통계 API, 실제 DB/API 테스트 | 공통 분기 추세·재현 지원 |
-| Frontend | 조건 선택·점포/추정매출 표, 로딩·오류·자료 없음, `/api` 프록시 | 공통 4개 분기 추세 |
+| Backend | CORS, JdbcClient·Flyway, 목록·단건/4분기 통계 API, 실제 DB/API 테스트 | 새 환경 재현 지원 |
+| Frontend | 조건 선택·단건/4분기 점포·추정매출 표, 로딩·오류·자료 없음, `/api` 프록시 | 새 환경 재현·후속 시각화 검토 |
 | ETL | 입력 검증, 업종 매핑, 좌표 변환, 행정동 실제 적재·복구 검증 | 나머지 자료의 실제 DB 적재 검증 |
 | DB | 7개 테이블, 공간·조회 인덱스, 서울시 업종 4개 매핑 | 적재 이력·스냅샷 버전·상권 경계 |
 
@@ -79,7 +79,7 @@ npm ci
 npm run dev
 ```
 
-React는 `http://localhost:5173`, Spring은 `http://localhost:8080`을 사용합니다. React는 `/api` 프록시로 조회 API 4개를 호출합니다. 행정동·업종·분기를 선택하고 조회하기를 누르면 점포·추정매출 표가 표시됩니다. 실행·테스트와 자료 없음 표시는 [Frontend 안내](frontend/README.md)를 확인합니다.
+React는 `http://localhost:5173`, Spring은 `http://localhost:8080`을 사용합니다. React는 `/api` 프록시로 조회 API 5개를 호출합니다. 행정동·업종·분기를 선택하고 조회하기를 누르면 선택 분기 상세 통계와 같은 행정동·업종의 2025년 4개 분기 점포·추정매출 표가 표시됩니다. 실행·테스트와 자료 없음 표시는 [Frontend 안내](frontend/README.md)를 확인합니다.
 
 ## 문서
 

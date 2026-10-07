@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { ApiFailure, getAdminDongs, getAdminDongStats, getIndustries, getQuarters } from '../api/adminDongApi'
-import type { AdminDongStats, Lookups, StatsQuery } from '../types/api'
+import { ApiFailure, getAdminDongs, getAdminDongStats, getAdminDongTrend, getIndustries, getQuarters } from '../api/adminDongApi'
+import type { AdminDongStats, AdminDongTrend, Lookups, StatsQuery } from '../types/api'
 
 function failure(error: unknown): ApiFailure {
   return error instanceof ApiFailure ? error : new ApiFailure('response', {
@@ -17,7 +17,10 @@ export function useAdminDongStats() {
   const [stats, setStats] = useState<AdminDongStats | null>(null)
   const [statsLoading, setStatsLoading] = useState(false)
   const [statsError, setStatsError] = useState<ApiFailure | null>(null)
-  const statsRequest = useRef<AbortController | null>(null)
+  const [trend, setTrend] = useState<AdminDongTrend | null>(null)
+  const [trendLoading, setTrendLoading] = useState(false)
+  const [trendError, setTrendError] = useState<ApiFailure | null>(null)
+  const searchRequest = useRef<AbortController | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -37,7 +40,7 @@ export function useAdminDongStats() {
     return () => controller.abort()
   }, [lookupAttempt])
 
-  useEffect(() => () => statsRequest.current?.abort(), [])
+  useEffect(() => () => searchRequest.current?.abort(), [])
 
   function retryLookups() {
     setLookupError(null)
@@ -46,35 +49,42 @@ export function useAdminDongStats() {
   }
 
   function changeSelection(field: keyof StatsQuery, value: string) {
-    statsRequest.current?.abort()
-    statsRequest.current = null
+    searchRequest.current?.abort()
+    searchRequest.current = null
     setSelection(current => ({ ...current, [field]: value }))
     setStats(null)
     setStatsError(null)
     setStatsLoading(false)
+    setTrend(null)
+    setTrendError(null)
+    setTrendLoading(false)
   }
 
   async function search() {
     if (!lookups || !selection.dongCode || !selection.industryCode || !selection.quarterCode
-      || (statsRequest.current && !statsRequest.current.signal.aborted)) return
-    statsRequest.current?.abort()
+      || (searchRequest.current && !searchRequest.current.signal.aborted)) return
+    searchRequest.current?.abort()
     const controller = new AbortController()
-    statsRequest.current = controller
+    searchRequest.current = controller
+    const current = () => !controller.signal.aborted && searchRequest.current === controller
     setStats(null)
     setStatsError(null)
     setStatsLoading(true)
-    try {
-      const result = await getAdminDongStats(selection, controller.signal)
-      if (!controller.signal.aborted && statsRequest.current === controller) setStats(result)
-    } catch (error) {
-      if (!controller.signal.aborted && statsRequest.current === controller) setStatsError(failure(error))
-    } finally {
-      if (!controller.signal.aborted && statsRequest.current === controller) {
-        statsRequest.current = null
-        setStatsLoading(false)
-      }
-    }
+    setTrend(null)
+    setTrendError(null)
+    setTrendLoading(true)
+    const statsTask = getAdminDongStats(selection, controller.signal)
+      .then(result => { if (current()) setStats(result) })
+      .catch((error: unknown) => { if (current()) setStatsError(failure(error)) })
+      .finally(() => { if (current()) setStatsLoading(false) })
+    const trendTask = getAdminDongTrend(selection, controller.signal)
+      .then(result => { if (current()) setTrend(result) })
+      .catch((error: unknown) => { if (current()) setTrendError(failure(error)) })
+      .finally(() => { if (current()) setTrendLoading(false) })
+    await Promise.allSettled([statsTask, trendTask])
+    if (current()) searchRequest.current = null
   }
 
-  return { lookups, lookupLoading, lookupError, retryLookups, selection, changeSelection, search, stats, statsLoading, statsError }
+  return { lookups, lookupLoading, lookupError, retryLookups, selection, changeSelection, search,
+    stats, statsLoading, statsError, trend, trendLoading, trendError, searchLoading: statsLoading || trendLoading }
 }
