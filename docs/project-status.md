@@ -4,15 +4,15 @@
 
 ## 전체 분석
 
-행정동 자료 적재·DB migration·조회 API와 React 단건/4분기 통계를 실제 데이터로 연결했습니다. 같은 행정동·업종의 선택 분기 상세 통계와 2025년 4개 분기 추세를 조회할 수 있습니다. 같은 개발 PC의 독립 clean clone과 별도 fresh PostgreSQL volume에서 CSV → ETL → PostgreSQL → Spring API → React 전체 흐름을 재현해 로드맵 7단계를 완료했습니다.
+행정동 자료 적재·DB migration·조회 API와 React 단건/4분기 통계를 실제 데이터로 연결했습니다. 같은 행정동·업종의 선택 분기 상세 통계와 2025년 4개 분기 추세를 조회할 수 있습니다. 같은 개발 PC의 독립 clean clone과 별도 fresh PostgreSQL volume에서 CSV → ETL → PostgreSQL → Spring API → React 전체 흐름을 재현해 1차 로드맵 7단계를 완료했습니다. 2차 공간 로드맵은 5단계 operational geometry·6단계 CAFE 검증에 이어 [7단계 V2 설계](spatial-schema-v2.md)를 확정했으며, 8단계 migration/ETL은 미구현입니다.
 
 | 영역 | 확인한 상태 | 우선 남은 일 |
 | --- | --- | --- |
 | Backend | CORS·JdbcClient·Flyway, 목록·단건/4분기 통계 API 5개, 일반/실제 DB/API·새 환경 재현 검증 | 2차 지도·공간 기능을 위한 데이터·계약 준비 |
 | Frontend | 조건 선택·단건/4분기 점포·추정매출 표, 상태 처리·개발 프록시·새 환경 재현 검증 | 지도·후보 비교 등 2차 UI |
 | ETL | CSV 사전 검사·선택 실행·변환·일괄 트랜잭션, 행정동 매출·점포 실제 DB 검증 완료 | 나머지 자료의 실제 적재 검증 |
-| DB | 7개 테이블·인덱스·서울시 업종 4개 매핑 | 출처·적재 이력·스냅샷 버전·경계 |
-| 원본 | CSV 6개·공식 행정동 ZIP, 대표점 수치/의미·425개 코드/이름·geometry 검사; 후속 공식 CSV 동일성·홍지문 상권 SHP 대조 | 2025 참조 경계/재집계 근거 부족(B); 홍지문 CSV/SHP 귀속 차이 원인 미확인(H5), 미세 중첩 13쌍 별도 검토·개별 점포 CRS·보관 CSV 이용 조건 |
+| DB | V1 7개 테이블·인덱스·서울시 업종 4개 매핑, 공간 V2/V3 설계 확정 | 8단계 공간 schema·Polygon ETL·SEMAS mapping/backfill 구현, 점포 스냅샷 metadata는 후속 |
+| 원본 | CSV 6개·공식 경계 ZIP2종, 행정동425/상권1650 품질·코드 대조, invalid6건 operational ACCEPTABLE, SEMAS CAFE 검증, 현재 공식 CSV 동일성 | 2025 참조 경계/재집계 근거 부족(B), 홍지문 귀속 원인 미확인(H5), 미세 중첩 원인·실제 공간 query 검증·보관 CSV 이용 조건 |
 | 기존 코드 | 활성 코드의 실행 의존성이 없는 실험 프로젝트 | 필요한 설계 이전 후 별도 제거 |
 
 행정동 매출·점포는 425개 행정동 코드와 2025년 4개 분기를 공유합니다. 상권 매출 1,577개 코드는 영역 자료 1,650개 코드에 모두 포함되지만, 영역 자료는 POINT 정보이며 Polygon이 아닙니다. 서울시 전체 인구 22행은 지역별 수요 분석에 사용하지 않습니다. 2025년 통계와 파일명 기준 2026년 6월 개별 점포의 시점을 구분해야 합니다.
@@ -746,3 +746,32 @@ CSV 대표점 6개·정확한 self-touch vertex 6개·내부 188개·hole 83개�
 **5단계 완료: operational geometry 정책**으로 기록합니다. 6건 모두 ACCEPTABLE·원본 보존·파생 생성 규칙·동일 입력 재현·raw/operational 분리 방향을 충족했습니다. 실제 production 적재·Flyway V2·API 구현 완료나 역사적 경계 버전 완전 검증을 뜻하지 않습니다. **전체 공간 B·4단계 미완료 known limitation/MVP blocker 아님·홍지문 H5·6단계 CAFE 범위 완료는 유지**합니다.
 
 새 결과·원본/파생 WKB·PostGIS 비교·재현 기록·진단 그림은 Git 제외 `data/raw/spatial/six-repair-validation-20261007/`의 `results.json`, `derived-operational-geometries.json`, `six-fixtures.json`, `postgis-results.jsonl`, `postgis-point-results.jsonl`, `replay-results.json`, `six-geometry-overview.png` 등에 보존했습니다. 이 JSON은 파생 검증 산출물이며 repaired SHP나 production raw 입력으로 저장하지 않았습니다. 분석/SQL 스크립트는 프로젝트 밖 임시 디렉터리에만 있습니다. 기존 공간 검증 산출물·manifest·architecture·production code/dependency는 변경하지 않았고 Git stage/commit/push도 하지 않았습니다.
+
+## 2026-10-07 공간 DB 7단계 V2 설계 확정
+
+시작은 `main` / `10384c550044839b73df99d44262f4db22432755`, `git status --short` 출력 없음이었습니다. V1·지정 문서 전체·manifest·현재 ETL·Backend JdbcClient/행정동 SQL/Flyway·Compose/Makefile을 직접 읽었습니다. 기존 세션 상태나 미커밋 파일을 전제하지 않았습니다. 설계 source of truth는 새 [spatial-schema-v2.md](spatial-schema-v2.md)입니다.
+
+| 결정 | 확정 내용 |
+| --- | --- |
+| table / version | admin_dong_boundaries·commercial_area_boundaries 분리, surrogate PK + version/code UNIQUE, 같은 code의 여러 version 보존 |
+| provenance / current | spatial_dataset_versions에 ZIP/처리 profile hash·분리된 날짜·reference verified·historical UNRESOLVED·report/도구 metadata. 종류별 is_current partial UNIQUE, 완전 적재 READY만 공개 |
+| geometry / quality | 같은 row의 source/operational 5181, 원래 source Polygon/MultiPolygon과 invalid 보존, operational valid MultiPolygon. VARCHAR+CHECK 4status, 6건만 linework repair metadata/hash |
+| 불변성 / index | INSERT-only boundary/lifecycle guard 2함수/3trigger. operational partial GiST, version/code·feature UNIQUE 겸용 lookup. source/radius index 추가 없음 |
+| PIP | POINT4326→5181, Covers. 행정동 0=OUTSIDE_OR_UNSUPPORTED/1=RESOLVED/2+=AMBIGUOUS_BOUNDARY 전체 후보. 원본 미세 중첩 유지. 상권은0..N membership |
+| 홍지문 / 통계 연결 | source_sigungu_code/source_dong_code와 CONFLICT_OBSERVED/H5, canonical FK/자동 동기화 없음. V1 통계/대표점과 application code join, 역사적 동일성 주장 금지 |
+| SEMAS / stores | 기존 industry_mappings 재사용, SEMAS/I21201→CAFE. V3에서 기존 NULL I21201만 최소 backfill, 충돌은 실패. 8단계 ETL은 SEMAS map으로 materialize, 미매핑 NULL |
+| migration | V2 공간 schema / V3 reference+최소 backfill, 각각 transaction. V2 성공/V3 실패의 부분 적용 상태를 명시. 기존 통계/점포/대표 POINT 보존, fresh도 동일 논리 결과 |
+
+전체 B·4단계 미완료 known limitation/MVP blocker 아님·홍지문 H5·5단계 ACCEPTABLE6·6단계 CAFE 범위 완료는 유지합니다. OA-15560 좌표 검산과 현재 공식 CSV/보관 CSV byte·SHA 동일성의 완료를 architecture에 반영했으며 최초 배포/역사적 경계 시점은 미확인으로 남겼습니다. SEMAS 데이터 검증 완료와 실제 DB/ETL 미반영을 구분했습니다.
+
+### isolated DDL spike
+
+프로젝트 밖 `/tmp/ry-spatial-schema-g5J45k/`에서만 임시 DDL/합성 fixture를 만들었습니다. container `ry-spatial-schema-g5j45k`는 network none·host port 없음·data/init-dir tmpfs·named volume/bind mount 없음으로 생성했습니다. PostgreSQL16.4/PostGIS3.4.3/GEOS3.9.0/PROJ7.2.1, 전용 DB3개와 docker exec Unix socket만 사용했습니다.
+
+geometry typmod·hash/NULL/quality CHECK·version/code UNIQUE·종류 composite FK·current partial UNIQUE·불변성/완전 적재 trigger를 실제 SQL로 확인했습니다. 공유 경계 Covers2/Containsfalse, 4326 입력 내부1/외부0, operational GiST 접근 경로(EXPLAIN; enable_seqscan=off)를 확인했습니다. 이는 index 사용 가능성 검사이며 실제 원본 workload 성능 보증은 아닙니다.
+
+합성 populated fixture에서는 통계·대표 POINT·점포 id/업종 외 값을 양방향 비교하여 보존하고 CAFE2행만 backfill, 나머지 NULL 및 반복 실행 결과를 확인했습니다. fresh0행 성공과 conflicting mapping/점포 id 거부, current 전환 실패 rollback, DDL 생성 후 강제 실패의 rollback도 확인했습니다. 첫 보존 검사 SQL은 EXCEPT/UNION ALL 괄호 문제로 오검출했고 최소 재현 후 수정해 새 합성 DB에서 통과했습니다.
+
+spike는 실제 Flyway V2/V3·원본2075건 ETL·현재 populated DB의 적용/보존 검증을 대신하지 않습니다. 상세 수용 검증은 설계 문서의 8단계 목록입니다. 임시 container는 종료/자동 제거했고 기존 `startup-analysis-postgres`는 같은 ID `983e738d45ac`/healthy를 유지했습니다. 기존 개발 DB에 연결하거나 volume을 mount/변경하지 않았습니다.
+
+**2차 7단계 완료: V2 설계**입니다. 8단계는 V2/V3 migration·Polygon2종 ETL·current 원자적 전환·stores SEMAS materialization과 fresh/populated/rollback/원본 보존 검증입니다. 새 migration 파일·production code·ETL·API·manifest·dependency·Compose/Makefile 변경 및 ETL 실행은 없습니다. Git stage/commit/push와 branch/worktree 작업도 하지 않았습니다. 7→8의 설계 blocker는 없습니다.

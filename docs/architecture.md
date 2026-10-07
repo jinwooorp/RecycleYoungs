@@ -1,6 +1,6 @@
 # 아키텍처와 분석 정책
 
-이 문서는 프로젝트의 책임과 목표 정책을 관리합니다. 구현 완료 항목은 [로드맵](roadmap.md), 실제 원본 범위는 [데이터 목록](data-catalog.md)을 확인합니다.
+이 문서는 프로젝트의 책임과 목표 정책을 관리합니다. 구현 완료 항목은 [로드맵](roadmap.md), 실제 원본 범위는 [데이터 목록](data-catalog.md)을 확인합니다. 2차 7단계에서 확정한 공간 DB 설계의 source of truth는 [V2 공간 스키마 설계](spatial-schema-v2.md)이며 실제 migration/ETL 구현은 8단계입니다.
 
 ## 데이터 흐름
 
@@ -53,10 +53,10 @@ React는 작은 fetch client·상태 hook·폼/결과 component로 나눕니다.
 - 반경을 변경해도 공식 지역 집계값은 그대로일 수 있습니다. 지역 매출·인구를 반경 면적 비율로 임의 배분하지 않습니다.
 - 현재 영역 CSV는 대표 지점과 면적만 제공하며 Polygon 경계가 없습니다. POINT만으로 후보 좌표의 포함 상권을 판정하지 않습니다.
 - 미지원 경계·연결 불가 통계는 데이터 부족으로 표시합니다. 근처 상권 통계를 대신 넣지 않습니다.
-- 경계 중첩·경계선 위 좌표의 선택 규칙과 미터 단위 공간 조회·인덱스는 지도 기능 전에 검증합니다.
-- 영역-상권의 현재 공식 데이터셋 메타데이터는 CRS를 **EPSG:5181**로 명시합니다([공식 메타데이터 확인 기록](data-catalog.md#좌표와-인구-자료의-한계)). 보관 CSV의 정확한 배포 버전·현재 제공 파일과의 동일 배포본 여부 및 EPSG:5181 → EPSG:4326 실제 대표 좌표 변환 결과는 아직 별도 검증 대상입니다. `AREA_SOURCE_CRS`의 공란 기본값과 미설정 시 적재 거부 정책을 유지합니다.
+- 경계선은 `ST_Covers`로 포함하고 행정동 다중 match는 전체 후보를 반환하는 `AMBIGUOUS_BOUNDARY`로 처리합니다. 상권은 `0..N` membership입니다. 원본 미세 중첩 13쌍을 snap/round로 제거하거나 `LIMIT 1`로 숨기지 않습니다. 구현 검증은 8·9단계입니다.
+- 영역-상권 공식 CRS는 **EPSG:5181**입니다([확인 기록](data-catalog.md#좌표와-인구-자료의-한계)). 대표 8점의 변환/의미 검산과 전체 1,650점의 sanity·독립 투영 수치 검증은 완료했고, 현재 공식 영역 CSV와 보관 CSV의 byte/SHA 동일성도 확인했습니다. 최초 다운로드·배포 이력/역사적 경계 기준일은 미확인이고 홍지문 참조 예외는 H5입니다. 별도 공식 SHP ZIP의 검증과 CSV 동일성을 구분하며 `AREA_SOURCE_CRS`의 공란 기본값·미설정 시 적재 거부를 유지합니다.
 
-MVP에서는 **행정동 Polygon을 먼저 검증**합니다. 현재 vertical slice의 `store_stats_dong`·`sales_dong`과 목록·단건 stats·4분기 trend API가 425개 행정동·2025 Q1~Q4를 사용하므로, 향후 `후보 좌표 → 행정동 Polygon 포함 판정 → dong_code → 기존 stats / trend`로 연결할 수 있습니다. `sales_commercial_area`는 스키마·ETL 입력이 존재하지만 현재 통계 API의 중심이 아니며, 상권 단위 점포 통계도 추가 확보가 필요합니다. 상권 Polygon은 이후 상권 단위 분석을 위해 검증합니다.
+MVP는 **행정동 Polygon 우선**입니다. 현재 vertical slice의 `store_stats_dong`·`sales_dong`과 목록·단건 stats·4분기 trend API가 425개 행정동·2025 Q1~Q4를 사용하므로, 향후 `후보 좌표 → operational 행정동 포함 판정 → dong_code → 기존 stats / trend`로 연결합니다. `sales_commercial_area`는 스키마·ETL 입력이 존재하지만 현재 통계 API의 중심이 아니며 상권 단위 점포 통계도 추가 확보가 필요합니다. 상권 Polygon은 5단계 operational geometry 검증을 완료했고 실제 DB 적재는 남아 있습니다.
 
 MVP의 공간 경계는 다음 두 수준으로 구분합니다.
 
@@ -69,26 +69,30 @@ MVP의 공간 경계는 다음 두 수준으로 구분합니다.
 
 홍지문 `3110531`은 **H5**를 유지합니다. 원인이 해결되기 전 OA-15560 상권 자료의 `SIGNGU_CD` 또는 `ADSTRD_CD` 중 어느 하나를 canonical 행정구역 속성으로 임의 선택하지 않습니다. 이 정책은 상권 Polygon 전체나 상권 코드 자체의 사용 금지를 의미하지 않습니다.
 
-대표 지점과 실제 경계는 다음처럼 분리하는 설계안을 검토합니다. 아래 경계 테이블은 현재 존재하지 않으며 이번에는 테이블·migration을 만들지 않습니다.
+대표 지점과 실제 경계는 [7단계 설계](spatial-schema-v2.md)에서 다음처럼 분리하기로 확정했습니다. 아래 새 테이블은 아직 구현하지 않았습니다.
 
 | 개념 | 역할 |
 | --- | --- |
 | `commercial_areas` | 상권 코드·이름·대표 POINT 유지; POINT와 면적만으로 경계를 재구성하지 않음 |
-| `commercial_area_boundaries` (설계안) | 별도 공식 Polygon/MultiPolygon, 상권 코드와 경계 출처·시점·버전 연결 |
+| `spatial_dataset_versions` | ZIP hash·처리/검증 profile·서로 다른 날짜·역사적 호환 상태·current version 관리 |
+| `admin_dong_boundaries` | version + dong code, source geometry와 operational MultiPolygon 별도 보존 |
+| `commercial_area_boundaries` | version + 상권 code, source geometry와 operational MultiPolygon·quality/repair·raw 행정구역 속성 보존 |
 
-Polygon은 확보 즉시 적재하지 않습니다. 코드 집합·이름·geometry type·SRID·중복의 검사 결과와 시점/버전의 확인 수준을 [도입 전 검증 절차](spatial-data-validation.md)에 따라 구분해 기록하고 공간 스키마와 Flyway V2를 설계합니다. OA-22160의 운영용 도입은 위 operational geometry 정책을 따르며 역사적 경계 근거의 unresolved 상태가 MVP 구현을 막지 않습니다. 같은 코드라도 경계 버전에 따라 공간 범위가 달라질 수 있으므로 사용한 geometry 버전과 통계의 역사적 경계 확인 상태를 별도로 관리합니다.
+source/operational은 모두 **EPSG:5181**이며 source의 Polygon/MultiPolygon type·invalid 상태를 유지합니다. operational은 valid non-empty MultiPolygon입니다. OA-15560 valid 1644건은 repair하지 않고 검증된 invalid 6건만 `make_valid(method="linework", keep_collapsed=True)` 파생 geometry를 사용합니다. 예상 밖 component/의미 변화는 자동 discard 없이 REVIEW_REQUIRED입니다. raw를 repaired SHP로 덮어쓰지 않습니다.
+
+version 안의 code/feature index는 UNIQUE이고 종류별 current는 partial UNIQUE로 최대 하나입니다. INSERT-only/lifecycle guard로 source·완료 version의 불변성과 완전 적재를 보장합니다. API는 4326 입력 POINT만 5181로 transform하여 operational partial GiST를 이용합니다. current 부재·0 match·단일 match·다중 match를 구분하며 V1 통계/대표점과는 FK 대신 code join합니다. 역사적 동일성을 주장하지 않고 B/unresolved metadata를 유지합니다. 실제 Flyway는 **V2 공간 schema / V3 SEMAS reference와 점포 최소 backfill**, 원본 적재는 별도 ETL로 구현합니다. 구체적인 column·제약·query·fresh/existing 경로와 isolated DDL spike 결과는 [설계 문서](spatial-schema-v2.md)에 있습니다.
 
 ## 업종·기간·출처
 
-서울시 `서비스_업종_코드`와 소상공인 `상권업종소분류코드`는 서로 다른 코드 체계입니다. 현재 서울시 코드 네 개만 내부 업종에 연결하며 `CAFE → SEOUL / CS100010`은 소상공인 코드에 대한 근거가 아닙니다. `etl_stores.py`는 의도적으로 `industry_id`를 NULL로 저장하고, 헬스장 코드도 미확정입니다.
+서울시 `서비스_업종_코드`와 소상공인 `상권업종소분류코드`는 서로 다른 체계입니다. 현재 DB에는 서울시 네 개만 매핑하고 `etl_stores.py`는 의도적으로 `industry_id`를 NULL로 저장합니다. 6단계에서 **`CAFE → SEMAS / I21201`의 데이터 검증을 완료**했지만 DB/ETL에는 아직 미반영입니다. 헬스장과 다른 SEMAS 업종은 미확정입니다.
 
-`industry_mappings`의 V1 키는 `(source, source_code)`이고 `industry.py`도 이 조합으로 읽으므로 `SEOUL`과 향후 `SEMAS`를 구분할 수 있습니다. 같은 내부 업종에 출처별 원본 코드 하나 이상을 연결하는 방향을 검토하되, 현재 통계 API의 단일 `SEOUL` 매핑 규칙은 유지합니다. `CAFE → SEMAS / 검증된 소분류 코드 하나 이상`은 개념 예시이며 실제 SEMAS 매핑은 없습니다. CAFE부터 공식 분류 정의·버전과 원본 코드/명칭 분포를 별도 검증한 뒤 포함·제외 기준을 결정하고, 코드를 추측해 등록하지 않습니다.
+V1의 `industry_mappings`와 `load_industry_map()`의 `(source, source_code)` 구조를 재사용합니다. V3에서 SEMAS/I21201→CAFE reference row와 기존 I21201/industry_id NULL 점포의 최소 backfill을 함께 적용하고, 향후 ETL은 SEMAS 소분류 mapping으로 materialize하며 미매핑 code는 NULL로 둡니다. I21201 전체를 공식 통합 범주에 따른 재현 가능한 MVP 경쟁군으로 사용하고 KSIC/상호명으로 재분류하지 않습니다. 현재 통계 API의 단일 SEOUL 매핑 규칙은 유지합니다([확정 설계](spatial-schema-v2.md#semas-cafe-mapping)).
 
 2025 Q1~Q4 통계와 파일명 기준 2026-06 점포 스냅샷을 같은 기간의 관측값으로 취급하지 않습니다. 공간 조회 결과에서도 통계 분기·점포 스냅샷·경계 버전을 구분하며, 스냅샷에서 사라진 점포만으로 폐업을 판정하지 않습니다. 비교에 사용할 기준 분기는 후보지별로 따로 선택하지 않습니다. 향후 데이터 버전·원본 파일·적재 이력·점포 기준일을 DB에도 기록해야 합니다.
 
 원본 출처·파일 해시·기간·인코딩·좌표계 확인 상태는 `data/manifest.json`과 데이터 목록에 남깁니다. 파일 교체 시 새 목록을 생성하고 변경 범위를 기록합니다.
 
-DB 접근 설계에서 메타데이터 제공 경로도 검토했습니다. 통계 기간은 `quarter_code`로 조회할 수 있지만 출처·단위·적재 이력·버전은 현재 테이블만으로 완전히 제공할 수 없습니다. 4단계 계약은 첫 조회에 DB 분기만 제공하는 선택 A로 정했습니다. 단위는 계약의 필드 정의에 명시하고 출처·dataset version 응답은 후속 DB metadata 도입으로 유예합니다. V2는 첫 조회 구현의 필수 선행조건이 아니며 이번에는 새 테이블을 추가하지 않았습니다. 이후에도 요청 중 CSV·manifest를 직접 읽지 않습니다. 상세 적재 이력·스냅샷 버전은 2차 관리 항목과 연결합니다.
+기존 통계 API의 metadata 유예와 단위 계약은 유지합니다. 7단계의 `spatial_dataset_versions`는 공간 경계용 최소 provenance이며 통계 전체/점포 스냅샷 catalog를 대신하지 않습니다. 9단계 공간 응답은 DB의 실제 경계 version/quality/한계를 사용하고, 점포 스냅샷 metadata와 반경 index는 10단계에서 연결합니다. V2는 기존 첫 통계 조회의 필수 선행조건이 아니며 이번에는 설계만 확정했습니다. 이후에도 요청 중 CSV·manifest를 직접 읽지 않습니다.
 
 ## 점수와 후보 비교 — 구현 전 정책
 

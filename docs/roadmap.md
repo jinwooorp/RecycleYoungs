@@ -50,24 +50,24 @@
 
 ## 2차: 공간 데이터 검증 후 지도·경쟁 점포·후보 비교
 
-2026-10-07에는 공식 CRS 메타데이터 확인에 이어 대표 8점의 변환/의미 검산과 공식 행정동 ZIP 확보·파일 검사를 수행했습니다. 전체 1,650점의 변환 sanity·독립 투영 수치도 통과했지만 추가 참조 대조 예외 1건을 발견했습니다. 통계/경계의 코드·이름 425개는 일치하나 2025 참조 경계/재집계에 대한 공식 근거 부족으로 **B 판정**, 4단계는 미완료입니다([실제 결과](project-status.md#2026-10-07-공간-데이터-24단계-실제-검증)). 후속 조사에서 현재 공식 영역/점포/매출 CSV와 보관 파일의 byte·SHA 동일성은 확인했으나 참조 경계 정책은 찾지 못했고, 홍지문은 현재 CSV/SHP의 행정동 귀속 차이를 확인한 **H5**입니다([조사 기록](project-status.md#2026-10-07-공간-검증-4단계-미완료-원인-조사)). 작은 면적 중첩 13쌍은 공간 판정 정책·geometry 정밀도 기준 설계 전에 별도로 검토합니다. 상권 5단계는 코드 연결 대조와 원본 보존·파생 operational geometry 6건 ACCEPTABLE 검증으로 완료했고, SEMAS 업종 매핑 검증은 CAFE 범위만 완료했습니다([5·6단계 결과](project-status.md#2026-10-07-공간-데이터-56단계-검증)). 최초 배포 이력과 CAFE 외 업종 매핑은 미확인입니다.
+2026-10-07에는 공식 CRS 메타데이터 확인에 이어 대표 8점의 변환/의미 검산과 공식 행정동 ZIP 확보·파일 검사를 수행했습니다. 전체 1,650점의 변환 sanity·독립 투영 수치도 통과했지만 추가 참조 대조 예외 1건을 발견했습니다. 통계/경계의 코드·이름 425개는 일치하나 2025 참조 경계/재집계에 대한 공식 근거 부족으로 **B 판정**, 4단계는 미완료입니다([실제 결과](project-status.md#2026-10-07-공간-데이터-24단계-실제-검증)). 후속 조사에서 현재 공식 영역/점포/매출 CSV와 보관 파일의 byte·SHA 동일성은 확인했으나 참조 경계 정책은 찾지 못했고, 홍지문은 현재 CSV/SHP의 행정동 귀속 차이를 확인한 **H5**입니다([조사 기록](project-status.md#2026-10-07-공간-검증-4단계-미완료-원인-조사)). 작은 면적 중첩 13쌍은 7단계에서 원본 정밀도 유지·행정동 다중 매칭 노출로 처리하기로 결정했으며 원인 규명/실제 query 검증과 구분합니다. 상권 5단계는 코드 연결 대조와 원본 보존·파생 operational geometry 6건 ACCEPTABLE 검증으로 완료했고, SEMAS 업종 매핑 검증은 CAFE 범위만 완료했습니다([5·6단계 결과](project-status.md#2026-10-07-공간-데이터-56단계-검증)). 최초 배포 이력과 CAFE 외 업종 매핑은 미확인입니다.
 
 | 순서 | 작업 | 완료 기준 |
 | --- | --- | --- |
 | 1 (완료) | 상권 공식 데이터셋 CRS 메타데이터 확인 | 현재 서울 열린데이터광장 영역-상권 OA-15560 본문에서 EPSG:5181 명시 확인; URL·확인일 기록. 보관 CSV의 배포 버전/현재 제공 파일과의 동일성 확인·실제 좌표 검산과 구분 |
 | 2 (완료: 대표 샘플 범위) | EPSG:5181 → EPSG:4326 대표 좌표 수작업 검산 | 고정 8점의 원본 코드/X/Y·변환 좌표·공식 행정동 포함 대조, 전체 1,650점의 sanity·독립 PyGeodesy 수치 비교 완료; 추가 참조 예외 홍지문 1점은 원인 미확인, 전체 참조 정합성 보증은 제외 |
 | 3 (완료: 원본 확보) | 행정동 Polygon 원본 확보 | OA-22160 공식 ZIP·SHA·provenance·CRS/축 선언·UTF-8 schema·425개 Polygon 확인; 실제 경계 기준 시점/버전은 미확인으로 4단계에서 확인 |
-| 4 (미완료) | 행정동 Polygon과 2025 통계 정합성 검증 | geometry valid 425·코드/이름·네 분기 대조 완료, 차집합/이름 불일치 0. 현재 공식 2025 점포·매출 ZIP도 이전 행정동 코드를 유지하지만 표준단위구역 → 행정동 환산/재집계·참조 기준일과 OA-22160 geometry의 연결 근거가 부족해 B/unresolved 유지. 작은 면적 중첩 13쌍은 공간 판정 정책·정밀도 기준 설계 전에 별도 검토 |
+| 4 (미완료) | 행정동 Polygon과 2025 통계 정합성 검증 | geometry valid 425·코드/이름·네 분기 대조 완료, 차집합/이름 불일치 0. 현재 공식 2025 점포·매출 ZIP도 이전 행정동 코드를 유지하지만 표준단위구역 → 행정동 환산/재집계·참조 기준일과 OA-22160 geometry의 연결 근거가 부족해 B/unresolved 유지. 작은 면적 중첩 13쌍은 7단계의 원본 유지·다중 매칭 정책 적용, 원인 미확인 |
 | 5 (완료: operational geometry 정책) | 상권 Polygon 확보 및 정합성 검증 | 기존 공식 원본·코드 연결 대조에 이어 invalid 6건 모두 ACCEPTABLE. 원본 불변 보존 + linework 파생 valid Polygon·hole 의미/대표점 유지·PostGIS 호환·고정 입력 재현 확인. raw/operational 분리 관리 방향을 기록하며 역사적 버전 증명·실제 DB/ETL 구현 완료와 구분 |
 | 6 (완료: CAFE 범위) | 소상공인 개별 점포 업종 매핑 검증 | 공식 SEMAS 소분류를 그대로 사용해 자의적 재분류를 피하고 재현성을 확보하는 MVP 정책으로 `CAFE → SEMAS / I21201` 결정, 2026-06 22739개 고유 점포·좌표 품질·offline 반경 계산 가능성 검증. 주스/찻집 등 통합 범주를 명시하며 SEOUL/SEMAS 분리 유지. 다른 업종·DB 등록·ETL 적용은 미완료 |
-| 7 | 공간 스키마·Flyway migration 설계 | 검증 결과를 보고 대표 POINT/경계 분리·코드/버전 연결·점포 기준일·출처/적재 이력·기존 DB 보존 전략 결정 |
-| 8 | Polygon ETL·공간 인덱스 | 승인된 설계의 migration과 ETL을 별도 구현하고 geometry·SRID·행 수·실패 복구·인덱스 검증 |
+| 7 (완료: V2 설계) | 공간 스키마·Flyway migration 설계 | [확정 설계](spatial-schema-v2.md): 경계별 table·version/current·provenance·source/operational 5181·MultiPolygon/quality/repair·GiST·행정동 Covers 0/1/multiple·상권 0..N·V2 schema/V3 SEMAS mapping·최소 stores backfill·fresh/existing 보존 경로 결정. 실제 migration/ETL 미구현 |
+| 8 (미완료) | Polygon ETL·공간 인덱스 | 확정 V2 3table/제약/index/불변성·완전 적재 guard, V3 SEMAS/I21201 mapping+최소 backfill, Polygon2종 ETL·atomic current 전환·stores SEMAS materialization 구현. fresh/populated·원본/hash/type/SRID/quality·재실행/rollback·GiST·기존 값 보존 검증 |
 | 9 | 후보 좌표 → 행정동/상권 판정 API | 검증된 경계로 코드 결정, 기존 행정동 stats/trend 연결; 경계선·중첩·미지원 결과와 후보 2~3곳 수작업 대조 |
 | 10 | 300m/500m/1km 경쟁 점포 반경 조회 | 검증된 점포 업종 매핑·미터 단위 거리/인덱스·대표 결과 검산; 2025 통계와 2026-06 스냅샷 시점 구분, 스냅샷 누락을 폐업으로 판정하지 않음 |
 | 11 | 지도 SDK 선택·지도 UI | 데이터/API 검증 이후 위치 선택·점포·경계·각 자료의 기간/버전 표시 |
 | 12 | 최대 3개 후보 비교 | 같은 업종·반경·통계 분기·점포 스냅샷·경계 버전으로 비교하고 후보별 결과 수작업 대조 |
 
-4단계의 미확인 사항은 **known limitation**으로 유지하며 MVP 구현은 검증된 현재 공식 OA-22160의 **operational geometry** 기준으로 진행합니다. 이를 2025 통계 집계 당시의 정확한 역사적 경계라고 주장하지 않으며, B/unresolved·4단계 미완료 상태를 문서와 향후 provenance에 유지하되 공간 스키마·Flyway V2·ETL·API·지도 UI 구현의 blocker로 사용하지 않습니다. 공식 경계 기준이 후속 확인되면 provenance와 판정 정책을 갱신합니다. 경계 기준/재집계 정책과 홍지문 H5의 귀속 기준에 대한 추가 공식 자료 조사·기관 문의는 후속 선택 작업입니다. 작은 면적 중첩 13쌍은 향후 point-in-polygon 경계/다중 매칭 정책과 geometry 정밀도 기준 설계 전에 별도로 검토합니다. 행정동 Polygon 우선 정책과 5~12단계의 순서는 유지합니다([공간 설계 정책](architecture.md#공간-기준)).
+4단계의 미확인 사항은 **known limitation**으로 유지하며 MVP 구현은 검증된 현재 공식 OA-22160의 **operational geometry** 기준으로 진행합니다. 이를 2025 통계 집계 당시의 정확한 역사적 경계라고 주장하지 않으며, B/unresolved·4단계 미완료 상태를 문서와 향후 provenance에 유지하되 공간 스키마·Flyway V2·ETL·API·지도 UI 구현의 blocker로 사용하지 않습니다. 공식 경계 기준이 후속 확인되면 provenance와 판정 정책을 갱신합니다. 경계 기준/재집계 정책과 홍지문 H5의 귀속 기준에 대한 추가 공식 자료 조사·기관 문의는 후속 선택 작업입니다. 작은 면적 중첩 13쌍은 원본 정밀도를 유지하고 행정동 다중 매칭을 AMBIGUOUS_BOUNDARY로 노출하기로 확정했습니다. 실제 경계/중첩 fixture 검증은 8·9단계입니다. 행정동 Polygon 우선 정책과 5~12단계의 순서는 유지합니다([공간 설계 정책](architecture.md#공간-기준)).
 
 현재 서울시 전체 인구 22행은 위치별 수요 자료로 사용할 수 없습니다. 공식 행정동 경계와 상권 ZIP은 별도 Git 제외 로컬 공간에 확보했습니다. 상권 최소 품질·코드/이름 대조와 6건의 파생 operational geometry 정책 검증을 완료했습니다. 원본 invalid 6건은 그대로 보존하고 source와 파생 결과를 구분합니다([6건 결과](project-status.md#2026-10-07-invalid-상권-6건-operational-geometry-검증)). 4단계는 기존 known limitation으로 유지하고 CAFE mapping의 검증 완료와 production 적재/구현 완료를 구분합니다.
 
