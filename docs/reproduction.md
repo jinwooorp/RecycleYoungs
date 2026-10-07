@@ -90,7 +90,7 @@ make etl ETL_ARGS="--only store_stats_dong sales_dong"
 
 첫 명령은 `--no-deps`·`--validate-only`로 DB에 연결하지 않습니다. 현재 ETL은 5개 job 입력의 구조·복합 키·필수값·연간 4분기를 검사합니다. 길단위인구-서울시 CSV는 분석 대상에서 제외되어 ETL job이 없으며, 6개 파일 전체의 동일성은 앞의 manifest 검사로 확인합니다.
 
-두 번째 명령은 migration 확인 후 **행정동 점포·매출 두 job만** 실행하고 하나의 transaction으로 commit합니다. 현재 ETL은 대상 연도 행을 삭제 후 재삽입하므로 접속 대상이 반드시 새 재현 DB인지 확인합니다. 상권 좌표계가 미확정이므로 전체 ETL을 첫 재현의 필수 조건으로 두지 않고 `AREA_SOURCE_CRS`도 추측하지 않습니다.
+두 번째 명령은 migration 확인 후 **행정동 점포·매출 두 job만** 실행하고 하나의 transaction으로 commit합니다. 현재 ETL은 대상 연도 행을 삭제 후 재삽입하므로 접속 대상이 반드시 새 재현 DB인지 확인합니다. 현재 [영역-상권 공식 데이터셋 메타데이터](data-catalog.md#좌표와-인구-자료의-한계)의 CRS는 EPSG:5181로 확인됐지만, 보관 CSV의 정확한 다운로드일·배포 버전과 현재 제공 파일과의 동일 배포본 여부는 미확인이고 EPSG:5181 → EPSG:4326 대표 좌표 수작업 검산도 별도 단계로 남아 있습니다. 상권 대표 좌표 변환은 이 vertical slice 재현 범위가 아니므로 첫 재현은 `--only store_stats_dong sales_dong`을 사용하며 `AREA_SOURCE_CRS` 설정을 요구하지 않습니다.
 
 ```sh
 docker compose exec -T postgres sh -c 'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -v ON_ERROR_STOP=1' <<'SQL'
