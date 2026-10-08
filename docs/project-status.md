@@ -775,3 +775,36 @@ geometry typmod·hash/NULL/quality CHECK·version/code UNIQUE·종류 composite 
 spike는 실제 Flyway V2/V3·원본2075건 ETL·현재 populated DB의 적용/보존 검증을 대신하지 않습니다. 상세 수용 검증은 설계 문서의 8단계 목록입니다. 임시 container는 종료/자동 제거했고 기존 `startup-analysis-postgres`는 같은 ID `983e738d45ac`/healthy를 유지했습니다. 기존 개발 DB에 연결하거나 volume을 mount/변경하지 않았습니다.
 
 **2차 7단계 완료: V2 설계**입니다. 8단계는 V2/V3 migration·Polygon2종 ETL·current 원자적 전환·stores SEMAS materialization과 fresh/populated/rollback/원본 보존 검증입니다. 새 migration 파일·production code·ETL·API·manifest·dependency·Compose/Makefile 변경 및 ETL 실행은 없습니다. Git stage/commit/push와 branch/worktree 작업도 하지 않았습니다. 7→8의 설계 blocker는 없습니다.
+
+## 2026-10-08 공간 8-B1 Polygon ETL 구현·격리 검증
+
+시작은 `main` / local HEAD·원격 main 모두 `90c66fe451836e703acf43409a1e823694b92ca4`, clean working tree였습니다. 기존 V1/V2/V3를 수정하지 않고 Python Polygon 전용 모듈·unittest·requirements·실행 안내를 추가했습니다. 기존 CSV `app.main`의 job/default와 `etl_stores.py`는 유지합니다.
+
+실행 경로는 `python -m app.spatial_main`입니다. 기본/`--validate-only`/`--help`는 DB에 접속하지 않습니다. 종류·ZIP·독립적인 고정 report 경로를 명시하며, 적재는 `--load`와 explicit DSN을 함께 지정할 때만 수행합니다. `make etl`을 실행하지 않았습니다. source catalog는 지정 ZIP/member/report SHA를 고정하고 기존 report bytes를 바꾸거나 실행 중 새로운 acceptance를 생성하지 않습니다.
+
+| 실제 입력 검증 | 결과 |
+| --- | --- |
+| OA-22160 ZIP | 지정 SHA `969f7033…` 일치, CP949 ZIP 이름·SHP/SHX/DBF/PRJ/CPG 5member·UTF-8 strict·5181·원문 code/name·425 valid Polygon |
+| OA-15560 ZIP | 지정 SHA `38bb8fab…` 일치, 같은 형식 검사·1561 Polygon/89 MultiPolygon·raw valid1644/invalid6 유지 |
+| report/acceptance | 행정동 `validation-results.json`, 상권 `stage56-validation…/results.json` 및 `six-repair-validation…/results.json`의 실제 구조/SHA 고정. 여섯 code/index/source WKB/linework Polygon SHA·hole/경계/vertex/bbox 일치 |
+| operational | 행정동425 VALID_SOURCE, 상권1644 VALID_SOURCE/6 REPAIRED_OPERATIONAL, 모두 valid non-empty MultiPolygon5181. valid source에는 repair 없음 |
+| 홍지문 | raw11110/11410660·CONFLICT_OBSERVED·H5 unresolved, Polygon usable. 기존 CSV/대표점 dong 속성 변경 없음 |
+
+GEOS는 별도 Python package로 추가하지 않았습니다. 기존 Python3.12 Dockerfile을 실제 빌드하여 **Python3.12.15 / pyshp3.1.6 / Shapely2.1.2 / GEOS3.13.1 / pyproj3.7.0 / PROJ9.4.1**을 확인했습니다. 프로젝트 밖 local venv는 Python3.13.16이고 GIS 버전은 같았습니다. Python 차이는 실제 profile에 기록되며 동일 profile이라고 주장하지 않습니다. source/repair bytes는 고정 acceptance와 대조했습니다.
+
+DB profile에는 실제 PostgreSQL16.4/PostGIS3.4.3/DB GEOS3.9.0/PROJ7.2.1을 추가합니다. report/member hash·parser/serializer·검증된 repair 목록·실제 도구/구현 파일 SHA를 canonical JSON UTF-8로 기록하며, 실행 시각/DBid/임시 물리 경로는 제외합니다. source와 operational은 NDR 2D OGC WKB(무SRID·무normalize)로 각각 hash를 계산하고 DB 저장 bytes와 core sha256을 대조합니다. repair 직후 Polygon과 저장 MultiPolygon SHA를 구분합니다.
+
+| 격리 검증 | 실제 결과 |
+| --- | --- |
+| 환경 | `ry-spatial-etl-qbuykl-db`와 internal network, host port 없음, data/init-dir tmpfs, named volume 없음. DB명은 `recycleyoungs_spatial_test_…`, raw/app/tests read-only mount |
+| migration | synthetic/real 각각 fresh DB에서 실제 Flyway12.4 V1→V2→V3, baseline 없음 |
+| unittest | production Python3.12 image에서 46개 PASS·fail0·skip0: 기존 CSV15, 파일/CLI/DB/실제ZIP 검사. raw 없는 환경의 DB/real 검사는 명시 opt-in이며 skip을 완료 증거로 쓰지 않음 |
+| 실제 publication | 별도 real DB에 행정동425/상권1650 전수 적재. 원래 type·raw invalid6 유지, operational SRID/type/validity/non-empty·Python/DB NDR hash 모두 통과 |
+| lifecycle/retry | 종류별 lock/transaction, PENDING→READY-only→old current 해제→new READY current 활성화. loaded_at DB 생성. 동일 identity 재실행에서 version/rowid/hash/loaded_at 불변, current 불필요 갱신 없음 |
+| 실패/동시성 | READY row/metadata 불일치 거부, PENDING incomplete 보존. 중간 INSERT/최종 current 활성화 강제 실패는 전체 rollback·기존 current 유지. 같은 profile 동시 publication은 하나의 version으로 직렬화 |
+| V1 보존 | 두 종류의 실제 적재 전후 작은 V1 통계 3table·상권 대표 POINT·stores·mapping fixture의 id/전체 값/POINT 불변. 현재 개발 populated DB 전수 보존 검증을 대신하지 않음 |
+| 공간/index | 홍지문 raw/H5·대표점 covers 확인, 고정 행정동 vertex Covers=true/Contains=false, operational GiST2개와 Index Scan 접근 확인(검증에서만 seqscan 비활성화). API 검증은 아님 |
+
+초기 synthetic 손상 입력 fixture에서 ZIP pin을 바꾼 뒤 report 참조가 남아 깊은 파서 검사에 도달하지 못한 setup을 수정했습니다. 기대 검증은 약화하지 않았습니다. 추가 실패 테스트로 unpaired SHP/DBF를 조용히 zip하는 경로와 serializer Z/M 축소를 재현한 뒤 각각 명시적 거부로 수정했습니다. 원본 파일을 수정하거나 검증 실패를 삭제하지 않았습니다.
+
+**8-B1의 구현과 실제 격리 자료 적재 검증 완료**입니다. 전체 B·4단계 known limitation·historical UNRESOLVED·홍지문 H5는 유지합니다. stores SEMAS ETL은 8-B2이며 이번에 수정하지 않았습니다. 기존 `startup-analysis-postgres`/`recycleyoungs_postgres_data`에는 연결·migration·적재·mount하지 않았습니다. 8-C 이전에는 변경 diff 리뷰, 실제 접속 대상/backup/Flyway history·checksum·V1 구조 대조, 기존 데이터 전후 비교, 명시적인 Polygon-only 실행 절차가 필요합니다. Git stage/commit/push와 branch/worktree 작업은 하지 않았습니다.

@@ -52,11 +52,11 @@ cd etl
 
 공통 DB 연결·타입 정리·입력 검사·적재를 공유하고 자료별 모듈을 분리합니다. 개별 점포는 청크 단위로 읽어 전체 파일을 한 번에 메모리에 올리지 않습니다.
 
-- 서울시 업종 네 개(CAFE, KFOOD, PUB, HAIR)를 연결합니다. GYM과 소상공인 코드 매핑은 미확정입니다.
-- 개별 점포의 `industry_id`는 매핑 확정 전 NULL로 저장합니다.
+- 서울시 업종 네 개(CAFE, KFOOD, PUB, HAIR)를 연결합니다. SEMAS CAFE/I21201은 검증과 V3 reference/backfill을 완료했지만 현재 CSV stores ETL은 아직 미반영입니다. 다른 SEMAS 업종은 미확정입니다.
+- 현재 개별 점포 CSV ETL의 `industry_id`는 NULL입니다. SEMAS materialization 변경은 별도 8-B2 범위입니다.
 - 점포·상권 대표 정보는 현재 입력으로 교체하고 통계는 2025년 연간 자료를 갱신합니다. 4개 분기가 모두 있는 입력만 처리합니다. 선택한 작업 전체의 실패 시 기존 상태를 유지합니다.
 - 파일 입력 검사·트랜잭션 보호와 DB 건수·값의 일치는 별도 검증입니다. 실제 적재·재실행은 PostgreSQL 환경에서 확인해야 합니다.
-- 출처·적재 이력·버전의 DB 테이블과 증분 스냅샷 이력은 아직 없습니다.
+- 공간 경계는 V2 version/provenance와 아래 별도 ETL로 관리합니다. CSV 통계/점포의 일반 metadata·증분 스냅샷 이력은 후속 범위입니다.
 - 상권 내부 판별·지도 반경·인구·점수 계산은 이 배치의 현재 기능이 아닙니다.
 
 ## 테스트
@@ -68,3 +68,52 @@ make check-etl PYTHON="$(pwd)/etl/.venv/bin/python"
 ```
 
 테스트는 입력 검증, NULL 전송, 선택 실행과 실패 복구 경계를 확인합니다. 실제 DB 검증과 후속 기능은 [로드맵](../docs/roadmap.md)을 확인합니다.
+
+## 별도 Polygon ETL — 8-B1
+
+`python -m app.spatial_main`은 CSV `app.main`/기본 5개 job과 독립적입니다. **기본은 검증만**이며 `--help`·`--validate-only`는 DB에 접속하지 않습니다. 선택한 종류의 ZIP/report 경로를 모두 명시해야 합니다. 실제 적재는 `--load`와 `--dsn`을 함께 지정해야 하며 `.env`나 기존 CSV DB 기본값을 사용하지 않습니다. `make etl`을 Polygon 실행 경로로 사용하지 않습니다.
+
+Python 3.12에서 갱신된 requirements를 설치하고 `etl/`에서 실행합니다. 행정동:
+
+```sh
+python -m app.spatial_main --only admin --validate-only \
+  --admin-zip '../data/raw/spatial/서울시 상권분석서비스(영역-행정동).zip' \
+  --admin-report ../data/raw/spatial/validation-results.json
+```
+
+상권은 전체 품질 report와 6건 repair acceptance report가 모두 필요합니다.
+
+```sh
+python -m app.spatial_main --only commercial --validate-only \
+  --commercial-zip ../data/raw/spatial/stage4-research-20261007/official-commercial-area.zip \
+  --commercial-report ../data/raw/spatial/stage56-validation-20261007/results.json \
+  --commercial-repair-report ../data/raw/spatial/six-repair-validation-20261007/results.json
+```
+
+두 종류를 순차 실행하려면 `--only admin commercial`과 위의 입력 옵션 전체를 지정합니다. 명시적인 적재에서는 `--validate-only`를 `--load --dsn "$SPATIAL_DSN"`으로 바꿉니다. DSN은 호출자가 확인한 대상 DB의 값을 명시합니다. 현재 기존 개발 DB 적용은 8-C의 별도 backup/보존 검증 절차를 따른 뒤 수행합니다.
+
+Docker도 동일한 Dockerfile을 사용합니다. 새 image를 빌드한 뒤 CSV entrypoint를 명시적으로 바꿉니다. 원본은 read-only로 mount합니다.
+
+```sh
+docker build -t recycleyoungs-spatial-etl etl
+docker run --rm --network none --entrypoint python \
+  -v "$(pwd)/data/raw/spatial:/sources:ro" recycleyoungs-spatial-etl \
+  -m app.spatial_main --only admin --validate-only \
+  --admin-zip '/sources/서울시 상권분석서비스(영역-행정동).zip' \
+  --admin-report /sources/validation-results.json
+```
+
+검증된 입력은 `spatial_sources.py`의 고정 ZIP/member/report SHA로 한정합니다. report를 실행 중 새로 만들어 acceptance로 승인하지 않습니다. SHA가 다른 새 자료/검증은 별도 검토와 catalog/profile 변경이 필요합니다. ZIP/SHP를 추출·재저장·재압축하거나 원본을 수정하지 않습니다. CP949 ZIP 이름, UTF-8 strict DBF, 5181 PRJ, field/count/code/type/Z/M·unpaired shape/record를 검사합니다. DBF의 우측 저장 padding 외에 code/name normalization을 하지 않습니다.
+
+425 행정동과 valid 상권 1644건은 repair 없이 MultiPolygon으로 포장합니다. 알려진 invalid 6건만 Shapely 2.1.2/GEOS 3.13.1의 `linework, keep_collapsed=True`를 사용하고 기존 index/source SHA/repair Polygon SHA·hole/경계/vertex를 대조합니다. 예상 밖 결과는 REVIEW_REQUIRED로 실패합니다. 저장 MultiPolygon SHA는 repair 직후 Polygon SHA와 구분합니다. 홍지문 raw 속성과 H5, 전체 B·historical UNRESOLVED를 유지합니다.
+
+오프라인 출력의 `offline_base_profile_sha256`에는 DB 정보가 없습니다. 적재 때 실제 PostgreSQL/PostGIS/GEOS/PROJ version을 추가한 **전체 profile SHA**를 계산합니다. Python/pyshp/Shapely/GEOS/pyproj/PROJ와 ETL 구현 파일 SHA도 기록합니다. 실행 시각·DB id·물리 입력 경로는 identity에서 제외합니다. 논리 report 경로는 catalog의 고정 archive 상대 경로이며 실제 입력 위치가 바뀌어도 동일 bytes/profile이면 같은 identity입니다.
+
+적재는 종류별 advisory lock과 한 transaction으로 INSERT→DB byte/hash/metadata 검사→READY-only UPDATE→이전 current 해제→새 current 활성화를 수행합니다. `loaded_at`은 V2 trigger가 생성합니다. 두 종류 전체를 단일 transaction이라고 보장하지 않습니다. READY 재실행은 모든 row/metadata를 비교하여 동일하면 id/loaded_at/hash를 유지하고 필요한 current 전환만 수행합니다. 불일치/PENDING은 실패하며 upsert/삭제로 숨기지 않습니다. 기존 V1 table·대표 POINT·stores는 이 코드에서 쓰지 않습니다.
+
+합성 unittest는 raw 파일 없이 실행됩니다. 실제 ZIP 검사는 `SPATIAL_REAL_SOURCE_ROOT`를 명시할 때만 수행합니다. DB 테스트는 실제 V1/V2/V3가 적용되고 공간 table이 비어 있는 **격리 DB**의 `SPATIAL_TEST_DSN`을 명시하며 DB 이름은 `recycleyoungs_spatial_test_`로 시작해야 합니다. 이름 prefix만으로 격리를 보장하지 않으므로 실행자는 별도 container/network·tmpfs·원본 read-only·기존 volume 미사용을 먼저 확인합니다. 두 환경 변수가 없으면 해당 검사는 skip되고 실제 자료/DB 완료로 주장하지 않습니다.
+
+```sh
+cd etl
+python -m unittest discover -s tests -v
+```

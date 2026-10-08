@@ -61,7 +61,7 @@
 | 5 (완료: operational geometry 정책) | 상권 Polygon 확보 및 정합성 검증 | 기존 공식 원본·코드 연결 대조에 이어 invalid 6건 모두 ACCEPTABLE. 원본 불변 보존 + linework 파생 valid Polygon·hole 의미/대표점 유지·PostGIS 호환·고정 입력 재현 확인. raw/operational 분리 관리 방향을 기록하며 역사적 버전 증명·실제 DB/ETL 구현 완료와 구분 |
 | 6 (완료: CAFE 범위) | 소상공인 개별 점포 업종 매핑 검증 | 공식 SEMAS 소분류를 그대로 사용해 자의적 재분류를 피하고 재현성을 확보하는 MVP 정책으로 `CAFE → SEMAS / I21201` 결정, 2026-06 22739개 고유 점포·좌표 품질·offline 반경 계산 가능성 검증. 주스/찻집 등 통합 범주를 명시하며 SEOUL/SEMAS 분리 유지. 다른 업종·DB 등록·ETL 적용은 미완료 |
 | 7 (완료: V2 설계) | 공간 스키마·Flyway migration 설계 | [확정 설계](spatial-schema-v2.md): 경계별 table·version/current·provenance·source/operational 5181·MultiPolygon/quality/repair·GiST·행정동 Covers 0/1/multiple·상권 0..N·V2 schema/V3 SEMAS mapping·최소 stores backfill·fresh/existing 보존 경로 결정. 실제 migration/ETL 미구현 |
-| 8 (미완료) | Polygon ETL·공간 인덱스 | 확정 V2 3table/제약/index/불변성·완전 적재 guard, V3 SEMAS/I21201 mapping+최소 backfill, Polygon2종 ETL·atomic current 전환·stores SEMAS materialization 구현. fresh/populated·원본/hash/type/SRID/quality·재실행/rollback·GiST·기존 값 보존 검증 |
+| 8 (진행 중: 8-A·8-B1 완료) | Polygon ETL·공간 인덱스 | 8-A V2/V3 migration은 `90c66fe`로 구현/검증. 8-B1 별도 Polygon CLI·고정 ZIP/report·425/1650 실제 격리 적재·hash/type/quality·READY/current·동등 재실행/rollback·GiST·V1 fixture 보존 검증 완료. stores SEMAS ETL(8-B2)과 기존 populated 개발 DB 적용/대규모 보존 검증(8-C)은 미완료 |
 | 9 | 후보 좌표 → 행정동/상권 판정 API | 검증된 경계로 코드 결정, 기존 행정동 stats/trend 연결; 경계선·중첩·미지원 결과와 후보 2~3곳 수작업 대조 |
 | 10 | 300m/500m/1km 경쟁 점포 반경 조회 | 검증된 점포 업종 매핑·미터 단위 거리/인덱스·대표 결과 검산; 2025 통계와 2026-06 스냅샷 시점 구분, 스냅샷 누락을 폐업으로 판정하지 않음 |
 | 11 | 지도 SDK 선택·지도 UI | 데이터/API 검증 이후 위치 선택·점포·경계·각 자료의 기간/버전 표시 |
