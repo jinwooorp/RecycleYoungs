@@ -245,3 +245,7 @@ Backend test/server 터미널에는 `DB_HOST=localhost`, `DB_PORT=55432`, `DB_NA
 Spring/Vite는 각 터미널에서 Ctrl+C로 종료합니다. 일반 개발 DB는 루트에서 `make db-stop`으로 중지하며 volume을 보존합니다. 격리 clone의 project·COMPOSE_FILE이 설정된 터미널에서는 `docker compose down`으로 검증 container/network만 종료할 수 있습니다. volume은 자동 삭제하지 않습니다. volume 삭제·DB 초기화는 이 재현 절차에 포함하지 않습니다.
 
 2026-10-07 검증의 실제 환경·테스트 수·원본/DB/API/화면 대조·기존 DB 보존 결과는 [프로젝트 기록](project-status.md#2026-10-07-새-환경-vertical-slice-재현)에 남깁니다. 기능·migration·ETL·dependency 변경 없이 재현하는 기준입니다.
+
+## 8-C1 전체 공간/점포 통합과 8-C2
+
+위 1차 vertical slice 재현과 구분되는 V1/V2/V3→전체 CSV·SEMAS 점포·Polygon의 Fresh/Populated 경로 및 ID/sequence/원본 값 보존·격리 백업 복원 절차는 [8-C1 통합 검증](integration-validation-8c1.md)에 기록합니다. 기존 개발 DB 적용은 [8-C2 실행 계획](development-db-8c2-runbook.md)의 별도 승인·접속 identity·백업/복원 검증이 필요합니다. 8-C1에서는 기존 개발 DB에 접속하지 않으며 기존 full CSV ETL을 backfill 도구로 사용하지 않습니다.

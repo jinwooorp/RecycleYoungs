@@ -125,3 +125,11 @@ docker run --rm --network none --entrypoint python \
 cd etl
 python -m unittest discover -s tests -v
 ```
+
+## 8-C1 전체 격리 통합 검증과 8-C2 계획
+
+[8-C1 결과·재현/streaming checksum 규칙](../docs/integration-validation-8c1.md)은 Fresh V1→V2→V3→CSV/stores→Polygon과 Populated V1 전체 적재→백업/새 격리 DB 복원→V2/V3 최소 backfill→Polygon-only를 구분합니다. 검증 worker는 `tests/integration_check.py`, `tests/integration_spatial.py`이며 actual Docker isolation proof와 명시적 DSN을 요구합니다. 기본 DB 접속값이 없고, 개발 DB·localhost/hostaddr/service override(명시적 DSN 및 ambient libpq 환경)·Python `-O`를 거부합니다. V1 NULL stores fixture는 전용 격리 V1-only/empty stores에서만 사용하며 production/backfill 경로가 아닙니다.
+
+검사 script의 테스트 DB prefix만으로 격리를 판단하지 않습니다. 실행 전과 매 Docker 명령 직전에 internal network·container ID·system identifier·tmpfs·host port/기존 volume 미사용·원본 read-only mount를 확인합니다. 백업·로그·snapshot·환경 driver는 저장소 밖 임시 경로에 둡니다. 기존 `make etl`이나 개발 DB를 통합 테스트 대상으로 사용하지 않습니다.
+
+[8-C2 실행 계획](../docs/development-db-8c2-runbook.md)은 기존 개발 DB의 identity·Flyway/구조·전수 snapshot·실제 backup·격리 복원 검증을 모두 통과한 후에만 V2/V3와 Polygon-only를 수행하는 검토 문서입니다. 8-C1 성공은 개발 DB 적용 완료가 아닙니다.

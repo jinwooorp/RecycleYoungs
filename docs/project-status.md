@@ -832,3 +832,30 @@ Fresh 경로는 빈 DB → V1 → V2 → V3 → mapping-aware stores full loader
 **8-B2 구현과 fresh 격리 환경의 fixture·실제 전체 CSV 적재 검증 완료**입니다. 기존 개발 DB/container/volume에는 연결·쓰기·migration·mount하지 않았습니다. 기존 migration·Polygon ETL·Compose/Makefile·원본 데이터는 변경하지 않았고 stage/commit/push도 하지 않았습니다. 전체 공간 B·4단계 known limitation·홍지문 H5는 유지하며 **8-C는 미완료**입니다. 8-C 전에는 diff 리뷰·대상 DB/backup/Flyway history/checksum 확인·보존 비교 계획·V3 최소 backfill과 Polygon-only 실행 절차를 확정해야 합니다. 기존 DB의 stores full loader 재실행은 그 절차에 포함하지 않습니다.
 
 최종 읽기 전용 리뷰에서 중요한 문제는 발견되지 않았습니다. 이번 작업의 임시 container·network는 제거했습니다. 기존 개발 container는 Docker metadata만 읽어 같은 ID `983e738d45ac`/healthy·기존 volume 연결 유지를 확인했으며, DB 접속이나 데이터 변경은 하지 않았습니다.
+
+## 2026-10-08 8-C1 실제 전체 데이터 격리 통합 검증
+
+시작 `main` / local·remote `ad290d0878ea247eefc747682b6c7b616d648329`, clean이었습니다. production migration/ETL/API·원본·dependency·Compose/Makefile은 유지하고 격리 검증 worker와 DB-free 테스트, [전수 결과/재현·hash 정의](integration-validation-8c1.md), [8-C2 실행 계획](development-db-8c2-runbook.md)을 추가했습니다.
+
+`ry-8c1-db-xa4ene`·전용 internal network·data/init-dir tmpfs·host port/named volume 없음으로 기존 개발 자원과 분리했습니다. Docker ID·mount/network/port·server system identifier를 매 명령 전 확인했고 입력/app/tests/migration은 read-only mount했습니다. PostgreSQL16.4/PostGIS3.4.3·Flyway12.4.0·production Python3.12.15에서 실행했습니다.
+
+CSV6개의 manifest SHA/size/strict schema/key/count와 Polygon2 ZIP·3report·member/CRS/repair acceptance를 확인했습니다. Fresh는 실제 V1→V2→V3→5 CSV job→Polygon CLI, Populated는 실제 V1→4 CSV job+테스트 전용 NULL stores554092→snapshot/pg_dump→새 빈 격리 DB 실제 복원/전수 동일성→V2→V3 최소 backfill→Polygon-only를 수행했습니다. Populated migration 이후 CSV/full stores/commercial loader를 다시 실행하지 않았습니다.
+
+| 검증 | 실제 결과 |
+| --- | --- |
+| 전체 CSV/source | 대표 POINT1650·점포통계141218·행정동매출67113·상권매출85732·stores554092. 양 경로 모든 저장 원본 metric/key/NULL/POINT의 source EXCEPT ALL mismatch0. 인구22는 입력 검증만 수행 |
+| V3 | I21201+NULL22739만 CAFE로 변경. 다른 code NULL 유지, SEOUL4 보존·SEMAS1 추가. 실제 대상 id/sourceid와 예상 분류 digest 일치 |
+| Populated 보존 | 통계/상권 대표 POINT/industries 전체 ID/값 동일, stores industry_id 제외 id/원본/POINT digest 동일, V1 sequence 보존(stores554092/true), V1 history/checksum 보존 |
+| 백업·복원 | custom dump79579490bytes·TOC/restore exit0, restored V1의7table 전체 checksum/ID/POINT·분류·sequence/history snapshot 동일. V1 column/default/nullability·constraint/index도 restored/Fresh/Populated 동일. 개발 DB 백업이 아님 |
+| Polygon | 양쪽425 VALID_SOURCE 및1644 VALID_SOURCE/6 REPAIRED_OPERATIONAL, source5181/type/rawinvalid6·valid/non-empty MultiPolygon·WKB/SHA·H5/provenance 확인. current READY 각각1개. 동등 재실행 version/rowid/loaded_at/hash/sequence 불변 |
+| Fresh vs Populated | V1·공간10table 전수 logical digest 모두 동일. surrogate id/FK 숫자는 논리 code로, loaded_at은 제외하며 실제 column/NULL/geometry/profile/quality/current는 보존 |
+| 실패·회귀 | actual Flyway mapping/store conflict2case에서 V3 실패·전수 rollback·V2 유지, 이미 CAFE fixture 최소 backfill 성공. 통합시점 unittest61 PASS/fail0/skip0, opt-in DB/원본 검사 포함. 리뷰 guard 검사 추가 후 최종62개 suite는 local47PASS/fail0/skip15(DB/raw env 없음), production49PASS/fail0/skip13(DB opt-in env 미지정); DB/전체 CSV 검사는 앞선61개에서 실제 실행 |
+| 공간/index | 양 경로 각각32 exact5181 표본, hole 내부/경계·13 overlap pair의 다중 match·상권복수membership·0match·독립 후보 대조 통과. operational GiST2개, ANALYZE 이후 normal/격리강제 plan 모두 Index Scan. 9단계 API 검증 아님 |
+
+첫 보존 도구가 새 공간 sequence의 정상 증가를 V1 변경으로 오검출했습니다. V1 해시는 같음을 확인하고 RED/GREEN regression으로 비교 범위를 V1 sequence로 제한했으며 경계 재실행은 전체 sequence까지 검사합니다. 기존 실패 경로 pandas reader ResourceWarning2건도 재관찰해 기록했습니다. 기대 데이터/테스트를 약화하거나 production 코드를 수정하지 않았습니다.
+
+**8-C1 완료, 8-C2 및 8-C 전체 미완료**입니다. 기존 `startup-analysis-postgres`/`recycleyoungs_postgres_data`/개발 port5432에 DB 접속·쓰기·migration·full ETL·volume mount하지 않았습니다. 전체 B·4단계 known limitation·historical UNRESOLVED·홍지문 H5를 유지합니다. 8-C2는 실제 접속 identity·현재 history/checksum/구조·writer 정지·전수 ID/sequence/POINT snapshot·실제 backup/격리 복원 확인 후에만 적용합니다. 백업/복원/보존 불일치·업종 충돌·원본/acceptance 차이는 중단 조건이며 자동 초기화/repair/기존 volume 삭제는 없습니다. stage/commit/push는 하지 않았습니다.
+
+최종 읽기 전용 리뷰의 Important1건은 libpq 환경 변수 route 우회 가능성이었습니다. PGHOSTADDR/PGSERVICE 및 관련 service/options 환경을 connect 전에 거부하도록 검증 도구만 보강했고 RED5case→GREEN 및 실제 강화 guard의 Fresh source 전수 mismatch0을 확인했습니다. 실제 실행 image/driver에는 해당 override가 없었습니다. 현재62개 서로 다른 unittest는 작업 중 모두 통과했고, post-fix DB opt-in skip을 재실행 성공으로 표현하지 않습니다.
+
+이번 작업의 임시 DB container·internal network는 검증 후 제거했습니다. 기존 개발 container는 시작과 같은 ID `983e738d45ac64e2c5c116117d739fde554b17041f417c2110938847c9edf951`/healthy·기존 volume 연결 상태를 Docker metadata로만 확인했습니다. DB/volume에 연결하거나 쓰지 않았습니다. 검토용 백업·JSON·로그는 저장소 밖 `/tmp/ry-8c1-xa4EnE/`에 유지하며 Git에 포함하지 않습니다.
