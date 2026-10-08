@@ -99,8 +99,8 @@ class LoaderTests(unittest.TestCase):
         conn.commit.assert_not_called()
 
     def test_store_chunk_preserves_nullable_industry_and_geometry(self):
-        conn = MagicMock()
-        cursor = conn.cursor.return_value.__enter__.return_value
+        from store_fixtures import mapped_mock_connection
+        conn, cursor, _ = mapped_mock_connection()
         writer = cursor.copy.return_value.__enter__.return_value
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "stores.csv"

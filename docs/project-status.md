@@ -808,3 +808,27 @@ DB profile에는 실제 PostgreSQL16.4/PostGIS3.4.3/DB GEOS3.9.0/PROJ7.2.1을 �
 초기 synthetic 손상 입력 fixture에서 ZIP pin을 바꾼 뒤 report 참조가 남아 깊은 파서 검사에 도달하지 못한 setup을 수정했습니다. 기대 검증은 약화하지 않았습니다. 추가 실패 테스트로 unpaired SHP/DBF를 조용히 zip하는 경로와 serializer Z/M 축소를 재현한 뒤 각각 명시적 거부로 수정했습니다. 원본 파일을 수정하거나 검증 실패를 삭제하지 않았습니다.
 
 **8-B1의 구현과 실제 격리 자료 적재 검증 완료**입니다. 전체 B·4단계 known limitation·historical UNRESOLVED·홍지문 H5는 유지합니다. stores SEMAS ETL은 8-B2이며 이번에 수정하지 않았습니다. 기존 `startup-analysis-postgres`/`recycleyoungs_postgres_data`에는 연결·migration·적재·mount하지 않았습니다. 8-C 이전에는 변경 diff 리뷰, 실제 접속 대상/backup/Flyway history·checksum·V1 구조 대조, 기존 데이터 전후 비교, 명시적인 Polygon-only 실행 절차가 필요합니다. Git stage/commit/push와 branch/worktree 작업은 하지 않았습니다.
+
+## 2026-10-08 8-B2 SEMAS stores ETL 구현·격리 검증
+
+시작은 `main` / local HEAD·원격 main 모두 `c51422489427eac024ead14591df68f67b7ea829`, clean working tree였습니다. `etl_stores.run()`에서 caller의 transaction으로 기존 `load_industry_map()`을 한 번 읽고, `industries.code='CAFE'`의 실제 id와 `SEMAS/I21201` mapping을 비교합니다. CAFE 부재·mapping 부재·다른 업종 연결은 `TRUNCATE` 전에 명시적으로 실패합니다. mapping 생성·CAFE id 숫자 고정·별도 connection·내부 commit은 없습니다.
+
+각 점포의 기존 `clean_text` 소분류를 `('SEMAS', code)`로 조회하여 기존 industry_id 위치에 전달합니다. 미매핑/빈 code와 SEOUL에만 존재하는 code는 NULL입니다. KSIC·상호·브랜드로 I21201 범위를 바꾸지 않으며 source code/name·UTF-8-SIG·청크·nullable 속성·좌표 검사·POINT4326·COPY column contract는 유지합니다.
+
+Fresh 경로는 빈 DB → V1 → V2 → V3 → mapping-aware stores full loader입니다. 기존 populated DB는 V3의 I21201+NULL 최소 backfill 경로를 사용합니다. **full loader는 `TRUNCATE stores RESTART IDENTITY`로 snapshot을 교체하므로 기존 데이터를 보존하는 backfill 도구가 아닙니다.** 재적재에서 surrogate id는 재발급/재사용될 수 있으며 동등성은 source_store_id·원본 속성·POINT·논리 업종 기준으로 검사합니다.
+
+| 격리 검증 | 실제 결과 |
+| --- | --- |
+| 환경/migration | 전용 `ry-stores-8b2-gcgmru-db`·internal network, host port 없음·data/init-dir tmpfs·named volume 없음. fixture/실제 CSV/Polygon 회귀 DB 각각 실제 Flyway12.4.0 V1→V2→V3 적용, baseline 없음. stores fixture/실제 CSV DB Flyway validate 각각 3migration 통과 |
+| 실행 환경 | 8-B1에서 빌드한 production Python3.12.15 image에 현재 app/tests를 read-only로 mount. PostgreSQL16.4/PostGIS3.4.3, dependency·Dockerfile 변경 없음 |
+| unittest | 전체 기존 CSV/Polygon·stores 회귀 54개 중 PASS53·fail0·skip1(별도 whole CSV 실행). 이어 whole CSV 검사1개 PASS·fail0·skip0. 합계 서로 다른 54개 모두 실행/통과. DB/raw opt-in 변수 없는 기본 local 실행은 PASS39·fail0·skip15이며 skip을 통과 증거로 쓰지 않음 |
+| mapping fixture | 동적 CAFE id·SEMAS/SEOUL source 분리·미매핑/빈 code·여러 chunk의 map 1회 조회. leading zero·탭/개행/따옴표/NA/주소·nullable 좌표·독립 NDR POINT WKB/SRID·실제 FK 확인 |
+| 오류/rollback | 세 mapping 오류 모두 실제 BEFORE TRUNCATE 감시 trigger에 도달하지 않고 실패. 두 번째 COPY chunk 강제 실패·좌표 오류는 caller transaction 전체 rollback·이전 stores id/전체 값/POINT 보존. 실제 app.main transaction 성공도 확인 |
+| 고정 실제 CSV | SHA `08d3fd08b37840256cccd4f09bad6fc33133b647cbff05f22f26fc962cf84152` 일치. 매 실행 전체554092·I21201/CAFE22739·I21201 NULL0/non-CAFE0·나머지 미매핑 non-NULL0 |
+| 전체 원본/재실행 | CSV 전체 source_store_id·독립 POINT WKB·업종을 두 번 전수 대조. id를 제외한 원본 속성/location/논리 업종의 정렬 hash `f6c8c0cce048cd6a1daccd834712033823df6747616482c019522861abe70a4c`가 두 적재에서 일치 |
+
+중간 실패를 강제로 발생시킨 두 테스트에서 기존 pandas 청크 reader의 파일 미종료 `ResourceWarning`이 관찰됐습니다. rollback 및 검증 결과는 통과했고, 기존 실패 경로의 reader 정리 개선은 별도 후속 사항으로 남깁니다. 경고를 숨기거나 테스트를 삭제하지 않았습니다.
+
+**8-B2 구현과 fresh 격리 환경의 fixture·실제 전체 CSV 적재 검증 완료**입니다. 기존 개발 DB/container/volume에는 연결·쓰기·migration·mount하지 않았습니다. 기존 migration·Polygon ETL·Compose/Makefile·원본 데이터는 변경하지 않았고 stage/commit/push도 하지 않았습니다. 전체 공간 B·4단계 known limitation·홍지문 H5는 유지하며 **8-C는 미완료**입니다. 8-C 전에는 diff 리뷰·대상 DB/backup/Flyway history/checksum 확인·보존 비교 계획·V3 최소 backfill과 Polygon-only 실행 절차를 확정해야 합니다. 기존 DB의 stores full loader 재실행은 그 절차에 포함하지 않습니다.
+
+최종 읽기 전용 리뷰에서 중요한 문제는 발견되지 않았습니다. 이번 작업의 임시 container·network는 제거했습니다. 기존 개발 container는 Docker metadata만 읽어 같은 ID `983e738d45ac`/healthy·기존 volume 연결 유지를 확인했으며, DB 접속이나 데이터 변경은 하지 않았습니다.

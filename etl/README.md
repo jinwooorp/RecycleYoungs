@@ -52,8 +52,8 @@ cd etl
 
 공통 DB 연결·타입 정리·입력 검사·적재를 공유하고 자료별 모듈을 분리합니다. 개별 점포는 청크 단위로 읽어 전체 파일을 한 번에 메모리에 올리지 않습니다.
 
-- 서울시 업종 네 개(CAFE, KFOOD, PUB, HAIR)를 연결합니다. SEMAS CAFE/I21201은 검증과 V3 reference/backfill을 완료했지만 현재 CSV stores ETL은 아직 미반영입니다. 다른 SEMAS 업종은 미확정입니다.
-- 현재 개별 점포 CSV ETL의 `industry_id`는 NULL입니다. SEMAS materialization 변경은 별도 8-B2 범위입니다.
+- 서울시 업종 네 개(CAFE, KFOOD, PUB, HAIR)를 연결합니다. stores는 DB에 등록된 SEMAS tuple-key mapping만 사용하며 `SEMAS/I21201 → CAFE`를 적용합니다. 다른 SEMAS 업종을 추측하거나 새 mapping을 만들지 않습니다.
+- stores는 caller transaction에서 mapping을 한 번 읽고, CAFE 존재 및 SEMAS/I21201의 CAFE id 일치를 TRUNCATE 전에 검사합니다. 미매핑/빈 code는 industry_id NULL이며 SEOUL-only code를 연결하지 않습니다. KSIC/상호명 filter는 없습니다.
 - 점포·상권 대표 정보는 현재 입력으로 교체하고 통계는 2025년 연간 자료를 갱신합니다. 4개 분기가 모두 있는 입력만 처리합니다. 선택한 작업 전체의 실패 시 기존 상태를 유지합니다.
 - 파일 입력 검사·트랜잭션 보호와 DB 건수·값의 일치는 별도 검증입니다. 실제 적재·재실행은 PostgreSQL 환경에서 확인해야 합니다.
 - 공간 경계는 V2 version/provenance와 아래 별도 ETL로 관리합니다. CSV 통계/점포의 일반 metadata·증분 스냅샷 이력은 후속 범위입니다.
@@ -68,6 +68,14 @@ make check-etl PYTHON="$(pwd)/etl/.venv/bin/python"
 ```
 
 테스트는 입력 검증, NULL 전송, 선택 실행과 실패 복구 경계를 확인합니다. 실제 DB 검증과 후속 기능은 [로드맵](../docs/roadmap.md)을 확인합니다.
+
+## stores fresh 적재와 기존 populated DB 보존 — 8-B2
+
+Fresh 경로는 **empty DB → 실제 Flyway V1/V2/V3 → stores full loader**입니다. V3에서는 빈 stores의 backfill이 0건이고, 이후 CSV ETL이 `('SEMAS', source_small_category_code)`로 industry_id를 materialize합니다. UTF-8-SIG·문자열/NULL 정리·청크·기존 COPY column 순서·POINT4326 생성은 유지합니다. `etl_stores.run()`은 새 connection이나 commit을 만들지 않으며 기존 `app.main`의 선택 CSV 전체 transaction에 참여합니다.
+
+기존 populated 경로는 **V1 populated → V2 → V3 최소 backfill**입니다. V3가 기존 I21201+NULL만 갱신합니다. **기존 stores를 보존하려고 full loader를 재실행하지 않습니다.** 현재 full loader는 `TRUNCATE stores RESTART IDENTITY`로 snapshot을 교체하므로 이전 row가 제거되고 surrogate id가 재발급/재사용될 수 있습니다. 재실행 동등성은 source_store_id·원본 속성·location·industry code를 기준으로 보며 id 동일성을 보장하지 않습니다. 증분/upsert 적재는 별도 설계입니다. 기존 개발 DB 적용/backup·대규모 보존 비교는 8-C이며 이번 검증 대상이 아닙니다.
+
+stores 통합 테스트는 실제 V1/V2/V3가 적용된 격리 DB의 `STORES_TEST_DSN`을 명시합니다. DB 이름은 `recycleyoungs_stores_test_` prefix를 검사하지만 prefix만으로 실제 격리를 보장하지 않습니다. 실행자는 별도 container/internal network·tmpfs·기존 volume 미사용을 먼저 확인합니다. `STORES_REAL_DSN`과 read-only `STORES_REAL_CSV`를 함께 지정하면 SHA가 고정된 2026-06 전체 적재/재실행 검사를 수행하며, 이 DB의 stores는 처음에 비어 있어야 합니다. 미지정 시 해당 검사는 skip되고 fixture 결과를 전수 검증으로 주장하지 않습니다.
 
 ## 별도 Polygon ETL — 8-B1
 
