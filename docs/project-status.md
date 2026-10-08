@@ -859,3 +859,25 @@ CSV6개의 manifest SHA/size/strict schema/key/count와 Polygon2 ZIP·3report·m
 최종 읽기 전용 리뷰의 Important1건은 libpq 환경 변수 route 우회 가능성이었습니다. PGHOSTADDR/PGSERVICE 및 관련 service/options 환경을 connect 전에 거부하도록 검증 도구만 보강했고 RED5case→GREEN 및 실제 강화 guard의 Fresh source 전수 mismatch0을 확인했습니다. 실제 실행 image/driver에는 해당 override가 없었습니다. 현재62개 서로 다른 unittest는 작업 중 모두 통과했고, post-fix DB opt-in skip을 재실행 성공으로 표현하지 않습니다.
 
 이번 작업의 임시 DB container·internal network는 검증 후 제거했습니다. 기존 개발 container는 시작과 같은 ID `983e738d45ac64e2c5c116117d739fde554b17041f417c2110938847c9edf951`/healthy·기존 volume 연결 상태를 Docker metadata로만 확인했습니다. DB/volume에 연결하거나 쓰지 않았습니다. 검토용 백업·JSON·로그는 저장소 밖 `/tmp/ry-8c1-xa4EnE/`에 유지하며 Git에 포함하지 않습니다.
+
+## 2026-10-08 8-C2A 기존 개발 DB 사전 점검·백업 복원 검증
+
+시작 `main` / local·remote `b6113585ea4c2ba10d1edf3d57ec999403e9b5dd`, clean이었습니다. 기존 runbook1~9단계를 실제 대상에서 검증했으며 [별도 점검 결과](development-db-8c2a-preflight.md)에 민감 정보 없이 기록했습니다. runbook과 production code/migration/ETL/Compose/Makefile/원본은 변경하지 않았습니다.
+
+기존 `startup-analysis-postgres`의 full ID·volume·PGDATA·network/alias·port·health를 먼저 확인한 뒤, 승인 container 내부 Unix socket의 명시적 REPEATABLE READ READ ONLY SQL을 사용했습니다. 실제 PostgreSQL16.4/PostGIS3.4.3, system identifier7692329130053947430, 구성 DB/user 일치·필요 권한을 확인했습니다. 세션 정책 외 DDL/DML/sequence 변경은 없습니다. 8-C1 connect_isolated를 수정하거나 개발 DB용으로 우회하지 않았습니다.
+
+현재 history는 성공 BASELINE1/checksumNULL 한 건, V2/V3/failed row 없음입니다. Flyway12.4.0 info 확인, 전체 기본 validate는 미적용V2/V3의 RESOLVED_VERSIONED_MIGRATION_NOT_APPLIED로 false임을 기록했습니다. 현재 적용된 target1 validate는 true이며 ignore/repair/baseline은 쓰지 않았습니다. baseline의 NULL checksum을 SQL checksum과 같은 것으로 취급하지 않고 새 격리 reference의 실제 V1 SQL과169column·19constraint·22index·7sequenceownership·extension/trigger 구조를 정확히 대조했습니다.
+
+실제 V1은 industries5·SEOUL mappings4·store_stats_dong141218·sales_dong67113, commercial_areas/sales_commercial_area/stores는0입니다. 이는2026-10-03의 두 job만 적재한 기록과 일치하며8-C1의 전체 source 테스트 상태와 구분합니다. 전체169field/ID/POINT NDR/SRID/NULL분포/분기·업종분포·sequence/history의 streaming snapshot을 수집했습니다. I21201분류충돌·mapping충돌은 없고 현재 V3 backfill 예상0입니다. 비어 있는3table을 채우는 full CSV loader는 실행하지 않았습니다.
+
+다른 DB client/프로젝트 writer/사용자 cron/prepared transaction/subscription이 관찰되지 않는 검증 창에서 pre-snapshot을 재확인하고, coordinator의 exported READ ONLY snapshot을 공유해 pg_dump-Fc를 수행했습니다. backup11690636bytes·SHA970cb9016b67b95b9e1c3bb291f762a229129f2a3884551e16053aca26f2089d·exit0/stderr0/TOC0, 프로젝트 밖 dir0700/file0600로 보관합니다. 백업 이름/상세 접속값/credential/원본 row는 공개하지 않습니다.
+
+새 no-port/internal-network/no-volume/tmpfs DB에 실제 pg_restore --exit-on-error가0으로 완료됐고, 원본7table 전체 값/ID/POINT/NULL·sequence·baseline history·V1 구조/mapping과 정확히 일치했습니다. --no-owner/--no-acl을 사용했으므로 실제 owner/ACL/role 권한 복원까지 검증한 것은 아닙니다. 최초→dump직전→dump직후→restore검증종료의 원본 전수 snapshot 및 write counter/history도 같았습니다. 기존 DB에 restore하지 않았습니다.
+
+Polygon2ZIP/고정3report SHA와 후속Python3.12.15/pyshp3.1.6/Shapely2.1.2/GEOS3.13.1/pyproj3.7.0/PROJ9.4.1·Flyway12.4.0 재현을 확인했습니다. 임시 bridge guard2PASS, 일반 unittest62개47PASS/fail0/skip15(DB/raw env 미지정)입니다. skip을 실제 DB 검증으로 주장하지 않습니다.
+
+판정 **READY_FOR_8_C2B_REVIEW**, 실제 migration 승인은 아닙니다. **8-C2/8단계 전체는 미완료**입니다. 8-C2B 직전 identity·writer검증창·history/hash/sequence·원본SHA를 다시 확인하고, 달라지면 중단/재점검해야 합니다. 현재 빈3table 적재를 migration과 섞지 않습니다. 기존 DB에는 읽기 SQL/pg_dump만 사용했고 V2/V3·Polygon publication·CSV loader·Spring startup·baseline/repair/clean·기존 container/volume 변경·Git stage/commit/push는 하지 않았습니다. 전체B·4단계 limitation·홍지문H5는 유지합니다.
+
+최종 읽기 전용 리뷰에서 commercial_areas.x와 임시 집계 alias x의 충돌로 초기 NULL count13field가 누락된 점을 찾았습니다. unique alias.*·object/column key-set 검사를 추가하고 격리 READ ONLY 상수 RED→GREEN으로 재현/수정했습니다. 원본/복원 전체169field NULL count 보완 실측이 일치했고 physical/ID/POINT/sequence/history/write-counter는 그대로였습니다. 기존 table0행 snapshot으로 backup 당시13count도0임을 입증하며 초기 증거는 보존했습니다. 문서에는 SQL 감사/pg_dump Unix socket과 Flyway readonly JDBC 접속을 구분했습니다. production/DB write는 없었습니다.
+
+이번 작업의 격리 reference/restore container와 internal network는 제거했습니다. 원본 container는 ID·StartedAt·RestartCount·volume이 시작과 같고 healthy임을 Docker metadata로 최종 확인했습니다. 실제 backup과 private 검증 근거는 제한된 프로젝트 밖 임시 경로에 보관합니다. backup/원본 row/접속값/credential은 Git에 추가하거나 첨부하지 않았고 stage/commit/push도 하지 않았습니다.
