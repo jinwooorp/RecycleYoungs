@@ -15,7 +15,7 @@ def connect_database(dsn):
     return connect(dsn, autocommit=True)
 
 
-def main(argv=None):
+def main(argv=None, *, connection_factory=None):
     parser = argparse.ArgumentParser(description='고정 공식 Polygon 검증/적재 (기본: 검증만, DB 접속 없음)')
     parser.add_argument('--only', nargs='+', choices=('admin', 'commercial'), default=['admin', 'commercial'])
     mode = parser.add_mutually_exclusive_group()
@@ -49,7 +49,7 @@ def main(argv=None):
         if not args.load:
             return 0
         from .spatial_load import publish
-        conn = connect_database(args.dsn)
+        conn = (connect_database if connection_factory is None else connection_factory)(args.dsn)
         try:
             for dataset in prepared:
                 result = publish(conn, dataset)
