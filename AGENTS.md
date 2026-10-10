@@ -23,16 +23,12 @@
 - 기존 스택을 유지하고, 요구 없는 프레임워크/DB 전환·dependency 추가·무관한 리팩터링을 피한다.
 
 ## 문서 탐색
-- 아래 목록은 탐색 지도다. 작업과 관련된 문서·구간부터 읽고 매번 전체 문서를 일괄적으로 읽지 않는다.
-- 입문·상태: `README.md`, `docs/architecture.md`, `docs/project-status.md`, `docs/roadmap.md`.
-- roadmap은 순서·완료 기준, project-status는 실제 작업·검증 증거다.
-- 개발·API: `docs/development.md`, `docs/api-contract.md`, backend/frontend README.
-- 데이터·공간: `docs/data-catalog.md`, `docs/spatial-data-validation.md`, `docs/spatial-schema-v2.md`.
-- 재현·적재: `docs/reproduction.md`, `etl/README.md`, `sql/README.md`, manifest.
-- 기존 DB 작업: `docs/development-db-8c2-runbook.md`와 preflight·rehearsal 기록을 먼저 읽는다.
-- 안전 조건: `docs/development-db-8c2b-safety-gates.md`, `docs/development-db-8c2b-execution-guard.md`.
-- 문서의 과거 검증·실행 예시는 현재 DB 상태나 이번 실행 승인을 대신하지 않는다.
-- 문서와 코드가 다르면 실제 구현을 확인하고 차이를 보고한다. 미실행 항목을 완료 처리하지 않는다.
+- [README](README.md) → [project](docs/project.md)에서 현재 구현·로드맵·blocker·미검증 범위를 먼저 확인한다.
+- 확정 설계는 [architecture](docs/architecture.md), 구현된 API는 [api-contract](docs/api-contract.md), 원본/ETL·공간 한계는 [data](docs/data.md)가 기준이다. 정확한 DDL은 backend migration이다.
+- 환경·테스트·신규 격리 재현은 [development](docs/development.md), 기존 DB 적용·보존·복구·승인과 과거 검증 commit은 [db-safety](docs/db-safety.md)를 읽는다.
+- 과거 상세 보고는 확인된 Git commit에서 필요한 구간만 조회한다. 과거 PASS·identity·건수·백업·blocker는 당시 범위이며 현재 DB 상태나 실행 승인이 아니다.
+- 원본·private evidence를 문서 조사에 열거나 인덱싱하지 않는다. 문서와 코드가 다르면 실제 구현을 확인해 보고하고 미실행 항목을 완료 처리하지 않는다.
+- 완료 기록마다 새 문서를 추가하지 않고 6개 기준 문서의 해당 영역을 갱신한다. 새 문서가 필요하면 독립적으로 유지해야 할 이유를 먼저 확인한다.
 
 ## 작업 방식과 데이터 계약
 - 시작 시 branch/HEAD/working tree와 관련 문서·코드를 확인한다. 기존 변경은 보존한다.
@@ -54,6 +50,15 @@
 - GitHub: 원격 HEAD·커밋·코드 이력을 로컬 상태와 교차 확인한다.
 - Build Web Apps: React UI·접근성·반응형 작업에 적합할 때 활용한다.
 - 플러그인·Skills·서브 에이전트는 사용자 승인 범위를 확장하지 않는다. Git·DB 승인 정책을 우선한다.
+
+## 임시 파일 관리
+- 불필요한 임시 파일을 만들지 않고 단순 분석은 가능한 경우 메모리·표준 출력으로 처리한다.
+- 일반 임시 파일은 프로젝트 루트 `.codex-local/tmp/`, 일반 리뷰 결과·diff는 `.codex-local/reviews/`를 사용한다. 필요할 때만 만들고 결과 기록마다 새 임시 디렉터리를 생성하지 않는다.
+- 작업 시작 시 기존 파일을 확인한다. 이름 충돌 시 덮어쓰지 않고 기존 파일·과거 세션이 생성한 파일을 임의로 삭제·이동하지 않는다.
+- 이번 작업에서 직접 생성한 임시 파일의 경로를 최종 보고한다. 작업 종료 시 정리 가능한 파일이 있으면 삭제 대상·범위를 설명하고 사용자 승인을 받은 뒤 그 범위만 삭제한다.
+- 격리 DB 검증 환경, 기존 safety guard 관리 파일, Docker volume/tmpfs, 백업·복원 파일, 민감한 private evidence, 도구·운영체제 관리 임시 파일에는 일반 `.codex-local/` 경로를 강제하지 않는다.
+- 민감 정보·백업은 Git 작업 디렉터리 내부에 저장하지 않는다. 기존 검증 도구의 경로·권한·격리·lifecycle을 임의로 변경하거나 기존 임시 환경을 새 위치로 옮기지 않는다.
+- 전역 TMPDIR 및 기존 테스트 runner의 디렉터리 정책을 변경하지 않는다. ignore 규칙은 Git 추적을 방지할 뿐 파일 생성이나 접근·삭제를 통제하지 않는다.
 
 ## 기존 개발 DB 보호
 - 보호 대상: container `startup-analysis-postgres`, volume `recycleyoungs_postgres_data`.

@@ -26,7 +26,8 @@ htmlcov/
 /data/archives/
 /data/processed/
 /data/raw/*
-!/data/raw/README.md
 !/data/raw/dataset/
 /data/raw/dataset/*
 !/data/raw/dataset/.gitkeep
+/codex-review-full.diff
+/.codex-local/

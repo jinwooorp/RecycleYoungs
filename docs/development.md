@@ -1,115 +1,99 @@
-# 개발·검증 안내
+# 개발 환경과 재현
 
-모든 `make` 명령은 프로젝트 루트에서 실행합니다. `Makefile`은 일반 명령의 단축 경로이며 `make help`로 목록을 확인할 수 있습니다. 새 checkout·새 DB에서 CSV → ETL → API → React 전체 vertical slice를 처음부터 재현하려면 [새 환경 재현 안내](reproduction.md)를 따릅니다. 일반 개발 절차와 기존 DB를 보호하는 격리 검증 절차를 구분합니다.
+이 문서는 환경·일반 DB 없는 검증·승인된 새 격리 DB의 재현 순서를 관리합니다. 실행 진입점은 [Makefile](../Makefile)이며 기존 DB 접속/변경은 [db-safety](db-safety.md)가 기준입니다. 아래 예시는 이번 문서 작업에서 실행하지 않았습니다.
 
-## 환경
+## 환경과 설정
 
-| 영역 | 기준 |
+| 영역 | 저장소 기준 |
 | --- | --- |
-| Backend | Java 21, 저장소의 Gradle Wrapper |
-| Frontend | Node.js 24 계열, `npm ci`와 저장소 lockfile |
-| ETL | Python 3.12, `etl/requirements.txt` 고정 버전 |
-| DB | 루트 Compose의 PostgreSQL 16/PostGIS 3.4 이미지 |
+| Backend | Java 21·Spring Boot 4.1.1·Gradle Wrapper, [build.gradle](../backend/build.gradle) |
+| Frontend | Node.js 24 계열·React 19/TypeScript 6/Vite 8·Tailwind 4/shadcn, [package/lockfile](../frontend/package.json) |
+| ETL | Python 3.12, [requirements.txt](../etl/requirements.txt)의 고정 dependency |
+| DB | PostgreSQL 16/PostGIS 3.4, Compose Flyway 12.4.0, [Compose](../docker-compose.yml) |
 
-서로 다른 하위 프로젝트의 package.json·lockfile을 하나로 합치지 않습니다. 실험용 Node 프로젝트는 `legacy/`에 있고 활성 개발의 의존성이 아닙니다.
+`cp .env.example .env`로 로컬 설정을 준비합니다. Compose는 루트 .env를 읽지만 Spring/로컬 Python은 프로세스 환경을 사용하고 .env를 자동 import하지 않습니다. Java properties로 dotenv를 import하지 않습니다. 실제 secret은 문서·로그·Git에 넣지 않습니다.
 
-## 설정
-
-`cp .env.example .env`로 로컬 설정을 생성합니다. `.env`는 Git에서 제외됩니다. Compose는 루트 `.env`를 읽으며 프로세스 환경 변수로 덮어쓸 수 있습니다. Spring은 `.env`를 자동으로 읽지 않습니다. `make backend`·`make check-db`·Gradle 실행 전 셸·IDE의 프로세스 환경에 같은 `DB_PASSWORD`를 지정하고, 기본값을 바꿨다면 나머지 `DB_*`도 맞춥니다. 비밀번호에는 코드 기본값을 두지 않습니다. dotenv와 Java properties는 따옴표·escape 해석이 달라 `.env`를 properties로 import하지 않습니다.
-
-| 변수 | 의미 |
+| 설정 | 의미 |
 | --- | --- |
-| `DB_NAME`, `DB_USER`, `DB_PASSWORD` | 공용 개발 DB 식별자·계정 |
-| `DB_PORT` | 호스트에서 DB에 접속할 포트, 컨테이너 내부는 5432 |
-| `DB_HOST` | Docker 밖의 Spring 접속 주소, 기본 localhost; ETL 컨테이너는 postgres |
-| `AREA_SOURCE_CRS` | 영역 CSV 원천 좌표계, 상권 좌표 적재 전 명시 |
-| `STORE_CHUNK_SIZE` | 개별 점포 CSV 청크 크기 |
-| `DATA_DIR` | 로컬 Python 실행 시 입력 폴더 변경, 기본 `data/raw/dataset/` |
-| `FRONTEND_ORIGINS` | Spring CORS 허용 주소, 기본 localhost/127.0.0.1의 5173 |
+| DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD | 접속 route·database·계정. 명시한 승인 대상과 맞춰야 함 |
+| AREA_SOURCE_CRS | 영역 X/Y 적재에 EPSG:5181 명시. 미설정 시 거부 |
+| DATA_DIR 또는 CSV --data-dir | 기본 `data/raw/dataset/` 대신 사용할 입력 |
+| STORE_CHUNK_SIZE | 점포 COPY 청크, 전체 transaction 경계와 별개 |
+| FRONTEND_ORIGINS | Spring CORS, 기본 localhost/127.0.0.1의 5173 |
+| EXPECTED_STORE_STATS_ROWS/EXPECTED_SALES_ROWS | DB 테스트 기대 건수. 실제 상태 확인을 대신하지 않음 |
 
-로컬 Python 실행은 `.env`를 자동으로 읽지 않습니다. 필요한 값을 프로세스 환경에 지정합니다. Compose의 ETL 서비스는 DB·좌표계·청크 설정을 전달하고 입력 경로를 `/app/data/raw/dataset`으로 설정합니다.
+Docker 밖 Spring/로컬 Python의 기본 localhost:5432와 Compose ETL의 postgres:5432를 혼동하지 않습니다. 기본값이 기존 보호 DB를 가리키면 중단합니다. 기존 volume에 이름/계정 env를 바꿔도 실제 database/role이 바뀌지 않습니다. Spring 기본 port=8080, Vite=5173이고 Vite /api proxy를 사용합니다.
 
-기존 DB 볼륨을 재사용할 때 DB 이름·계정 설정을 바꿔도 기존 데이터베이스 계정이 자동 변경되지는 않습니다. 현재 기본 식별자와 볼륨은 유지했습니다. 다른 계정으로 전환할 때는 기존 DB 상태를 먼저 확인합니다.
+## 설치와 DB 없는 검증
 
-## 실행
-
-```sh
-make db
-make db-migrate
-make etl-validate
-make etl ETL_ARGS="--only store_stats_dong sales_dong"
-```
-
-DB 시작은 ETL을 자동으로 실행하지 않습니다. `make db-migrate`는 Flyway Docker로 backend SQL을 적용하며 Spring 서버·Java 실행이 필요 없습니다. `make etl`도 migration을 먼저 실행합니다. 초기 SQL로 만든 기존 DB의 일회성 편입은 [스키마 안내](../sql/README.md)를 확인하며, 새 DB에는 baseline을 실행하지 않습니다. `make db-info`로 버전과 상태를 조회합니다.
-
-`db-baseline`은 일반적인 새 DB 초기화 명령이 아닙니다. 기존 schema가 V1과 동일함을 검증한 뒤에만 `make db-baseline CONFIRM_BASELINE=verified-v1`을 사용합니다. 확인 값이 없거나 다르면 DB 명령을 실행하지 않고 실패합니다. 새 DB는 `make db-migrate`로 V1부터 적용합니다.
-
-ETL은 선택 실행하는 Compose 서비스입니다. `make etl-validate`는 DB 컨테이너를 시작하거나 DB에 연결하지 않습니다. 처음에는 Docker 이미지 빌드와 패키지 내려받기에 네트워크가 필요합니다.
-
-백엔드·프론트엔드는 각각 별도 터미널에서 실행합니다.
+원본 ZIP은 별도 전달받아 dataset 폴더를 유지하고 [manifest](../data/manifest.json)의 파일명/size/SHA와 대조합니다. 원본은 바꾸지 않습니다. 설치는 저장소 lockfile을 따릅니다.
 
 ```sh
-make backend
-```
-
-```sh
-cd frontend
-npm ci
-npm run dev
-```
-
-기본 주소는 Vite 5173, Spring 8080, DB 5432입니다. DB는 localhost에 바인딩합니다. Spring은 JDBC로 공용 DB에 연결하고 Flyway 이력을 검증·적용합니다. React는 `/api` 개발 프록시를 통해 목록·행정동 통계를 조회합니다. 세 조건을 선택한 뒤 조회하기를 누릅니다([Frontend 안내](../frontend/README.md)).
-
-## 검증
-
-```sh
-make check-frontend
-```
-
-위 명령은 lint·build를 실행합니다. frontend의 화면·API client 테스트는 DB 없이 별도로 실행합니다.
-
-```sh
-cd frontend
-npm run test
-```
-
-```sh
-cd backend
-./gradlew test
-```
-
-일반 `test`의 context 검사는 DataSource/Flyway 자동 설정을 제외해 DB 없이 실행합니다. 실제 DB 검증은 별도 `dbTest` source set으로 분리했습니다. 행정동 자료를 적재한 개발 DB에서 다음을 실행합니다.
-
-```sh
-make check-db
-```
-
-`dbTest`는 JdbcClient로 141,218/67,113행, 업종 매핑·PostGIS와 Flyway version 1·validate·pending 없음 상태를 검사합니다. 다른 검증 DB를 사용할 때는 `DB_HOST`·`DB_PORT`·`DB_NAME`과 `EXPECTED_STORE_STATS_ROWS`·`EXPECTED_SALES_ROWS`를 환경으로 지정합니다. 새 빈 DB의 기대 행 수는 각각 0입니다. 테스트는 통계 데이터를 쓰지 않지만 Spring 시작 시 미적용 migration이 있으면 적용합니다.
-
-ETL 로컬 환경은 다음과 같이 준비합니다.
-
-```sh
+(cd frontend && npm ci)
 python3.12 -m venv etl/.venv
 etl/.venv/bin/python -m pip install -r etl/requirements.txt
-make check-etl PYTHON="$(pwd)/etl/.venv/bin/python"
 ```
 
-CSV 검증의 상세 조건과 선택 작업은 [ETL 안내](../etl/README.md)를 확인합니다. DB 적재 결과는 실제 PostgreSQL에서 건수·샘플 값·재실행·중간 실패를 별도로 검증해야 합니다. CSV 검사나 mock 기반 테스트 통과를 DB 적재 성공으로 표시하지 않습니다.
-
-Gradle은 기본 사용자 캐시를 사용합니다. 실행 환경의 캐시 쓰기 권한이나 네트워크 제한으로 테스트가 막히면 원인을 기록하고 과거 테스트 결과와 이번 실행 결과를 구분합니다.
-
-## Git와 원본 관리
-
-- 코드는 backend·frontend·etl, 스키마는 backend의 `db/migration`, 문서는 docs에서 관리합니다. sql에는 운영 안내만 둡니다.
-- `data/raw/dataset/.gitkeep`과 `data/raw/README.md`는 추적하며 실제 CSV·ZIP·정제 결과는 제외합니다.
-- 원본 CSV를 코드 정리 과정에서 수정하지 않습니다. 새 파일은 출처·기간·해시를 확인한 뒤 의도적으로 교체합니다.
-- `.env`, Python 캐시·가상환경, node_modules·빌드 결과는 제외합니다.
-- legacy 자료는 새 기능의 샘플 입력으로 자동 사용하지 않습니다.
-
-## DB 종료·변경
+준비된 환경에서 DB/raw opt-in을 활성화하지 않고 필요한 검증만 실행합니다.
 
 ```sh
-make db-stop
+(cd backend && ./gradlew test)
+(cd frontend && npm run test)
+make check-frontend
+make check-etl PYTHON="$(pwd)/etl/.venv/bin/python"
+(cd etl && .venv/bin/python -m app.main --validate-only)
 ```
 
-볼륨을 보존하며 DB만 중지합니다. 일상적인 갱신에 볼륨 삭제 명령을 사용하지 않습니다. 초기 SQL 적용 조건과 마이그레이션 전환은 [스키마 안내](../sql/README.md)를 확인합니다.
+일반 Backend test는 DataSource/Flyway 자동 설정을 제외합니다. frontend check는 lint/build이며 test는 별도입니다. ETL의 --validate-only는 CSV 구조/key/기간 검사이고 DB 접속·적재를 하지 않습니다. make etl-validate도 --no-deps/--validate-only이지만 첫 image build/download가 필요할 수 있습니다. mock/skip/offline은 실제 DB 성공이 아닙니다.
+
+`python etl/control.py`의 기본 inspect는 Git와 비활성 정책만 출력하고 DB에 접속하지 않습니다. test-only safety_gate도 무접속·write 승인 거부입니다. 실행 코드를 임의 import하거나 --isolated-run을 일반 점검에 추가하지 않습니다.
+
+## 승인된 신규 격리 DB 재현
+
+현재 schema는 **V1→V2→V3**, 원본 geometry는 별도 ETL입니다. 아래는 과거 8-C1 흐름을 현재 코드와 정적으로 대조한 절차이며 현재 HEAD의 전체 실행을 재검증한 결과가 아닙니다.
+
+1. 기존 DB/container/volume을 재사용하지 않는 새 대상과 생성/실행 범위를 승인받습니다. 전용 internal network·host port 없음·data/init tmpfs·기존 mount/volume 없음·고정 image를 사용합니다. 루트 Compose는 고정 보호 container 이름을 쓰므로 project 이름만 바꿔 격리를 주장하지 않습니다.
+2. 실제 Docker/server identity와 isolation proof를 수집하고 승인된 explicit route/계정·secret으로 고정합니다. 원본·source/migration은 read-only, evidence는 project 밖 private 위치에 둡니다.
+3. 입력 manifest·Polygon ZIP/member/report/profile을 offline 검사합니다. 불일치면 DB 단계로 진행하지 않습니다.
+4. **Fresh:** 빈 DB에 Flyway V1/V2/V3 SQL을 적용·validate합니다. BASELINE이 아닌 SQL history 1/2/3, V1 7table+V2 3table, SEOUL 4+SEMAS CAFE mapping, 빈 stores backfill 0을 확인합니다. actual JDBC identity 검사와 gate를 생략하지 않습니다.
+5. 같은 격리 network의 승인 runner에서 explicit CSV DB env로 행정동 두 통계만 먼저 적재합니다. 전체 5job 적재는 별도 범위이고 AREA_SOURCE_CRS가 필요합니다. source/row/key/NULL/ID/sequence·rollback을 검증합니다.
+6. Polygon은 explicit ZIP/report와 DSN으로 admin→검증→commercial→검증→동등 retry를 수행합니다. 상세 publication/STOP은 db-safety를 따릅니다.
+7. Backend를 같은 격리 network의 승인 runner에서 explicit DB route로 실행하고 HTTP/API·원본 표 값을 대조합니다. Frontend는 `npm run dev`와 승인된 API proxy로 연결합니다. 임시 port/proxy가 필요하면 기존 process를 종료하지 않습니다.
+8. 전후 원본 hash·기존 보호 자원 불변·새 대상 최종 snapshot을 확인하고 승인받아 만든 자원만 정리합니다. 기존 container stop/volume 삭제·restore는 이 절차에 포함하지 않습니다.
+
+CSV 선택 예시는 승인된 격리 runner에서 ETL 디렉터리를 기준으로 사용합니다.
+
+```sh
+python -m app.main --data-dir "$APPROVED_DATA_DIR" --only store_stats_dong sales_dong
+```
+
+Polygon offline 검증 예시는 다음과 같습니다. 실제 load는 --load/--dsn을 함께 요구하며 기본 CSV DB env나 make etl을 사용하지 않습니다.
+
+```sh
+python -m app.spatial_main --only admin --validate-only \
+  --admin-zip "$APPROVED_ADMIN_ZIP" --admin-report "$APPROVED_ADMIN_REPORT"
+python -m app.spatial_main --only commercial --validate-only \
+  --commercial-zip "$APPROVED_COMMERCIAL_ZIP" \
+  --commercial-report "$APPROVED_COMMERCIAL_REPORT" \
+  --commercial-repair-report "$APPROVED_REPAIR_REPORT"
+```
+
+실제 검사 도구는 [integration_check](../etl/tests/integration_check.py)의 inputs/snapshot/source/compare-preserved/compare-logical과 [integration_spatial](../etl/tests/integration_spatial.py)입니다. DSN 기본값이 없으며 guarded DB mode는 actual proof와 테스트 prefix·SID·route를 검사합니다. inputs/compare는 무접속입니다. v1-stores는 전용 V1-only/empty 격리 fixture이고 production/full loader/backfill 경로가 아닙니다. 재현 전체 orchestration driver와 private config/evidence는 저장소의 일반 자동 실행 명령이 아닙니다.
+
+## DB 테스트와 실행 제한
+
+`./gradlew dbTest`/`make check-db`와 Spring bootRun/`make backend`는 pending migration을 자동 실행할 수 있습니다. **기존 DB 사전 점검에 사용하지 않습니다.** 현재 PostgresConnectionTests는 current Flyway version **1**을 고정 기대하므로 V1~V3 fresh DB와 맞지 않습니다. 행 수 변수만 바꾸면 해결되는 문제가 아니며 기대값·startup migration 정책은 후속 코드 검토 사항입니다.
+
+API fixture는 API_FIXTURE_TEST=true와 DB_NAME의 recycleyoungs_api_fixture_ prefix, 실제 V1·빈 통계 table을 요구하고 Flyway를 비활성화합니다. 쓰기/rollback fixture이므로 별도 격리 승인 없이 활성화하지 않습니다. 공간/stores DB 및 실제 raw 검사는 SPATIAL_TEST_DSN/SPATIAL_REAL_SOURCE_ROOT/STORES_TEST_DSN/STORES_REAL_DSN/STORES_REAL_CSV opt-in이며 prefix만으로 격리가 보장되지 않습니다. 실행/미실행·PASS/FAIL/SKIP를 분리합니다.
+
+| 경로 | 부작용·사용 조건 |
+| --- | --- |
+| make db / db-info / docker compose up | 기존 container 시작·재생성 가능. 대상·승인 확인 전 실행 금지 |
+| make db-migrate / Flyway migrate | schema/history 변경. 단계별 JDBC/gate·명시 승인 필요 |
+| make db-baseline | V1 대조를 대신하지 않음. 새 DB에 사용 금지, 기존 BASELINE 재실행 금지 |
+| make etl / CSV full loader | migration 선행·DELETE/TRUNCATE·ID 재시작. 기존 DB backfill 금지 |
+| Polygon --load | explicit DSN·actual publication 연결 검사·종류별 transaction·명시 승인 |
+| bootRun / make backend / dbTest / check-db | DB 접속·자동 migration 가능. 일반 읽기 전용 검증이 아님 |
+| db-stop / stop/restart/recreate / down / restore | 기존 자원에 자동 실행 금지. 만든 격리 자원과 보호 대상 구분 |
+
+API 값·NULL/0/NO_ROW·오류·BIGINT 표시·정상/결측 조합·390px/1280px·키보드 focus를 함께 검증합니다. 과거 API/화면/원본 대조 과정은 [deaed745의 기록](https://github.com/jinwooorp/RecycleYoungs/blob/deaed745b31fdcb16355ecc241f46b3dc2b46045/docs/project-status.md)에 있고 이번 실행 결과로 사용하지 않습니다. 캐시/네트워크/권한 때문에 검증을 못 했다면 원인과 미실행 범위를 보고합니다.
