@@ -1,6 +1,21 @@
-# 기존 개발 DB 안전 기준
+# 기존 개발 DB 보호와 적용 정책
 
-**NOT_READY / STOP. V2/V3 migration·행정동/상권 Polygon은 마지막 확인 기록에서 기존 개발 DB에 미적용입니다. 개발 DB 실행 runner는 구현/활성화되지 않았습니다.** 격리 PASS·백업 존재·READY 판정은 실제 mutation 승인이 아닙니다. 2026-10-10 문서 통합에서는 DB·Docker·백업에 접속하지 않았습니다.
+**NOT_READY / STOP. V2/V3 migration·행정동/상권 Polygon은 마지막 확인 기록에서 기존 개발 DB에 미적용입니다. 실제 source collector와 source execution runner는 미구현입니다.** 비활성 모델·순수 보존/Audit 계약은 구현됐지만 실행 가능 상태가 아닙니다. 격리 PASS·백업 존재·READY 판정은 실제 mutation 승인이 아닙니다.
+
+정적 대조 기준은 2026-10-11의 [`d06f675`](https://github.com/jinwooorp/RecycleYoungs/commit/d06f675921b1edc34d38ef6646fdbb48bc66533e)입니다. 이번 문서 개편에서 DB·Docker·raw·백업·테스트·Spring/ETL을 실행하거나 확인하지 않았습니다. 과거 read-only 기록을 현재 DB 상태로 표현하지 않습니다. 작업 순서는 [트랙 A](project.md#트랙-a--기존-db에-안전하게-적용하기), schema/CLI/검증 도구의 구현 계약은 [technical](technical.md)에 둡니다.
+
+## 목차
+
+- [보호 대상과 마지막 확인](#보호-대상과-마지막-확인)
+- [V1 보존과 허용 변경](#v1-보존과-허용-변경)
+- [실행·검증 계층과 결과 상태](#실행검증-계층과-결과-상태)
+- [실제 source collector와 provenance 요구](#실제-source-collector와-provenance-요구)
+- [과거 검증과 Git 근거](#과거-검증과-git-근거)
+- [연결 identity·writer·권한](#연결-identitywriter권한)
+- [백업·독립 restore와 복구 가능성](#백업독립-restore와-복구-가능성)
+- [향후 source 실행과 검증 gate](#향후-source-실행과-검증-gate)
+- [FINAL 검증의 분리](#final-검증의-분리)
+- [STOP·복구·Go/No-Go](#stop복구gono-go)
 
 ## 보호 대상과 마지막 확인
 
@@ -20,7 +35,7 @@
 
 기존 개발 DB에 전체 CSV가 적재됐다고 주장하지 않습니다. 빈 세 table을 채우는 작업은 V2/V3/Polygon 적용 범위에 자동 포함하지 않습니다.
 
-## V1 BASELINE과 예상 변경
+## V1 보존과 허용 변경
 
 V1 BASELINE의 **NULL checksum을 유지**합니다. SQL V1 checksum으로 바꾸거나 repair/rebaseline하지 않습니다. 성공 SQL migration checksum도 수정하지 않습니다. 과거 target=1 validate 성공과 전체 validate의 V2/V3 pending 오류는 별개였으며 ignoreMigrationPatterns로 숨기지 않았습니다.
 
@@ -32,9 +47,43 @@ V1 BASELINE의 **NULL checksum을 유지**합니다. SQL V1 checksum으로 바�
 - source와 operational Polygon만 별도 ETL로 적재합니다. V1 대표 POINT·stores/통계 재적재·원본 geometry 교체는 포함하지 않습니다.
 - full CSV/점포 loader는 TRUNCATE/ID 재시작·연도 DELETE를 수행하므로 기존 DB backfill/일반 검증에 사용하지 않습니다.
 
+원행과 source ID/FK·전체 column·NULL/실제0/빈 문자열·POINT NDR/SRID·sequence state/정의/ownership·catalog/ACL·full history를 보존합니다. 승인된 V2 additions와 V3 mapping/대상 industry_id/예상 sequence 변화만 허용합니다. catalog에 owner/RLS·column type/nullability/default/identity/collation·제약/index/trigger 정의·schema/extension/function 정의와 owner를 포함합니다. 빈 table도 구조/ACL 비교 대상입니다.
+
+V1 BASELINE은 `<< Flyway Baseline >>` script/description과 NULL checksum profile을 독립적으로 확인합니다. actor/time/duration은 과거 값을 새 실행 기대값으로 고정하지 않으며 기존 history 원행은 그대로 보존합니다. V2/V3 신규 history는 실제 migration actor·정확한 SQL/checksum·관찰 시점을 결속합니다.
+
+## 실행·검증 계층과 결과 상태
+
+| 계층 | 현재 구현과 결과 | 실제 source 판정으로 확대하면 안 되는 것 |
+| --- | --- | --- |
+| control/controller/backend/worker | 실제 격리 11단계·ISOLATED_MEASURED 실행 증거 | 과거 고정 backup·image·empty stores profile. source 실행 모드 없음 |
+| source_validation | 공급 before/after JSON evidence의 V1/V2/V3 순수 비교 | PASS는 공급 증거의 일관성/보존뿐. DB 출처·실행·rollback·승인 증명 아님 |
+| source_control / SourceSimulation | inspect=NOT_READY, db_state=UNMEASURED, 실행 항상 거부 | 합성 PASS/SIMULATION_COMPLETE도 SIMULATED_ONLY. HMAC/approval fixture는 사람 승인 아님 |
+| source_audit | serialization·UNVERIFIED_CLAIMS의 형식/결속 검사 | 성공도 CONTRACT_VALID_UNVERIFIED, boolean false·db_observed/execution_authorized false |
+| 실제 collector/executor·durable crash 처리 | 미구현 | CLI flag/config/env·합성 승인값으로 활성화할 경로 없음 |
+
+코드: [source_validation](../etl/source_validation.py), [source_control](../etl/source_control.py), [source_audit](../etl/source_audit.py). 신규 세 모듈의 회귀 테스트 source는 있으나 이번에 실행하지 않았습니다. 이전 세션에서 보고된 결과와 현재 Git에 존재하는 실행 기록도 구분하며 해당 커밋의 실행 결과는 확인하지 못했습니다.
+
+preservation 결과는 PASS/UNEXPECTED_CHANGE/INSUFFICIENT_EVIDENCE/INDETERMINATE입니다. missing evidence·UNKNOWN·불명확한 sequence 변화는 PASS가 아닙니다. stage는 V1/V2/V3만 지원하므로 Polygon 전후 source 보존·공간 additions 검증 계약은 후속 작업입니다. independently reviewed V2 additions reference와 migration actor가 필요합니다.
+
+old integration snapshot은 full catalog/ACL/sequence definition·installed_by/on/execution_time 전체를 수집하지 않습니다. 이것만 신규 source evidence로 사용할 수 없습니다. source_control은 preservation validator를 실측 수집에 연결하지 않고, source_audit도 before/after 보존 comparator·SourceSimulation을 호출하지 않습니다.
+
+## 실제 source collector와 provenance 요구
+
+Audit 계약→fake connection collector→실제 READ ONLY 수집→실측 provenance 결속 순으로 준비합니다. fake connection의 query/stream/evidence·오류·timeout 검증은 DB를 관찰한 결과가 아닙니다. 실제 접속·수집은 별도 대상/범위 승인이 필요합니다.
+
+collector는 승인된 **같은 connection·READ ONLY REPEATABLE READ transaction·같은 snapshot**에서 full evidence를 수집해야 합니다. reconnect/recollection·일부 component 누락·중간 실패는 거부합니다. DB identity·actor/writer·수집 window와 code/SQL/input/profile/reference hash를 실측 증거에 결속하며 별도 사전 연결 PASS를 대체 증거로 쓰지 않습니다.
+
+snapshot/audit에는 physical/raw digest·모든 table ID/NULL·POINT NDR/SRID·columns/full catalog/ACL·sequence state/정의·full Flyway history가 필요합니다. V3는 complete industries/mappings/stores projection과 projection digest·ID digest·NULL count·FK를 대조합니다. ACL은 database/schema/default ACL·roles/memberships·객체 owner/ACL을 포함합니다. 누락/UNKNOWN과 확인된 빈 배열/SQL NULL ACL은 다릅니다.
+
+row digest는 정해진 PostgreSQL text serialization의 UTF-8 bytes를 정렬 ID 순서로 8byte unsigned big-endian 길이 framing해 SHA-256합니다. physical·industry_id 제외 raw·논리 분류 digest를 분리하고 예상 V3 변경만 허용합니다. ID·POINT·전 field NULL·sequence·history/catalog는 별도 전수 검사합니다. count·몇 개 샘플·ST_Equals만으로 보존을 주장하지 않습니다. serialization/ID/projection profile은 [source_audit](../etl/source_audit.py)의 고정 계약을 따릅니다.
+
+Audit envelope는 run/collection/stage·1-based 순서·validation stage·artifacts/component bindings·payload/previous digest·scope·collection outcome·connection/transaction/snapshot window를 결속합니다. TTL≤1800초와 start 기준 freshness, reconnect/recollect=false를 검사하지만 **현재는 모두 caller claim**입니다. CONFIRMED라는 claim이나 stage label은 실제 관찰/완료 증명이 아닙니다. 이전 digest의 실제 존재·성공과 before/after 관찰점은 미래 collector/runner가 증명해야 합니다. NULL snapshot ID에 descriptor/local transaction ID를 적는 계약도 실제 PostgreSQL XID 할당을 뜻하지 않습니다.
+
+실측 provenance는 Git/SQL·collector/validator 및 adapter dependency code·입력/처리/serialization/V2 reference·target·backup 증거까지 결속해야 합니다. 수집 payload/envelope는 민감할 수 있으므로 공개 로그에는 고정 오류 category/field만 사용하고 row·SQL·접속값·private 경로를 노출하지 않습니다.
+
 ## 과거 검증과 Git 근거
 
-아래는 **당시의 실행 결과**입니다. 각 SHA의 원문 blob이 현재 HEAD의 원래 문서와 같음을 문서 통합 전에 확인했습니다. 상세 로그·수치는 Git에 두고 private 원본/백업/접속값은 공개 문서에 복제하지 않습니다.
+아래는 **당시의 실행 결과**이며 해당 고정 SHA/path의 원문 존재를 확인했습니다. 과거 보고서는 현재 작업 트리에 없는 역사적 문서입니다. 상세 로그·수치는 Git에 두고 private 원본/백업/접속값은 공개 문서에 복제하지 않습니다.
 
 | 단계 | 핵심 결과·제한 | 보존된 commit SHA와 원문 |
 | --- | --- | --- |
@@ -62,7 +111,7 @@ writer 확인은 DB client·프로젝트 backend/ETL·prepared transaction·subs
 
 격리 B-3 Flyway는 public schema 고정, createSchemas=false·baselineOnMigrate=false·cleanDisabled=true·group=false·outOfOrder=false·connectRetries=0·executeInTransaction=true·mixed=false, target 2/3 분리입니다. initSql이 **같은 JDBC 연결**의 database/user/SID/PGDATA/port·5s lock/10min statement timeout을 검사하고 불일치 시 division-by-zero로 거부합니다. source의 과거 readonly info/validate와 source mutation JDBC 경로의 승인을 혼동하지 않습니다.
 
-Polygon factory는 실제 반환 연결의 user/session_user/SID/PGDATA/port·write session/timeout·idle autocommit을 검사하고 그 연결을 publish에 전달합니다. 보호 구조는 [control.py](../etl/control.py), [control_backend.py](../etl/control_backend.py), [control_worker.py](../etl/control_worker.py), [spatial_main.py](../etl/app/spatial_main.py)에 있습니다. 현재 개발 DB 경로의 구현·리뷰·실사용자 검증은 남아 있습니다.
+격리 worker가 주입하는 Polygon factory는 실제 반환 연결의 user/session_user/SID/PGDATA/port·write session/timeout·idle autocommit을 검사하고 그 연결을 publish에 전달합니다. standalone CLI 기본 연결에는 이 actual guard가 없습니다. explicit DSN만으로 source 안전 경로가 되지 않습니다. 보호 구조는 [control.py](../etl/control.py), [control_backend.py](../etl/control_backend.py), [control_worker.py](../etl/control_worker.py), [spatial_main.py](../etl/app/spatial_main.py)에 있습니다. 현재 개발 DB 경로의 구현·리뷰·실사용자 검증은 남아 있습니다.
 
 ## 백업·독립 restore와 복구 가능성
 
@@ -74,9 +123,9 @@ B-2의 영속 위치 미승인 blocker 이후 B-3에서 승인된 private 위치
 
 격리 대상은 전용 internal network, host port 없음, 기존 volume/mount 없음, data/init tmpfs, 승인된 고정 image·자원 소유 label·새 run을 사용합니다. 이름 prefix/proof만으로 격리를 주장하지 않고 실제 inspect와 server identity를 대조합니다. 만든 자원만 정리합니다.
 
-## 실행과 검증 gate
+## 향후 source 실행과 검증 gate
 
-아래는 승인 전 검토할 계약입니다. 일반 Makefile/직접 ETL로 단계를 건너뛰거나 격리 guard를 완화해 source에 연결하지 않습니다.
+아래는 **향후 실제 source 적용을 위해 승인 전 검토할 계약**이며 실행 경로는 미구현입니다. 격리 코드/합성 모델이 같은 stage 이름을 사용해도 실제 동작·승인 범위가 같지 않습니다. 일반 Makefile/직접 ETL로 단계를 건너뛰거나 격리 guard를 완화해 source에 연결하지 않습니다. feature 수는 승인된 고정 입력 profile의 기대값이며 현재 source DB 실측값이 아닙니다.
 
 | 순서 | 실행/검증 | 통과 조건 |
 | --- | --- | --- |
@@ -90,17 +139,29 @@ B-2의 영속 위치 미승인 blocker 이후 B-3에서 승인된 private 위치
 | 8 ADMIN_POLYGON_VERIFIED | 전수 경계·current·V1 보존 | 425 VALID_SOURCE·READY/current·B/UNRESOLVED·원본 불변 |
 | 9 COMMERCIAL_POLYGON_APPLIED | explicit 입력·guarded 연결로 commercial-only | 승인 6건 외 repair 없음, transaction publication |
 | 10 COMMERCIAL_POLYGON_VERIFIED | 전수 경계·current·V1 보존 | 1644 VALID_SOURCE/6 REPAIRED_OPERATIONAL, H5/raw 속성·hash·version 유지 |
-| 11 FINAL_VERIFIED | 최종 전수·동등 retry·source hash·공간/index | V3 이후 V1 유지, 같은 spatial ID/loaded_at/hash·snapshot, 실패/skip 분리 |
+| 11 FINAL_VERIFIED | READ ONLY 최종 전수 보존·source hash·공간/version 감사 | V3 이후 V1·공간 ID/loaded_at/hash/current 유지, 실제 identity·관찰 증거, 실패/skip 분리. retry publication 없음 |
 
-snapshot 검증은 실제 모든 column과 NULL/0/빈 문자열/NO_ROW를 구분하고 ID 정렬·UTF-8 row의 8byte big-endian 길이 framing으로 streaming digest를 계산합니다. physical·industry_id 제외 raw·논리 분류 digest를 분리하며 예상 V3 변경만 마스킹합니다. ID/source ID/FK·POINT NDR/SRID·전 field NULL·sequence·history/catalog를 별도 대조합니다. count·몇 개 샘플·ST_Equals만으로 전수 보존을 주장하지 않습니다. 구현 기준은 [integration_support](../etl/tests/integration_support.py)입니다.
+전수 검증의 evidence 요구는 [collector/provenance](#실제-source-collector와-provenance-요구)를 따릅니다. [integration_support](../etl/tests/integration_support.py)는 기존 격리 snapshot/보존 도구이고 신규 source profile의 full evidence를 대신하지 않습니다. stage 실측 수집과 source_validation·Polygon 보존 검증을 연결하는 경로는 아직 없습니다.
 
-SQL·DB/Flyway/ETL image·backup/reference·ZIP/member/report·processing profile·app/controller/전이 validator source·Git/target·private config hash를 stage 전후 결속합니다. 실측 exit와 validator·연결 identity·현재 fingerprint를 runner가 수집하며 외부 PASS나 SIMULATED_ONLY를 받아 승인하지 않습니다.
+현재 격리 runner는 SQL·DB/Flyway/ETL image·backup/reference·ZIP/member/report·processing profile·app/controller/전이 validator source·Git/target·private config hash를 stage 전후 결속합니다. 실측 exit와 validator·연결 identity·fingerprint를 수집하며 외부 PASS나 SIMULATED_ONLY를 받지 않습니다. 미래 source runner도 실제 수집/판정 결속이 필요하며 현재 합성/UNVERIFIED 모듈이 이를 수행한다고 표현하지 않습니다.
 
-증거는 project 밖 소유자 일치/0700·빈 private 작업 위치에 symlink 없이 exclusive 생성합니다. fresh nonce·순서·최대 30분 TTL·hash/HMAC chain·로그/validator/snapshot SHA·atomic state·메모리 anchor를 검사합니다. hash/HMAC는 변조 탐지이며 사람 승인이나 코드/config/secret을 통제하는 actor에 대한 독립 보안 경계가 아닙니다.
+격리 runner 증거는 project 밖 소유자 일치/0700·빈 private 작업 위치에 symlink 없이 exclusive 생성합니다. fresh nonce·순서·최대 30분 TTL·hash/HMAC chain·로그/validator/snapshot SHA·atomic state·메모리 anchor를 검사합니다. source simulation은 메모리 모델이고 이런 private 실측 파일을 생성하지 않습니다. hash/HMAC는 변조 탐지이며 사람 승인이나 코드/config/secret을 통제하는 actor에 대한 독립 보안 경계가 아닙니다.
+
+## FINAL 검증의 분리
+
+### 현재 격리 runner FINAL
+
+[control_worker의 final](../etl/control_worker.py)은 admin/commercial Polygon publication을 실제로 다시 호출한 뒤 전후 snapshot 동등성을 확인합니다. 이는 승인된 격리 환경에서 idempotence를 검증하는 write retry입니다. 과거 pipeline 성공·실측 snapshot·공간/index 검증과 연결되지만 source에 자동 적용할 절차가 아닙니다.
+
+### 향후 실제 source FINAL
+
+최종 source 단계는 **읽기 전용 전수 보존 감사**여야 합니다. load·retry publication·DDL/DML·ANALYZE 등 write 경로를 dispatch하지 않습니다. 격리 final 함수를 재사용하면 publication writes가 발생하므로 분리 구현·검증해야 합니다. source_control/source_audit의 FINAL은 합성/claim label이며 실제 FINAL 구현이나 완료 증거가 아닙니다. retry 실측은 승인된 격리 검증의 별도 항목으로 둡니다.
 
 ## STOP·복구·Go/No-Go
 
 identity/input/hash/context 변화, writer/권한·backup/restore 불일치, 새로운 충돌, missing/FAIL/UNKNOWN gate, exit!=0/validator false, 순서/중복·stale/future/cross-run·TTL 만료·state/log/snapshot 변조는 **terminal STOP**입니다. 자동/force/resume 재개는 없고 원인 리뷰 후 새 run/PRECHECK와 필요한 승인을 요구합니다.
+
+durable source crash 감지·persisted STOP·재시작 관찰 정책은 미구현입니다. 합성 모델의 STOP나 격리 atomic state만으로 source crash 처리를 완료했다고 보지 않습니다. timeout/process exit는 rollback 증명이 아니므로 실제 상태는 UNKNOWN/UNMEASURED로 중단하고, 증거/DB 상태를 별도 승인된 조회로 확인하기 전 진행하지 않습니다. 새 인스턴스 생성도 자동 resume 허가가 아닙니다.
 
 - V2 실패: script rollback·history·V1 보존을 확인하고 중단합니다.
 - V2 성공/V3 실패: V2 schema는 남습니다. V3 rollback·기존 값 보존을 확인하며 repair/full ETL로 통과시키지 않습니다.
