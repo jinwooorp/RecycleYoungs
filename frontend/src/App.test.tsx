@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { normalTrend } from './test/trendFixture'
+import { createKakaoMapsMock } from './test/kakaoMapsMock'
 
 const dongs = [
   { code: '11110515', name: '청운효자동' },
@@ -22,6 +23,7 @@ let statsResponse: () => Promise<Response>
 let trendResponse: () => Promise<Response>
 
 beforeEach(() => {
+  vi.stubEnv('VITE_KAKAO_MAP_APP_KEY', '')
   statsResponse = async () => json(normal)
   trendResponse = async () => json(normalTrend)
   fetchMock.mockReset().mockImplementation(async (input) => {
@@ -62,6 +64,28 @@ function deferred<T>() {
 }
 
 describe('행정동 통계 화면', () => {
+  it('지도 선택 좌표를 표시하고 통계 API를 자동 재호출하지 않는다', async () => {
+    const map = createKakaoMapsMock()
+    vi.stubEnv('VITE_KAKAO_MAP_APP_KEY', 'test-map-key')
+    vi.stubGlobal('kakao', { maps: map.sdk })
+    render(<App />)
+    await ready()
+    await waitFor(() => expect(map.listeners.size).toBe(1))
+    expect(screen.getByText('아직 선택한 위치가 없습니다.')).toBeInTheDocument()
+    expect(map.markers).toHaveLength(0)
+    await search()
+    expect(await screen.findByRole('heading', { name: '청운효자동 · 카페' })).toBeInTheDocument()
+    const calls = fetchMock.mock.calls.length
+    act(() => map.click(37.57123456789, 126.98123456789))
+    const region = within(screen.getByRole('region', { name: '창업 후보 위치 선택' }))
+    expect(region.getByText('37.571235')).toBeInTheDocument()
+    expect(region.getByText('126.981235')).toBeInTheDocument()
+    expect(map.markers[0].position.getLat()).toBe(37.57123456789)
+    act(() => map.click(37.58, 126.99))
+    expect(map.markers).toHaveLength(1)
+    expect(region.getByText('37.580000')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(calls)
+  })
   it('lookup 세 개를 병렬 요청하고 로딩 중 선택을 막으며 자동 선택하지 않는다', async () => {
     const pending = deferred<Response>()
     fetchMock.mockImplementation(() => pending.promise)

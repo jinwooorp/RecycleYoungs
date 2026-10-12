@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { KakaoMap, type MapCoordinate } from './components/KakaoMap'
 import { SearchForm } from './components/SearchForm'
 import { StatsResult } from './components/StatsResult'
 import { TrendResult } from './components/TrendResult'
@@ -7,6 +9,7 @@ import { Card } from '@/components/ui/card'
 import './App.css'
 
 function App() {
+  const [selectedCoordinate, setSelectedCoordinate] = useState<MapCoordinate | null>(null)
   const state = useAdminDongStats()
   const { lookups, lookupLoading, lookupError, stats, statsLoading, statsError, trend, trendLoading, trendError } = state
   const noLookups = lookups && (!lookups.adminDongs.length || !lookups.industries.length || !lookups.quarters.length)
@@ -17,6 +20,19 @@ function App() {
         <h1>행정동의 점포와 추정매출 살펴보기</h1>
         <p>행정동·업종·분기를 선택해 같은 조건의 통계를 확인하세요.</p>
       </header>
+      <Card asChild className="mb-6 gap-0 rounded-lg p-5 min-[761px]:p-6">
+        <section aria-labelledby="map-title">
+          <h2 id="map-title">창업 후보 위치 선택</h2>
+          <p className="mb-4 text-muted-foreground">지도에서 창업을 고려하는 위치를 클릭해 주세요.</p>
+          <KakaoMap selectedCoordinate={selectedCoordinate} onCoordinateChange={setSelectedCoordinate} />
+          <div className="mt-4" aria-live="polite" aria-atomic="true">
+            {selectedCoordinate ? <dl className="flex flex-wrap gap-x-8 gap-y-2 tabular-nums">
+              <div><dt className="text-sm text-muted-foreground">위도</dt><dd>{selectedCoordinate.lat.toFixed(6)}</dd></div>
+              <div><dt className="text-sm text-muted-foreground">경도</dt><dd>{selectedCoordinate.lng.toFixed(6)}</dd></div>
+            </dl> : <p>아직 선택한 위치가 없습니다.</p>}
+          </div>
+        </section>
+      </Card>
       <Card asChild className="gap-0 rounded-lg p-5 min-[761px]:p-6">
         <section aria-labelledby="search-title">
           <h2 id="search-title">조회 조건</h2>
