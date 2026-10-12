@@ -58,3 +58,22 @@ tasks.register('dbTest', Test) {
     outputs.upToDateWhen { false }
     outputs.cacheIf { false }
 }
+
+// Explicitly packaged opt-in harness; never runs with test, check, bootRun or dbTest.
+sourceSets {
+    locationIntegration {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+configurations {
+    locationIntegrationImplementation.extendsFrom implementation
+    locationIntegrationRuntimeOnly.extendsFrom runtimeOnly
+}
+tasks.register('prepareLocationIntegration', Sync) {
+    dependsOn tasks.named('locationIntegrationClasses')
+    into layout.buildDirectory.dir('location-integration')
+    from(sourceSets.main.output) { into 'classes' }
+    from(sourceSets.locationIntegration.output) { into 'classes' }
+    from(configurations.locationIntegrationRuntimeClasspath) { into 'lib' }
+}

@@ -8,12 +8,15 @@ function failure(error: unknown): ApiFailure {
   })
 }
 
-export function useAdminDongStats() {
+export function useAdminDongStats(locationDongCode?: string) {
   const [lookups, setLookups] = useState<Lookups | null>(null)
   const [lookupLoading, setLookupLoading] = useState(true)
   const [lookupError, setLookupError] = useState<ApiFailure | null>(null)
   const [lookupAttempt, setLookupAttempt] = useState(0)
-  const [selection, setSelection] = useState<StatsQuery>({ dongCode: '', industryCode: '', quarterCode: '' })
+  const [manualSelection, setSelection] = useState<StatsQuery>({ dongCode: '', industryCode: '', quarterCode: '' })
+  // Derived selection also handles a location resolving before lookup loading/retry finishes.
+  const selection = { ...manualSelection, dongCode: locationDongCode === undefined ? manualSelection.dongCode
+    : lookups?.adminDongs.some(dong => dong.code === locationDongCode) ? locationDongCode : '' }
   const [stats, setStats] = useState<AdminDongStats | null>(null)
   const [statsLoading, setStatsLoading] = useState(false)
   const [statsError, setStatsError] = useState<ApiFailure | null>(null)
@@ -62,6 +65,9 @@ export function useAdminDongStats() {
 
   async function search() {
     if (!lookups || !selection.dongCode || !selection.industryCode || !selection.quarterCode
+      || !lookups.adminDongs.some(dong => dong.code === selection.dongCode)
+      || !lookups.industries.some(industry => industry.code === selection.industryCode)
+      || !lookups.quarters.some(quarter => quarter.code === selection.quarterCode)
       || (searchRequest.current && !searchRequest.current.signal.aborted)) return
     searchRequest.current?.abort()
     const controller = new AbortController()

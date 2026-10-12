@@ -75,7 +75,7 @@ describe('행정동 통계 화면', () => {
     expect(map.markers).toHaveLength(0)
     await search()
     expect(await screen.findByRole('heading', { name: '청운효자동 · 카페' })).toBeInTheDocument()
-    const calls = fetchMock.mock.calls.length
+    const calls = fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/admin-dong-')).length
     act(() => map.click(37.57123456789, 126.98123456789))
     const region = within(screen.getByRole('region', { name: '창업 후보 위치 선택' }))
     expect(region.getByText('37.571235')).toBeInTheDocument()
@@ -84,7 +84,8 @@ describe('행정동 통계 화면', () => {
     act(() => map.click(37.58, 126.99))
     expect(map.markers).toHaveLength(1)
     expect(region.getByText('37.580000')).toBeInTheDocument()
-    expect(fetchMock).toHaveBeenCalledTimes(calls)
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/admin-dong-'))).toHaveLength(calls)
+    expect(screen.queryByRole('heading', { name: '청운효자동 · 카페' })).not.toBeInTheDocument()
   })
   it('lookup 세 개를 병렬 요청하고 로딩 중 선택을 막으며 자동 선택하지 않는다', async () => {
     const pending = deferred<Response>()
@@ -106,6 +107,8 @@ describe('행정동 통계 화면', () => {
     choose()
     expect(screen.getByRole('button', { name: '조회하기' })).toBeEnabled()
     expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(screen.getByText('조회하기를 눌러 통계를 확인하세요.')).toBeInTheDocument()
+    expect(screen.queryByText('세 조건을 선택한 후 조회하기를 눌러 주세요.')).not.toBeInTheDocument()
   })
 
   it('code query로 조회하고 정상 값과 기준 조건을 표시한다', async () => {

@@ -63,6 +63,7 @@ const errorCodes = new Set([
   'INVALID_PARAMETER', 'INVALID_DONG_CODE', 'UNKNOWN_DONG', 'INVALID_INDUSTRY_CODE',
   'UNKNOWN_INDUSTRY', 'UNSUPPORTED_INDUSTRY', 'INVALID_QUARTER', 'UNSUPPORTED_QUARTER',
   'DATA_INTEGRITY_ERROR', 'INTERNAL_ERROR',
+  'INVALID_COORDINATE', 'BOUNDARY_DATA_UNAVAILABLE',
 ])
 
 function apiError(value: unknown): value is ApiError {
@@ -70,7 +71,7 @@ function apiError(value: unknown): value is ApiError {
     && (value.field === null || typeof value.field === 'string')
 }
 
-async function get<T>(path: string, valid: (body: unknown) => body is T, signal?: AbortSignal): Promise<T> {
+export async function get<T>(path: string, valid: (body: unknown) => body is T, signal?: AbortSignal): Promise<T> {
   let response: Response
   try {
     response = await fetch(path, { signal, headers: { Accept: 'application/json' } })

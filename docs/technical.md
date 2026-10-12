@@ -17,7 +17,7 @@
 - [Polygon ETL과 공간 한계](#polygon-etl과-공간-한계)
 - [현재 GET API 계약](#현재-get-api-계약)
 - [Frontend 화면과 요청 상태](#frontend-화면과-요청-상태)
-- [공간 조회 설계 — 구현 전](#공간-조회-설계--구현-전)
+- [공간 조회 설계 — API·격리 검증](#공간-조회-설계--구현-전)
 - [테스트와 안전 모듈](#테스트와-안전-모듈)
 - [개발 환경과 안전한 시작](#개발-환경과-안전한-시작)
 - [승인된 격리 재현 안내](#승인된-격리-재현-안내)
@@ -565,13 +565,23 @@ Tailwind는 @tailwindcss/vite·@import입니다. index.css는 light theme/base/�
 
 이 구조와 과거 browser 기록은 포괄적 WCAG/contrast/screen reader 최신 PASS를 뜻하지 않습니다. 출처/loadedAt/version UI는 아직 없고 원본 보고값 해석 한계 문구만 제공합니다.
 
-## 공간 조회 설계 — 구현 전
+<a id="공간-조회-설계--구현-전"></a>
+
+## 공간 조회 설계 — API·격리 검증
+
+2026-10-12에 Backend 좌표 API·Frontend 지도 연결을 구현하고, DB 없는 단위/Mock 테스트와 **새 일회용 격리 DB의 합성 fixture**를 검증했습니다. PostgreSQL 16.4/PostGIS 3.4.3/PROJ 7.2.1에서 실제 V1/V2/V3(Flyway 12.4.0)·공간 SQL·JdbcClient·HTTP 200/400/503/500·current 교체/동일 snapshot·날짜/BIGINT 및 EXPLAIN을 확인했습니다. 기존 개발 DB·실제 서울 Polygon·실제 서울 통계·운영 성능은 미검증이며 기존 DB는 **NOT_READY**입니다. 격리 실행은 이번 세션의 명시적 승인 아래 새 internal network·host port 없음·data/init tmpfs·소유권/연결 identity 검사로만 수행했습니다. 기존 Docker 자원·원본·백업·ETL에 접근하지 않았으며 README 7단계의 ✅ 전환은 사용자 리뷰 후 결정합니다.
 
 ### 후보 POINT와 행정동
 
 longitude/latitude 순서의 EPSG:4326 POINT를 받고 query POINT 하나만 5181로 변환합니다. 저장 boundary를 transform하지 않아 operational GiST를 사용할 수 있습니다. ST_Covers는 내부·외곽/공유 경계·hole ring을 포함하고 hole 내부는 제외합니다.
 
-| current 행정동 match | domain result 설계 |
+`GET /api/locations/resolve?lat=37.5665&lng=126.9780`은 업종과 무관한 읽기 전용 API입니다. `lat`/`lng`는 각각 한 번 필수이며 다른 query는 거부합니다. 최대 64자의 십진수(지수 표기 포함), 유한값, 위도 -90..90·경도 -180..180을 검사합니다. 원래 십진수로 범위를 확인하여 double 반올림으로 범위 밖 값을 허용하지 않고, 0으로 underflow하는 비정상 입력도 거부합니다. 표시만 소수점 6자리이며 요청 좌표를 반올림하지 않습니다.
+
+서비스의 투영 지원 범위는 서울 자료를 포함하는 EPSG:5181의 사용 영역 bbox(위도 33.96..38.33, 경도 126..128)입니다. [PROJ의 EPSG:5181 usage](https://github.com/OSGeo/PROJ/blob/master/data/sql/projected_crs.sql)와 [extent 3730](https://github.com/OSGeo/PROJ/blob/master/data/sql/extent.sql)을 기준으로 합니다. 범위 밖의 유효 좌표는 CASE로 POINT 변환을 생략하고 NULL query geometry를 사용합니다. 필요한 current 데이터가 준비돼 있으면 OUTSIDE_OR_UNSUPPORTED/NO_MEMBERSHIP을 반환하며 서울 밖이라는 확정 원인으로 해석하지 않습니다. 이 bbox는 소속을 결정하는 행정 경계가 아니며, 범위 안의 판정은 항상 ST_Covers로 수행합니다.
+
+두 종류의 current version·행 수/usable 품질·모든 membership을 한 SELECT의 MVCC snapshot에서 읽습니다. READY·검증 PASSED/PASSED_WITH_LIMITATIONS의 operational geometry만 조회하고 ST_Touches로 BOUNDARY/INTERIOR를 구분합니다. current 부재·미준비와 준비된 경계의 0개 match를 구분하며, READY의 feature_count/실제 행 수/usable 행 수 불일치·중복 식별자는 무결성 오류입니다. publication/version을 변경하지 않습니다.
+
+| current 행정동 match | domain result |
 | --- | --- |
 | 0 | OUTSIDE_OR_UNSUPPORTED, reason=NO_COVERING_OPERATIONAL_BOUNDARY, resolved dong=NULL, candidates=[]; 영역 밖/gap으로 단정하지 않음 |
 | 1 | RESOLVED, dong code·version·quality·point_relation. 단일 경계 위 match도 BOUNDARY 유지 |
@@ -581,9 +591,21 @@ longitude/latitude 순서의 EPSG:4326 POINT를 받고 query POINT 하나만 518
 
 상권은 0..N memberships입니다. 0은 NO_MEMBERSHIP/빈 배열, 복수는 전체 membership이며 행정동 모호성 상태를 적용하지 않습니다. 배타적 소속·원본 overlap의 의도/오류를 가정하지 않습니다. 사용자가 상권을 선택하고 복수 통계를 자동 합산하지 않습니다.
 
-유효 좌표 domain result=200, current 부재=BOUNDARY_DATA_UNAVAILABLE/503, 무결성/DB 실패=500 설계입니다. endpoint/query/DTO 구현 계약은 후속입니다. 기존 GET 5개 계약을 바꾸지 않습니다.
+유효 좌표 domain result=200, 필요한 current 부재·미준비=BOUNDARY_DATA_UNAVAILABLE/503, 무결성=DATA_INTEGRITY_ERROR/500, 예상치 못한 DB 실패=INTERNAL_ERROR/500입니다. 누락·중복·unknown query는 INVALID_PARAMETER/400, 숫자 형식·범위 오류는 INVALID_COORDINATE/400이며 모두 기존 `code/message/field` 형태입니다. 위치 Controller에 별도 advice를 적용하고 기존 통계 GET 5개·기존 advice 계약을 바꾸지 않습니다. SQL/원본 예외/인증정보는 응답에 노출하지 않습니다.
+
+응답은 `coordinate:{lat,lng}`, `adminDong:{status,reason,resolvedDong,candidates,dataset}`, `commercialArea:{status,memberships,dataset}`입니다. RESOLVED의 candidates는 빈 배열, AMBIGUOUS_BOUNDARY의 resolvedDong은 null이며 모든 후보를 코드순으로 반환합니다. 상권 1개 이상은 MEMBERSHIP, 0개는 NO_MEMBERSHIP입니다. 각 match는 code/name/datasetVersion/qualityStatus/qualityDetail/pointRelation을 제공하고 상권은 sourceAttributeStatus/sourceAttributeDetail을 추가합니다. 내부 boundary ID·geometry·raw 동 코드/시군구 코드는 반환하지 않습니다.
+
+각 dataset은 `version`(spatial_dataset_versions.id의 BIGINT 문자열 식별자), `datasetId`, `datasetName`, `sourceUrl`, `sourceCrs=5181`, `referenceDate`, `referenceDateVerified`, `historicalCompatibilityStatus`, `validationStatus`, `loadedAt`을 제공합니다. 행정동·상권 version은 독립적입니다. referenceDate=null/verified=false는 기준일 미확인이며 loadedAt을 기준일이나 통계 분기로 대체하지 않습니다. 원본 지역 속성 충돌·미검증 상태와 과거 통계 경계 호환성 미검증을 UI에 표시합니다.
 
 resolved dong code로 통계 lookup을 연결하되 geometry match·lookup 부재·통계 NO_ROW는 별개입니다. 통계 부재를 OUTSIDE로 바꾸지 않고 대표점/통계가 없어도 membership을 제공합니다. 경계 이름·대표점 이름을 구분하고 raw 지역 속성 fallback은 금지합니다.
+
+지도 재클릭은 이전 지역·통계·추세·관련 오류와 확정 동 조건을 즉시 정리합니다. AbortController와 요청 식별자로 늦은 성공/오류를 무시하고, 언마운트 시 취소합니다. lookup에 있는 단일 동만 조건에 반영하며 업종·분기는 자동 선택하지 않습니다. 통계는 기존 **조회하기** 버튼으로만 요청합니다. lookup에 없는 동은 지역 판정 성공을 유지하고 통계 연결 자료 부재로 표시합니다. 직접 동을 선택하면 수동 모드가 되어 진행 중 위치 응답이 선택을 덮지 않습니다. lookup 지연/실패 후 재시도도 처리하고 통계/추세 병렬 요청·부분 성공·NULL/0/NO_ROW·BIGINT 문자열 동작을 유지합니다. 위치 실패는 독립적인 재시도 버튼을 제공하며 수동 통계 검색을 막지 않습니다.
+
+격리 합성 fixture는 exact 5181 및 4326 JDBC/HTTP에서 내부·외부·외곽·공유 경계·양의 면적 overlap·hole ring/내부·상권 0/1/복수·투영 지원 밖/극단 좌표를 검증했습니다. 경계 API fixture는 왕복 오차로 epsilon/snap을 도입하지 않고 중앙경도 축의 정확한 경계 좌표를 사용했습니다. 실제 데이터의 임의 경계 근처 소속 보장은 여전히 없습니다. 두 operational GiST index가 작은 fixture의 실행 계획에 사용됐지만, 작은 합성 자료의 시간·계획을 운영 성능으로 일반화하지 않습니다.
+
+전용 opt-in harness는 [locationIntegration](../backend/src/locationIntegration/)입니다. `./gradlew prepareLocationIntegration --offline`은 별도 runner용 classpath를 준비하며 DB에 연결하지 않습니다. 일반 test/check/bootRun/dbTest가 이 harness를 자동 실행하지 않습니다. Python controller는 새 자원만 만들고 비밀번호를 메모리에 유지하며, Java DataSource는 Flyway와 API의 모든 새 연결에서 database/user/system identifier/PGDATA/port/timeout을 검사합니다. 원본 migration·V2 제약/trigger는 변경하거나 해제하지 않습니다. 격리 환경의 재실행·정리는 세션별 명시적 승인과 소유권 검사 아래 수행해야 합니다.
+
+Chrome은 Mock 지도 SDK와 실제 격리 HTTP/DB 합성 응답을 연결하여 지도 클릭→동 조건→수동 통계·추세·재클릭·실제 503/재시도·lookup 부재를 확인했습니다. HTTP는 같은 internal network의 runner에서 호출해 전달했으며 DB/API host port를 열지 않았습니다. 이 검증은 live Kakao SDK/타일 및 실제 서울 자료 전체 흐름과 구분합니다. v1/v2 diff·검증 기록·스크린샷은 Git 제외 작업별 리뷰 폴더에 보존합니다.
 
 snap/round/epsilon buffer로 복수 match를 없애지 않습니다. 좌표 변환 왕복·측위 오차로 경계 근처 확정 소속을 보장하지 않습니다. exact 5181 fixture와 4326 API 입력 fixture를 따로 검증해야 합니다.
 

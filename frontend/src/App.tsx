@@ -1,16 +1,16 @@
-import { useState } from 'react'
-import { KakaoMap, type MapCoordinate } from './components/KakaoMap'
+import { KakaoMap } from './components/KakaoMap'
+import { LocationResult } from './components/LocationResult'
 import { SearchForm } from './components/SearchForm'
 import { StatsResult } from './components/StatsResult'
 import { TrendResult } from './components/TrendResult'
-import { useAdminDongStats } from './hooks/useAdminDongStats'
+import { useLocationAnalysis } from './hooks/useLocationAnalysis'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import './App.css'
 
 function App() {
-  const [selectedCoordinate, setSelectedCoordinate] = useState<MapCoordinate | null>(null)
-  const state = useAdminDongStats()
+  const state = useLocationAnalysis()
+  const selectedCoordinate = state.location.coordinate
   const { lookups, lookupLoading, lookupError, stats, statsLoading, statsError, trend, trendLoading, trendError } = state
   const noLookups = lookups && (!lookups.adminDongs.length || !lookups.industries.length || !lookups.quarters.length)
   return (
@@ -24,13 +24,17 @@ function App() {
         <section aria-labelledby="map-title">
           <h2 id="map-title">창업 후보 위치 선택</h2>
           <p className="mb-4 text-muted-foreground">지도에서 창업을 고려하는 위치를 클릭해 주세요.</p>
-          <KakaoMap selectedCoordinate={selectedCoordinate} onCoordinateChange={setSelectedCoordinate} />
+          <KakaoMap selectedCoordinate={selectedCoordinate} onCoordinateChange={state.selectCoordinate} />
           <div className="mt-4" aria-live="polite" aria-atomic="true">
             {selectedCoordinate ? <dl className="flex flex-wrap gap-x-8 gap-y-2 tabular-nums">
               <div><dt className="text-sm text-muted-foreground">위도</dt><dd>{selectedCoordinate.lat.toFixed(6)}</dd></div>
               <div><dt className="text-sm text-muted-foreground">경도</dt><dd>{selectedCoordinate.lng.toFixed(6)}</dd></div>
             </dl> : <p>아직 선택한 위치가 없습니다.</p>}
           </div>
+          <LocationResult result={state.location.result} loading={state.location.loading} error={state.location.error}
+            lookupLoading={lookupLoading} lookupError={!!lookupError}
+            linked={!!state.location.result?.adminDong.resolvedDong && state.selection.dongCode === state.location.result.adminDong.resolvedDong.code}
+            manual={state.mode === 'manual'} onRetry={state.retryLocation} />
         </section>
       </Card>
       <Card asChild className="gap-0 rounded-lg p-5 min-[761px]:p-6">
@@ -58,7 +62,10 @@ function App() {
       </div>
       {trendError && <div className="error-message" role="alert"><p>4개 분기 추세를 조회하지 못했습니다. {trendError.message}</p></div>}
       {trend && <TrendResult trend={trend} />}
-      {!stats && !trend && !state.searchLoading && !statsError && !trendError && !lookupError && !noLookups && <p className="initial-message">세 조건을 선택한 후 조회하기를 눌러 주세요.</p>}
+      {!stats && !trend && !state.searchLoading && !statsError && !trendError && !lookupError && !noLookups && <p className="initial-message">
+        {state.selection.dongCode && state.selection.industryCode && state.selection.quarterCode
+          ? '조회하기를 눌러 통계를 확인하세요.' : '세 조건을 선택한 후 조회하기를 눌러 주세요.'}
+      </p>}
     </main>
   )
 }
