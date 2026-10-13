@@ -101,7 +101,7 @@ describe('행정동 통계 화면', () => {
     await ready()
     expect(screen.getByRole('option', { name: '청운효자동' })).toHaveValue('11110515')
     expect(screen.getByRole('option', { name: '카페' })).toHaveValue('CAFE')
-    expect(screen.getByRole('option', { name: '2025년 1분기' })).toHaveValue('20251')
+    expect(within(screen.getByRole('region', { name: '조회 조건' })).getByRole('option', { name: '2025년 1분기' })).toHaveValue('20251')
     expect(screen.getByLabelText('행정동')).toHaveValue('')
     expect(screen.getByRole('button', { name: '조회하기' })).toBeDisabled()
     choose()

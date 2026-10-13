@@ -48,21 +48,22 @@ MVP는 처음 완성할 핵심 서비스 범위입니다. 현재 첫 흐름은 �
 
 | 단계 | 현재 화면 | 최종 MVP |
 | --- | --- | --- |
-| 입력 | 지도 단일 좌표 선택과 행정동·업종·분기 명시 조회가 독립 | 좌표 후보와 공통 분석 조건 |
-| 지역 | 동 code 직접 선택 | 동 0/1/복수·상권 0..N 판정과 경계 설명 |
-| 정보 | 단건 점포/매출·2025 네 분기 표 | 경쟁 점포·지역 지표·출처/기간/version |
-| 비교 | 한 동/업종 조회 | 최대 3후보 동일 조건 비교 |
-| 결측/오류 | 로딩·부분 성공·취소·NULL/0/NO_ROW | 좌표/경계/자료 미지원·모호성까지 일관된 처리 |
+| 입력 | 지도 좌표 선택·최대 3후보 저장, 수동 조회와 별도 공통 CAFE/500m/분기 조건 | 실자료로 재현 가능한 후보 선택·공통 조건 |
+| 지역 | 좌표 기반 동 0/1/복수·상권 0..N 판정, 단일 확정 동의 통계 조건 연결 | 실제 서울 경계 대조와 모호성·품질 한계 확인 |
+| 정보 | 반경 500m 카페 count/목록·자료 한계, 행정동 단건 통계·2025 네 분기 표 | 검증된 원본 자료 연결·출처/기간/단위 확인 |
+| 비교 | 최대 3후보 등록·삭제·공통 분기 통계, 공간 version 차이·snapshot 한계 안내 | 실자료 3곳 대조 및 통합 시연 |
+| 결측/오류 | 독립 로딩·부분 성공·취소/stale 차단·NULL/0/NO_ROW·미지원·모호성·미준비503 | 실제 자료에서도 같은 의미와 오류 처리 검증 |
 
-현재 UI는 선택 분기로 단건 조회를 하고 추세는 항상 20251~20254입니다. 카카오맵 클릭·좌표 저장/표시·단일 마커 이동은 구현했지만 통계 조회 조건을 자동으로 바꾸거나 API를 재호출하지 않습니다. 좌표 API·반경·후보 비교·metadata UI는 미구현이며, 지도부터 실제 분석까지의 통합 흐름은 미검증입니다.
+현재 화면은 코드 구현 및 합성 검증 범위입니다. 지도 클릭은 지역 판정과 지원 조건의 500m 경쟁 카페 API를 요청하며, 단일 확정 동이 통계 lookup에 있으면 동 조건을 반영합니다. 단건 통계·추세는 기존 조회 버튼을 사용하고 추세는 항상 20251~20254입니다. 최대 3후보 비교는 별도 공통 분기를 사용하며 분기 변경 후 통계를 명시 재조회합니다. 지역·카페·후보 결과에 dataset version·품질·출처·snapshot 한계를 표시합니다. 실제 서울 Polygon·SEMAS snapshot 적재와 실자료 전체 통합 시연은 미완료이고 기존 DB는 NOT_READY입니다.
 
 ## 현재 위치와 지금 시작할 작업
 
-최근 완료한 사용자 기능은 README 6단계의 카카오맵 SDK 1차 연동이며, 다음 작업은 7단계 좌표 기반 행정동·상권 분석과 통계 조회 연결입니다. 기존 개발 DB에 공간 변경을 적용할 실제 수집·실행 경로는 아직 없어 NOT_READY입니다. 아래에서 DB 없는 계약·mock 준비와 별도 승인이 필요한 실제 적용을 구분합니다.
+README 로드맵의 7단계 지역 판정·통계 연결과 8단계 500m 경쟁 카페 API/UI는 구현·합성 PostGIS 격리 검증을 완료했고, 9단계 최대 3곳 비교는 구현·Frontend/Mock 검증을 완료했습니다. 다음 핵심 과제는 승인된 실제 자료 연결과 10단계 통합·시연입니다. 기존 개발 DB는 NOT_READY이며 실제 서울 Polygon·SEMAS snapshot 적재·실자료 통합은 미완료입니다. 단계 표시를 자동으로 완료 처리하지 않고 코드/합성 검증과 실제 적용을 구분합니다.
 
 ### 최근 완료한 범위
 
-- **카카오맵 단일 위치 선택**: 지도 클릭 좌표를 상위 React 상태에 저장하고 마커 하나를 이동합니다. 10월 12일 최근 개발 세션에서 프론트엔드 116개 테스트·lint·build가 통과했고 실제 Chrome 지도 동작을 확인했습니다. 초기 모바일 화면 검증 기록도 있으며, Backend/DB와 연결한 전체 흐름은 미검증입니다.
+- **7~9단계 분석·비교**: 지역 판정·통계 연결 및 500m 경쟁 카페 API/UI는 합성 PostGIS 격리 검증을, 최대 3후보 비교는 Frontend/Mock 검증을 완료했습니다. [현재 상태](#구현-상태와-검증-수준)와 [상세 계약](technical.md#공간-조회-설계--구현-전)에서 실자료 미완료 범위를 구분합니다.
+- **카카오맵 단일 위치 선택의 과거 검증**: 지도 클릭 좌표 저장·단일 마커 이동을 구현했고, SDK 1차 연동 당시 10월 12일 프론트엔드 116개 테스트·lint·build 및 실제 Chrome 지도 동작 검증 기록이 있습니다. 이후 분석·비교의 합성 검증과 별개이며 live SDK+실자료 전체 시연 완료를 뜻하지 않습니다.
 - **Source Preservation Validator**: 받은 변경 전후 자료로 값·ID·NULL·좌표·이력 등의 보존을 비교하는 코드입니다. 실제 DB에서 자료를 수집하지는 않습니다.
 - **비활성 Source Control**: 가짜 증거로 단계 전이를 연습하는 모델이며 실제 실행은 막습니다. 결과는 SIMULATED_ONLY입니다.
 - **Source Audit·Provenance 계약**: 입력·코드·관찰 과정의 출처를 기록하고 서로 맞는지 검사하는 형식입니다. 성공도 CONTRACT_VALID_UNVERIFIED로 실제 DB 관찰의 증명은 아닙니다.
@@ -78,11 +79,11 @@ MVP는 처음 완성할 핵심 서비스 범위입니다. 현재 첫 흐름은 �
 
 2. **Polygon 전후 보존 비교 계약 준비 — A-01, 이후 A-05.** [source_validation](../etl/source_validation.py)은 V1/V2/V3만 지원하므로 Polygon 적용 전후의 허용 변화와 보존 범위를 정해야 합니다. [publication](technical.md#불변성과-publication)·[V1 보존 조건](db-safety.md#v1-보존과-허용-변경)을 읽고 validator·[회귀 테스트](../etl/tests/test_source_validation.py)의 합성 입력 계약을 검토합니다. 승인 밖 변경·증거 부족을 거부하는 모의 검사와 독립 계약 리뷰가 준비 단계의 완료 기준입니다. A-05 실측은 별도 선행 조건이 필요합니다.
 
-3. **통계·점포의 출처 표시 설계 — B-02.** 사용자가 2025년 통계와 2026-06 점포를 같은 시점으로 오해하지 않도록 출처·기간·단위·버전 응답을 정합니다. [자료 의미](technical.md#데이터-출처와-의미)·[현재 metadata 한계](technical.md#단위와-metadata)를 읽고 [Backend DTO](../backend/src/main/java/com/example/backend/admindong/ApiResponses.java)·[Frontend types](../frontend/src/types/api.ts)·결과 컴포넌트의 확장안을 설계합니다. 가짜 자료로 표시/결측을 확인할 수 있어야 하며 실제 catalog·DB 적용·출처 검증은 후속입니다.
+3. **통계·점포 원본 snapshot catalog 계약 보강 — B-02.** 공간 version·품질과 점포 UNVERIFIED 한계 표시는 구현했습니다. 아직 제공되지 않는 통계/점포 원본 snapshot·기준일·완전성 계약은 [자료 의미](technical.md#데이터-출처와-의미)·[현재 metadata 한계](technical.md#단위와-metadata)·[Backend DTO](../backend/src/main/java/com/example/backend/admindong/ApiResponses.java)·[Frontend types](../frontend/src/types/api.ts)를 기준으로 보강합니다. 2025년 통계와 예정된 점포 자료를 같은 시점으로 취급하지 않으며 실제 catalog·DB 적용·원본 검증은 별도 후속입니다.
 
-4. **위치 조회 API의 입력·응답과 모의 사례 설계 — B-04/B-05.** 좌표가 동 경계 안·밖·복수 경계에 놓이거나 상권 여러 곳에 포함되는 경우를 표현할 계약을 만듭니다. [공간 조회 정책](technical.md#공간-조회-설계--구현-전)·[기존 Backend 계층](../backend/src/main/java/com/example/backend/admindong/)을 참고하고 새 Controller/Service/JDBC Repository·DTO·테스트가 예상 영역입니다. 파일 배치는 구현 시 정합니다. 동 0/1/복수·상권 0..N·자료 미적재·오류를 mock 응답으로 구분하면 계약 준비를 확인할 수 있습니다. 실제 SQL fixture는 격리 승인이 필요합니다.
+4. **구현된 위치 조회 API의 합성 회귀 유지 — B-04/B-05.** [공간 조회 계약](technical.md#공간-조회-설계--구현-전)과 [Location API](../backend/src/main/java/com/example/backend/location/)는 동 0/1/복수·상권 0..N·미준비/오류를 구현·합성 검증했습니다. 후속 지원 범위/원본 대조 계획과 회귀 사례를 보강하되 실제 SQL fixture 재실행은 새 격리 대상의 별도 승인이 필요합니다.
 
-5. **선택 좌표와 분석 결과를 연결할 화면 준비 — B-07.** [App](../frontend/src/App.tsx)·[KakaoMap](../frontend/src/components/KakaoMap.tsx)의 SDK·단일 위치 선택은 구현했습니다. 이후 [결과 컴포넌트](../frontend/src/components/)와 [조회 hook](../frontend/src/hooks/useAdminDongStats.ts)을 출발점으로 위치 선택→모호성 안내→통계/점포→비교를 가짜 응답으로 점검하고 기존 취소/부분 성공 정책과 B-02/04~06 계약을 연결합니다. 단일 선택 완료를 실제 지역 분석·자료 연결이나 전체 흐름 검증 완료로 보고하지 않습니다.
+5. **구현된 분석·비교 화면의 회귀와 통합 준비 — B-07/B-09.** [App](../frontend/src/App.tsx)·[결과 컴포넌트](../frontend/src/components/)·[단일 조회 hook](../frontend/src/hooks/useAdminDongStats.ts)·[후보 비교 hook](../frontend/src/hooks/useCandidateComparison.ts)에 위치→지역/카페→통계·최대 3곳 비교가 연결돼 있습니다. Mock 오류/취소/부분 성공·버전 한계를 유지하고 10단계 live SDK+실자료 전체 흐름의 검증 계획을 준비합니다. Frontend/합성 검증을 실제 자료 적재·통합 완료로 보고하지 않습니다.
 
 ### 먼저 조건을 갖춰야 하는 일
 
@@ -191,35 +192,35 @@ DB 구조는 버전별 SQL 변경 작업인 Flyway migration으로 관리했습�
 
 | 영역·코드 근거 | 구현 | 확인한 검증 기록 | 기존 DB 적용·사용자 제공·남은 작업 |
 | --- | --- | --- | --- |
-| [AdminDong API](../backend/src/main/java/com/example/backend/admindong/) | IMPLEMENTED | UNIT_VERIFIED·ISOLATED_VERIFIED(당시 d808b76/2f1997c) | UI 연결, 최신 HTTP/test 미실행 |
-| [App/client/hook](../frontend/src/App.tsx) | IMPLEMENTED | 당시 28dd582/c8b7afa 연결 기록·10/12 프론트엔드 회귀 테스트 | 통계/추세·취소/결측/오류. 이번에 실제 API를 재확인하지 않음 |
-| [KakaoMap](../frontend/src/components/KakaoMap.tsx)·[SDK 로더](../frontend/src/lib/loadKakaoMaps.ts) | IMPLEMENTED(단일 선택) | 10/12 mock 테스트·Chrome 지도 동작·초기 모바일 검증 기록 | 좌표/마커 선택 완료. 실제 지역 분석·통계 API 연결 미검증 |
+| [AdminDong API](../backend/src/main/java/com/example/backend/admindong/) | IMPLEMENTED | UNIT_VERIFIED·ISOLATED_VERIFIED(과거 d808b76/2f1997c 및 7~8단계 합성 HTTP 회귀) | UI·조건 연결 구현, 기존 DB/실자료 최신 통합 미검증 |
+| [App/client/hook](../frontend/src/App.tsx) | IMPLEMENTED | 과거 28dd582/c8b7afa 기록, 7~9단계 Frontend 회귀·Mock Chrome 검증 | 단일 분석·수동 통계/추세·3후보 비교 구현. live SDK+실자료 통합 미완료 |
+| [KakaoMap](../frontend/src/components/KakaoMap.tsx)·[SDK 로더](../frontend/src/lib/loadKakaoMaps.ts) | IMPLEMENTED(단일 선택) | 1차 연동의 실제 Chrome 기록 및 7~9단계 Mock 회귀 | 지역/카페·통계 조건·후보 비교 연결 구현. 저장 후보는 카드로 구분, live SDK+실자료 시연 미완료 |
 | [V1](../backend/src/main/resources/db/migration/V1__initial_schema.sql)·동 통계 ETL | IMPLEMENTED | SOURCE_READ_ONLY_VERIFIED(당시 C2A/B2) | SOURCE_APPLIED(당시 V1 구조/두 통계), 현재 미조회 |
 | [CSV ETL](../etl/app/main.py) | IMPLEMENTED | UNIT_VERIFIED·ISOLATED_VERIFIED(당시) | source 전체5job 적용 아님, full loader 별도 범위 |
 | [V2/V3](../backend/src/main/resources/db/migration/) | IMPLEMENTED·BLOCKED | ISOLATED_VERIFIED(당시 C1/B1/B2/B3) | 마지막 source 미적용 기록, 최신 gate·승인 필요 |
-| [Polygon ETL](../etl/app/spatial_main.py) | IMPLEMENTED·BLOCKED | ISOLATED_VERIFIED(당시) | 마지막 source 미적용 기록, 공간 API 없음 |
+| [Polygon ETL](../etl/app/spatial_main.py) | IMPLEMENTED·BLOCKED | ISOLATED_VERIFIED(당시) | 기존 DB/실제 서울 Polygon 미적용. 공간 API는 별도 구현·합성 검증 완료 |
 | [격리 control](../etl/control.py) | IMPLEMENTED | ISOLATED_VERIFIED(당시 B3) | 운영자 검증용·과거 고정 profile, source 모드 없음 |
 | [source_validation](../etl/source_validation.py) | IMPLEMENTED | 단위 회귀 source 존재, 커밋된 실행 결과 미확인 | 실제 수집 없음, Polygon stage 없음 |
 | [source_control](../etl/source_control.py) | IMPLEMENTED | 회귀 source 존재, 실행 결과 미확인 | inspect/합성 모델, 실행 불가 |
 | [source_audit](../etl/source_audit.py) | IMPLEMENTED | 회귀 source 존재, 실행 결과 미확인 | UNVERIFIED contract, 실측 없음 |
 | fake/실제 collector·executor·durable STOP | NOT_IMPLEMENTED·BLOCKED | 없음 | 트랙 A 선행 작업 |
-| 좌표/동·상권 API | DESIGNED_ONLY·NOT_IMPLEMENTED | 격리 probe는 HTTP/4326 API 검증 아님 | 트랙 B 구현 필요 |
-| 반경 점포 | DESIGNED_ONLY·NOT_IMPLEMENTED | POINT/오프라인 거리 검사는 반경 API PASS 아님 | snapshot·metadata·미터 index 필요 |
-| 후보 비교·metadata UI | NOT_IMPLEMENTED | 없음 | 지도 선택 이후 분석·비교 흐름 미완성 |
-| 통계/점포 metadata·추가 지표·점수 | DESIGNED_ONLY 또는 NOT_IMPLEMENTED | 없음 | 자료/계산식·catalog 계약 필요 |
+| [7단계 좌표/동·상권 API](technical.md#공간-조회-설계--구현-전) | IMPLEMENTED | UNIT_VERIFIED·ISOLATED_VERIFIED(합성 PostGIS/JDBC/HTTP) | 지역 판정·통계 조건 연결 완료, 실자료 경계/기존 DB 통합 미완료 |
+| [8단계 반경 경쟁 카페](technical.md#반경-500m-경쟁-카페-api) | IMPLEMENTED | UNIT_VERIFIED·ISOLATED_VERIFIED(합성 PostGIS/JDBC/HTTP) | CAFE/500m API/UI·기존 GiST 후보 필터 검증, 실제 SEMAS snapshot 적재/완전성·운영 성능 미완료 |
+| [9단계 후보 비교·자료 한계 UI](technical.md#최대-3곳-후보-비교--frontend-orchestration) | IMPLEMENTED | UNIT_VERIFIED·MOCK_VERIFIED(Frontend/Chrome) | 최대3곳·공통조건·부분실패/경합·version/품질/출처/snapshot 안내 완료. 실자료 3곳 대조·동일 원본 snapshot 검증 미완료 |
+| 통계/점포 원본 snapshot catalog·추가 지표·점수 | DESIGNED_ONLY 또는 NOT_IMPLEMENTED | 없음 | 통계 snapshot/version 제공·원본 기간/완전성·추가 자료/계산식 계약 필요 |
 | 역사적 B·홍지문 H5 | BLOCKED | 미해결을 확인한 원본 조사 | 공식 근거 없이 보정 금지 |
 
 신규 세 모듈에는 test 정의가 있고 이전 세션에서 실행 결과가 보고됐지만 현재 Git의 커밋된 실행 기록을 확인하지 못했습니다. 이번에는 실행하지 않아 UNIT_VERIFIED로 부여하지 않습니다. 과거 V1은 SQL 실행 history가 아닌 BASELINE 편입 기록입니다. 정확한 당시 DB 상태는 안전 문서에만 유지합니다.
 
 ## Now / Next / Later
 
-Now는 확보한 코드/계약, Next는 다음에 준비할 연결과 증거, Later는 선행 조건을 갖춘 뒤 실제 적용/사용자 흐름입니다. 작은 착수 작업은 [현재 위치 안내](#현재-위치와-지금-시작할-작업), 정확한 의존성과 완료 기준은 다음 두 트랙에서 찾습니다.
+Now는 구현·검증한 코드/계약, Next는 실제 자료 연결과 10단계 통합·시연에 필요한 증거, Later는 선행 조건을 갖춘 뒤 확장할 범위입니다. 작은 착수 작업은 [현재 위치 안내](#현재-위치와-지금-시작할-작업), 정확한 의존성과 완료 기준은 다음 두 트랙에서 찾습니다.
 
 | 구분 | 트랙 A | 트랙 B |
 | --- | --- | --- |
-| Now | Audit/보존/비활성 계약 구현, 실제 적용 NOT_READY | 통계·네 분기 화면과 카카오맵 단일 선택 구현. 분석 흐름 미통합 |
-| Next | 계약 리뷰→fake collector→실측 provenance·actor/writer·보존·backup/restore·durable STOP | 좌표 행정동·상권 API와 통계 연결. metadata·UI mock·격리 fixture 준비 |
-| Later | 추가 격리→독립 리뷰/명시 승인→V2/V3/Polygon-only | 점포 snapshot 검증·반경 경쟁 카페·최대3곳 비교→통합/시연. 추가 지표·점수는 검증 뒤 |
+| Now | Audit/보존/비활성 계약 구현, 기존 DB NOT_READY | 7~8단계 지역·통계 연결/500m 카페 구현·합성 격리 검증, 9단계 최대3곳 비교 구현·Frontend/Mock 검증 |
+| Next | 계약 리뷰→fake collector→실측 provenance·actor/writer·보존·backup/restore·durable STOP | 서울 Polygon·SEMAS snapshot 연결/대조 및 10단계 live SDK+실자료 통합·시연 |
+| Later | 추가 격리→독립 리뷰/명시 승인→V2/V3/Polygon-only | 추가 지표·업종·기간·설명 가능한 점수는 자료/계산식 검증 뒤 검토 |
 
 ## 트랙 A — 기존 DB에 안전하게 적용하기
 
@@ -243,7 +244,7 @@ A-11은 full CSV/stores 적재·빈 table 채우기·metadata migration·기존 
 
 ## 트랙 B — 사용자 기능 완성하기
 
-통계 화면·지도 단일 선택·좌표/동·상권 판정과 통계 연결에 이어 반경 500m 경쟁 카페 API/UI를 구현했습니다. 2026-10-12 새 일회용 격리 V1/V2/V3 DB의 합성 점포로 geography 거리·경계·분류/NULL·미준비/0개·목록 제한·실제 JDBC/HTTP·기존 기능 회귀·EXPLAIN을 검증했습니다. 실제 SEMAS 적재·기준일/완전성·실자료 대조·운영 성능·최종 사용자 시연은 미완료이고 기존 DB는 NOT_READY입니다. 이후 최대3곳 비교→통합/시연으로 진행하며 metadata와 안전한 적재 절차가 필요합니다. P1은 MVP, P2는 확장·선택 개선입니다. 아래 ID는 mock 구현·격리 검증·실제 자료 연결·전체 흐름 검증을 구분합니다.
+통계 화면·지도 단일 선택·좌표/동·상권 판정과 통계 연결에 이어 반경 500m 경쟁 카페 API/UI를 구현했습니다. 이전 8단계에서는 2026-10-12 새 일회용 격리 V1/V2/V3 DB의 합성 점포로 geography 거리·경계·분류/NULL·미준비/0개·목록 제한·실제 JDBC/HTTP·기존 기능 회귀·EXPLAIN을 검증했습니다. 최대3곳 비교는 아래 Frontend/Mock 검증 범위로 구현됐으며, 이후 실자료 연결→통합/시연을 진행합니다. 실제 SEMAS 적재·기준일/완전성·실자료 대조·운영 성능·최종 사용자 시연은 미완료이고 기존 DB는 NOT_READY입니다. metadata와 안전한 적재 절차가 필요합니다. P1은 MVP, P2는 확장·선택 개선입니다. 아래 ID는 mock 구현·격리 검증·실제 자료 연결·전체 흐름 검증을 구분합니다.
 
 | ID·우선순위·현재 | 목적·구현 영역 | 선행 조건 | 완료 기준·검증 방법 |
 | --- | --- | --- | --- |
@@ -254,13 +255,15 @@ A-11은 full CSV/stores 적재·빈 table 채우기·metadata migration·기존 
 | B-05 / P1 / PARTIALLY_IMPLEMENTED | 상권 0..N membership API/UI | B-04 좌표/version 계약 | NO_MEMBERSHIP·복수 소속·자동합산 없음·H5 fallback 금지, 합성 fixture PASS. 별도 상권 통계 선택·실자료 미완료 |
 | B-06 / P1 / ISOLATED_VERIFIED | CAFE/I21201 반경 500m API·목록/UI | 실제 연결은 B-02~03·별도 적재 승인 | geography 최종 거리≤500·geometry GiST 후보 필터·count/list100·미준비503/조회0개·snapshot UNVERIFIED, 합성 JDBC/HTTP·EXPLAIN PASS. 실자료/운영 성능 미완료 |
 | B-07 / P1 / PARTIALLY_IMPLEMENTED | 카카오맵 단일 선택·지역/카페 결과·수동 통계 연결 구현 | 실자료 연결은 B-02~06 계약 필요 | 취소/stale/오류/모호성·metadata 회귀 PASS. live SDK·실자료·최종 사용자 통합 시연 미완료 |
-| B-08 / P1 / NOT_IMPLEMENTED | 동일 조건 최대3곳 비교 | B-02/04~07 | 업종·반경·연령/기간·snapshot/version·공간유형 일치, 결측/미지원 보존, 후보별 수작업 대조 |
+| B-08 / P1 / MOCK_VERIFIED | 최대3곳 Frontend 후보 비교 구현 | 실자료 연결은 B-02/04~07 | CAFE/500m/공통 분기·좌표 보존·등록/삭제·독립 부분 실패/취소/stale·NULL/NO_ROW/0·BIGINT, Mock 사용자 흐름 PASS. 공간 version 차이·점포 UNVERIFIED·동일 동 집계 의미 표시. 실자료/동일 원본 snapshot/운영 성능 미완료 |
 | B-09 / P1 / NOT_IMPLEMENTED | 통합·a11y·성능·시연/발표/배포 | B-01~08·배포 대상 | E2E·경계/결측/오류·모바일/keyboard·query 성능, 팀원 재현·시연 근거 |
 | B-10 / P2 / DESIGNED_ONLY | 인구/시설/변화 지표·기간 확대 | 공식 단위/기간/중복·경계 호환 | 의미→schema/ETL→API/UI, 반복값/중복합산 금지·공통 기간·원본/결측 대조 |
 | B-11 / P2 / DESIGNED_ONLY | 설명 가능한 규칙 점수 | B-08와 필요한 B-10 자료 | 계산식/집단/가중치/model version·원지표·필수결측=null, fixture/수작업 검증 |
 | B-12 / P2 / BLOCKED | 추가 SEMAS 업종·B/H5 조사 | 공식 분류/참조 경계/귀속 근거 | 포함/제외·mapping 충돌/NULL·최소변경 검증. 근거 전 UNRESOLVED 유지 |
 
 상권 통계 확장의 commercial_areas/sales_commercial_area 적재도 별도 범위입니다. membership과 통계/대표점 부재는 다릅니다. 담당자·일정·기간은 근거 없이 지정하지 않습니다.
+
+2026-10-13 후보 비교는 기존 location/nearby/stats·공유 lookup API를 재사용하고 Backend·DB/schema를 변경하지 않았습니다. 비교 분기 변경 시 모든 후보의 기존 통계를 지운 뒤 명시적으로 다시 조회하며, 단일 탐색·수동 stats/trend는 유지합니다. Frontend 233개 테스트·lint/build·합성 API/Mock SDK Chrome 30개 체크가 PASS입니다. 2025년 행정동 통계와 SEMAS 점포의 시점/집계 단위는 별개이고 비교 요청 간 동일 snapshot을 보장하지 않습니다. 실제 서울 3곳 대조·live SDK+실자료 시연은 미완료, 기존 DB는 NOT_READY이며 이번 DB/Docker/Flyway/ETL/원본/백업 접근은 없습니다. README 단계 표시는 자동 변경하지 않습니다.
 
 ## 병렬로 진행할 수 있는 개발
 
@@ -280,11 +283,11 @@ source 적용 전 A-01~02 순수 계약/fake collector, B-02 metadata 설계·DT
 
 - 기존 개발 DB NOT_READY. actual collector/executor·실측 provenance·Polygon 보존 계약·durable STOP·최신 identity/writer/role/ACL·snapshot backup/restore·실사용자 경로·최종 리뷰/승인 미충족.
 - PostgresConnectionTests version=1 기대와 startup migration 정책은 코드 검토 대상. 문서로 해결되지 않음.
-- 공간 API·지도 분석 결과 연결·미터 index·비교·통계/점포 metadata·CAFE 외 SEMAS mapping 미구현. 점포 snapshot 적용 별도 필요.
+- 7~9단계 공간/카페 API·지도 연결·최대3곳 비교·자료 한계 UI는 구현·합성/Mock 검증 완료. 실제 서울 Polygon·SEMAS snapshot 적재/기간·완전성·통계/점포 원본 catalog·CAFE 외 SEMAS mapping은 미완료이며 별도 안전 적용이 필요.
 - 역사적 B/UNRESOLVED·홍지문 H5/CONFLICT_OBSERVED·원본 overlap 보존. 공식 정의 미확보를 완료로 바꾸지 않음.
 - B/H5 해결 미완료와 operational MVP 개발 가능 여부는 별개입니다. 한계 표시·확정 membership 정책을 지켜 개발하되 source 적용 안전 조건은 그대로 유지합니다.
 - manifest 초기 CRS/후속 결론 시점·BOM 기록 차이는 [technical](technical.md#manifest와-후속-검증의-범위)에 구분. 이번 raw 미확인.
 - 카카오맵 SDK는 선택·연동됐으며 시연/배포 대상·추가 지표 필수 범위·점수 가중치는 미확정. 팀원 PC 재현 증거 별도 필요.
-- 10/12 프론트엔드 mock·지도 Chrome 검증과 달리 현재 DB/backup/권한/writer·Backend·전체 통합 검증은 미확인. 이번 문서 작업에서 재실행하지 않음.
+- 7~8단계 합성 PostGIS/JDBC/HTTP와 9단계 Frontend/Mock 검증은 실자료 연결의 증거가 아님. 현재 기존 DB/backup/권한/writer·live SDK+실자료 전체 통합·10단계 시연은 미완료. 이번 문서 정정에서 테스트/서버/DB 검증을 재실행하지 않음.
 
 완료는 코드·mock·몇 개 샘플만으로 판단하지 않습니다. 해당 환경의 입력/제외·원본/DB·값/NULL·단위/기간·연결·재실행·실패 보존을 대조하고 PASS/FAIL/SKIP·미실행·blocker를 구분합니다.

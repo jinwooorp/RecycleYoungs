@@ -145,7 +145,7 @@ sequenceDiagram
 | table·제약·V1/V2/V3 변경 | [DB schema와 Flyway](#db-schema와-flyway) |
 | CSV 검증·적재·재실행 | [CSV ETL](#csv-etl) |
 | 경계 원본·좌표계·repair·hash·한계 | [Polygon ETL](#polygon-etl과-공간-한계) |
-| 위치·반경 기능의 아직 구현되지 않은 정책 | [공간 조회 설계](#공간-조회-설계--구현-전) |
+| 위치·반경·후보 비교 계약과 검증 한계 | [공간 조회 설계](#공간-조회-설계--구현-전) |
 | 테스트·격리 runner·source 계약의 차이 | [테스트와 안전 모듈](#테스트와-안전-모듈) |
 | 설치·설정·DB 없는 검증·위험 명령 | [개발 환경](#개발-환경과-안전한-시작) |
 
@@ -179,7 +179,7 @@ sequenceDiagram
 | writer control | 값을 쓸 수 있는 프로그램·계정·예약 작업 등을 확인하고 검증 창의 변경을 통제하는 일 |
 | NOT_READY | 실제 source 적용 경로·최신 증거·승인 등 조건이 미충족인 상태. 코드 존재/격리 PASS로 해제되지 않음 |
 
-현재 통계 API·화면은 구현됐습니다. 공간 포함 판정과 복수 결과 처리 정책은 설계됐지만 해당 endpoint/DTO는 미구현입니다. migration SQL 존재도 기존 DB 적용을 뜻하지 않습니다.
+현재 통계·지역 판정·반경 경쟁 카페 API와 화면, 최대 3후보 비교를 구현했습니다. [공간 API와 격리 검증](#공간-조회-설계--구현-전) 및 [후보 비교](#최대-3곳-후보-비교--frontend-orchestration)의 합성/Mock 검증 범위와 실자료 미완료 상태를 구분합니다. migration SQL·코드·격리 PASS는 기존 DB 적용 완료를 뜻하지 않습니다.
 
 ## 기술 스택과 선택 이유
 
@@ -533,11 +533,11 @@ AdminDongController의 Advice가 처리하는 오류는 wrapper 없이 `{code,me
 
 점포 수=개, 추정매출=원, 거래 건수=건입니다. 분기에 귀속된 원본 보고값이며 원본의 `당월` 열 이름을 월평균·분기 총액·연간액으로 재해석하지 않습니다. 합·평균·점포당 매출·증감률·성공률은 계산하지 않습니다. openingRate/closingRate·시간대/연령대 상세는 현재 최소 응답에 없습니다.
 
-기간 metadata는 quarter만 제공합니다. 통계/점포 source·loadedAt·dataset version catalog는 미구현입니다. Flyway version·공간 provenance로 대체하거나 값을 만들지 않습니다. metadata는 별도 설계/migration/계약 확장 뒤 제공하며 요청 중 CSV/manifest/원천을 읽는 우회는 금지합니다.
+통계 기간 metadata는 quarter만 제공하며 통계/점포 원본 snapshot·loadedAt catalog는 미구현입니다. 공간 dataset version·품질과 점포 출처/UNVERIFIED 한계 UI는 [상세 계약](#공간-조회-설계--구현-전)에 따라 이미 제공하지만 원본 snapshot 검증을 대신하지 않습니다. 미제공 통계/점포 metadata를 Flyway version·공간 provenance로 대체하거나 만들지 않으며 실제 catalog 확장은 별도 설계/승인이 필요합니다. 요청 중 CSV/manifest/원천을 읽는 우회는 금지합니다.
 
 ## Frontend 화면과 요청 상태
 
-기존 통계 조회의 요청 흐름은 아래와 같으며 지도 선택 상태와 독립적입니다.
+기존 수동 통계·추세의 요청 흐름은 아래와 같습니다. 지도에서 단일 행정동을 확정하면 동 조건을 반영하지만 통계는 조회 버튼으로 요청하며, 후보 비교는 별도 공통 조건을 사용합니다.
 
 1. mount 때 lookup 세 개를 Promise.all로 병렬 요청합니다. loading/error/목록 하나라도 빈 상태에서는 선택을 막고 오류에는 다시 시도를 제공합니다. 기본 선택·자동 조회는 없습니다.
 2. 세 조건 선택 후 버튼으로 단건·추세를 병렬 요청합니다. 선택 분기는 단건에만 전달합니다.
@@ -553,9 +553,9 @@ client는 INTEGER/BIGINT 범위·section/missingReasons 일치·추세 길이/�
 - 지도 표시·확대·축소·드래그 이동을 지원합니다. 지도 초기 중심은 선택 위치로 처리하지 않으며, 최초 선택 좌표는 `null`입니다.
 - 클릭 이벤트의 위도·경도를 검증해 일반 좌표 객체로 [App](../frontend/src/App.tsx)의 React state에 저장하고 화면에 표시합니다. 마커는 처음 선택할 때 생성하고 이후 같은 객체를 이동하며, 상위 좌표 변경도 반영합니다.
 - 키 누락·SDK 로딩 실패·지도 초기화 실패를 지도 영역에서 안내합니다. StrictMode와 늦은 로딩 완료에 대응하고, 실패·언마운트 시 클릭 리스너·ResizeObserver/window resize 이벤트·마커·지도 참조를 정리합니다. 공유 SDK script는 컴포넌트 언마운트만으로 제거하지 않습니다.
-- 지도 클릭은 기존 통계 검색 조건을 바꾸거나 API를 재호출하지 않습니다. 좌표 기반 행정동·상권 판정, 선택 좌표와 실제 통계 API 연결, 반경 경쟁 카페 조회, 최대 3후보 비교는 미구현입니다.
+- 지도 클릭은 지역 판정과 지원 조건의 500m 경쟁 카페 조회를 요청합니다. 단일 확정 동이 통계 lookup에 있으면 동 조건에 반영하며, 통계·추세는 기존 조회 버튼을 유지합니다. 저장한 최대 3후보는 새 지도 탐색과 독립적이고 별도 공통 분기로 비교합니다. [지역 판정·통계 연결](#공간-조회-설계--구현-전), [경쟁 카페](#반경-500m-경쟁-카페-api), [후보 비교](#최대-3곳-후보-비교--frontend-orchestration)에 상세 계약을 둡니다.
 
-2026-10-12 개발 세션에서 프론트엔드 테스트 116개·lint·build PASS와 실제 Chrome 지도·클릭/마커·확대·축소·이동 검증 기록을 확인했습니다. 초기 모바일 화면 검증 기록도 있습니다. mock 검증과 실제 지도 브라우저 검증은 구분하며, Backend/DB까지 연결한 전체 사용자 흐름은 미검증입니다. 이번 문서 정정에서는 테스트나 브라우저를 다시 실행하지 않았습니다.
+SDK 1차 연동 당시 2026-10-12의 프론트엔드 116개 테스트·lint·build 및 실제 Chrome 지도 동작 기록은 과거 검증입니다. 이후 7~8단계는 합성 PostGIS 격리 SQL/JDBC/HTTP·UI 검증을, 9단계는 Frontend/Mock 사용자 흐름 검증을 완료했습니다. 실제 서울 Polygon·SEMAS snapshot 적재와 live SDK+실자료 전체 통합은 미완료이며 기존 DB는 NOT_READY입니다. 이번 문서 정정에서는 테스트·브라우저·DB를 재실행하지 않았습니다.
 
 ### 접근성과 스타일
 
@@ -563,7 +563,7 @@ client는 INTEGER/BIGINT 범위·section/missingReasons 일치·추세 길이/�
 
 Tailwind는 @tailwindcss/vite·@import입니다. index.css는 light theme/base/접근성 utility, App.css는 components layer의 native 입력·통계·상태를 담당합니다. layer 밖 전역 CSS로 공통 UI를 덮어쓰지 않습니다. 760/761px 전환·모바일 한 열·표 내부 overflow, TypeScript/Vite의 @/*→src/* alias를 유지합니다. 미사용 Select/Combobox/Chart·불필요한 wrapper는 없습니다.
 
-이 구조와 과거 browser 기록은 포괄적 WCAG/contrast/screen reader 최신 PASS를 뜻하지 않습니다. 출처/loadedAt/version UI는 아직 없고 원본 보고값 해석 한계 문구만 제공합니다.
+이 구조와 과거 browser 기록은 포괄적 WCAG/contrast/screen reader 최신 PASS를 뜻하지 않습니다. 지역 결과와 후보 비교는 공간 dataset version·품질·기준일/loadedAt·역사 호환성 한계를, 카페 결과는 SEMAS/I21201 출처·기준일/적재 시점 미확인·snapshot UNVERIFIED를 표시합니다. 통계 원본 snapshot/version은 API에 없어 만들지 않습니다. [공간 자료 한계](#공간-조회-설계--구현-전)와 [후보 비교의 자료 기준](#최대-3곳-후보-비교--frontend-orchestration)을 따르며 실제 원본 검증 완료를 뜻하지 않습니다.
 
 <a id="공간-조회-설계--구현-전"></a>
 
@@ -639,6 +639,31 @@ snap/round/epsilon buffer로 복수 match를 없애지 않습니다. 좌표 변�
 Chrome 20개 체크는 실제 격리 API·합성 점포/통계·Mock 지도 SDK로 클릭→카페/지역 결과→수동 통계·재클릭·0개·실제 매핑503/재시도·다른 업종 안내를 확인했습니다. 네트워크 실패·통계 실패·실제 응답 지연은 QA 주입이며 live SDK/타일 검증이 아닙니다. 데스크톱/390px 가로 넘침과 페이지 JavaScript 오류가 없었고, 스크린샷·전체 diff·보고서는 Git 제외 `.codex-local/reviews/2026-10-12-nearby-cafes/`에 보존합니다. Backend 일반 230개, Frontend 185개, Python 안전성 6개, 실제 nearby JDBC/HTTP 체크 65개와 Location 회귀 64개를 검증했습니다.
 
 실제 SEMAS 원본/snapshot 준비·기준일/완전성·controlled ingestion·실제 서울 카페 대조·기존 개발 DB 적용·실자료 규모 성능·최종 live SDK 시연은 미완료입니다. ETL의 TRUNCATE full loader를 실행하지 않았습니다. 예정된 2026년 점포 자료와 2025년 통계의 시점·집계 단위는 별개이고, 점포의 원본 기간을 파일 이름만으로 확정하지 않습니다. 기존 DB는 **NOT_READY**이며 README 8단계 완료 표시는 사용자 최종 검토 후 결정합니다.
+
+### 최대 3곳 후보 비교 — Frontend orchestration
+
+2026-10-13에 기존 API를 재사용하는 후보 비교를 구현했습니다. 지도 탐색/단일 분석 hook과 별도의 useCandidateComparison·CandidateComparison·CandidateCard로 구성하며 Backend/API/schema/SDK loader 변경과 새 전역 상태 라이브러리는 없습니다. 선택한 원본 좌표를 **후보지에 추가**로 복사해 최대 3곳 저장하고, 정확한 숫자 좌표만 중복으로 처리합니다. 가까운 좌표를 반올림/snap으로 합치지 않습니다. 새 지도 클릭은 저장 후보를 바꾸지 않습니다. 내부 ID/등록 순서는 단조 증가해 삭제 후 재사용하지 않고, 표시 번호 1~3의 빈 번호만 다시 사용할 수 있습니다. 현재 단일 선택 마커를 유지하고 저장 위치는 후보 카드로 구분합니다. 페이지 새로고침/언마운트 후 후보 영속 저장은 범위 밖입니다.
+
+공통 비교 조건은 **CAFE / 500m / SEMAS I21201 / 사용자가 선택한 조회 가능한 2025년 분기 하나 / 행정동 통계**입니다. 비교 분기는 기존 수동 조회 조건과 독립적입니다. 분기를 변경하면 모든 후보의 이전 통계/오류/진행 요청을 즉시 무효화하며 지역·카페 결과는 유지합니다. **비교 통계 조회** 버튼으로 새 분기를 명시 조회합니다. 지역 판정이 끝난 후보 중 단일 RESOLVED 동이 lookup에 있고 CAFE/분기가 실제 lookup에서 지원될 때만 통계를 요청합니다. 판정 중인 후보는 완료 후 다시 조회해야 하며 모호성/미지원/lookup 부재는 다른 동으로 대체하지 않습니다.
+
+| 사용자 동작 | 기존 API 재사용·요청 수 |
+| --- | --- |
+| 후보 추가 | 해당 좌표 location resolve + nearby stores를 독립 병렬 요청, 후보당 2개 |
+| 비교 통계 조회 | 조회 가능한 후보당 admin-dong-stats 1개, 최대 3개. 비교용 trend 요청 없음 |
+| 개별 재조회 | 선택한 후보의 지역/카페/통계 중 해당 종류만 요청. 지역 재조회는 종속 통계를 무효화 |
+| 조회 조건 | 기존 단일 hook의 admin-dongs/industries/quarters lookup 결과 공유, 후보별 추가 lookup 없음 |
+
+기존 지도 탐색의 단일 위치 요청·수동 stats/trend는 그대로 유지합니다. 매 render/마우스 이동에 비교 요청을 반복하지 않고 pending 재조회/통계 조회 중복을 막습니다. 동일 동/분기의 통계 요청을 캐싱하지 않아 후보별 취소 상태를 단순하게 유지하며, 같은 행정동의 값은 좌표별 독립 통계가 아니고 합산하지 않는다고 안내합니다.
+
+후보별 지역·카페·통계에 개별 결과/loading/error와 AbortController·요청 세대·registry entry identity·mounted guard를 둡니다. 삭제는 모든 pending 요청을 취소하고 늦은 성공/오류가 후보를 다시 만들지 못하게 합니다. 분기 A→B→A, 같은 이벤트의 분기 변경+조회, 지역 재조회 중 이전 통계 응답도 차단합니다. 지역 실패/모호성은 성공한 카페 결과를 삭제하지 않으며 한 후보의 오류가 다른 후보를 지우지 않습니다. API의 좌표 검증과 통계 응답의 요청 dong/industry/quarter 대조를 유지합니다. 각 후보에 이름 붙인 지역·카페·통계 재조회 버튼을 제공합니다.
+
+행정동·상권·경계 내부/위·품질·행정동/상권 version·기준일·적재 시점·역사 호환성 한계를 표시합니다. 후보별 공간 version이 다르면 동일 경계 자료 기준 비교가 아님을 경고하고 개별 지역 재조회를 안내합니다. 같은 version이라도 별도 요청을 원자적 동일 시점 조회로 주장하지 않습니다. Nearby totalCount의 BIGINT 문자열을 그대로 보존하고 listLimit100/listedCount와 구분합니다. 점포 snapshot은 UNVERIFIED이며 모든 후보 요청의 동일 원본/기준일/완전성을 보장하지 않습니다. 통계 snapshot/version을 만들지 않으며 같은 분기 코드와 동일 원본 snapshot 검증을 구분합니다.
+
+통계 9항목(점포/유사/개업/폐업/프랜차이즈·추정매출/매출 건수/평일/주말 추정매출)을 기존 값만으로 표시합니다. NULL은 값 없음, NO_ROW는 조회 행 없음, 실제 0은 단위 있는 0입니다. BIGINT를 Number로 바꾸지 않습니다. 경쟁 카페는 좌표 반경, 추정매출은 2025년 행정동 집계이며 반경 매출로 배분하거나 창업 점수/성공률/추천 순위를 만들지 않습니다. SEMAS 자료와 통계의 시점·공간 단위 차이를 명시합니다.
+
+Frontend 전체 Vitest/RTL 233개(기존185+신규48)·lint/build PASS, 실제 Chrome Mock 사용자 흐름 30개 체크 PASS입니다. Chrome은 SDK와 모든 API를 합성 Mock으로 대체했고 Frontend QA 서버의 API proxy를 비활성화했습니다. 데스크톱 1440px/모바일390px에서 3곳 등록·분기 변경·삭제/교체·늦은 응답·부분 오류/재시도·키보드·수동 통계/추세·가로 넘침을 확인했습니다. Backend/실제 PostGIS 검증은 이번 단계에서 실행하지 않았습니다. 리뷰/diff/스크린샷은 Git 제외 `.codex-local/reviews/2026-10-13-candidate-comparison/`에 보존합니다.
+
+실제 서울 Polygon·SEMAS snapshot 적재·서울 좌표별 3곳 대조·동일 원본 snapshot 완전성·운영 성능·live Kakao SDK+실자료 전체 시연은 미완료입니다. 기존 DB는 **NOT_READY**, DB/Docker/Flyway/ETL/원본·백업 접근 없이 구현했습니다. README 9단계 완료 표시는 사용자 최종 검토 후 결정합니다.
 
 ## 테스트와 안전 모듈
 
