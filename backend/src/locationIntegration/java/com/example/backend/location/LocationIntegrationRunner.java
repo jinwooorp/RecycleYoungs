@@ -40,6 +40,7 @@ public final class LocationIntegrationRunner {
     private static volatile boolean missingSchema;
 
     @Configuration(proxyBeanMethods = false)
+    @org.springframework.context.annotation.Profile("location-integration")
     public static class IsolatedConfiguration {
         @Bean DataSource dataSource() { return isolated; }
     }
@@ -104,6 +105,7 @@ public final class LocationIntegrationRunner {
                 "java", System.getProperty("java.version"), "migrations", List.of("1", "2", "3"))));
             fixtures();
             var app = new SpringApplication(BackendApplication.class, IsolatedConfiguration.class);
+            app.setAdditionalProfiles("location-integration");
             app.setDefaultProperties(Map.of("spring.flyway.enabled", "false", "spring.sql.init.mode", "never",
                 "server.port", "8080", "spring.main.banner-mode", "off", "logging.level.root", "WARN"));
             context = app.run();

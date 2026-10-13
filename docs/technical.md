@@ -609,11 +609,36 @@ Chrome은 Mock 지도 SDK와 실제 격리 HTTP/DB 합성 응답을 연결하여
 
 snap/round/epsilon buffer로 복수 match를 없애지 않습니다. 좌표 변환 왕복·측위 오차로 경계 근처 확정 소속을 보장하지 않습니다. exact 5181 fixture와 4326 API 입력 fixture를 따로 검증해야 합니다.
 
-### 반경 설계
+### 반경 500m 경쟁 카페 API
 
-300m/500m/1km query의 geography functional GiST(`stores.location::geography`)와 5181 projected POINT는 후속 성능 검증으로 선택합니다. 기존 POINT GiST·소분류 index는 미터 반경 API 구현 완료가 아닙니다. 4326 degree 거리를 미터로 쓰지 않습니다.
+`GET /api/nearby-stores?lat=37.5665&lng=126.9780&radius=500&industryCode=CAFE`를 구현했습니다. 네 query는 각각 한 번 필수이고 unknown query를 거부합니다. 좌표 검증은 위치 API와 같은 유한 십진수/원래 값 범위/underflow 정책이며, radius는 문자열 `500`, industryCode는 `CAFE`만 허용합니다. 누락·중복·unknown=INVALID_PARAMETER/400, 좌표=INVALID_COORDINATE/400, 다른 반경=UNSUPPORTED_RADIUS/400, 다른 업종=UNSUPPORTED_INDUSTRY/400입니다.
 
-통계와 다른 SEMAS snapshot·CAFE 범위·미매핑/NULL POINT를 표시해야 합니다. V2/V3/Polygon-only 적용은 stores를 채우지 않으므로 별도 승인된 snapshot 적재/metadata가 반경 기능의 선행 조건입니다.
+카페 범위는 `SEMAS/I21201 → industries.CAFE` 매핑과 stores의 `source_small_category_code=I21201 AND industry_id=CAFE.id`가 모두 일치한 행입니다. 서울 통계 CS100010·상호·KSIC·행정동·상권 속성을 분류/거리 대체 조건으로 사용하지 않습니다. I21201 전체 통합 범주이므로 커피전문점 외 일부 음료 업태도 포함될 수 있습니다. 분류 NULL과 NULL/EMPTY/범위 밖 POINT는 제외하고 전역 품질 건수를 제공합니다. 원본 longitude/latitude 불완전 건수도 별도 표시하며, 유효한 location이 있으면 그 POINT가 거리와 응답 좌표의 기준입니다. 원본 POINT/분류/좌표는 수정하지 않습니다.
+
+거리·목록 정렬은 WGS84 geography `ST_Distance(..., true)`의 미터 값을 사용하며 **반환 거리 ≤ 500m**를 경계 포함의 최종 기준으로 합니다. 실제 PostGIS 3.4.3에서 ST_Project로 생성한 500m 점은 ST_Distance=500인데 ST_DWithin(...,500)=false인 정밀도 차이를 재현했습니다. 따라서 ST_DWithin(...,501,true)는 넓은 후보 필터로만 사용하고 materialized 후보의 ST_Distance≤500으로 최종 필터링합니다. 분석 반경을 501m로 넓히거나 좌표를 snap/반올림하지 않습니다. 499.999m/500m 포함과 500.001m 제외를 실제 JDBC/HTTP로 검증했습니다. 이 기준도 [PostGIS 거리 함수의 수치 정밀도](https://github.com/postgis/postgis/blob/3.4.3/postgis/geography_measurement.c)에 의존하며 실측 위치 오차를 없애지 않습니다.
+
+`location::geography`에 기존 geometry GiST가 자동 적용된다고 가정하지 않습니다. `location && queryEnvelope`를 별도로 적용합니다. WGS84의 위도 1도 거리 하한보다 작은 100,000m를 사용해 위도 범위를 넓게 잡고, 경도는 경로의 최대 절대 위도 cos로 보수적으로 계산합니다. 위도 ±80° 이상/날짜변경선 부근은 전 지구 bbox로 바꿔 후보 누락을 방지합니다. 최종 거리 판정은 항상 geography입니다. 서울·적도·고위도·극지·날짜변경선의 360 방위 geodesic fixture와 극단 유효 입력을 검증했습니다. 작은 fixture 및 20,000개 추가 합성 점포의 EXPLAIN/ANALYZE에서 기존 idx_stores_location의 사용을 확인했으며 새 schema/index/migration은 추가하지 않았습니다.
+
+매핑·전역 inventory·반경 내 전체 count·거리순 최대 100개 목록은 한 SELECT/MVCC snapshot입니다. 동거리에서는 source_store_id COLLATE "C"로 안정적으로 정렬합니다. 기존 UNIQUE(source_store_id)를 유지하고 서비스도 중복 결과를 거부합니다. 전체 count와 품질 건수는 BIGINT 문자열, listedCount/listLimit은 정수, 거리/좌표는 숫자입니다. 응답은 `coordinate`, `industryCode`, `radiusMeters`, `totalCount`, `listedCount`, `listLimit=100`, `listComplete`, `stores:[{sourceStoreId,name,coordinate,distanceMeters}]`, `data`이며 내부 점포 ID·주소·원본 분류 전체를 노출하지 않습니다. name=null은 상호명 미확인입니다.
+
+| 준비 상태 | HTTP·계약 |
+| --- | --- |
+| CAFE 또는 SEMAS/I21201 매핑 누락/불일치 | 503 CAFE_MAPPING_UNAVAILABLE |
+| 전역 stores가 비어 있음 | 503 STORES_DATA_UNAVAILABLE |
+| 분류·위치가 유효한 I21201 카페가 전역에 없음 | 503 CAFE_DATA_UNAVAILABLE (카페 외 행만 있어도 동일) |
+| I21201의 non-CAFE 분류 충돌 | 500 DATA_INTEGRITY_ERROR |
+| 조회 가능한 카페 자료는 있으나 반경 내 0개 | 200 totalCount="0", stores=[], listComplete=true |
+| SQL/예상치 못한 서버 오류 | 500 INTERNAL_ERROR; code/message/field만 반환 |
+
+정상 응답의 data는 `source=SEMAS`, `sourceCategoryCode=I21201`, `availability=AVAILABLE_RECORDS`, **snapshotStatus=UNVERIFIED**, referenceDate=null, loadedAt=null입니다. quality는 totalStoreCount/cafeSourceCount/usableCafeCount/unclassifiedCafeCount/missingLocationCafeCount/invalidLocationCafeCount/incompleteSourceCoordinateCafeCount입니다. 제외/품질 사유는 중복될 수 있습니다. 행 존재·유효 POINT·V3 매핑은 전체 snapshot 완전성/기준일/적재 시점을 증명하지 않으며 공간 경계 version을 점포 version으로 재사용하지 않습니다. 0개도 현재 조회 가능한 자료의 결과이지 실제 경쟁 카페 부재를 보장하지 않습니다.
+
+지도 클릭은 지역 판정과 경쟁 카페를 독립 요청하고 각각 AbortController/요청 식별자로 취소·늦은 응답·언마운트를 처리합니다. 재클릭은 이전 카페 목록을 즉시 지우며 재시도는 최신 좌표만 사용합니다. 통계 업종이 CAFE 외이면 카페 결과를 지우고 미지원 안내를 표시합니다. 업종 미선택 시에는 명시적으로 이름 붙인 카페 분석을 제공하고 CAFE 선택 시 최신 위치를 조회합니다. 통계/추세는 기존 수동 조회와 부분 성공을 유지합니다. 지역 모호성/실패는 카페 거리 조회를 막지 않으며 반경 결과가 지역 판정을 바꾸지 않습니다. 카페 다중 마커·원 오버레이·최대 3곳 비교는 포함하지 않습니다.
+
+새 opt-in NearbyIntegrationRunner는 기존 locationIntegration controller의 allowlist action `start-nearby-runner`로만 실행합니다. 두 runner는 명시적인 테스트 profile로 DataSource 설정을 분리하며 모든 JDBC/Flyway 연결의 기존 identity guard를 유지합니다. 원본 V1/V2/V3와 합성 점포로 SQL/JdbcClient/HTTP 200/400/503/500·count/list·NULL/분류·경계·정렬·EXPLAIN 및 기존 Location/통계 API 회귀를 검증했습니다. inventory를 매 요청 전역 집계하는 비용은 남아 있으며 합성 2만 행의 성능을 실자료/운영 성능으로 일반화하지 않습니다.
+
+Chrome 20개 체크는 실제 격리 API·합성 점포/통계·Mock 지도 SDK로 클릭→카페/지역 결과→수동 통계·재클릭·0개·실제 매핑503/재시도·다른 업종 안내를 확인했습니다. 네트워크 실패·통계 실패·실제 응답 지연은 QA 주입이며 live SDK/타일 검증이 아닙니다. 데스크톱/390px 가로 넘침과 페이지 JavaScript 오류가 없었고, 스크린샷·전체 diff·보고서는 Git 제외 `.codex-local/reviews/2026-10-12-nearby-cafes/`에 보존합니다. Backend 일반 230개, Frontend 185개, Python 안전성 6개, 실제 nearby JDBC/HTTP 체크 65개와 Location 회귀 64개를 검증했습니다.
+
+실제 SEMAS 원본/snapshot 준비·기준일/완전성·controlled ingestion·실제 서울 카페 대조·기존 개발 DB 적용·실자료 규모 성능·최종 live SDK 시연은 미완료입니다. ETL의 TRUNCATE full loader를 실행하지 않았습니다. 예정된 2026년 점포 자료와 2025년 통계의 시점·집계 단위는 별개이고, 점포의 원본 기간을 파일 이름만으로 확정하지 않습니다. 기존 DB는 **NOT_READY**이며 README 8단계 완료 표시는 사용자 최종 검토 후 결정합니다.
 
 ## 테스트와 안전 모듈
 

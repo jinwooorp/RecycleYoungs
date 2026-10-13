@@ -1,5 +1,6 @@
 import { KakaoMap } from './components/KakaoMap'
 import { LocationResult } from './components/LocationResult'
+import { NearbyResult } from './components/NearbyResult'
 import { SearchForm } from './components/SearchForm'
 import { StatsResult } from './components/StatsResult'
 import { TrendResult } from './components/TrendResult'
@@ -37,6 +38,9 @@ function App() {
             manual={state.mode === 'manual'} onRetry={state.retryLocation} />
         </section>
       </Card>
+      <NearbyResult result={state.nearby.result} loading={state.nearby.loading} error={state.nearby.error}
+        unsupported={!!state.selection.industryCode && state.selection.industryCode !== 'CAFE'}
+        selected={!!selectedCoordinate} onRetry={state.retryNearby} />
       <Card asChild className="gap-0 rounded-lg p-5 min-[761px]:p-6">
         <section aria-labelledby="search-title">
           <h2 id="search-title">조회 조건</h2>

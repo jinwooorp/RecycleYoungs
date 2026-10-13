@@ -243,17 +243,17 @@ A-11은 full CSV/stores 적재·빈 table 채우기·metadata migration·기존 
 
 ## 트랙 B — 사용자 기능 완성하기
 
-통계 화면과 지도 단일 선택을 구현했으며, 다음은 좌표/동·상권 분석과 통계 연결입니다. 이후 점포 반경→최대3곳 비교→통합/시연으로 진행하며 metadata와 자료 검증도 필요합니다. P1은 MVP, P2는 확장·선택 개선입니다. 아래 ID는 세부 의존성을 설명하며, mock 구현·격리 검증·실제 자료 연결·전체 흐름 검증을 구분합니다.
+통계 화면·지도 단일 선택·좌표/동·상권 판정과 통계 연결에 이어 반경 500m 경쟁 카페 API/UI를 구현했습니다. 2026-10-12 새 일회용 격리 V1/V2/V3 DB의 합성 점포로 geography 거리·경계·분류/NULL·미준비/0개·목록 제한·실제 JDBC/HTTP·기존 기능 회귀·EXPLAIN을 검증했습니다. 실제 SEMAS 적재·기준일/완전성·실자료 대조·운영 성능·최종 사용자 시연은 미완료이고 기존 DB는 NOT_READY입니다. 이후 최대3곳 비교→통합/시연으로 진행하며 metadata와 안전한 적재 절차가 필요합니다. P1은 MVP, P2는 확장·선택 개선입니다. 아래 ID는 mock 구현·격리 검증·실제 자료 연결·전체 흐름 검증을 구분합니다.
 
 | ID·우선순위·현재 | 목적·구현 영역 | 선행 조건 | 완료 기준·검증 방법 |
 | --- | --- | --- | --- |
 | B-01 / P1 / BLOCKED | Backend dbTest·startup migration 정책 | V1~V3·안전 대상 구분 | version1 기대 검토, DB 없는/격리/source 명령 분리, 승인 격리 재현. 이번 코드 수정 없음 |
 | B-02 / P1 / DESIGNED_ONLY | 통계/점포 catalog·DTO/API/UI | source/분기/snapshot/단위 정책 | 실제 관리값·missing/version/loadedAt 계약, fixture→원본→UI 대조. 공간/Flyway version 대체 금지 |
 | B-03 / P1 / NOT_IMPLEMENTED | SEMAS controlled ingestion·보존/교체 정책 | B-02, mapping·별도 적재 승인 | input/identity·원자적 replacement·분류/POINT/NULL·논리 replay·snapshot 전수 검증. V2/V3/Polygon과 별도 |
-| B-04 / P1 / DESIGNED_ONLY | 좌표·행정동 membership API/DTO | 공간 정책·승인 READY fixture | 4326→5181·0/1/2+·경계/hole/overlap·503/500·NO_ROW 별개, fixture/HTTP/실자료 대조 |
-| B-05 / P1 / DESIGNED_ONLY | 상권 membership·명시 선택 | B-04 좌표/version 계약 | 0..N 전체·NO_MEMBERSHIP·자동합산 없음·H5 fallback 금지, overlap/hole fixture |
-| B-06 / P1 / DESIGNED_ONLY | 반경 점포·미터 index·API(MVP는 500m 우선 검토) | B-02~03, 좌표/거리 정책 | 분류/NULL POINT/snapshot, 후보 수작업/전수 대조·EXPLAIN/성능. 별도 점포 적재 증거 미확보가 blocker. 300/1000m는 확장 검토 |
-| B-07 / P1 / PARTIALLY_IMPLEMENTED | 카카오맵 SDK·단일 선택 완료, 분석 결과 UI 미완료 | 결과 연결은 B-02/04~06 계약 필요 | 단일 선택 mock/Chrome 검증 기록. 연결 뒤 취소/오류/모호성·metadata·모바일/keyboard 전체 흐름 검증 필요 |
+| B-04 / P1 / ISOLATED_VERIFIED | 좌표·행정동 membership API/DTO·통계 조건 연결 | 공간 정책·승인 READY fixture | 4326→5181·0/1/2+·경계/hole/overlap·503/500·NO_ROW 별개, 합성 JDBC/HTTP PASS. 실자료 대조 미완료 |
+| B-05 / P1 / PARTIALLY_IMPLEMENTED | 상권 0..N membership API/UI | B-04 좌표/version 계약 | NO_MEMBERSHIP·복수 소속·자동합산 없음·H5 fallback 금지, 합성 fixture PASS. 별도 상권 통계 선택·실자료 미완료 |
+| B-06 / P1 / ISOLATED_VERIFIED | CAFE/I21201 반경 500m API·목록/UI | 실제 연결은 B-02~03·별도 적재 승인 | geography 최종 거리≤500·geometry GiST 후보 필터·count/list100·미준비503/조회0개·snapshot UNVERIFIED, 합성 JDBC/HTTP·EXPLAIN PASS. 실자료/운영 성능 미완료 |
+| B-07 / P1 / PARTIALLY_IMPLEMENTED | 카카오맵 단일 선택·지역/카페 결과·수동 통계 연결 구현 | 실자료 연결은 B-02~06 계약 필요 | 취소/stale/오류/모호성·metadata 회귀 PASS. live SDK·실자료·최종 사용자 통합 시연 미완료 |
 | B-08 / P1 / NOT_IMPLEMENTED | 동일 조건 최대3곳 비교 | B-02/04~07 | 업종·반경·연령/기간·snapshot/version·공간유형 일치, 결측/미지원 보존, 후보별 수작업 대조 |
 | B-09 / P1 / NOT_IMPLEMENTED | 통합·a11y·성능·시연/발표/배포 | B-01~08·배포 대상 | E2E·경계/결측/오류·모바일/keyboard·query 성능, 팀원 재현·시연 근거 |
 | B-10 / P2 / DESIGNED_ONLY | 인구/시설/변화 지표·기간 확대 | 공식 단위/기간/중복·경계 호환 | 의미→schema/ETL→API/UI, 반복값/중복합산 금지·공통 기간·원본/결측 대조 |

@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import App from './App'
 import { createKakaoMapsMock } from './test/kakaoMapsMock'
 import { resolvedLocation } from './test/locationFixture'
+import { nearbyFixture } from './test/nearbyFixture'
 import { normalTrend } from './test/trendFixture'
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
@@ -23,6 +24,7 @@ beforeEach(() => {
   locationResponse = async coordinate => json({ ...resolvedLocation, coordinate })
   fetchMock.mockReset().mockImplementation(async input => {
     const url = new URL(String(input), 'http://localhost')
+    if (url.pathname === '/api/nearby-stores') return json(nearbyFixture({ lat: Number(url.searchParams.get('lat')), lng: Number(url.searchParams.get('lng')) }))
     if (url.pathname === '/api/admin-dongs') return dongResponse()
     if (url.pathname === '/api/industries') return json([{ code: 'CAFE', name: '카페' }])
     if (url.pathname === '/api/quarters') return json([{ code: '20251', label: '2025년 1분기' }])

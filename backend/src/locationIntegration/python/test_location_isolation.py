@@ -22,6 +22,13 @@ def network(value, members=None):
 
 
 class IsolationControllerTests(unittest.TestCase):
+    def test_unknown_runner_entrypoint_rejected_before_docker(self):
+        value = controller()
+        value['docker'] = Mock()
+        with self.assertRaisesRegex(RuntimeError, 'entrypoint'):
+            value['start_runner']('unapproved.Executor')
+        value['docker'].assert_not_called()
+
     def test_optimized_execution_preserves_ownership_guard(self):
         value = controller(optimize=1)
         value['network_id'] = 'a' * 64

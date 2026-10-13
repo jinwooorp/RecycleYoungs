@@ -124,7 +124,9 @@ def verify_runner(runner_id):
     return d
 
 
-def start_runner():
+def start_runner(main_class='com.example.backend.location.LocationIntegrationRunner'):
+    require(main_class in {'com.example.backend.location.LocationIntegrationRunner',
+                           'com.example.backend.location.NearbyIntegrationRunner'}, 'Runner entrypoint rejected')
     identity()
     image = docker('image', 'inspect', 'eclipse-temurin:21-jdk', '--format', '{{.Id}}')
     env = os.environ.copy()
@@ -140,7 +142,7 @@ def start_runner():
             '-e', 'LOCATION_DB_CONTAINER_ID=' + db_id, '-e', 'LOCATION_NETWORK_ID=' + network_id,
             '-e', 'LOCATION_OWNER=' + OWNER, '-e', 'LOCATION_PGDATA=' + PGDATA,
             image, 'java', '-cp', '/app/classes:/app/lib/*',
-            'com.example.backend.location.LocationIntegrationRunner']
+            main_class]
     runner_id = docker(*args, env=env)
     runners[runner_id] = image
     verify_runner(runner_id)
@@ -152,7 +154,7 @@ def status():
     for runner_id in runners:
         d = verify_runner(runner_id)
         logs = docker('logs', runner_id).replace(PASSWORD, '[redacted]')
-        markers = [line for line in logs.splitlines() if line.startswith('LOCATION_')]
+        markers = [line for line in logs.splitlines() if line.startswith(('LOCATION_', 'NEARBY_'))]
         if d['State']['Status'] == 'exited' and not markers:
             # Preserve compact diagnostics only, never raw log/connection configuration.
             markers = [line[:350] for line in logs.splitlines() if any(x in line for x in ['Exception', 'ERROR', 'Caused by:', 'error:', 'Assertion'])][-15:]
@@ -185,7 +187,9 @@ print(json.dumps({'action': 'controller-ready', 'owner': OWNER}), flush=True)
 for line in sys.stdin:
     try:
         action = json.loads(line)['action']
-        result = {'prepare': prepare, 'start-runner': start_runner, 'status': status, 'identity': identity, 'cleanup': cleanup}[action]()
+        result = {'prepare': prepare, 'start-runner': start_runner,
+                  'start-nearby-runner': lambda: start_runner('com.example.backend.location.NearbyIntegrationRunner'),
+                  'status': status, 'identity': identity, 'cleanup': cleanup}[action]()
         print(json.dumps(result, ensure_ascii=False), flush=True)
         if action == 'cleanup':
             break
