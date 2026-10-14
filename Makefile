@@ -6,43 +6,41 @@ ETL_ARGS ?=
 
 help:
 	@printf '%s\n' \
-	  'make db              Start the development database' \
-	  'make db-stop         Stop the database, retaining its volume' \
-	  'make db-migrate      Apply backend SQL migrations without starting Spring' \
-	  'make db-baseline     Adopt a verified existing V1 schema (CONFIRM_BASELINE=verified-v1)' \
-	  'make db-info         Show Flyway migration status' \
-	  'make etl-validate    Validate CSV inputs without connecting to a database' \
-	  'make etl             Load data (optional ETL_ARGS="--only sales_dong")' \
+	  'make db              Prepare the guarded team development pipeline' \
+	  'make db-stop         Stop team-postgres, retaining its volume' \
+	  'make db-migrate      Refused: use the guarded Compose pipeline' \
+	  'make db-baseline     Refused: team development never adopts an existing DB' \
+	  'make db-info         Check owned DB READY/version/fingerprint read-only' \
+	  'make etl-validate    Verify eight input sizes/SHA without a DB connection' \
+	  'make etl             Prepare or verify the same team dataset through Compose' \
 	  'make backend         Start Spring Boot' \
 	  'make frontend        Start Vite (run npm ci in frontend first)' \
 	  'make check-frontend  Build and lint React' \
 	  'make check-etl       Run ETL regression tests with PYTHON' \
-	  'make check-db        Run Spring smoke tests against the populated DB'
+	  'make check-db        Verify owned team DB READY and fingerprint read-only'
 
 db:
-	docker compose up -d postgres
+	docker compose up -d
 
 db-stop:
-	docker compose stop postgres
+	docker compose stop team-postgres
 
 db-migrate:
-	docker compose run --rm db-migrate
+	@printf '%s\n' 'Use docker compose up -d: identity → Flyway → ETL is one guarded pipeline.'
+	@exit 1
 
 db-baseline:
-ifneq ($(CONFIRM_BASELINE),verified-v1)
-	@printf '%s\n' 'Refusing baseline. Verify the existing DB matches V1, then run with CONFIRM_BASELINE=verified-v1.' >&2
+	@printf '%s\n' 'Team development never baselines or adopts an existing database.' >&2
 	@exit 1
-endif
-	docker compose run --rm db-migrate baseline
 
 db-info:
-	docker compose run --rm db-migrate info
+	$(PYTHON) etl/team_dev.py status
 
 etl-validate:
-	docker compose run --build --rm --no-deps etl --validate-only $(ETL_ARGS)
+	$(PYTHON) etl/team_data.py validate
 
-etl: db-migrate
-	docker compose run --build --rm etl $(ETL_ARGS)
+etl:
+	docker compose up -d
 
 backend:
 	cd backend && ./gradlew bootRun
@@ -58,4 +56,4 @@ check-etl:
 	cd etl && $(PYTHON) -m unittest discover -s tests -v
 
 check-db:
-	cd backend && ./gradlew dbTest
+	$(PYTHON) etl/team_dev.py status

@@ -1,65 +1,170 @@
+name: recycleyoungs-team-dev
+
+x-labels: &labels
+  org.recycleyoungs.environment: team-development-v1
+
+x-worker: &worker
+  image: recycleyoungs-team-dev-tools:real-data-v1
+  pull_policy: build
+  build:
+    context: .
+    dockerfile: docker/team-dev/Dockerfile
+    target: worker
+  labels: *labels
+  restart: "no"
+  read_only: true
+  tmpfs: [/tmp]
+
 services:
-  postgres:
-    image: postgis/postgis:16-3.4
-    container_name: startup-analysis-postgres
+  inspect-proxy:
+    image: recycleyoungs-team-dev-inspect:real-data-v1
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: docker/team-dev/Dockerfile
+      target: inspect-proxy
+    labels: *labels
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${DB_NAME:-startup_analysis}
-      POSTGRES_USER: ${DB_USER:-app}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-app}
-    ports:
-      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [inspect]
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    # Schema and extensions come from Flyway, not the image's init scripts.
-    tmpfs:
-      - /docker-entrypoint-initdb.d
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
-      interval: 5s
-      timeout: 5s
-      retries: 20
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=2).close()"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  preflight:
+    <<: *worker
+    entrypoint: [python, /workspace/etl/team_guard.py]
+    depends_on:
+      inspect-proxy:
+        condition: service_healthy
+    networks: [inspect]
+    environment:
+      TEAM_PROJECT: ${COMPOSE_PROJECT_NAME:-recycleyoungs-team-dev}
+    volumes:
+      - team_control:/control
+
+  data-init:
+    <<: *worker
+    entrypoint: [python, /workspace/etl/team_data.py, init]
+    depends_on:
+      preflight:
+        condition: service_completed_successfully
+    environment:
+      TEAM_DATA_MODE: ${TEAM_DATA_MODE:-local}
+    networks: [download]
+    volumes:
+      - team_cache:/cache
+      - type: bind
+        source: ./data/raw
+        target: /source/data/raw
+        read_only: true
+        bind:
+          create_host_path: false
+
+  team-postgres:
+    image: postgis/postgis@sha256:44126d872ac91993766c341e369c539e8196614321765d36a6f1bab0419a5fa5
+    platform: linux/amd64
+    labels: *labels
+    restart: unless-stopped
+    depends_on:
+      preflight:
+        condition: service_completed_successfully
+    environment:
+      POSTGRES_DB: recycleyoungs_team_dev
+      POSTGRES_USER: ry_team_owner
+      POSTGRES_PASSWORD_FILE: /control/password
+      PGDATA: /var/lib/postgresql/data/team
+    ports: ["127.0.0.1:55432:5432"]
+    networks:
+      team:
+        aliases: [postgres]
+      host: {}
+    volumes:
+      - team_db:/var/lib/postgresql/data
+      - team_control:/control:ro
+      - ./docker/team-dev/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U ry_team_owner -d recycleyoungs_team_dev']
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+
+  db-identity:
+    <<: *worker
+    command: [identity]
+    depends_on:
+      team-postgres:
+        condition: service_healthy
+      data-init:
+        condition: service_completed_successfully
+    networks: [team, inspect]
+    volumes:
+      - team_control:/control
 
   db-migrate:
-    profiles: ["migration"]
-    # Match the Flyway version managed by Spring Boot 4.1.1.
     image: flyway/flyway:12.4.0
+    labels: *labels
+    restart: "no"
+    entrypoint: [/bin/sh, /team/migrate.sh]
     depends_on:
-      postgres:
-        condition: service_healthy
+      db-identity:
+        condition: service_completed_successfully
+    networks: [team]
     environment:
-      FLYWAY_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-startup_analysis}
-      FLYWAY_USER: ${DB_USER:-app}
-      FLYWAY_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the project .env}
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/recycleyoungs_team_dev
+      FLYWAY_USER: ry_team_owner
       FLYWAY_LOCATIONS: filesystem:/flyway/sql
       FLYWAY_SCHEMAS: public
       FLYWAY_DEFAULT_SCHEMA: public
-      FLYWAY_BASELINE_VERSION: "1"
       FLYWAY_BASELINE_ON_MIGRATE: "false"
       FLYWAY_CLEAN_DISABLED: "true"
+      FLYWAY_CONNECT_RETRIES: "0"
     volumes:
+      - team_control:/control:ro
+      - ./docker/team-dev/migrate.sh:/team/migrate.sh:ro
       - ./backend/src/main/resources/db/migration:/flyway/sql:ro
-    command: migrate
 
-  etl:
-    profiles: ["etl"]
-    build:
-      context: ./etl
-    container_name: startup-analysis-etl
+  etl-init:
+    <<: *worker
+    command: [initialize]
     depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: ${DB_NAME:-startup_analysis}
-      DB_USER: ${DB_USER:-app}
-      DB_PASSWORD: ${DB_PASSWORD:-app}
-      DATA_DIR: /app/data/raw/dataset
-      AREA_SOURCE_CRS: ${AREA_SOURCE_CRS:-}
-      STORE_CHUNK_SIZE: ${STORE_CHUNK_SIZE:-50000}
+      db-migrate:
+        condition: service_completed_successfully
+    networks: [team, inspect]
     volumes:
-      - ./data:/app/data:ro
+      - team_control:/control
+      - team_cache:/cache:ro
+
+networks:
+  inspect:
+    name: recycleyoungs-team-dev-inspect
+    internal: true
+    labels: *labels
+  team:
+    name: recycleyoungs-team-dev-net
+    internal: true
+    labels: *labels
+  download:
+    name: recycleyoungs-team-dev-download
+    labels: *labels
+  host:
+    name: recycleyoungs-team-dev-host
+    labels: *labels
 
 volumes:
-  postgres_data:
+  team_db:
+    name: recycleyoungs-team-dev-db
+    labels: *labels
+  team_control:
+    name: recycleyoungs-team-dev-control
+    labels: *labels
+  team_cache:
+    name: recycleyoungs-team-dev-cache
+    labels: *labels

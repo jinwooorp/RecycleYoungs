@@ -1,11 +1,26 @@
 # 기존 개발 DB 보호와 적용 정책
 
+## 2026-10-14 로컬 환경 통일
+
+사용자의 별도 승인으로 기존 `startup-analysis-postgres` / `startup_analysis` / `recycleyoungs_postgres_data`를 읽기 전용으로 감사하고, snapshot 연계 custom dump·schema SQL·역할/권한 정보를 비공개 로컬 경로에 보존했다. 원본 DB에는 migration·ETL·DDL/DML을 실행하지 않았다. 백업 파일·SHA-256·검증 증거는 삭제하지 않는다. 개인 절대 경로·credential은 이 문서에 기록하지 않는다.
+
+독립 PostgreSQL 16/PostGIS 3.4에서 실제 복원을 완료했다. 원본과 복원본의 전체 행 SHA-256·NULL·컬럼·제약/index·sequence 정의/값/ownership·전체 Flyway history·role attributes/membership·owner/ACL이 일치했고 schema SQL도 byte-identical이었다. 역할 비밀번호/hash는 추출하지 않았으며 복원 리허설의 인증에는 격리용 임시 비밀번호를 사용했다. 향후 실제 복구 시 인증 secret은 별도로 설정해야 한다.
+
+기존 V1 통계 141,218행·매출 67,113행·업종 5개·SEOUL mapping 4개는 surrogate ID 대신 business key와 전체 필드/분류/NULL projection으로 팀 DB와 전수 대조했다. 기존 stores·commercial_areas·sales_commercial_area는 모두 0행이고, postgres/template1에는 별도 사용자 데이터가 없었다. 기존 전용 미분류 업무 데이터는 없었으며 BASELINE 이력·기존 ID/sequence·owner/ACL은 검증된 백업에 보존했다.
+
+15개 삭제 안전 조건 통과 후 full container ID·SID·전용 volume의 생성시점/label/mount·network ID·미사용 여부를 다시 확인하고 기존 컨테이너를 정상 종료했다. 해당 컨테이너·전용 volume·비어 있는 기존 전용 network만 제거했다. 팀 DB `recycleyoungs_team_dev`와 DB/control/cache volume 3개는 유지한다. 기본 개발 경로는 `recycleyoungs-team-dev`, loopback `55432`, guarded `bootRun`, Vite `5173`이다. Release는 여전히 UNPUBLISHED이고 Git stage/commit/push는 하지 않았다.
+
+퇴역 후 5432 포트 해제와 팀 DB의 동일 SID·READY를 확인했다. `docker compose up -d`를 다시 실행해 cache 재검증·ETL 생략과 전체 데이터/ID/sequence fingerprint 보존을 확인했고, GET 7개·Vite proxy·Kakao 위치/카페/후보 통계·Swagger UI/JSON을 재검증했다. 이번에 만든 독립 복원 container/network/volume만 소유권 확인 후 정리했으며 백업과 검증 증거는 유지했다. 애플리케이션 기능·dependency·migration은 이번 퇴역 작업에서 변경하지 않았다.
+
+아래 NOT_READY·source 적용 정책과 마지막 감사 설명은 **퇴역 전의 역사적 적용 상태**다. 같은 이름의 자원이 다시 생겨도 이번 승인을 재사용하거나 자동 연결·재사용·삭제하지 않는다. 복구·원본 적용·백업 삭제에는 대상 identity와 범위를 확인한 별도 승인이 필요하다.
+
 **NOT_READY / STOP. V2/V3 migration·행정동/상권 Polygon은 마지막 확인 기록에서 기존 개발 DB에 미적용입니다. 실제 source collector와 source execution runner는 미구현입니다.** 비활성 모델·순수 보존/Audit 계약은 구현됐지만 실행 가능 상태가 아닙니다. 격리 PASS·백업 존재·READY 판정은 실제 mutation 승인이 아닙니다.
 
 정적 대조 기준은 2026-10-11의 [`d06f675`](https://github.com/jinwooorp/RecycleYoungs/commit/d06f675921b1edc34d38ef6646fdbb48bc66533e)입니다. 이번 문서 개편에서 DB·Docker·raw·백업·테스트·Spring/ETL을 실행하거나 확인하지 않았습니다. 과거 read-only 기록을 현재 DB 상태로 표현하지 않습니다. 작업 순서는 [트랙 A](project.md#트랙-a--기존-db에-안전하게-적용하기), schema/CLI/검증 도구의 구현 계약은 [technical](technical.md)에 둡니다.
 
 ## 목차
 
+- [2026-10-14 로컬 환경 통일](#2026-10-14-로컬-환경-통일)
 - [보호 대상과 마지막 확인](#보호-대상과-마지막-확인)
 - [V1 보존과 허용 변경](#v1-보존과-허용-변경)
 - [실행·검증 계층과 결과 상태](#실행검증-계층과-결과-상태)

@@ -2,9 +2,11 @@
 
 이 문서는 조회 버튼을 누른 뒤 화면과 서버, DB가 어떻게 함께 동작하는지 설명합니다. 처음에는 아래 시스템 그림과 조회 예시를 읽고, 맡을 작업에 필요한 상세 명세로 이동합니다. 현재 구현 상태와 다음 작업은 [project](project.md), 기존 DB 접속·적용·복구 승인은 [db-safety](db-safety.md), AI 작업 규칙은 [AGENTS](../AGENTS.md)에 있습니다.
 
-기초 문서 개편의 정적 대조 기준은 2026-10-11의 [`d06f675`](https://github.com/jinwooorp/RecycleYoungs/commit/d06f675921b1edc34d38ef6646fdbb48bc66533e)입니다. 당시 무실행·7~9단계 합성/Mock·2026-10-13 v2 기록과 **2026-10-14 최종 실자료 E2E**를 구분합니다. 최신 회귀·대표 source 경계·bridge abort·실제 Kakao 지도 3후보 및 재현 절차는 [실자료 격리 시연](#실자료-격리-시연)에 있습니다. 이번 문서 갱신에서 기능 테스트·DB·Docker를 재실행하지 않았고 기존 보호 DB·백업 접근 승인은 추가되지 않았습니다.
+기초 문서 개편의 정적 대조 기준은 2026-10-11의 [`d06f675`](https://github.com/jinwooorp/RecycleYoungs/commit/d06f675921b1edc34d38ef6646fdbb48bc66533e)입니다. 당시 무실행·합성/Mock·2026-10-13 v2 기록과 2026-10-14의 일회용 실자료 E2E는 [실자료 격리 시연](#실자료-격리-시연)에 보존합니다. **영구 팀 개발 환경**의 구현·실행 증거는 아래 절에서 별도로 관리합니다. 최초 팀 환경 구축은 기존 DB 미접속으로 진행했고, 후속 승인된 로컬 환경 통일의 읽기 전용 감사·백업·복원·퇴역 결과는 [DB 안전 정책](db-safety.md#2026-10-14-로컬-환경-통일)에 구분합니다.
 
 ## 목차
+
+- [팀 공통 실자료 개발 환경](#팀-공통-실자료-개발-환경)
 
 - [시스템과 기술 선택](#시스템과-기술-선택)
 - [통계 조회 한 번 따라가기](#통계-조회-한-번-따라가기)
@@ -17,11 +19,78 @@
 - [Polygon ETL과 공간 한계](#polygon-etl과-공간-한계)
 - [현재 GET API 계약](#현재-get-api-계약)
 - [Frontend 화면과 요청 상태](#frontend-화면과-요청-상태)
-- [공간 조회 설계 — API·격리 검증](#공간-조회-설계--구현-전)
+- [공간 조회 설계 — API·격리 검증](#공간-조회-설계--api격리-검증)
 - [테스트와 안전 모듈](#테스트와-안전-모듈)
 - [개발 환경과 안전한 시작](#개발-환경과-안전한-시작)
 - [승인된 격리 재현 안내](#승인된-격리-재현-안내)
 - [기술 결정과 Git 근거](#기술-결정과-git-근거)
+
+## 팀 공통 실자료 개발 환경
+
+이번 환경은 일회용 demo와 별개인 영구 **team-dev** 환경이다. 기존 DB는 V1 BASELINE 상태를 변경하지 않고 2026-10-14 별도 승인된 백업·독립 복원·전수 대조 후 퇴역했다. 루트 Compose의 기본 역할은 팀 개발 환경 준비이며 기존 `DB_*` 값은 참조하지 않는다. 개인별 Kakao JavaScript 키를 제외한 DB 이름·포트·V1~V3·`real-data-v1` 계약을 공통으로 사용한다.
+
+설계·구현 순서는 입력 계약/공격 입력 테스트 → Docker metadata guard/전용 자원 → 실제 Flyway → 상태 기반 ETL/전수 대조 → guarded bootRun → 실제 API/UI·재실행 검증 → 문서/리뷰다. 승인된 main 작업 트리에서만 수정하며 원본·migration·비즈니스 API는 보존한다. 별도 설계/완료 문서는 만들지 않고 이 절에 실행 증거를 갱신한다.
+
+| 단계 | 책임과 실패 경계 |
+| --- | --- |
+| `inspect-proxy` | socket 접근을 전담하는 stdlib 전용 이미지. internal network·host port 없음. 고정 GET inspect만 허용하고 실제 project/owner/name/ID를 검증해 필요한 metadata만 반환 |
+| `preflight` | Docker **GET metadata만** 사용. 전용 network/volume label·생성시점·저장 identity 검증, 임의 owner/password 생성. 외부 자원 입양 거부 |
+| `data-init` | 로컬 원본 8개 read-only → bytes/SHA·CSV 구조/기간·ZIP member/geometry/report 검증 → 검증 cache 원자적 공개. Release는 고정 설정이 없으면 `RELEASE_UNPUBLISHED` |
+| `team-postgres` | digest 고정 PostgreSQL 16/PostGIS 3.4, DB `recycleyoungs_team_dev`, PGDATA `/var/lib/postgresql/data/team`, host `127.0.0.1:55432`. ETL internal network와 DB만 참여하는 host 접속 network. 기존 service `postgres`와 이름 분리 |
+| `db-identity` | 실제 연결의 DB/role/SID/PGDATA/owner 확인. 알 수 없는 기존 데이터가 있으면 migration 거부 |
+| `db-migrate` | 원본 V1~V3. 실제 Flyway 연결마다 initSql identity 검증. baseline/clean 비활성 |
+| `etl-init` | CSV 3개를 기존 loader의 단일 transaction으로 적재. 각 Polygon publication도 실제 연결을 검증. source projection·SRID·geometry/attribute/profile·Flyway checksum·전체 row/ID/sequence fingerprint 확인 후 DB state READY |
+
+`depends_on`은 healthy/completed-successfully를 구분한다. `up -d` 반환은 ETL 성공이 아니다. `python3 etl/team_dev.py status`는 Docker metadata와 DB READ ONLY snapshot에서 READY/version/contract 및 전수 fingerprint를 다시 비교한다. Backend `bootRun`은 이 검사를 통과해야 시작하며 실패 시 즉시 종료하고 상태/로그 확인 명령을 안내한다.
+
+재실행은 동일 contract의 READY DB를 전수 재검증하고 ETL을 생략한다. CSV transaction과 `CSV_DONE` checkpoint는 원자적이다. 실패·프로세스 중단 후에는 CSV 이전의 빈 DB만 다시 적재하고, CSV_DONE 이후에는 source projection을 확인한 뒤 immutable Polygon publication을 재사용한다. 알 수 없는 비어 있지 않은 DB·다른 데이터 버전·다른 처리 계약은 자동 TRUNCATE/refresh하지 않는다. READY와 실측이 다르면 정상 상태를 반환하지 않는다. 기본 보존 대상은 새 DB/cache/control volume 모두다.
+
+host preflight는 최초 `python3 etl/team_dev.py preflight`로 포트·기존 동일 이름 충돌을 검사한다. Compose 내 guard는 다시 실제 metadata를 검사한다. preflight/db-identity/etl-init은 직접 socket을 받지 않고 전용 internal inspect network의 proxy를 사용한다. proxy는 정확한 container/network/volume inspect만 허용하며 mutation·exec·list·archive·query/encoded/경로 탈출·타 프로젝트를 거부한다. 응답에서 임의 Env·명령·host mount 경로를 제거하되 실제 image/mount/network/port/생성시각 검증 필드는 유지한다. host status/bootRun의 Docker CLI와 실제 DB SID/owner/PGDATA 검사는 별개로 유지한다.
+
+socket의 `:ro`는 Docker API 권한을 제한하지 않는다. socket을 가진 proxy 자체의 침해는 여전히 daemon 전체 권한으로 이어질 수 있다. 별도 stdlib 전용 build stage·고정 base digest·읽기 전용 filesystem·cap_drop ALL·no-new-privileges·외부 port 없는 internal network로 노출을 줄인다. 신뢰한 로컬 개발 환경 전용이며 daemon을 외부 TCP에 공개하지 않는다. DB·입력 mount·volume 소유권을 검증하지 않은 cleanup은 금지한다.
+
+`./gradlew bootRun`은 팀 전용 profile과 고정 loopback reader를 사용한다. 루트 `.env`를 Spring에 읽히지 않으며 process `DB_*`/`PG*`/`FLYWAY_*`/`SPRING_*` 주입과 CLI override를 거부한다. reader는 기본 READ ONLY이며 매 실제 JDBC 연결에서 SID/owner/DB/role/READY/버전/row count/Flyway history를 확인한다. 시작 전에는 전체 fingerprint도 검사한다. 일반 application.yaml/bootJar의 기본 OpenAPI 비활성 정책은 유지한다.
+
+Release 후보에는 고정 원본 8개와 출처/기간/hash/ETL 계약 `dataset.json`만 들어간다. `data/release.json`은 현재 UNPUBLISHED이며 임의 URL/latest를 받지 않는다. 공개 시 고정 tag·정확한 asset URL·archive SHA가 모두 필요하고 redirect host/상태/크기/전체 hash/ZIP 경로/내부 개별 hash/report를 검사한다. cache 손상은 자동 대체하지 않는다. 공개 업로드는 별도 승인 단계다.
+
+### 2026-10-14 팀 개발 환경 실측
+
+상태는 **LOCAL_READY_RELEASE_PENDING**이다. 아래 수치는 과거 demo 기록을 복사하지 않고 이번 전용 volume에서 다시 측정했다.
+
+| 검증 | 이번 결과 |
+| --- | --- |
+| 입력 | 원본 8개 bytes/SHA 일치, 고정 report·ZIP member·6개 repair 계약 통과, 원본 불변 |
+| Flyway | V1/V2/V3 success, checksum -2055107083 / 237765795 / 617267104 |
+| CSV | store_stats_dong 141,218 / sales_dong 67,113 / stores 554,092. 원본 전체 projection SHA 대조 통과 |
+| 점포 | source ID 554,092 unique / CAFE 22,739 / mapping 충돌·NULL/비정상 POINT 0 |
+| Polygon | admin 425(version 1) / commercial 1,650(version 2), source/operational 전체 geometry·속성·SRID 5181 일치. 기존 한계 UNRESOLVED 유지 |
+| API | GET 7개 200. 선택 위치 3개 카페 179 / 116 / 267과 Q3 행정동 9개 지표·4개 분기 추세를 READ ONLY SQL과 대조 |
+| 브라우저 | localhost:5173 실제 Kakao SDK/타일·지도 클릭·행정동/상권·3후보 제한/비교·수동 통계/추세. 실제 Swagger `/api/docs`와 OpenAPI JSON, console error/warn 없음 |
+| 재실행 | data-init VERIFIED_CACHE, Flyway 추가 적용 없음, etl-init PRESERVED. 최초와 모든 data row/ID/sequence·source version fingerprint 동일 |
+| 실패 주입 | 새 team DB에서 실제 SID 오류 거부, version/contract/status·값 변조 감지, 실제 CSV 중간 실패 rollback·미준비 상태 확인. fixture 변경 전부 rollback, 기존 데이터·ID·sequence 보존: 7 PASS |
+| 일반 회귀 | Backend 247 PASS / Frontend 235 PASS + build/lint / ETL 295 PASS·15 SKIP(총 310). 기존 DB/raw opt-in은 미활성 |
+| Release | 후보 87,885,265 bytes, SHA-256 `58f83f3edc981b950288b990cd667ca17e0a1b30c6028b84035a88bf3407490d`, 원본 8개+dataset.json 9 members. HTTP fixture 다운로드→hash→안전 해제→cache 재사용/손상 거부 통과. 실제 GitHub 다운로드·업로드 미실행 |
+
+초기 bind 셸 스크립트 실행 오류는 SQL init + 빈 스키마의 owner bootstrap으로 고쳤다. internal network 단독으로 host port가 실제 publish되지 않은 문제는 DB 전용 host network와 실제 `NetworkSettings.Ports` 검사로 고쳤다. reviewer의 사전 migration 버전 gate·고유 service key·이미지 재빌드·원자적 최초 checkpoint/credential claim 지적을 반영했고 남은 actionable finding은 없었다.
+
+위 표는 최초 구축·퇴역 시점의 기록이다. 최종 보안 검토에서는 `source-map-js`의 PostCSS/Tailwind/jsdom 전이 의존성을 1.2.1에서 공식 수정 버전 1.2.2로 lockfile만 갱신했다. [GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q)는 신뢰하지 않는 indexed source map의 큰 offset을 처리할 때 event loop를 막는 취약점이다. 현재는 개발·빌드·테스트 의존성이지만 외부 source map을 처리할 때 위험하므로 수정했다. `npm ci`와 audit에서 취약점 0건을 확인했다.
+
+서울시·SEMAS 공식 이용조건과 로컬 출처 연결/리포트 자체 공개 조건의 남은 확인은 [README](../README.md#원본-이용조건과-공개-보류)에 있다. 데이터 Release는 UNPUBLISHED이며 clean clone 다운로드는 아직 미검증이다. 코드 커밋·푸시는 최종 리뷰·회귀 Gate 뒤 별도로 확인한다.
+
+### 2026-10-14 최종 보안 검토·회귀
+
+최초 구축 후 별도 실행한 검증이다. 직접 socket 접근을 worker 3개에서 제거하고 전용 inspect proxy로 제한했다. 실제 macOS Docker Desktop에서 허용된 GET은 200, 변경 요청은 405, legacy 이름·임의 API 경로는 403이었다. `make check-db`도 과거 V1 기대값의 opt-in dbTest 대신 읽기 전용 팀 status로 연결한다. 기존 API·migration·원본·승인 repair 계약은 변경하지 않았다.
+
+| 검증 | 최종 보안 검토 실행 결과 |
+| --- | --- |
+| Backend | Java 21, `./gradlew test build --no-daemon --rerun-tasks`: 247 PASS. 일반 bootRun의 legacy DB 환경 주입은 proof/접속 전에 거부 |
+| Frontend | Node 24.20.0, `npm ci`, 235 PASS, lint/build PASS, audit 0건. source-map-js 1.2.2 설치 확인 |
+| ETL | Python 3.12.14, 316개 중 301 PASS / 15 SKIP. 일반 회귀이며 DB/raw opt-in 미활성. Release 다운로드는 합성 HTTP/cache fixture |
+| Compose 재실행 | 보안 변경 적용 후 일반 `up -d` 두 번, VERIFIED_CACHE·migration 추가 없음·PRESERVED. 동일 DB full ID/SID와 전체 데이터·ID·sequence fingerprint 보존 |
+| 실자료 SQL/API/UI | 실제 지도 3곳의 카페 176 / 117 / 254, 명동·소공동 Q3 9개 지표 및 네 분기 추세 대조. 후보 3곳 제한·비교·Swagger 7 GET 렌더링, 양쪽 console error/warn 0 |
+| 패키지 | 기존 후보 87,885,265 bytes와 위 archive SHA 유지. 8개 개별 bytes/SHA와 dataset.json 계약·9 members·byte 동일성 재확인. 원본/후보 덮어쓰기 없음 |
+
+현재 READY DB를 초기화하거나 실패 주입으로 변조하지 않았다. 최초 적재·실제 실패 rollback은 앞 절의 기존 구축 증거이며 이번 일반 회귀·재실행 보존과 구분한다. 공개 데이터의 취득 이력·리포트 배포 권한 검토와 사용자 후속 승인, 실제 Release 공개·다운로드 및 clean clone 재현은 남아 있다.
 
 ## 시스템과 기술 선택
 
@@ -29,15 +98,15 @@
 
 ```mermaid
 flowchart LR
-    Source["공공 CSV · 공식 Polygon"] --> ETL["Python 수동 ETL"]
+    Source["공공 CSV · 공식 Polygon"] --> ETL["Python 검증 · ETL"]
     ETL --> DB[("PostgreSQL · PostGIS")]
     UI["React 조건 입력 · 결과"] --> API["Spring MVC · JdbcClient"]
     API --> DB
 ```
 
-각 부분이 맡는 일은 분명합니다. React는 조건 입력과 로딩·오류·결과 표시, Spring은 조건/자료의 일관성 확인과 응답 조립, PostgreSQL은 자료 저장과 조건별 SQL 조회를 담당합니다. PostGIS는 점포의 좌표와 지역 경계를 다루는 DB 확장입니다. 현재 통계 API는 공간 포함 판정을 하지 않으며 해당 기능은 후속 설계입니다.
+각 부분이 맡는 일은 분명합니다. React는 조건 입력과 로딩·오류·결과 표시, Spring은 조건/자료의 일관성 확인과 응답 조립, PostgreSQL은 자료 저장과 조건별 SQL 조회를 담당합니다. PostGIS는 점포의 좌표와 지역 경계를 다루는 DB 확장입니다. 통계 API는 행정동 code를 사용하고 공간 포함 판정은 별도 `/api/locations/resolve`에서 담당합니다.
 
-서로 다른 원천의 통계를 DB table로 나눠 저장하면 동·업종·분기라는 key로 필요한 자료를 읽고 중복/연결 조건을 검사할 수 있습니다. CSV 검증과 변환은 별도 Python ETL이 맡으므로 요청마다 원본을 읽거나 다시 적재할 필요가 없습니다. 자동 다운로드·스케줄링은 현재 구현 범위가 아닙니다.
+서로 다른 원천의 통계를 DB table로 나눠 저장하면 동·업종·분기라는 key로 필요한 자료를 읽고 중복/연결 조건을 검사할 수 있습니다. CSV 검증과 변환은 별도 Python ETL이 맡으므로 요청마다 원본을 읽거나 다시 적재할 필요가 없습니다. 공식 원본의 자동 수집·정기 갱신 스케줄링은 미구현입니다. 고정 Release 다운로드 코드는 구현했지만 실제 데이터 공개·GitHub 다운로드·clean clone 검증은 대기 중입니다.
 
 실제 코드는 Backend의 Controller→Service→JdbcClient Repository, Frontend의 API client→types→hooks→components로 나눠 책임을 관리합니다. Frontend는 DB에 직접 접속하거나 Backend 계산을 별도로 구현하지 않습니다. Compose·Makefile은 실행 진입점일 뿐 승인이나 대상 확인을 대신하지 않습니다.
 
@@ -145,7 +214,7 @@ sequenceDiagram
 | table·제약·V1/V2/V3 변경 | [DB schema와 Flyway](#db-schema와-flyway) |
 | CSV 검증·적재·재실행 | [CSV ETL](#csv-etl) |
 | 경계 원본·좌표계·repair·hash·한계 | [Polygon ETL](#polygon-etl과-공간-한계) |
-| 위치·반경·후보 비교 계약과 검증 한계 | [공간 조회 설계](#공간-조회-설계--구현-전) |
+| 위치·반경·후보 비교 계약과 검증 한계 | [공간 조회 설계](#공간-조회-설계--api격리-검증) |
 | 테스트·격리 runner·source 계약의 차이 | [테스트와 안전 모듈](#테스트와-안전-모듈) |
 | 설치·설정·DB 없는 검증·위험 명령 | [개발 환경](#개발-환경과-안전한-시작) |
 
@@ -533,7 +602,7 @@ AdminDongController의 Advice가 처리하는 오류는 wrapper 없이 `{code,me
 
 점포 수=개, 추정매출=원, 거래 건수=건입니다. 분기에 귀속된 원본 보고값이며 원본의 `당월` 열 이름을 월평균·분기 총액·연간액으로 재해석하지 않습니다. 합·평균·점포당 매출·증감률·성공률은 계산하지 않습니다. openingRate/closingRate·시간대/연령대 상세는 현재 최소 응답에 없습니다.
 
-통계 기간 metadata는 quarter만 제공하며 통계/점포 원본 snapshot·loadedAt catalog는 미구현입니다. 공간 dataset version·품질과 점포 출처/UNVERIFIED 한계 UI는 [상세 계약](#공간-조회-설계--구현-전)에 따라 이미 제공하지만 원본 snapshot 검증을 대신하지 않습니다. 미제공 통계/점포 metadata를 Flyway version·공간 provenance로 대체하거나 만들지 않으며 실제 catalog 확장은 별도 설계/승인이 필요합니다. 요청 중 CSV/manifest/원천을 읽는 우회는 금지합니다.
+통계 기간 metadata는 quarter만 제공하며 통계/점포 원본 snapshot·loadedAt catalog는 미구현입니다. 공간 dataset version·품질과 점포 출처/UNVERIFIED 한계 UI는 [상세 계약](#공간-조회-설계--api격리-검증)에 따라 이미 제공하지만 원본 snapshot 검증을 대신하지 않습니다. 미제공 통계/점포 metadata를 Flyway version·공간 provenance로 대체하거나 만들지 않으며 실제 catalog 확장은 별도 설계/승인이 필요합니다. 요청 중 CSV/manifest/원천을 읽는 우회는 금지합니다.
 
 ## Frontend 화면과 요청 상태
 
@@ -553,7 +622,7 @@ client는 INTEGER/BIGINT 범위·section/missingReasons 일치·추세 길이/�
 - 지도 표시·확대·축소·드래그 이동을 지원합니다. 지도 초기 중심은 선택 위치로 처리하지 않으며, 최초 선택 좌표는 `null`입니다.
 - 클릭 이벤트의 위도·경도를 검증해 일반 좌표 객체로 [App](../frontend/src/App.tsx)의 React state에 저장하고 화면에 표시합니다. 마커는 처음 선택할 때 생성하고 이후 같은 객체를 이동하며, 상위 좌표 변경도 반영합니다.
 - 키 누락·SDK 로딩 실패·지도 초기화 실패를 지도 영역에서 안내합니다. StrictMode와 늦은 로딩 완료에 대응하고, 실패·언마운트 시 클릭 리스너·ResizeObserver/window resize 이벤트·마커·지도 참조를 정리합니다. 공유 SDK script는 컴포넌트 언마운트만으로 제거하지 않습니다.
-- 지도 클릭은 지역 판정과 지원 조건의 500m 경쟁 카페 조회를 요청합니다. 단일 확정 동이 통계 lookup에 있으면 동 조건에 반영하며, 통계·추세는 기존 조회 버튼을 유지합니다. 저장한 최대 3후보는 새 지도 탐색과 독립적이고 별도 공통 분기로 비교합니다. [지역 판정·통계 연결](#공간-조회-설계--구현-전), [경쟁 카페](#반경-500m-경쟁-카페-api), [후보 비교](#최대-3곳-후보-비교--frontend-orchestration)에 상세 계약을 둡니다.
+- 지도 클릭은 지역 판정과 지원 조건의 500m 경쟁 카페 조회를 요청합니다. 단일 확정 동이 통계 lookup에 있으면 동 조건에 반영하며, 통계·추세는 기존 조회 버튼을 유지합니다. 저장한 최대 3후보는 새 지도 탐색과 독립적이고 별도 공통 분기로 비교합니다. [지역 판정·통계 연결](#공간-조회-설계--api격리-검증), [경쟁 카페](#반경-500m-경쟁-카페-api), [후보 비교](#최대-3곳-후보-비교--frontend-orchestration)에 상세 계약을 둡니다.
 
 SDK 1차 연동 당시 2026-10-12의 프론트엔드 116개 테스트·lint·build 및 Chrome 지도 기록은 과거 검증입니다. 이후 합성/Mock·v1 SDK BLOCKED·2026-10-13 v2와 [2026-10-14 최종 실자료 격리 시연](#실자료-격리-시연)을 구분합니다. 최신 실제 SDK·tile/click·3후보 연결과 Frontend 235 PASS·lint/TypeScript/build를 확인했습니다. 기존 DB는 NOT_READY입니다.
 
@@ -563,7 +632,7 @@ SDK 1차 연동 당시 2026-10-12의 프론트엔드 116개 테스트·lint·bui
 
 Tailwind는 @tailwindcss/vite·@import입니다. index.css는 light theme/base/접근성 utility, App.css는 components layer의 native 입력·통계·상태를 담당합니다. layer 밖 전역 CSS로 공통 UI를 덮어쓰지 않습니다. 760/761px 전환·모바일 한 열·표 내부 overflow, TypeScript/Vite의 @/*→src/* alias를 유지합니다. 미사용 Select/Combobox/Chart·불필요한 wrapper는 없습니다.
 
-이 구조와 과거 browser 기록은 포괄적 WCAG/contrast/screen reader 최신 PASS를 뜻하지 않습니다. 지역 결과와 후보 비교는 공간 dataset version·품질·기준일/loadedAt·역사 호환성 한계를, 카페 결과는 SEMAS/I21201 출처·기준일/적재 시점 미확인·snapshot UNVERIFIED를 표시합니다. 통계 원본 snapshot/version은 API에 없어 만들지 않습니다. [공간 자료 한계](#공간-조회-설계--구현-전)와 [후보 비교의 자료 기준](#최대-3곳-후보-비교--frontend-orchestration)을 따르며 실제 원본 검증 완료를 뜻하지 않습니다.
+이 구조와 과거 browser 기록은 포괄적 WCAG/contrast/screen reader 최신 PASS를 뜻하지 않습니다. 지역 결과와 후보 비교는 공간 dataset version·품질·기준일/loadedAt·역사 호환성 한계를, 카페 결과는 SEMAS/I21201 출처·기준일/적재 시점 미확인·snapshot UNVERIFIED를 표시합니다. 통계 원본 snapshot/version은 API에 없어 만들지 않습니다. [공간 자료 한계](#공간-조회-설계--api격리-검증)와 [후보 비교의 자료 기준](#최대-3곳-후보-비교--frontend-orchestration)을 따르며 실제 원본 검증 완료를 뜻하지 않습니다.
 
 <a id="공간-조회-설계--구현-전"></a>
 
@@ -700,6 +769,8 @@ source_validation은 Polygon stage를 지원하지 않고 old integration snapsh
 
 ## 개발 환경과 안전한 시작
 
+현재 팀원의 정상 실행은 [팀 공통 실자료 개발 환경](#팀-공통-실자료-개발-환경)과 README 빠른 시작을 따른다. 아래의 일반/과거 DB 설명은 보호 대상에 대한 실행 승인이 아니다. 루트 Compose와 `make db`는 이제 새 team-dev pipeline이며 baseline·단독 migration 진입점은 거부한다.
+
 ### 설정과 설치
 
 먼저 [README](../README.md)→[project](project.md)를 읽고 작업 범위를 정합니다. Git 상태를 확인하고 기존 변경을 보존합니다. DB 접속 없이 소스·mock UI·일반 test부터 시작합니다. 아래 명령은 안내이며 이번 개편에서 실행하지 않았습니다.
@@ -761,20 +832,21 @@ API_FIXTURE_TEST=true·DB_NAME recycleyoungs_api_fixture_ prefix·실제 V1/빈 
 
 ### 위험 명령과 알려진 blocker
 
-**bootRun/DB test도 pending migration을 자동 실행할 수 있습니다. 기존 DB 사전 점검에 사용하지 않습니다.** [PostgresConnectionTests](../backend/src/dbTest/java/com/example/backend/PostgresConnectionTests.java)는 Flyway current version=1을 고정 기대해 V1~V3 fresh DB와 맞지 않습니다. 행 수 변수만 바꾸는 해결책이 아니며 test 기대값·startup migration 정책 검토가 필요합니다.
+**일반 application.yaml/opt-in dbTest는 pending migration을 자동 실행할 수 있으므로 사전 점검에 사용하지 않습니다.** 팀 전용 `bootRun`은 READY·소유권 확인 후 reader로 연결하며 Flyway를 비활성화합니다. `make check-db`는 읽기 전용 팀 status로 연결합니다. 기존 [PostgresConnectionTests](../backend/src/dbTest/java/com/example/backend/PostgresConnectionTests.java)는 Flyway current version=1을 고정 기대해 V1~V3 fresh DB와 맞지 않으므로 팀 DB 검사로 실행하지 않습니다.
 
 | 경로 | 부작용·승인 조건 |
 | --- | --- |
-| make db / db-info / docker compose up | 기존 container 시작·재생성 가능. 대상/승인 먼저 확인 |
-| make db-migrate / Flyway migrate | schema/history 변경, 실제 JDBC identity·gate·명시 승인 |
-| make db-baseline | V1 대조를 대신하지 않음. 새 DB 사용·기존 BASELINE 재실행 금지 |
-| make etl / CSV full loader | migration 선행·DELETE/TRUNCATE·ID 재시작. 기존 DB backfill 금지 |
+| make db / make etl / docker compose up | guarded team-dev pipeline 준비·재검증. 기존 legacy 자원 참조 없음. 최초 동일 이름 충돌 확인 필수 |
+| make db-info / make check-db | 팀 metadata·READY/version·전수 fingerprint를 READ ONLY로 확인 |
+| make db-migrate / make db-baseline | 거부. identity→Flyway→ETL 순서를 우회하지 않음 |
+| 독립 Flyway migrate / CSV full loader | schema/history·DELETE/TRUNCATE·ID 변경 가능. 별도 대상/gate/명시 승인 필요. 기존 DB backfill 금지 |
 | Polygon --load | explicit DSN만으로 충분하지 않음. 실제 publication 연결 guard·종류별 transaction·승인 |
-| bootRun / make backend / dbTest / make check-db | DB 접속·자동 migration 가능 |
+| bootRun / make backend | 고정 loopback 팀 reader·READY 검사, Flyway 비활성. 임의 process/CLI DB 설정 거부 |
+| 일반 application.yaml / opt-in dbTest | 자동 migration 가능. 기존/팀 DB 사전 점검 금지 |
 | db-stop / stop/restart/recreate / down / restore | 보호 자원에 자동 실행 금지. 만든 격리 자원과 구분 |
 | Flyway repair/clean·DDL/DML·role/ACL/sequence 변경 | 별도 명시 승인. 실패를 숨기는 복구 경로로 사용 금지 |
 
-현재 개발 DB는 NOT_READY입니다. 위 명령은 실행 허가가 아니며 [DB 안전 기준](db-safety.md)과 세션 승인 범위를 적용합니다.
+현재 team-dev는 READY이며, 과거 NOT_READY였던 legacy 환경은 백업·독립 복원·전수 대조 후 퇴역했습니다. 과거 source 적용 정책은 [DB 안전 기준](db-safety.md)에 보존하며 이름이 같은 자원을 재생성·재사용하는 승인으로 해석하지 않습니다.
 
 ## 승인된 격리 재현 안내
 

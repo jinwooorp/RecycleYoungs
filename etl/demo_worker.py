@@ -28,15 +28,15 @@ def sha(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
-def manifests():
-    manifest = json.loads(Path('/inputs/manifest.json').read_text())
+def manifests(manifest_path=Path('/inputs/manifest.json')):
+    manifest = json.loads(Path(manifest_path).read_text())
     return {d['dataset_id']: d for d in manifest['datasets'] if d['dataset_id'] in INPUTS}
 
 
-def input_validation():
+def input_validation(inputs_root=Path('/inputs'), manifest_path=Path('/inputs/manifest.json')):
     reports = []
-    for key, spec in manifests().items():
-        path = Path('/inputs') / INPUTS[key]
+    for key, spec in manifests(manifest_path).items():
+        path = Path(inputs_root) / INPUTS[key]
         require(path.is_file() and sha(path) == spec['sha256'] and path.stat().st_size == spec['bytes'],
                 'CSV identity mismatch: ' + key)
         keys, quarters, dongs, classes = set(), Counter(), set(), Counter()
@@ -72,12 +72,12 @@ def input_validation():
     return reports
 
 
-def prepared():
+def prepared(inputs_root=Path('/inputs')):
     from app.spatial_geometry import prepare_dataset
     from app.spatial_sources import SPECS
-    return [prepare_dataset(SPECS[key], '/inputs/' + key + '.zip',
-                            {'quality': '/inputs/' + key + '-report.json',
-                             **({'repair': '/inputs/repair-report.json'} if key == 'commercial' else {})})
+    return [prepare_dataset(SPECS[key], Path(inputs_root) / (key + '.zip'),
+                            {'quality': Path(inputs_root) / (key + '-report.json'),
+                             **({'repair': Path(inputs_root) / 'repair-report.json'} if key == 'commercial' else {})})
             for key in ('admin', 'commercial')]
 
 
@@ -147,7 +147,7 @@ def multiset_digest(rows):
     return len(values), hashlib.sha256('\n'.join(values).encode()).hexdigest()
 
 
-def projections(connection):
+def projections(connection, inputs_root=Path('/inputs'), manifest_path=Path('/inputs/manifest.json')):
     from app.etl_sales import SALES_AMOUNT_FIELDS, TRANSACTION_FIELDS
     from app.etl_stores import USECOLS, COLUMNS
     mapping = {(r['source'], r['source_code']): r['industry_id'] for r in
@@ -165,12 +165,12 @@ def projections(connection):
     for key, table, fields in [('administrative_store_stats', 'store_stats_dong', stats),
                                ('administrative_sales', 'sales_dong', sales),
                                ('individual_stores', 'stores', stores)]:
-        spec = manifests()[key]
+        spec = manifests(manifest_path)[key]
         columns = [b for _, b, _ in fields] + ['industry_id']
         nulls, zeros = Counter(), Counter()
 
         def source_rows():
-            with (Path('/inputs') / INPUTS[key]).open(encoding=spec['encoding'], newline='') as stream:
+            with (Path(inputs_root) / INPUTS[key]).open(encoding=spec['encoding'], newline='') as stream:
                 for row in csv.DictReader(stream):
                     values = []
                     for header, column, kind in fields:

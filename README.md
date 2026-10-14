@@ -330,7 +330,7 @@ RecycleYoungs/
 
 | 유지하는 상태·한계 | 의미 |
 | --- | --- |
-| 기존 개발 DB **NOT_READY** | 적용 안전 조건·실측 증거·승인이 미충족. 이번 작업에서 현재 DB 상태를 재조회하지 않음 |
+| 과거 기존 개발 DB **NOT_READY** | V1 BASELINE 상태에서 migration/ETL을 추가 적용하지 않음. 2026-10-14 별도 승인으로 읽기 전용 감사·백업·독립 복원·팀 DB 대조 후 기존 Docker 환경 제거. 백업은 비공개 로컬 보존 |
 | SEMAS snapshot·원천 기준일 **UNVERIFIED** | 파일명의 `202606`은 완전한 영업 현황·정확한 기준일의 증명이 아님. 누락을 폐업으로 단정하지 않음 |
 | 역사적 경계 호환성 **UNRESOLVED** | 확보한 operational 경계가 2025년 통계 당시 경계와 같다고 보증하지 않음 |
 | source overlap·홍지문 H5 속성 충돌 | 원본 보존·모호성·품질 metadata 공개. 임의 보정·단일 후보 선택 금지 |
@@ -341,236 +341,121 @@ RecycleYoungs/
 
 ## 실행 방법
 
-### 실행 환경 요구사항
+### 팀원 빠른 시작
 
-필요한 항목은 실행 시나리오에 따라 다릅니다. **A는 Frontend와 지도, B는 DB 없는 문서 서버, C는 외부 실자료·새 독립 DB를 포함한 통합 실행**입니다. A/B에는 Docker·실자료 DB가 필요 없습니다.
+Java 21, Node.js/npm(현재 검증 Node 24), Python 3.12 권장, Docker Engine/Desktop와 Compose v2 이상을 준비합니다. Docker에 약 4GB 이상의 여유 메모리와 데이터·이미지용 디스크 공간이 필요합니다. Backend/Frontend는 호스트에서 실행합니다.
 
-| 항목 | 실제 버전·기준 | 필요한 시나리오·준비 위치 | 미준비 시 |
-| --- | --- | --- | --- |
-| Java | Java 21, 이번 검증 Temurin 21.0.12 | B/C. 별도 JDK 설치, `JAVA_HOME` 또는 PATH에서 사용 | Backend 테스트·preview·빌드 불가 |
-| Gradle Wrapper | 9.7.1 | B/C. 저장소 `backend/gradlew` 사용, 별도 Gradle 설치 불필요. 최초 dependency 다운로드 필요 | cache 미완성 시 offline 실행 불가 |
-| Node.js / npm | 개발 검증 Node 24.20.0, package에 engines 고정 없음 | A/C. Node 24 계열·npm 별도 설치, frontend lockfile로 `npm ci` | Vite/UI 실행 불가 |
-| Python | 3.12, 과거 실자료 검증 3.12.14 | C 및 ETL 검사. `etl/.venv` 등 준비한 전용 interpreter·requirements 고정 버전 | ETL/격리 controller 실행 불가 |
-| Docker Engine / Compose | daemon 및 Compose v2 명령. repo의 최소 patch 버전 고정 없음 | C의 승인된 container 실행·별도 Compose 작업. demo는 고정 image ID 3개 필요 | 새 격리 DB/sidecar 실행 불가 |
-| PostgreSQL | 16 계열 | C. 승인된 독립 DB, demo에서는 새 tmpfs container. 로컬 PostgreSQL 설치가 필수인 것은 아님 | 실제 API/데이터 조회 불가 |
-| PostGIS | 3.4 계열 | C의 PostgreSQL extension/image. Compose 선언은 `postgis/postgis:16-3.4`, demo는 지정 image identity | 경계·반경 SQL 불가 |
-| Kakao JavaScript 앱 키 | Kakao Maps 공식 SDK | A/C의 실지도. `frontend/.env.local`에 본인 `VITE_KAKAO_MAP_APP_KEY` | SDK·실제 타일 표시 불가 |
-| 등록된 localhost origin | A: `http://localhost:5173`, demo: `http://localhost:5273` | Kakao Developers에 정확한 origin 등록. localhost/127.0.0.1 구분 | SDK domain mismatch 가능 |
-| 서울시 통계 CSV | 2025년 1~4분기 점포-행정동·추정매출-행정동 | C. `data/raw/dataset/` 아래 manifest의 정확한 파일명 | 점포/매출·추세 조회 자료 없음 |
-| SEMAS 서울 점포 CSV | 파일명 기준 202606, 기준일 UNVERIFIED | C. 같은 dataset 디렉터리, manifest 파일명·bytes/SHA 대조 | 경쟁 카페 분석 자료 없음 |
-| 행정동·상권 Polygon ZIP | OA-22160 / OA-15560, EPSG:5181 | C. 아래 고정 spatial 경로. 별도 원본 확보 | 위치 판정 경계 없음 |
-| 원본 검증 report | quality 2개·repair 1개, 고정 hash/profile | C. `etl/app/spatial_sources.py`의 경로와 일치 | Polygon gate/publication 불가 |
-| `data/manifest.json` | 저장소 추적 입력 목록·hash·조사 범위 | C. clone에 포함, 실CSV와 대조. 새 원본·report 자체는 미포함 | 고정 CSV identity 확인 불가 |
-
-Spring/Python은 process 환경 변수를 사용하며 루트 `.env`를 자동 읽지 않습니다. 루트 `.env`는 Compose용, `frontend/.env.local`은 Vite용입니다. 설정 파일·원본은 별도로 준비하고 기존 파일을 덮어쓰지 않습니다. 기존 보호 DB/container/volume은 **NOT_READY**이며 C의 정상 DB로 사용하지 않습니다.
-
-### A. 프론트엔드만 실행
-
-**설치:** 새 clone에서 Node/npm을 준비한 뒤 실행합니다. 이미 clone했다면 기존 저장소 루트에서 시작합니다.
+**현재 Release는 미공개입니다.** 새 clone만으로 공공데이터 다운로드가 성공하는 상태는 아닙니다. 이번에 구현한 기본값은 Local mode이며 아래 원본 8개를 별도로 확보해야 합니다. 공개 Release를 승인·업로드하고 고정 설정을 갱신하면 같은 pipeline에서 Release mode를 사용할 수 있습니다.
 
 ```sh
 git clone https://github.com/jinwooorp/RecycleYoungs.git
 cd RecycleYoungs
-npm --prefix frontend ci
 
-# 기존 설정은 보존
-if [ ! -e frontend/.env.local ]; then
-  cp frontend/.env.local.example frontend/.env.local
-fi
+# 아래 표의 원본 8개가 data/raw/에 있는지 확인
+python3 etl/team_data.py validate
+
+# 최초 실행: DB 접속 없는 동일 이름 자원·포트 충돌 검사
+python3 etl/team_dev.py preflight
+docker compose up -d
 ```
 
-**환경 변수:** `frontend/.env.local`의 `VITE_KAKAO_MAP_APP_KEY`에 본인 JavaScript 앱 키를 입력합니다. Kakao Developers에 `http://localhost:5173`을 등록합니다. 키·비밀번호를 출력하거나 Git에 저장하지 않습니다. 실지도에는 유효한 키·등록 origin·SDK/타일 네트워크 접근이 모두 필요합니다.
+기존 동일 이름 자원이 있으면 임의 재사용·삭제하지 않습니다. 이 저장소에서 이전에 준비한 환경은 아래 status로 소유권과 실제 준비 상태를 확인합니다. `COMPOSE_PROJECT_NAME`, `-p`, Compose override를 사용하지 않습니다.
 
-**실행:** 화면은 mount 시 동·업종·분기 lookup 3개를 자동 요청합니다. 기본 Vite proxy는 localhost:8080입니다. DB 없는 UI 확인 전 8080에 기존 Backend/listener가 없음을 읽기 전용으로 확인합니다. listener가 있거나 확인 불가이면 이 화면 실행 경로를 중단하고 mock 테스트만 사용하며 다른 process를 종료하지 않습니다.
+`up -d` 반환은 ETL 완료가 아닙니다. 다음 명령에서 **READY**를 확인합니다. 아직 준비되지 않았으면 실패 단계의 로그를 확인하고 원인을 해결한 뒤 같은 `up -d`를 재실행합니다. status는 무한 대기하지 않습니다.
 
 ```sh
-lsof -nP -iTCP:8080 -sTCP:LISTEN
-
-# 8080 listener 없음이 확인된 경우에만
-npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173 --strictPort
+docker compose ps -a
+docker compose logs --tail=30 inspect-proxy preflight data-init db-identity db-migrate etl-init
+python3 etl/team_dev.py status
 ```
 
-**접속·정상 확인:** [http://localhost:5173/](http://localhost:5173/)에서 화면·실지도 타일·클릭 좌표·마커를 확인합니다. Backend/DB를 자동 시작하지 않으므로 API lookup·통계·카페는 실패/미준비 상태입니다. SDK 표시를 API 통합 성공으로 해석하지 않습니다. 수동 조회를 누르지 않는 것만으로 기존 Backend 접근을 차단할 수는 없습니다.
+별도 터미널 두 개에서 실행합니다. `bootRun`은 READY·Docker 소유권·DB 전수 fingerprint를 검사하고, 새 팀 DB의 읽기 전용 계정만 사용합니다. 준비 전에는 명확한 오류로 종료합니다. process에 예전 `DB_*`/`PG*`/`FLYWAY_*`/`SPRING_*` 설정이 있으면 제거한 별도 셸을 사용합니다. 루트의 기존 `.env`는 수정하지 않아도 됩니다.
 
-**종료:** 실행 터미널의 `Ctrl+C`. port 충돌 시 기존 process를 종료하거나 origin을 임의 변경하지 않습니다.
-
-### B. DB 없이 Backend 테스트·Swagger UI 실행
-
-**요구사항·설치:** Java 21과 Gradle Wrapper만 필요합니다. 최초 실행 시 Gradle dependencies를 내려받습니다. DB용 `.env`·Docker·CSV/Polygon·Kakao 키가 필요 없습니다.
-
-**환경·실행:** DB/raw opt-in은 미설정 상태로 유지합니다. 프로젝트 루트에서 다음 명령을 실행합니다.
+Backend:
 
 ```sh
 cd backend
-./gradlew test build --no-daemon
-./gradlew swaggerPreview
+./gradlew bootRun
 ```
 
-`swaggerPreview`는 test classpath의 문서 전용 서버입니다. DataSource/Flyway auto-configuration을 제외하고 **mocked JdbcClient**를 공급하며 127.0.0.1:18080에만 바인딩합니다. 일반 `bootRun`은 DB/Flyway를 사용하므로 이 DB 없는 실행 방식과 다릅니다. preview 테스트 클래스는 배포 bootJar에 포함되지 않습니다.
-
-**접속 주소:**
-
-- Swagger UI: [http://127.0.0.1:18080/api/docs](http://127.0.0.1:18080/api/docs)
-- OpenAPI JSON: [http://127.0.0.1:18080/api/v3/api-docs](http://127.0.0.1:18080/api/v3/api-docs)
-
-**정상 확인:** `BUILD SUCCESSFUL`과 서버 Started/18080 로그를 확인합니다. UI에서 RecycleYoungs API / OAS 3.1·GET 7개가 보이고 각 operation을 펼치면 필수 query·응답 code·Example Value/Schema를 확인할 수 있습니다. Schemas에서 21종 DTO를 확인합니다. `Try it out`은 HTTP 요청 실행 기능이며 preview는 실제 통계·점포 자료를 조회하는 서버가 아닙니다.
-
-실측 동작은 `/api/docs` **302 → `/api/swagger-ui/index.html`**, HTML·JS/CSS/initializer **200**, `/api/v3/api-docs/swagger-config` **200**·명세 URL `/api/v3/api-docs`입니다. 최종 주소창도 `/api/` 아래이므로 별도 rewrite/resource handler가 필요 없습니다. Petstore 기본 URL은 비활성화했습니다. `/api` 자체는 Swagger UI 주소가 아닙니다.
-
-**종료:** 실행 터미널의 `Ctrl+C` 후 `lsof -nP -iTCP:18080 -sTCP:LISTEN` 등으로 포트 해제를 확인합니다. 기존 listener가 있으면 preview가 중단되며 기존 process를 종료하지 않습니다. DB/Docker cleanup은 없습니다.
-
-### C. 실자료 Backend·Frontend 통합 실행
-
-**실행 가능 범위:** 이 시나리오는 새 clone만으로 바로 실행되지 않습니다. 외부 원본·고정 report/image·Java/Node/Python·Kakao 키가 필요하고 **새 독립 DB와 별도 승인된 실행 절차**가 필요합니다. 일반 사용자를 위한 원본 다운로드→DB→전체 서비스 자동 실행은 미구현입니다. 아래는 구현된 격리 demo 절차와 안전하게 준비된 일반 Backend 절차를 구분한 안내이며 **이번 경로 변경 작업에서는 실행하지 않았습니다**.
-
-#### 1. 원본·의존성·지도 준비
-
-C를 담당하는 실행자가 [격리 시연 안내](docs/technical.md#격리-시연-실행-안내)와 [DB 안전 정책](docs/db-safety.md)을 읽고 새 실행의 생성·접속·적재·종료/정리 범위를 승인받습니다. 기존 `startup-analysis-postgres`·`recycleyoungs_postgres_data`·`startup_analysis`를 대상에 사용하지 않습니다.
-
-A의 frontend 설치/키 설정, Java 21, 준비한 Python 3.12 환경을 확인합니다. 가상환경이 없을 때만 생성합니다.
-
-```sh
-# 프로젝트 루트, 기존 .venv 보존
-if [ ! -e etl/.venv ]; then
-  python3.12 -m venv etl/.venv
-fi
-etl/.venv/bin/python -m pip install -r etl/requirements.txt
-etl/.venv/bin/python -m pip check
-(cd backend && ./gradlew prepareDemo)
-```
-
-`prepareDemo`는 DB 미접속 Java 산출물 준비입니다. cache가 완전할 때만 `--offline`을 사용할 수 있습니다. [demo_safety.py](etl/demo_safety.py)의 고정 DB/PostGIS·ETL·Java image ID가 로컬에 있어야 하며 runner는 `--pull=never`입니다. tag 대체·자동 image 다운로드/빌드는 지원하지 않습니다.
-
-원본 입력은 아래 **8개**이고 manifest도 함께 대조합니다. 모두 새 clone에서 별도 확보해야 합니다.
-
-| 위치 | 원본 |
-| --- | --- |
-| `data/raw/dataset/` | `서울시 상권분석서비스(점포-행정동)_2025년.csv` |
-| 같은 위치 | `서울시 상권분석서비스(추정매출-행정동)_2025년.csv` |
-| 같은 위치 | `소상공인시장진흥공단_상가(상권)정보_서울_202606.csv` |
-| `data/raw/spatial/` | `서울시 상권분석서비스(영역-행정동).zip` |
-| 같은 위치 | `validation-results.json` (행정동 quality) |
-| `data/raw/spatial/stage4-research-20261007/` | `official-commercial-area.zip` |
-| `data/raw/spatial/stage56-validation-20261007/` | `results.json` (상권 quality) |
-| `data/raw/spatial/six-repair-validation-20261007/` | `results.json` (상권 repair) |
-
-CSV는 [manifest](data/manifest.json)의 파일명·bytes·SHA와, ZIP/member/report는 [spatial_sources.py](etl/app/spatial_sources.py)의 고정 identity/profile과 일치해야 합니다. 누락/불일치 시 STOP이며 다른 입력으로 대체하지 않습니다. 일반 CSV CLI는 구조/key/분기 검사이고 SHA 검증은 demo의 추가 gate입니다.
-
-원본 사용까지 승인된 실행자는 아래 **DB 없는 구조 검사**를 사용할 수 있습니다. Python 옵션은 실제 CLI 기준입니다.
-
-```sh
-# 프로젝트 루트
-(cd etl && .venv/bin/python -m app.main --validate-only \
-  --data-dir ../data/raw/dataset --only store_stats_dong sales_dong stores)
-
-(cd etl && .venv/bin/python -m app.spatial_main --validate-only --only admin \
-  --admin-zip "../data/raw/spatial/서울시 상권분석서비스(영역-행정동).zip" \
-  --admin-report ../data/raw/spatial/validation-results.json)
-
-(cd etl && .venv/bin/python -m app.spatial_main --validate-only --only commercial \
-  --commercial-zip ../data/raw/spatial/stage4-research-20261007/official-commercial-area.zip \
-  --commercial-report ../data/raw/spatial/stage56-validation-20261007/results.json \
-  --commercial-repair-report ../data/raw/spatial/six-repair-validation-20261007/results.json)
-```
-
-구조/Polygon 검사 exit 0과 기대 분기·feature·품질 요약을 확인합니다. raw 접근이므로 일반 test 실행과 다릅니다. `--load`를 덧붙이거나 stores full loader를 기존 DB 검증으로 쓰지 않습니다.
-
-**DB 생성 전 SDK-only gate:** 등록된 localhost:5273 origin에서 별도 Node/Vite `createServer`의 `configFile:false`, `proxy:{}`, `/api` 503 middleware·메모리 진단 route로 실제 SDK·타일·클릭·마커와 API 차단을 검증하고 종료합니다. 기본 Vite proxy/Mock SDK는 gate를 대신하지 않습니다. 이 사전 gate는 현재 공개 단일 task로 자동화돼 있지 않습니다.
-
-#### 2. 새 독립 DB·schema·ETL 준비
-
-승인된 controller를 시작합니다. process에 기존 DB/DSN·opt-in 변수를 주입하지 않습니다.
-
-```sh
-etl/.venv/bin/python -u etl/demo.py --isolated-run \
-  --dataset-dir data/raw/dataset --spatial-root data/raw/spatial
-```
-
-`READY_FOR_EXPLICIT_ACTIONS` 이후 stdin에 JSON action을 **한 단계씩** 입력하고 성공·identity를 확인한 뒤 진행합니다.
-
-| action | 실제 작업·정상 gate |
-| --- | --- |
-| `{"action":"prepare"}` | 입력 8개/hash·고정 image 검사, 새 owner·internal network·DB host port 없음·data/init tmpfs·기존 volume 없음. 새 DB/계정 생성 |
-| `{"action":"identity"}` | 이번 full container/network ID·SID·database/user·PGDATA·mount/alias/port·ownership 확인 |
-| `{"action":"migrate"}` | 실제 연결 identity를 검사한 새 DB에 Flyway V1/V2/V3. 기존 schema 변경 승인과 별개 |
-| `{"action":"load"}` | CSV 3종 한 transaction, Polygon 2종 종류별 transaction/publication. 실제 연결 검사·rollback/STOP |
-| `{"action":"verify"}` | 원본/DB 전수 projection·건수·키/mapping·POINT·geometry hash/SRID/validity·Flyway 대조 |
-| `{"action":"seal"}` | reader SELECT-only·owner NOLOGIN 등 접근 계정/권한 확정 |
-| `{"action":"serve"}` | guarded Java Backend 8080을 internal network에서 시작. 매 JDBC 연결 identity·읽기 전용·Flyway 비활성화 |
-| `{"action":"final"}` | 원본/DB·SQL/HTTP·CAFE/500·통계·특수 좌표 최종 대조 |
-| `{"action":"bridge"}` | 이번 run의 새 loopback API bridge URL 반환 |
-
-부정확한 identity·실패/stale 증거·STOP 뒤에는 다음 단계나 자동 retry를 하지 않습니다. 일반 CSV/Polygon CLI의 `--load`·DB 환경 기본값은 이 연결 guard/승인을 대신하지 않습니다. 기존 보호 DB에 `make db-migrate`/`make etl`을 실행하는 절차가 아닙니다.
-
-#### 3. Frontend 연결·실지도 및 API 확인
-
-별도 터미널에서 bridge 출력의 **이번 실제 port**를 지정합니다. 예시 PORT를 교체하고 다른 Backend/과거 port를 사용하지 않습니다.
+Frontend:
 
 ```sh
 cd frontend
-RECYCLEYOUNGS_DEMO_API_PROXY=http://127.0.0.1:PORT \
-  npm run dev -- --host 127.0.0.1 --port 5273 --strictPort
+npm ci
+# 기존 파일이 없을 때만 복사하고 본인 JavaScript 앱 키를 입력
+test -e .env.local || cp .env.local.example .env.local
+npm run dev
 ```
 
-Kakao 키는 `frontend/.env.local`, origin은 `http://localhost:5273`입니다. [http://localhost:5273/](http://localhost:5273/)에서 실타일·클릭 좌표/마커·행정동/상권·반경 500m 카페·동 통계·최대 3후보를 확인합니다. 분기 변경·정상 0/null/NO_ROW·모호성·미준비 오류도 구분합니다. 실제 클릭 좌표의 SQL/API/UI와 품질 metadata를 대조하며 과거 건수를 다른 클릭의 기대값으로 쓰지 않습니다.
+`frontend/.env.local`의 `VITE_KAKAO_MAP_APP_KEY`를 설정하고 Kakao Developers에 **http://localhost:5173** origin을 등록합니다. localhost와 127.0.0.1은 서로 다른 origin입니다. 키는 Git·Docker 이미지에 포함하지 않습니다. 키가 없으면 지도 SDK와 실제 클릭은 미검증이며, API·일반 UI 테스트는 따로 실행할 수 있습니다.
 
-**Swagger와의 차이:** 현재 demo의 Backend는 internal network에 있고 host 8080을 공개하지 않습니다. bridge는 기존 비즈니스 GET만 전달하며 Swagger HTML/JS/config는 제공하지 않습니다. demo process에 OPENAPI_ENABLED를 전달하는 공개 실행 옵션도 없습니다. 따라서 위 demo만으로 `localhost:8080/api/docs`까지 통합된다고 안내하지 않습니다. 동일 schema 문서 확인은 B의 preview를 사용하고, 실제 8080 Swagger는 아래의 승인된 일반 Backend 환경에서만 확인합니다.
+Docker socket은 전용 `inspect-proxy` 하나만 마운트합니다. 초기화 서비스는 host port가 없는 internal network에서 고정된 GET inspect와 필요한 metadata만 받습니다. 변경 요청·타 프로젝트·임의 경로는 거부합니다. socket의 `:ro`가 Docker API 권한을 제한하는 것은 아니며, proxy 자체가 침해되면 daemon 권한에 접근할 수 있습니다. 신뢰한 코드·고정 이미지로 구성된 로컬 개발 환경에서만 실행하며 운영 설정으로 사용하지 않습니다.
 
-#### 4. 종료·cleanup
+- 서비스: [http://localhost:5173](http://localhost:5173)
+- API 예: [http://localhost:8080/api/industries](http://localhost:8080/api/industries)
+- Swagger UI: [http://localhost:8080/api/docs](http://localhost:8080/api/docs)
+- OpenAPI JSON: [http://localhost:8080/api/v3/api-docs](http://localhost:8080/api/v3/api-docs)
 
-controller에 `{"action":"final"}`로 재검사하고 frontend 터미널에서 `Ctrl+C`로 종료한 뒤 `{"action":"cleanup"}`을 입력합니다. 이번 owner/full ID/attachment·network/mount/port 소유권을 재확인한 자원만 정리하며 잔여 자원과 loopback listener 없음도 확인합니다. EOF/Ctrl+C는 controller의 자동 cleanup을 보장하지 않습니다. 증명이 사라진 자원을 label만 보고 삭제하지 않습니다. 원본·기존 volume·backup·다른 process는 정리 대상이 아닙니다.
+정상 흐름은 지도 클릭 → 행정동/상권 확인 → 2025년 분기·업종 통계 → 500m 주변 카페 → 최대 3후보 비교입니다. 서울시 분기 통계와 SEMAS 202606 snapshot의 시점은 다르며 성공·수익·폐업 예측이 아닙니다.
 
-tmpfs 종료 후 자료는 사라지고 새 시연에는 새 승인·identity가 필요합니다. 독립 PC 재현·운영 부하/인증·원천 snapshot·역사적 경계·즉시 SQL 취소는 별도 미완료 범위입니다.
+종료는 각 개발 서버 터미널에서 `Ctrl+C`입니다. DB/cache/control volume은 기본 보존합니다. DB를 멈출 때만 `docker compose stop team-postgres`를 사용하고, 재시작은 `docker compose up -d` 후 status로 확인합니다. `down -v`·volume 삭제·자동 재적재는 빠른 시작 절차에 없습니다. 다른 사람의 listener/process를 종료하지 않습니다.
 
-### 안전하게 준비된 일반 Backend에서 Swagger 확인
+### Local mode 입력 8개
 
-**사전 조건:** 별도로 승인된 독립 PostgreSQL/PostGIS DB·접근 계정·실제 연결 identity·V1~V3·필요 CSV/Polygon 적재가 이미 준비돼 있어야 합니다. 이 일반 DB의 생성/실측 guard/원본 적재를 모두 묶은 공개 자동 task는 없습니다. mutation에는 최신 backup/격리 restore·writer/history/보존·중단/복구 계획과 실행 승인이 필요합니다. 현재 보호 DB는 NOT_READY이며 사용 대상이 아닙니다.
+Dataset version은 **real-data-v1**입니다. 원본 내용은 저장소에 없으며 Git 추적 대상이 아닙니다. 다음 경로는 저장소 기준 상대 경로입니다.
 
-**환경 변수:** Unix/macOS에서 승인된 DB_HOST/PORT/NAME/USER/PASSWORD를 기존의 안전한 process 설정으로 주입합니다. secret 값은 명령 예시에 넣지 않습니다. root `.env`는 Spring에 자동 적용되지 않습니다.
+| 입력 | 경로 |
+| --- | --- |
+| 점포 통계 CSV | `data/raw/dataset/서울시 상권분석서비스(점포-행정동)_2025년.csv` |
+| 추정매출 CSV | `data/raw/dataset/서울시 상권분석서비스(추정매출-행정동)_2025년.csv` |
+| SEMAS CSV | `data/raw/dataset/소상공인시장진흥공단_상가(상권)정보_서울_202606.csv` |
+| 행정동 ZIP | `data/raw/spatial/서울시 상권분석서비스(영역-행정동).zip` |
+| 행정동 report | `data/raw/spatial/validation-results.json` |
+| 상권 ZIP | `data/raw/spatial/stage4-research-20261007/official-commercial-area.zip` |
+| 상권 quality report | `data/raw/spatial/stage56-validation-20261007/results.json` |
+| 상권 repair report | `data/raw/spatial/six-repair-validation-20261007/results.json` |
 
-**실행:** 준비된 process에서만 적용하는 형식이며 **이번 작업에서는 bootRun/8080 DB Backend를 실행하지 않았습니다**.
+CSV는 [manifest](data/manifest.json)의 bytes/SHA/기간/행 수, Polygon/report는 [spatial_sources.py](etl/app/spatial_sources.py)의 고정 identity와 승인된 6개 repair 계약으로 검증합니다. 다른 기간·report로 대체하지 않습니다. `data-init`은 원본을 read-only로 읽고 검증된 byte-identical 사본만 전용 cache volume에 공개합니다.
+
+### Release mode와 패키지 후보
+
+현재 [release.json](data/release.json)은 `UNPUBLISHED`이며 실재하지 않는 URL을 넣지 않았습니다. 향후 공개 승인 후 정확한 tag·asset URL·archive SHA를 추적 설정에 고정합니다. `latest`·임의 URL·환경 변수 URL은 받지 않습니다. 이후 `TEAM_DATA_MODE=release docker compose up -d`로 동작합니다.
+
+공개 후에는 실제 asset URL/SHA 검증 → `release.json`의 PUBLISHED 전환 → Compose와 `.env.example`의 기본 mode를 release로 전환(local 명시 선택 유지) → 깨끗한 clone·새 volume에서 다운로드부터 ETL·Backend/Frontend까지 검증 → 안내 갱신 순서로 진행합니다. 현재는 이 전환과 실제 GitHub 다운로드가 미실행입니다.
+
+다운로드는 HTTP 상태/redirect host/길이/전체 SHA → 안전한 ZIP 경로 → 내부 8개 파일 SHA와 report/ETL 계약을 검증합니다. 부분 파일이나 손상 cache는 정상 처리하지 않습니다. 동일 버전 재실행은 cache를 재검증하며 다운로드와 destructive ETL을 생략합니다. DB의 버전·처리 계약이 달라지면 자동 갱신하지 않고 기존 volume을 보존합니다.
+
+로컬 후보 생성(업로드 없음):
 
 ```sh
-cd backend
-OPENAPI_ENABLED=true ./gradlew bootRun
+python3 etl/team_data.py package --output .codex-local/tmp/recycleyoungs-real-data-v1.zip
 ```
 
-**접속·정상 확인:** 별도 SERVER_PORT override가 없으면 Backend 기본 포트는 8080입니다. Started/port 로그를 확인한 뒤 다음 조건부 주소로 접속합니다.
+8개 원본과 상대 출처·기간·hash·처리 계약을 담은 `dataset.json`만 포함합니다. 기존 파일 덮어쓰기를 거부하고 archive SHA·개별 SHA·파일 수·byte 동일성을 확인합니다. 개인 절대 경로·credential 패턴이 고정 report에 있으면 후보 생성을 차단합니다. 후보는 Git에서 무시됩니다.
 
-- UI: [http://localhost:8080/api/docs](http://localhost:8080/api/docs)
-- JSON: [http://localhost:8080/api/v3/api-docs](http://localhost:8080/api/v3/api-docs)
+### 원본 이용조건과 공개 보류
 
-동일 경로 구조는 B에서 실측 검증했습니다. `/api` 자체는 Swagger UI 주소가 아닙니다. 기본은 OPENAPI_ENABLED=false이며 true는 UI/JSON 노출만 켭니다. **Swagger 활성화는 DB 접속·migration·ETL 실행 승인이 아닙니다.** 일반 bootRun은 DB 연결/Flyway 자동 migration을 유발할 수 있습니다.
+2026-10-14 공식 페이지 조사 결과입니다. 공공누리 1유형은 출처표시 조건으로 공유·상업적 이용·변경을 허용합니다([일반증서](https://www.kogl.or.kr/info/licenseType1.do)). 로컬 파일의 고정 SHA 검증과 공개 권리 검토는 별개입니다.
 
-Frontend 기본 Vite proxy는 localhost:8080이므로 A의 키/origin과 설치가 준비되면 이 승인 Backend에 연결할 수 있습니다. 실제 lookup·7 GET·지도/통계/카페·metadata를 확인하며 UI 문서 표시만으로 데이터 적재 성공을 주장하지 않습니다.
-
-**종료:** Backend와 Frontend 각각 실행 터미널의 Ctrl+C. DB/container/volume 종료·재생성·삭제는 별도 승인 범위입니다.
-
-### 현재 Docker Compose 범위
-
-| 서비스 | 실제 역할 | 포함 여부 |
+| 자료 | 공식 출처·이용조건 | 공개 전 남은 확인 |
 | --- | --- | --- |
-| `postgres` | PostgreSQL 16/PostGIS 3.4, loopback DB port·영구 volume | 현재 포함 |
-| `db-migrate` | Flyway 12.4.0, migration profile | 현재 포함 |
-| `etl` | Python CSV ETL build/run, etl profile·raw read-only mount | 현재 포함 |
-| Spring Backend / React Frontend | 전체 웹 서비스 실행 | 현재 미포함, 향후 Compose 통합 검토 |
+| 점포-행정동 2025 | [서울시 OA-22172](https://data.seoul.go.kr/dataList/OA-22172/S/1/datasetView.do), 공공누리 1유형 | manifest의 원본 다운로드일/license NULL, 로컬 CSV와 공식 출처 연결·출처표시문 |
+| 추정매출-행정동 2025 | [서울시 OA-22175](https://data.seoul.go.kr/dataList/OA-22175/S/1/datasetView.do), 공공누리 1유형 | 위와 동일 |
+| SEMAS 서울 202606 | [파일데이터 15083033](https://www.data.go.kr/data/15083033/fileData.do), 이용허락범위 제한 없음 | 공식 현재 20260630과 로컬 파일명 202606의 연결. manifest 후보 API 링크는 snapshot 직접 출처가 아님 |
+| 행정동 Polygon | [서울시 OA-22160](https://data.seoul.go.kr/dataList/OA-22160/S/1/datasetView.do), 공공누리 1유형 | 출처표시문. 파일 수정일은 경계 기준일 증거가 아님 |
+| 상권 Polygon | [서울시 OA-15560](https://data.seoul.go.kr/dataList/OA-15560/S/1/datasetView.do), 공공누리 1유형 | 위와 동일. 기존 provenance의 NULL을 현재 페이지 값으로 바꾸지 않음 |
+| 행정동 validation report | 로컬 생성 report, 고정 hash | 작성 주체·자체 배포조건·공개 내용 검토 |
+| 상권 quality report | 로컬 생성 report, 고정 hash | 위와 동일 |
+| 상권 repair report | 로컬 생성 report, 고정 hash | 위와 동일. 승인된 내용/profile 변경 금지 |
 
-[Compose](docker-compose.yml)는 루트 `.env`를 사용합니다. `docker compose up -d`만으로 전체 서비스를 실행할 수 없습니다. container `startup-analysis-postgres`·volume `recycleyoungs_postgres_data`와 겹치므로 실행 전 [안전 정책](docs/db-safety.md)과 대상·부작용·승인이 필요합니다. 현재 Compose는 C의 새 owner/tmpfs runner가 아닙니다.
+공개 상태는 **REDISTRIBUTION_REVIEW_REQUIRED**입니다. 조건 검토와 사용자 후속 승인이 끝나기 전 GitHub Release 생성·asset 업로드·Git LFS 공개를 하지 않습니다. 서울시 2024년 이후 집계 기준 변경, 역사적 경계 호환성 UNRESOLVED·H5 충돌·source overlap 한계는 그대로 유지합니다.
 
-`make db`/db-info/db-migrate/db-baseline/etl/backend/check-db·dbTest는 무조건 실행할 빠른 시작 명령이 아닙니다. `make etl`은 migration을 선행하고 stores는 TRUNCATE/ID 재시작을 합니다. `make etl-validate`도 Docker build/run·raw mount를 수행하며 순수 Python 검사와 다릅니다. `down -v`를 일반 cleanup으로 사용하지 않습니다.
+### DB 없는 문서·회귀 검사와 기존 DB 보호
 
-### 일반 회귀 검사
+DB 없는 Swagger는 `cd backend && ./gradlew swaggerPreview`로 127.0.0.1:18080에서 실행합니다. mock 문서 서버이며 실제 데이터 조회 성공 증거가 아닙니다. 일반 회귀는 [테스트 전략](#테스트-전략)을 따릅니다.
 
-DB/raw opt-in 없는 준비 환경에서 프로젝트 루트 기준입니다. Frontend/ETL 테스트는 실제 SDK/DB E2E 성공을 의미하지 않습니다.
-
-```sh
-(cd backend && ./gradlew test build --no-daemon)
-npm --prefix frontend run test
-make check-frontend
-make check-etl PYTHON="$(pwd)/etl/.venv/bin/python"
-```
-
-Backend 보고서는 `backend/build/reports/tests/test/index.html`입니다. `check-frontend`는 TypeScript/Vite build+ESLint이고 Vitest는 별도입니다. ETL의 실제 DB/raw 필요 검사는 opt-in 없으면 SKIP입니다. 테스트는 종료 후 서버를 남기지 않으며 build/dist/가상환경 정리는 이번 소유 범위와 별도 삭제 승인을 확인합니다.
+기존 DB `startup_analysis`, container `startup-analysis-postgres`, volume `recycleyoungs_postgres_data`는 **2026-10-14 별도 승인된 백업·독립 복원·전수 데이터 대조 후 제거**했습니다. 팀 공통 개발 환경은 위 `recycleyoungs-team-dev` / `127.0.0.1:55432`이며 새 Compose는 기존 이름·5432 host port를 사용하지 않습니다. 같은 이름의 자원이 다시 생겨도 자동으로 연결·재사용·삭제하지 않습니다. 기존 자원의 SQL·migration·ETL·start/stop/recreate·mount/restore/delete는 이 빠른 시작 범위에 포함되지 않습니다. 백업과 보호 정책은 [db-safety](docs/db-safety.md#2026-10-14-로컬-환경-통일), 과거 일회용 검증은 [technical](docs/technical.md#실자료-격리-시연)을 참고합니다.
 
 ## API 문서
 
@@ -645,34 +530,32 @@ JSON은 `{code,message,field}`입니다. 400은 오류 query 이름, 500/503은 
 
 | 실행 환경 | 공식 Swagger UI | 공식 OpenAPI JSON | 검증 범위 |
 | --- | --- | --- | --- |
-| 준비된 실제 Backend | [http://localhost:8080/api/docs](http://localhost:8080/api/docs) | [http://localhost:8080/api/v3/api-docs](http://localhost:8080/api/v3/api-docs) | 승인된 DB 환경의 조건부 주소. 이번에 bootRun/8080 DB 연결은 실행하지 않음 |
+| READY team-dev의 `./gradlew bootRun` | [http://localhost:8080/api/docs](http://localhost:8080/api/docs) | [http://localhost:8080/api/v3/api-docs](http://localhost:8080/api/v3/api-docs) | 팀 전용 reader·실자료 API·실제 UI/JSON 검증 |
 | DB 없는 preview | [http://127.0.0.1:18080/api/docs](http://127.0.0.1:18080/api/docs) | [http://127.0.0.1:18080/api/v3/api-docs](http://127.0.0.1:18080/api/v3/api-docs) | 실제 HTTP·브라우저 PASS |
 
 `/api` 자체는 Swagger UI 주소가 아닙니다. `/api/docs`는 302로 내부 `/api/swagger-ui/index.html`에 이동하며 JS/CSS/initializer도 `/api/swagger-ui/`에서 로딩됩니다. `/api/v3/api-docs/swagger-config`의 명세 URL은 `/api/v3/api-docs`입니다. 별도 context path·rewrite·resource handler를 추가하지 않았고 기존 비즈니스 API 7개도 `/api/` 그대로입니다.
 
-일반 Backend는 **OPENAPI_ENABLED=false가 기본**이며 새 JSON·swagger-config·UI와 이전 `/v3/api-docs`, `/swagger-ui.html` 등 접근의 404를 테스트했습니다. 승인된 개발 process에서 `OPENAPI_ENABLED=true ./gradlew bootRun`으로 JSON/UI를 함께 활성화합니다. 루트 `.env`만 작성하면 Spring에 전달되지 않으며 활성화는 DB/migration 허가가 아닙니다. `disable-swagger-default-url=true`로 Petstore fallback을 제거했습니다.
+일반 `application.yaml`/bootJar는 **OPENAPI_ENABLED=false가 기본**이며 새 JSON·swagger-config·UI와 이전 `/v3/api-docs`, `/swagger-ui.html` 등 접근의 404를 테스트했습니다. 일반 `bootRun`은 READY를 확인한 team-dev profile에서 JSON/UI를 명시 활성화하므로 추가 환경 변수가 필요하지 않습니다. DB 없는 `swaggerPreview`도 별도로 활성화합니다. 루트 `.env`는 Spring에 전달되지 않으며 Swagger 활성화는 DB/migration 허가가 아닙니다. `disable-swagger-default-url=true`로 Petstore fallback을 제거했습니다.
 
 인증은 미구현입니다. 활성화하면 명세·Swagger 요청 실행 기능이 접근 가능한 사용자에게 노출되며 API를 숨기거나 권한을 추가하는 보안 기능이 아닙니다. 운영 기본 비활성화를 유지하고 접근 제한은 별도 설계해야 합니다. `/api/**`의 새 Controller는 명세에 자동 포함될 수 있어 7개 경로 테스트가 변경 검토를 요구합니다. 기존 API 접근 제어·CORS는 변경하지 않았습니다.
 
 ## 환경 변수
 
-루트 `.env`는 Compose, `frontend/.env.local`은 Vite가 읽습니다. Spring/Python은 **실행 process 환경 변수**·CLI를 사용하며 루트 `.env`를 자동 로드하지 않습니다. [루트 예시](.env.example)·[Frontend 예시](frontend/.env.local.example)는 보존했습니다. 아래 기본값은 승인된 연결 대상의 증명이 아닙니다.
+루트 `.env`는 Compose, `frontend/.env.local`은 Vite가 읽습니다. Spring은 루트 `.env`를 읽지 않습니다. 기존 개인 설정을 덮어쓰지 않습니다.
 
-| 변수 | 실제 적용 process | 필수·선택 | 목적·기본값 | 설정 위치·방법 |
-| --- | --- | --- | --- | --- |
-| `VITE_KAKAO_MAP_APP_KEY` | Vite가 읽고 Frontend SDK loader에서 사용 | 실제 지도 필수, mock/Backend preview 불필요 | 본인 JavaScript 앱 키·정확한 origin. 서버 secret을 넣지 않음 | `frontend/.env.local`, 예시 파일의 빈 값을 직접 설정 |
-| `OPENAPI_ENABLED` | Spring Backend | 선택, 기본 **false** | UI/JSON 함께 노출. DB 실행 승인과 별개 | 승인된 process에서 `OPENAPI_ENABLED=true ./gradlew bootRun`. preview는 테스트 설정으로 활성화 |
-| `RECYCLEYOUNGS_DEMO_API_PROXY` | Vite Node process | 격리 bridge 연결 시 필수 | 미설정→localhost:8080, `http://127.0.0.1:PORT`만 허용 | Vite 명령 앞에 inline 주입. `.env.local` 자동 주입을 가정하지 않음 |
-| `DB_HOST` | Spring·Python, Compose ETL container | 실제 DB 실행 시 승인 대상 명시 | 로컬 기본 localhost, Compose ETL postgres | process 환경, Compose용만 루트 `.env`/container 설정 |
-| `DB_PORT` | Spring·Python·Compose | 선택 기본 5432, 대상 port 확인 필수 | Compose host loopback port와 ETL 내부 5432 구분 | process 환경 / Compose 루트 `.env` |
-| `DB_NAME` | Spring·Python·Compose | 승인 DB 이름 명시 | 기본 startup_analysis는 보호 DB 사용 승인 아님 | process 환경 / Compose 루트 `.env` |
-| `DB_USER` | Spring·Python·Compose | 승인 계정 명시 | 기본 app, 실제 role/ACL/user 확인 | process 환경 / Compose 루트 `.env` |
-| `DB_PASSWORD` | Spring·Python·Compose | Spring DB 실행 필수, preview 불필요 | Spring default 없음. Python/Compose 로컬 fallback은 운영 정책 아님 | 승인된 secret 주입 방식·Git 제외 설정. 명령/로그에 값을 출력하지 않음 |
-| `FRONTEND_ORIGINS` | Spring WebConfig | 선택 | 기본 `http://localhost:5173,http://127.0.0.1:5173`. CORS이며 인증 대체 아님 | process 환경에 comma 구분 origin 지정 |
-| `AREA_SOURCE_CRS` | Python CSV ETL | commercial_areas 적재 시 필요 | 기본 빈 값. 상권 X/Y 원천 CRS 근거 확인 후 지정, Polygon EPSG:5181과 별개 | ETL process 환경, Compose용 루트 `.env` |
-| `DATA_DIR` | Python CSV ETL / Compose ETL | 선택, 원본은 필수 | 로컬 기본 `data/raw/dataset`, container `/app/data/raw/dataset` | process 환경 또는 CSV `--data-dir` 우선. demo는 별도 `--dataset-dir`/spatial CLI는 명시 경로 |
-| `STORE_CHUNK_SIZE` | Python CSV ETL / Compose ETL | 선택 기본 50000 | stores load에서 양수 청크 크기 | ETL process 환경 / Compose 루트 `.env` |
-| `EXPECTED_STORE_STATS_ROWS`, `EXPECTED_SALES_ROWS` | Backend dbTest | 선택·일반 테스트에는 불필요 | 기대 건수 override, 실제 DB 준비/identity/승인 대체 아님 | 승인된 dbTest process 환경만, 이번에 실행하지 않음 |
-| `SPATIAL_TEST_DSN`, `STORES_TEST_DSN`, `STORES_REAL_DSN` 등 | ETL DB/raw opt-in 테스트 | 일반 개발은 미설정 | 개별 safety gate·새 격리 대상·원본 승인 필요 | 승인된 테스트 process에만 지정, 이번에 미활성화 |
+| 설정 | 적용 범위 | 기본값·정책 |
+| --- | --- | --- |
+| `TEAM_DATA_MODE` | 새 팀 Compose의 data-init | `local`. 향후 고정 Release 설정이 공개된 뒤에만 `release` |
+| Dataset version / URL / SHA | [data/release.json](data/release.json)·[입력 계약](etl/team_data.py) | `real-data-v1`, 현재 `UNPUBLISHED`. 임의 URL/latest 금지 |
+| DB host port·이름·role | 새 팀 Compose / guarded bootRun | `127.0.0.1:55432/recycleyoungs_team_dev`. 고정 identity, 비밀번호는 control volume에서 임의 생성 |
+| `TEAM_DEV_*` | Gradle → team-dev JVM 내부 전달 | metadata/READY 확인 후 메모리로 전달. 직접 설정하거나 로그에 출력하지 않음 |
+| `DB_*`, `PG*`, `FLYWAY_*`, `SPRING_*` | 기존 일반 실행·독립 ETL 또는 기존 테스트 | 새 Compose는 참조하지 않음. 일반 `bootRun`에서는 process 주입을 거부. 보호 DB 접속 승인 아님 |
+| `COMPOSE_PROJECT_NAME`, `-p`, Compose override | Compose | 팀 환경에서는 사용하지 않음. 고유 service key로 기존 postgres reconciliation을 피하고 guard가 다른 project를 거부 |
+| `VITE_KAKAO_MAP_APP_KEY` | Frontend | 본인 JavaScript 키. `frontend/.env.local`에만 보관, localhost:5173 origin 등록 |
+| `RECYCLEYOUNGS_DEMO_API_PROXY` | 기존 일회용 demo Vite process | 미설정 시 localhost:8080. demo용 명시 loopback endpoint만 허용 |
+| `OPENAPI_ENABLED` | 일반 application.yaml/bootJar | 기본 **false** 유지. 팀 개발 profile과 DB 없는 swaggerPreview에서만 명시 활성 |
+| `FRONTEND_ORIGINS` | Spring CORS | localhost:5173 / 127.0.0.1:5173. 인증 기능이 아님 |
+| `AREA_SOURCE_CRS`, `DATA_DIR`, `STORE_CHUNK_SIZE` | 기존 독립 CSV ETL | 기존 계약 유지. 팀 pipeline은 명시 입력 3개·검증된 Polygon 경로를 사용 |
+| `SPATIAL_TEST_DSN`, `STORES_TEST_DSN`, `STORES_REAL_DSN` 등 | 기존 DB/raw opt-in 테스트 | 일반 회귀에서 미설정. 새 팀 검증은 별도 명시적 `team_checks.py --owned-team-db` 사용 |
 
-API key·비밀번호·전체 credential DSN·backup/private evidence는 README/로그/Git에 저장하지 않습니다. 기존 설정을 덮어쓰지 않으며 실제 DB 적용·migration·CSV/Polygon 적재·보호 자원 cleanup은 별도 명시적 승인 범위에서 수행합니다.
+API key·비밀번호·credential DSN·백업·private evidence를 Git·공개 로그에 저장하지 않습니다. team-dev의 host 연결은 새 DB 한 곳만 허용하며 운영 설정으로 사용하지 않습니다.

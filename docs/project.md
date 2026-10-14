@@ -2,9 +2,11 @@
 
 서비스의 과거·현재·미래를 관리하는 기준 문서입니다. 기술/API/데이터/개발 방법은 [technical](technical.md), 실제 DB 보호·실측 증거·승인은 [db-safety](db-safety.md)에 둡니다.
 
-최신 검증 기준은 **2026-10-14 최종 실자료 E2E**입니다. 새 독립 격리 DB의 전수 적재·무결성, 실제 지도 클릭 4개의 카페 SQL/API, 최종 3후보 Q3 통계 9개 지표 SQL/API/UI, 대표 source 경계 2개 SQL→HTTP, bridge abort·복구 3회 및 cleanup을 확인했습니다. **README 7~10단계는 캡스톤 MVP·일회용 격리 시연 범위에서 완료**입니다. 이전 단계/v1/v2 기록은 [실자료 통합 결과](#실자료-통합-결과)에서 날짜별로 구분합니다. 기존 보호 DB·백업에는 접속하지 않았고 이번 문서 갱신에서도 테스트·DB·Docker를 재실행하지 않습니다.
+최신 로컬 개발 환경 상태는 **LOCAL_READY_RELEASE_PENDING**입니다. 새 영구 team-dev Compose에서 로컬 원본 8개 검증·V1~V3·CSV/Polygon 전수 적재·API/실지도/3후보 비교·실패 rollback·동일 데이터 재실행 보존을 확인했습니다. 실행 방법은 README, 실측·구조·테스트는 [technical의 팀 환경 절](technical.md#팀-공통-실자료-개발-환경)에 있습니다. GitHub Release는 미공개이며 이용조건·로컬 출처 연결·리포트 공개 검토와 후속 승인이 남았습니다. 최초 구축은 기존 DB 미접속으로 진행했으며, 후속 2026-10-14 로컬 환경 통일에서는 별도 승인된 읽기 전용 감사·백업·독립 복원·전수 대조 후 기존 환경을 제거했습니다. [보존·퇴역 기록](db-safety.md#2026-10-14-로컬-환경-통일)을 참고합니다. 코드 반영 상태는 Git main 이력으로 확인하며, 코드 공개와 실자료 Release 공개 승인은 구분합니다.
 
-개발 인원은 1명이며 최종 목표는 **2026년 10월 31일까지 시연 가능한 MVP 완성**입니다. 카페는 우선 검증 업종이며 서비스를 카페 전용으로 제한하지 않습니다. 사용자 관점의 1~10단계 순서와 현재 단계는 [README 개발 로드맵](../README.md#개발-로드맵)에 둡니다.
+이전 **2026-10-14 일회용 실자료 E2E**는 별도 기록입니다. 새 격리 DB의 지도 클릭 4개, 최종 3후보 Q3 통계, 대표 경계 2개, bridge abort·복구 3회 및 cleanup을 확인했습니다. 당시 README 7~10단계는 캡스톤 MVP·일회용 격리 시연 범위에서 완료했습니다. 이전 단계/v1/v2 기록은 [실자료 통합 결과](#실자료-통합-결과)에서 구분합니다.
+
+개발 인원은 1명이며 최종 목표는 **2026년 10월 31일까지 시연 가능한 MVP 완성**입니다. 카페는 우선 검증 업종이며 서비스를 카페 전용으로 제한하지 않습니다. 현재 구현 상태와 다음 개발 순서는 [현재 위치](#현재-위치와-지금-시작할-작업)와 [Now / Next / Later](#now--next--later)에서 확인합니다.
 
 ## 목차
 
@@ -58,7 +60,7 @@ MVP는 처음 완성할 핵심 서비스 범위입니다. 현재 첫 흐름은 �
 
 ## 현재 위치와 지금 시작할 작업
 
-7~10단계의 캡스톤 MVP·일회용 격리 실자료 시연 검증을 2026-10-14에 완료했습니다. 대표 실제 source 경계 2개와 bridge abort·재요청도 PASS이며, README 완료 표시와 더 넓은 backlog의 운영·발표·배포 범위를 구분합니다. 다음 우선 작업은 **코드 스타일 도구 도입, 코드 가독성·UI 정보 정리**입니다. 개발 DB 적용은 별도 안전 승인 트랙이고 운영 배포·성능·데이터 출처 및 snapshot 검증은 후속입니다. Git stage/commit/push는 최종 리뷰와 명시 승인을 기다립니다.
+7~10단계의 캡스톤 MVP·일회용 격리 실자료 시연 검증과 팀 영구 개발 환경 구축을 2026-10-14에 완료했습니다. 대표 실제 source 경계 2개와 bridge abort·재요청도 PASS이며, README 완료 표시와 더 넓은 backlog의 운영·발표·배포 범위를 구분합니다. 다음 팀 환경 작업은 **데이터 이용조건·출처/리포트 공개 승인 → Release 공개 → 기본 다운로드 전환 → clean clone 재현**입니다. 코드 스타일 도구·가독성·UI 정리는 별도 후속이며 이번 보안 검토 범위에 포함하지 않습니다. 운영 배포·성능·원천 snapshot 검증은 미완료입니다.
 
 ### 최근 완료한 범위
 
@@ -81,7 +83,7 @@ MVP는 처음 완성할 핵심 서비스 범위입니다. 현재 첫 흐름은 �
 
 3. **통계·점포 원본 snapshot catalog 계약 보강 — B-02.** 공간 version·품질과 점포 UNVERIFIED 한계 표시는 구현했습니다. 아직 제공되지 않는 통계/점포 원본 snapshot·기준일·완전성 계약은 [자료 의미](technical.md#데이터-출처와-의미)·[현재 metadata 한계](technical.md#단위와-metadata)·[Backend DTO](../backend/src/main/java/com/example/backend/admindong/ApiResponses.java)·[Frontend types](../frontend/src/types/api.ts)를 기준으로 보강합니다. 2025년 통계와 파일명 202606 점포를 같은 시점으로 취급하지 않으며 실제 catalog·기존 DB 적용·원천 검증은 별도 후속입니다.
 
-4. **구현된 위치 조회 API의 합성 회귀 유지 — B-04/B-05.** [공간 조회 계약](technical.md#공간-조회-설계--구현-전)과 [Location API](../backend/src/main/java/com/example/backend/location/)는 동 0/1/복수·상권 0..N·미준비/오류를 구현·합성 검증했습니다. 후속 지원 범위/원본 대조 계획과 회귀 사례를 보강하되 실제 SQL fixture 재실행은 새 격리 대상의 별도 승인이 필요합니다.
+4. **구현된 위치 조회 API의 합성 회귀 유지 — B-04/B-05.** [공간 조회 계약](technical.md#공간-조회-설계--api격리-검증)과 [Location API](../backend/src/main/java/com/example/backend/location/)는 동 0/1/복수·상권 0..N·미준비/오류를 구현·합성 검증했습니다. 후속 지원 범위/원본 대조 계획과 회귀 사례를 보강하되 실제 SQL fixture 재실행은 새 격리 대상의 별도 승인이 필요합니다.
 
 5. **분석·비교 화면의 가독성·UI 정리와 발표 준비 — B-07/B-09.** [App](../frontend/src/App.tsx)·[결과 컴포넌트](../frontend/src/components/)·[단일 조회 hook](../frontend/src/hooks/useAdminDongStats.ts)·[후보 비교 hook](../frontend/src/hooks/useCandidateComparison.ts)에 위치→지역/카페→통계·최대 3곳 비교가 연결돼 있습니다. 2026-10-14 실자료 핵심 흐름과 대표 경계 검증을 완료했고, 팀원 재현·발표·운영 성능은 별도 후속입니다. Mock 오류/취소/부분 성공과 실제 시연 증거를 구분합니다.
 
@@ -156,13 +158,13 @@ DB 구조는 버전별 SQL 변경 작업인 Flyway migration으로 관리했습�
 
 8-C 계열 번호는 이 검증 과정을 구분하는 작업명입니다. 격리 성공·실제 source read-only 관찰은 각각 범위가 다르고 실제 적용 승인도 별도입니다. 상세 기록은 아래 표와 [DB 검증 근거](db-safety.md#과거-검증과-git-근거)에 있습니다.
 
-### 4. 지금은 실제 적용 전의 증거 수집과 실행 경계를 준비한다
+### 4. 과거 source 적용 준비와 현재 팀 환경을 구분한다
 
 현재 Source Preservation Validator는 **받은 변경 전후 자료를 비교하는 검사기**, Source Audit·Provenance는 **자료의 출처를 기록하고 묶는 형식**, 비활성 Source Control은 **가짜 증거로 순서를 연습하고 실제 실행을 막는 모델**입니다. 이들이 있다고 실제 DB의 증거가 자동 수집되거나 적용되는 것은 아닙니다.
 
 실제 read-only collector는 같은 DB 연결에서 필요한 자료를 빠짐없이 읽는 수집기이고, 실제 source 실행 경계는 승인된 변경의 실행 결과를 증거와 보존 검사에 연결하는 경로입니다. 둘 다 아직 없습니다. 다음에는 가짜 연결로 수집 흐름을 검증하고 실제 수집·최신 백업/복원·권한·중단 정책을 준비해야 합니다.
 
-그래서 SQL과 격리 검증 기록이 있어도 기존 DB는 NOT_READY입니다. **코드가 존재하는 단계와 실제 적용 가능한 단계는 다릅니다.** 사용자 기능은 별도 mock 설계와 승인된 격리 fixture 개발로 진행할 수 있습니다.
+이 때문에 퇴역 전 기존 DB의 source 적용 상태는 NOT_READY였습니다. 해당 환경은 이후 보존 감사·백업·독립 복원·팀 DB 대조 후 제거했고 현재 개발은 READY인 별도 team-dev에서 진행합니다. source collector/executor 미구현과 과거 적용 정책은 남겨두며, 과거 DB로 자동 연결하거나 source 적용을 재개하지 않습니다.
 
 ### 상세 마일스톤을 읽는 방법
 
@@ -255,11 +257,13 @@ Now는 완료한 MVP와 구현·검증한 코드/계약, Next는 가독성·UI �
 
 | 구분 | 트랙 A | 트랙 B |
 | --- | --- | --- |
-| Now | Audit/보존/비활성 계약 구현, 기존 DB NOT_READY | 2026-10-14 7~10단계 MVP·격리 실자료 E2E·대표 경계·bridge 복구·cleanup 완료 |
-| Next | 계약 리뷰→fake collector→실측 provenance·actor/writer·보존·backup/restore·durable STOP | 코드 스타일 도구 도입, 코드 가독성·UI 정보 정리, 발표·팀원 재현 준비 |
+| Now | Audit/보존/비활성 계약 구현. legacy는 NOT_READY 상태를 보존 감사 후 퇴역, 백업 비공개 보존 | MVP·격리 E2E와 영구 team-dev READY. 실자료 Release UNPUBLISHED |
+| Next | 아래 source 트랙은 향후 별도 대상·범위 승인 시 검토 | 이용조건·공개 승인 → Release/기본 다운로드 전환 → clean clone 재현. 가독성/UI·발표는 별도 후속 |
 | Later | 추가 격리→독립 리뷰/명시 승인→V2/V3/Polygon-only | 운영 배포·성능·원천 출처/snapshot/catalog 검증. 추가 지표·업종·기간·점수는 자료/계산식 검증 뒤 검토 |
 
 ## 트랙 A — 기존 DB에 안전하게 적용하기
+
+아래는 퇴역 전 source 적용을 위해 준비한 backlog입니다. 현재 legacy DB를 재생성·복원·적용하는 계획이나 실행 승인이 아니며, 팀 개발 환경 구축의 선행 조건도 아닙니다.
 
 Audit 계약→fake connection collector→실측 수집/provenance→identity/writer/권한→보존 검증→최신 backup/독립 restore→durable STOP→격리 검증→독립 리뷰/승인→실제 적용 순서입니다. P0는 source 적용 필수 안전 조건입니다. 작업 ID는 관리 ID이며 기존 완료 단계 번호가 아닙니다. 표의 한 행이 한 작업입니다. 먼저 목적과 선행 조건을 읽고 완료 기준이 모의 검증인지 실제 관찰인지 구분합니다. DB 조회/변경 승인은 이 표로 대체되지 않습니다.
 
@@ -318,13 +322,13 @@ source 적용 전 A-01~02 순수 계약/fake collector, B-02 metadata 설계·DT
 
 ## 현재 blocker와 미확정 사항
 
-- 기존 개발 DB NOT_READY. actual collector/executor·실측 provenance·Polygon 보존 계약·durable STOP·최신 identity/writer/role/ACL·snapshot backup/restore·실사용자 경로·최종 리뷰/승인 미충족.
+- 현재 team-dev는 READY이며 legacy는 백업·독립 복원·전수 대조 후 퇴역했습니다. 과거 source 적용의 NOT_READY 정책과 actual collector/executor·durable STOP 미구현은 유지하며 팀 정상 실행 경로와 구분합니다.
 - PostgresConnectionTests version=1 기대와 startup migration 정책은 코드 검토 대상. 문서로 해결되지 않음.
 - 7~10단계 MVP·격리 E2E는 2026-10-14 완료. 대표 경계 2개 PASS를 모든 좌표의 보장으로 확대하지 않으며 원본 기준일·원자적 snapshot publication·통계/점포 catalog·CAFE 외 SEMAS mapping 및 기존 DB 적용은 미완료.
 - 역사적 B/UNRESOLVED·홍지문 H5/CONFLICT_OBSERVED·원본 overlap 보존. 공식 정의 미확보를 완료로 바꾸지 않음.
 - B/H5 해결 미완료와 operational MVP 개발 가능 여부는 별개입니다. 한계 표시·확정 membership 정책을 지켜 개발하되 source 적용 안전 조건은 그대로 유지합니다.
 - manifest 초기 CRS/후속 결론 시점·BOM 기록 차이는 [technical](technical.md#manifest와-후속-검증의-범위)에 구분. 2026-10-14 고정 입력 hash 검증과 원천 기간·완전성 검증은 별개.
 - 카카오맵 SDK는 선택·연동됐으며 시연/배포 대상·추가 지표 필수 범위·점수 가중치는 미확정. 팀원 PC 재현 증거 별도 필요.
-- 과거 합성/Mock·v1 SDK 실패·2026-10-13 v2와 2026-10-14 최종 검증을 구분함. 기존 DB/backup/권한/writer는 미조회. MVP·대표 exact boundary는 PASS이며 운영 부하·원천 snapshot 및 Git 최종 리뷰/승인은 별도.
+- 과거 합성/Mock·v1 SDK 실패·2026-10-13 v2·최종 격리 검증과 후속 팀 환경·legacy 퇴역 검증을 구분합니다. MVP·대표 exact boundary는 PASS이나 운영 부하·원천 snapshot은 별도입니다. 공개 데이터 권리·clean clone 다운로드는 여전히 미검증입니다.
 
 완료는 코드·mock·몇 개 샘플만으로 판단하지 않습니다. 해당 환경의 입력/제외·원본/DB·값/NULL·단위/기간·연결·재실행·실패 보존을 대조하고 PASS/FAIL/SKIP·미실행·blocker를 구분합니다.
