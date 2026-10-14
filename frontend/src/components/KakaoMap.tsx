@@ -51,12 +51,16 @@ export function KakaoMap({ selectedCoordinate, onCoordinateChange }: {
         const handler = (event: KakaoMapMouseEvent) => { if (!canceled && map.current === instance) onClick(event) }
         const relayout = () => { if (!canceled && map.current === instance) instance.relayout() }
         const resources: { observer?: ResizeObserver } = {}
+        const zoomControl = maps.ZoomControl && maps.ControlPosition && instance.addControl && instance.removeControl
+          ? new maps.ZoomControl() : null
         // Prepare cleanup before any registration can partially succeed and throw.
         release = () => {
           maps.event.removeListener(instance, 'click', handler)
           resources.observer?.disconnect()
           window.removeEventListener('resize', relayout)
+          if (zoomControl) instance.removeControl?.(zoomControl)
         }
+        if (zoomControl && maps.ControlPosition) instance.addControl?.(zoomControl, maps.ControlPosition.RIGHT)
         maps.event.addListener(instance, 'click', handler)
         resources.observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(relayout)
         if (resources.observer) resources.observer.observe(element)

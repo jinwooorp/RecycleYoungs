@@ -77,3 +77,22 @@ tasks.register('prepareLocationIntegration', Sync) {
     from(sourceSets.locationIntegration.output) { into 'classes' }
     from(configurations.locationIntegrationRuntimeClasspath) { into 'lib' }
 }
+
+// Disposable real-data demo only; ordinary application/test entry points do not invoke it.
+sourceSets {
+    demo {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+configurations {
+    demoImplementation.extendsFrom implementation
+    demoRuntimeOnly.extendsFrom runtimeOnly
+}
+tasks.register('prepareDemo', Sync) {
+    dependsOn tasks.named('demoClasses')
+    into layout.buildDirectory.dir('demo')
+    from(sourceSets.main.output) { into 'classes' }
+    from(sourceSets.demo.output) { into 'classes' }
+    from(configurations.demoRuntimeClasspath) { into 'lib' }
+}

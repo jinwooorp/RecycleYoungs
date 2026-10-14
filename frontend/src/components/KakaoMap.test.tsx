@@ -23,6 +23,49 @@ function Selection() {
 async function ready() { await waitFor(() => expect(mock.listeners.size).toBe(1)) }
 
 describe('지도 위치 선택', () => {
+  it('줌 컨트롤 등록 중 예외도 정리하고 재시도에서 중복 없이 복구한다', async () => {
+    const controls: object[] = []
+    const addControl = vi.fn().mockImplementationOnce(() => { throw new Error('partial registration') })
+    const removeControl = vi.fn()
+    const sdk = Object.assign({}, mock.sdk, {
+      Map: vi.fn(function () { return { relayout: vi.fn(), addControl, removeControl } }),
+      ZoomControl: vi.fn(function () { const control = {}; controls.push(control); return control }),
+      ControlPosition: { RIGHT: 2 },
+    })
+    vi.mocked(loadKakaoMaps).mockResolvedValue(sdk)
+    const view = render(<KakaoMap selectedCoordinate={null} onCoordinateChange={vi.fn()} />)
+    await screen.findByText('지도를 초기화하지 못했습니다. 다시 시도해 주세요.')
+    expect(removeControl).toHaveBeenCalledOnce()
+    expect(removeControl).toHaveBeenCalledWith(controls[0])
+    fireEvent.click(screen.getByRole('button', { name: '지도 다시 시도' }))
+    await screen.findByText('지도가 준비되었습니다. 지도에서 위치를 클릭해 주세요.')
+    expect(controls).toHaveLength(2)
+    expect(controls[0]).not.toBe(controls[1])
+    expect(addControl).toHaveBeenLastCalledWith(controls[1], sdk.ControlPosition.RIGHT)
+    view.unmount()
+    expect(removeControl).toHaveBeenCalledTimes(2)
+    expect(removeControl).toHaveBeenLastCalledWith(controls[1])
+  })
+
+  it('SDK 표준 줌 컨트롤을 오른쪽에 등록하고 언마운트 시 제거한다', async () => {
+    const control = {}
+    const addControl = vi.fn()
+    const removeControl = vi.fn()
+    const sdk = Object.assign({}, mock.sdk, {
+      Map: vi.fn(function () { return { relayout: vi.fn(), addControl, removeControl } }),
+      ZoomControl: vi.fn(function () { return control }),
+      ControlPosition: { RIGHT: 2 },
+    })
+    vi.mocked(loadKakaoMaps).mockResolvedValue(sdk)
+    const view = render(<KakaoMap selectedCoordinate={null} onCoordinateChange={vi.fn()} />)
+    await screen.findByText('지도가 준비되었습니다. 지도에서 위치를 클릭해 주세요.')
+    expect(addControl).toHaveBeenCalledOnce()
+    expect(addControl).toHaveBeenCalledWith(control, sdk.ControlPosition.RIGHT)
+    view.unmount()
+    expect(removeControl).toHaveBeenCalledOnce()
+    expect(removeControl).toHaveBeenCalledWith(control)
+  })
+
   it('로딩 중 생성하지 않고 준비 후 서울 중심 지도만 생성한다', async () => {
     let resolve!: (sdk: KakaoMapsSDK) => void
     vi.mocked(loadKakaoMaps).mockReturnValue(new Promise((done) => { resolve = done }))

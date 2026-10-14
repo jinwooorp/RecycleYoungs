@@ -2,7 +2,7 @@
 
 이 문서는 조회 버튼을 누른 뒤 화면과 서버, DB가 어떻게 함께 동작하는지 설명합니다. 처음에는 아래 시스템 그림과 조회 예시를 읽고, 맡을 작업에 필요한 상세 명세로 이동합니다. 현재 구현 상태와 다음 작업은 [project](project.md), 기존 DB 접속·적용·복구 승인은 [db-safety](db-safety.md), AI 작업 규칙은 [AGENTS](../AGENTS.md)에 있습니다.
 
-정적 대조 기준은 2026-10-11의 [`d06f675`](https://github.com/jinwooorp/RecycleYoungs/commit/d06f675921b1edc34d38ef6646fdbb48bc66533e)입니다. 이번 문서 개편에서는 테스트·DB·Docker·Spring·ETL·raw 입력·백업을 실행하거나 확인하지 않았습니다. 코드에서 확인한 계약, 고정 Git의 과거 실행 기록, 구현 전 설계를 아래에서 구분합니다.
+기초 문서 개편의 정적 대조 기준은 2026-10-11의 [`d06f675`](https://github.com/jinwooorp/RecycleYoungs/commit/d06f675921b1edc34d38ef6646fdbb48bc66533e)입니다. 당시 무실행·7~9단계 합성/Mock·2026-10-13 v2 기록과 **2026-10-14 최종 실자료 E2E**를 구분합니다. 최신 회귀·대표 source 경계·bridge abort·실제 Kakao 지도 3후보 및 재현 절차는 [실자료 격리 시연](#실자료-격리-시연)에 있습니다. 이번 문서 갱신에서 기능 테스트·DB·Docker를 재실행하지 않았고 기존 보호 DB·백업 접근 승인은 추가되지 않았습니다.
 
 ## 목차
 
@@ -179,7 +179,7 @@ sequenceDiagram
 | writer control | 값을 쓸 수 있는 프로그램·계정·예약 작업 등을 확인하고 검증 창의 변경을 통제하는 일 |
 | NOT_READY | 실제 source 적용 경로·최신 증거·승인 등 조건이 미충족인 상태. 코드 존재/격리 PASS로 해제되지 않음 |
 
-현재 통계·지역 판정·반경 경쟁 카페 API와 화면, 최대 3후보 비교를 구현했습니다. [공간 API와 격리 검증](#공간-조회-설계--구현-전) 및 [후보 비교](#최대-3곳-후보-비교--frontend-orchestration)의 합성/Mock 검증 범위와 실자료 미완료 상태를 구분합니다. migration SQL·코드·격리 PASS는 기존 DB 적용 완료를 뜻하지 않습니다.
+현재 통계·지역 판정·반경 경쟁 카페 API와 화면, 최대 3후보 비교를 구현했습니다. [공간 API와 격리 검증](#공간-조회-설계--api격리-검증) 및 [후보 비교](#최대-3곳-후보-비교--frontend-orchestration)의 과거 합성/Mock·v2와 2026-10-14 최종 실자료 검증을 구분합니다. README 7~10단계 완료는 MVP·격리 시연 범위이며 migration SQL·코드·격리 PASS가 기존 DB 적용 완료를 뜻하지 않습니다.
 
 ## 기술 스택과 선택 이유
 
@@ -555,7 +555,7 @@ client는 INTEGER/BIGINT 범위·section/missingReasons 일치·추세 길이/�
 - 키 누락·SDK 로딩 실패·지도 초기화 실패를 지도 영역에서 안내합니다. StrictMode와 늦은 로딩 완료에 대응하고, 실패·언마운트 시 클릭 리스너·ResizeObserver/window resize 이벤트·마커·지도 참조를 정리합니다. 공유 SDK script는 컴포넌트 언마운트만으로 제거하지 않습니다.
 - 지도 클릭은 지역 판정과 지원 조건의 500m 경쟁 카페 조회를 요청합니다. 단일 확정 동이 통계 lookup에 있으면 동 조건에 반영하며, 통계·추세는 기존 조회 버튼을 유지합니다. 저장한 최대 3후보는 새 지도 탐색과 독립적이고 별도 공통 분기로 비교합니다. [지역 판정·통계 연결](#공간-조회-설계--구현-전), [경쟁 카페](#반경-500m-경쟁-카페-api), [후보 비교](#최대-3곳-후보-비교--frontend-orchestration)에 상세 계약을 둡니다.
 
-SDK 1차 연동 당시 2026-10-12의 프론트엔드 116개 테스트·lint·build 및 실제 Chrome 지도 동작 기록은 과거 검증입니다. 이후 7~8단계는 합성 PostGIS 격리 SQL/JDBC/HTTP·UI 검증을, 9단계는 Frontend/Mock 사용자 흐름 검증을 완료했습니다. 실제 서울 Polygon·SEMAS snapshot 적재와 live SDK+실자료 전체 통합은 미완료이며 기존 DB는 NOT_READY입니다. 이번 문서 정정에서는 테스트·브라우저·DB를 재실행하지 않았습니다.
+SDK 1차 연동 당시 2026-10-12의 프론트엔드 116개 테스트·lint·build 및 Chrome 지도 기록은 과거 검증입니다. 이후 합성/Mock·v1 SDK BLOCKED·2026-10-13 v2와 [2026-10-14 최종 실자료 격리 시연](#실자료-격리-시연)을 구분합니다. 최신 실제 SDK·tile/click·3후보 연결과 Frontend 235 PASS·lint/TypeScript/build를 확인했습니다. 기존 DB는 NOT_READY입니다.
 
 ### 접근성과 스타일
 
@@ -638,7 +638,7 @@ snap/round/epsilon buffer로 복수 match를 없애지 않습니다. 좌표 변�
 
 Chrome 20개 체크는 실제 격리 API·합성 점포/통계·Mock 지도 SDK로 클릭→카페/지역 결과→수동 통계·재클릭·0개·실제 매핑503/재시도·다른 업종 안내를 확인했습니다. 네트워크 실패·통계 실패·실제 응답 지연은 QA 주입이며 live SDK/타일 검증이 아닙니다. 데스크톱/390px 가로 넘침과 페이지 JavaScript 오류가 없었고, 스크린샷·전체 diff·보고서는 Git 제외 `.codex-local/reviews/2026-10-12-nearby-cafes/`에 보존합니다. Backend 일반 230개, Frontend 185개, Python 안전성 6개, 실제 nearby JDBC/HTTP 체크 65개와 Location 회귀 64개를 검증했습니다.
 
-실제 SEMAS 원본/snapshot 준비·기준일/완전성·controlled ingestion·실제 서울 카페 대조·기존 개발 DB 적용·실자료 규모 성능·최종 live SDK 시연은 미완료입니다. ETL의 TRUNCATE full loader를 실행하지 않았습니다. 예정된 2026년 점포 자료와 2025년 통계의 시점·집계 단위는 별개이고, 점포의 원본 기간을 파일 이름만으로 확정하지 않습니다. 기존 DB는 **NOT_READY**이며 README 8단계 완료 표시는 사용자 최종 검토 후 결정합니다.
+8단계 구현 당시에는 실제 SEMAS 적재와 TRUNCATE full loader를 실행하지 않았습니다. 이후 [실자료 격리 시연](#실자료-격리-시연)은 새 DB의 빈 stores·실제 연결 identity를 확인한 뒤 전수 적재했습니다. EXPLAIN은 과거 v1 실측이고, 2026-10-13 v2의 클릭 대조와 2026-10-14 최종 4개 클릭 SQL/API·최종 UI 대조를 구분합니다. README 8단계는 MVP·격리 시연 완료입니다. 원천 기준일·원자적 snapshot publication·운영 부하는 미검증이고 파일명 202606과 2025 통계의 시점·집계 단위를 구분합니다. 기존 DB는 **NOT_READY**입니다.
 
 ### 최대 3곳 후보 비교 — Frontend orchestration
 
@@ -661,9 +661,9 @@ Chrome 20개 체크는 실제 격리 API·합성 점포/통계·Mock 지도 SDK�
 
 통계 9항목(점포/유사/개업/폐업/프랜차이즈·추정매출/매출 건수/평일/주말 추정매출)을 기존 값만으로 표시합니다. NULL은 값 없음, NO_ROW는 조회 행 없음, 실제 0은 단위 있는 0입니다. BIGINT를 Number로 바꾸지 않습니다. 경쟁 카페는 좌표 반경, 추정매출은 2025년 행정동 집계이며 반경 매출로 배분하거나 창업 점수/성공률/추천 순위를 만들지 않습니다. SEMAS 자료와 통계의 시점·공간 단위 차이를 명시합니다.
 
-Frontend 전체 Vitest/RTL 233개(기존185+신규48)·lint/build PASS, 실제 Chrome Mock 사용자 흐름 30개 체크 PASS입니다. Chrome은 SDK와 모든 API를 합성 Mock으로 대체했고 Frontend QA 서버의 API proxy를 비활성화했습니다. 데스크톱 1440px/모바일390px에서 3곳 등록·분기 변경·삭제/교체·늦은 응답·부분 오류/재시도·키보드·수동 통계/추세·가로 넘침을 확인했습니다. Backend/실제 PostGIS 검증은 이번 단계에서 실행하지 않았습니다. 리뷰/diff/스크린샷은 Git 제외 `.codex-local/reviews/2026-10-13-candidate-comparison/`에 보존합니다.
+2026-10-13의 9단계 구현 당시 Frontend Vitest/RTL 233개(기존185+신규48)·lint/build, Chrome Mock 사용자 흐름 30개 체크가 PASS했습니다. Chrome은 SDK와 모든 API를 합성 Mock으로 대체했고 QA 서버의 API proxy를 비활성화했습니다. 1440px/390px에서 등록·분기·삭제/교체·늦은 응답·부분 오류·키보드·수동 통계/추세·가로 넘침을 확인했습니다. Backend/실제 PostGIS는 당시 실행하지 않았습니다. 이 과거 기록은 Git 제외 로컬 리뷰 폴더에 보존하며 최신 Frontend 235 PASS·실자료 검증과 구분합니다.
 
-실제 서울 Polygon·SEMAS snapshot 적재·서울 좌표별 3곳 대조·동일 원본 snapshot 완전성·운영 성능·live Kakao SDK+실자료 전체 시연은 미완료입니다. 기존 DB는 **NOT_READY**, DB/Docker/Flyway/ETL/원본·백업 접근 없이 구현했습니다. README 9단계 완료 표시는 사용자 최종 검토 후 결정합니다.
+9단계 구현 당시 Frontend/Mock 검증, 2026-10-13 v2 시연, 2026-10-14 [최종 실자료 검증](#실자료-격리-시연)을 구분합니다. 최신 검증은 실제 지도 최대 3후보·4번째 제한·삭제/교체·분기 변경·단일 실패 복구·다른 후보 유지·늦은 응답 차단 및 최종 Q3 통계 9개 지표 SQL/API/UI 일치입니다. README 9단계는 MVP·격리 시연 완료입니다. 원자적 snapshot publication·운영 부하는 미검증이며 기존 DB는 **NOT_READY**입니다.
 
 ## 테스트와 안전 모듈
 
@@ -694,7 +694,7 @@ API 값·NULL/0/NO_ROW·오류·BIGINT·부분 성공·390px/1280px·keyboard fo
 | source_audit.py | serialization·UNVERIFIED_CLAIMS 결속. 성공도 CONTRACT_VALID_UNVERIFIED·boolean false·DB/승인 false |
 | 실제 source collector/executor | 미구현. fake connection collector·실측 provenance·durable STOP도 후속 작업 |
 
-신규 source 세 모듈에는 단위 회귀 코드가 있으나 이번에 실행하지 않았고 해당 커밋의 실행 결과는 확인하지 못했습니다. 이전 세션의 보고를 이번 PASS나 Git 실측 기록으로 승격하지 않습니다. Audit는 preservation comparator나 SourceSimulation을 호출하지 않으며 source_control도 실제 validator 수집 경로에 연결돼 있지 않습니다.
+source 세 모듈의 과거 커밋 실행 결과는 확인하지 못했지만 2026-10-14 일반 ETL 회귀는 PASS였습니다. 이 단위 결과는 실제 source 수집·적용 증거가 아닙니다. Audit는 preservation comparator나 SourceSimulation을 호출하지 않으며 source_control도 실제 validator 수집 경로에 연결돼 있지 않습니다.
 
 source_validation은 Polygon stage를 지원하지 않고 old integration snapshot만으로 신규 full catalog/ACL/history/sequence 요구를 만족하지 못합니다. source control의 HMAC·합성 승인값도 사람 승인/실측 근거가 아닙니다. 상세 판정·collector 요구·FINAL 구분은 [안전 계층](db-safety.md#실행검증-계층과-결과-상태)에 둡니다.
 
@@ -796,6 +796,127 @@ python -m app.main --data-dir "$APPROVED_DATA_DIR" --only store_stats_dong sales
 ```
 
 integration_check의 inputs/snapshot/source/compare-preserved/compare-logical과 integration_spatial의 책임은 앞 테스트 표를 확인합니다. 전체 orchestration driver·private config/evidence는 저장소의 일반 자동 실행 명령이 아닙니다. 실패·권한/캐시/네트워크 blocker와 PASS/FAIL/SKIP를 실제 환경별로 기록합니다.
+
+## 실자료 격리 시연
+
+### 2026-10-14 최종 검증 결과
+
+별도 승인된 새 일회용 격리 DB에서 수행한 최종 실행 기록입니다. 이 문서 갱신에서 재실행한 결과가 아닙니다.
+7~10단계 완료 범위는 캡스톤 MVP·격리 실자료 시연이며 기존 개발 DB 적용이나 운영 준비 완료를 뜻하지 않습니다.
+
+| 일반 회귀 | 최종 기록 |
+| --- | --- |
+| Python | 3.12.14 전용 venv, 기존 requirements의 고정 버전만 설치·import·pip check PASS |
+| ETL 전체 unittest | 277 PASS / 15 SKIP / 0 FAIL / 0 ERROR |
+| Bridge 순수 안전 테스트 | 33 PASS, ETL 277에 포함 |
+| Backend 일반 test | 230 PASS, compileJava/compileDemoJava/prepareDemo PASS |
+| Frontend 전체 Vitest | 235 PASS, ESLint/TypeScript/Vite production build PASS |
+
+의존성은 pandas 2.2.3, psycopg/psycopg-binary 3.2.3, pyproj 3.7.0, pyshp 3.1.6, Shapely 2.1.2입니다.
+일반 ETL의 SKIP는 spatial DB 8개, stores DB 4개, 실제 ZIP/report 2개, 실제 CSV+DB 1개로 opt-in 미설정 때문입니다.
+일반 회귀는 DB/Docker/raw를 사용하지 않았고 별도 아래 격리 live 실행과 구분합니다.
+
+입력 8개(CSV 3개·ZIP 2개·source/repair report 3개)의 명시 경로·bytes·SHA-256과 ZIP member/report/profile identity를 확인했습니다.
+기대값은 [manifest](../data/manifest.json)와 [spatial_sources](../etl/app/spatial_sources.py)의 고정 정의를 따르며 다른 원본으로 대체하지 않았습니다.
+prepare/verify/final과 cleanup 전후 source hash가 일치했습니다.
+
+| 실제 적재 | 전수 검증 결과 |
+| --- | --- |
+| 행정동 Polygon | 425개 valid |
+| 상권 Polygon | 1,650개: valid source 1,644개 + 승인 repair 6개 |
+| 행정동 점포 통계 | 141,218행 |
+| 행정동 추정매출 | 67,113행 |
+| SEMAS 점포 | 554,092행, unique ID 동일, NULL/bad POINT·CAFE 분류 충돌 0 |
+| I21201 → CAFE | 22,739행 |
+
+V1/V2/V3 migration, 실제 publication/JDBC identity guard와 reader SELECT-only(writable table 0)·owner NOLOGIN을 통과했습니다.
+E2E 전후 final에서 source/DB 전수 projection·geometry·점포 무결성 값이 동일했습니다.
+
+| 실제 클릭 | 좌표 (lat, lng) | 카페 SQL/API count | list 길이 |
+| --- | --- | ---: | ---: |
+| 후보1 | (37.567733362099176, 126.97439598233436) | 138 | 100 |
+| 후보2, 이후 삭제 | (37.5666530622714, 126.97892396440197) | 202 | 100 |
+| 후보3 | (37.5650319908887, 126.9834519353379) | 221 | 100 |
+| 빈 표시번호2에 교체 | (37.565933282564906, 126.9857155203619) | 266 | 100 |
+
+네 클릭의 geography 거리/count/list 전체 계약 필드는 독립 SQL/API와 일치했습니다.
+최종 후보1/2/3(클릭1/4/3)의 UI count는 138/266/221, Q3 통계 9개 지표도 SQL/API/UI와 일치했습니다.
+최종 nearby UI 목록의 100개 항목을 API/SQL 근거와 대조했으며 목록 길이와 전체 count를 구분합니다.
+Q4/Q3 SQL/API 대조와 Q4 초기 UI·Q3 전환/재조회도 확인했지만 Q4 모든 지표의 별도 DOM 대조 기록으로 확대하지 않습니다.
+실제 SDK/tile/click·최대3후보·4번째 제한·삭제/새 identity 교체·늦은 응답 차단·단일 실패 복구·다른 후보 유지·desktop1440/mobile390px가 PASS였습니다.
+오류·지연은 QA 네트워크 제어로 주입했고 pageerror는 0이었습니다.
+
+대표 source exterior vertex 2개를 shift/snap/epsilon 없이 선정해 EPSG:5181→4326→5181 왕복 오차 0을 확인했습니다.
+같은 lat/lng를 SQL과 HTTP에 입력했습니다.
+
+| source 경계 | 정확한 EPSG:4326 입력 | SQL→HTTP 결과 |
+| --- | --- | --- |
+| 행정동 11170560 | (37.5412759486966, 126.97102146045967) | 11170530/11170560 모두 BOUNDARY, API AMBIGUOUS_BOUNDARY·임의 선택 없음 |
+| 상권 3110039 | (37.55843188505098, 126.98125899044328) | ST_Covers membership·경계 관계 일치, 행정동11140540 INTERIOR/RESOLVED |
+
+이는 **대표 정확한 source 경계 2개 사례**이며 모든 좌표의 수치 왕복이나 역사적 경계 호환성을 증명하지 않습니다.
+
+수정된 최종 bridge로 정상200→handler/probe-call 처리 진입→실제 TCP RST→정상200 복구를 3회 PASS했습니다.
+3회 모두 probe 호출 종료 후 응답 작성 시 BrokenPipeError를 감지했습니다. SQL 시작 시각은 별도로 관찰하지 않았습니다.
+잘못된 좌표의 실제400 뒤 정상200도 복구했고 중복 응답·미처리 handler 예외는 0, 반복 후 lock 해제·잔류 연결 없음이었습니다.
+ConnectionResetError 및 503 fallback의 RuntimeError/OSError는 mock 회귀 증거이며 live에서 해당 오류를 강제한 결과가 아닙니다.
+소유권을 재확인한 컨테이너 11개·네트워크 1개만 cleanup했고 잔여 0, loopback 서버 종료를 확인했습니다.
+보호 container metadata와 원본 hash는 전후 동일하며 기존 보호 DB에는 SQL 접속하지 않았습니다.
+
+기존 DB **NOT_READY**, SEMAS snapshot·원천 기준일 **UNVERIFIED**, 역사적 경계 호환성 **UNRESOLVED**를 유지합니다.
+원본 overlap/H5·승인 repair, 즉시 Java/JDBC query cancellation 미구현, 운영 부하·인증·상시 배포,
+durable source collector/executor 및 전체 source snapshot의 원자적 publication은 후속 범위입니다.
+
+### 격리 시연 실행 안내
+
+`etl/demo.py`는 기존 `control*`·`source*`·테스트 allowlist와 분리한 일회용 실자료 실행 경로입니다. 기본 `python3 etl/demo.py`는 INERT이며 DB·Docker·raw 접속이 없습니다. 실행은 명시한 입력과 `--isolated-run`이 필요합니다. 기존 보호 container/volume이나 영구 volume을 사용하지 않습니다.
+
+필수 입력은 manifest의 점포-행정동/추정매출-행정동 2025 CSV와 SEMAS 서울 202606 CSV, `etl/app/spatial_sources.py`의 고정 ZIP/report입니다. 상권 ZIP은 `data/raw/spatial/stage4-research-20261007/official-commercial-area.zip`이고 report 3개 경로도 해당 정의를 따릅니다. 다른 입력을 탐색·다운로드하거나 누락/불일치 파일을 대체하지 않습니다. 원본 행·주소·키·credentials를 로그에 출력하지 않습니다.
+
+준비된 Python 3.12·고정 requirements, Java 21·frontend lockfile 환경과 Docker image가 필요합니다. 아래 `python3`는 의존성 import/pip check가 끝난 전용 interpreter를 뜻하며 2026-10-14 검증은 3.12.14였습니다. runner는 아래 로컬 image ID를 `--pull=never`로 사용합니다. image/처리 버전 변경은 별도 검토하며 자동 pull/build/install을 하지 않습니다.
+
+첫 gate는 DB 없는 SDK-only 사전 검증입니다. frontend 디렉터리의 일반 Node 프로세스에서 Vite의 `createServer`를 사용합니다. `configFile:false`·`server.proxy:{}`로 프로젝트의 기본 Backend proxy를 제외하고 `/api` middleware가 503을 반환하도록 차단한 메모리 내 진단 route에서 기존 SDK loader를 사용합니다. 실제 /api 차단 응답, SDK 초기화·타일·직접 지도 클릭을 확인하고 진단 서버를 종료한 뒤에만 Docker/DB/ETL로 진행합니다. DB·Spring·Docker에는 연결하지 않으며 Node REPL 전용 모듈 해석이나 Mock SDK/가짜 API 데이터로 gate를 대체하지 않습니다. 키/등록 origin·차단 증거가 없으면 DB를 만들지 않습니다. 로컬 demo-runbook-v2.md와 최종 실행 기록의 절차를 따른 설명이며 ignored 리뷰 파일은 공개 문서 링크가 아닙니다.
+
+| 역할 | 고정 image ID |
+| --- | --- |
+| DB/PostGIS | `sha256:44126d872ac91993766c341e369c539e8196614321765d36a6f1bab0419a5fa5` |
+| ETL, requirements 일치 | `sha256:b3bc55d2aeadd8ca3ef25e8c6be50a9f1651420983ded52cf20f98b3cee75536` |
+| Java 21 | `sha256:3e3c176ffed168beb42c607be9bc1639b466cf00261a0fb04425562c9d0c5c2b` |
+
+```sh
+cd backend
+./gradlew --offline prepareDemo
+cd ..
+python3 etl/demo.py
+python3 -u etl/demo.py --isolated-run --dataset-dir data/raw/dataset --spatial-root data/raw/spatial
+```
+
+마지막 명령은 stdin의 명시 JSON action을 기다립니다. 다음 순서로 각 PASS를 확인한 뒤 다음 action을 입력합니다. `prepare → migrate → load → verify → seal → serve → final → bridge`입니다. 예: `{"action":"prepare"}`. `identity`로 이번 실행의 full container/network ID·SID·PGDATA·mount·port·label을 확인합니다. 준비 시 원본 8개를 재검증하고 DB는 tmpfs data/init·새 database/user·전용 internal network·host DB port 없음으로 만듭니다. 기존 시연 ID/SID/port/container/network나 보호 volume을 재사용하지 않습니다. sidecar는 stdin gate에서 대기하며 실제 network endpoint가 확인된 뒤에만 SQL을 허용합니다.
+
+worker readiness의 runner/DB/endpoint proof 실패, timeout 또는 입력 전 종료 시에는 현행 full ID·owner label·attachment 검사를 통과한 소유 runner만 halt합니다. 소유권 확인 불가 시 강제 종료하지 않고 원래 실패와 cleanup 실패를 별도로 보존합니다. 실패한 stage를 무시해 다음 action으로 진행하지 않습니다.
+
+Flyway의 모든 연결과 CSV/Polygon publication 연결은 실제 database/current_user/session_user/SID/PGDATA/5432/lock·statement timeout을 검사합니다. CSV 3종은 첫 빈 테이블 확인 뒤 같은 transaction으로 기존 ETL을 실행합니다. CSV 전체는 함께 commit/rollback하고 Polygon은 종류별 transaction입니다. 종류 사이에는 전역 rollback이 없으므로 실패를 숨기거나 이어서 재실행하지 않습니다. `verify`는 source/DB 전수 논리 projection, geometry hash/SRID/validity, count/uniqueness·mapping·POINT·Flyway history를 대조합니다.
+
+`seal`은 reader에 SELECT만 허용하고 owner를 NOLOGIN으로 바꿉니다. `serve`는 매 JDBC 연결을 확인하는 read-only Spring이고 자동 Flyway는 비활성화합니다. `final`은 원본/DB를 다시 전수 대조하며 실제 3곳과 특수 좌표 SQL/HTTP·동일 CAFE/500m·Q4/Q3·오류·병렬 조회를 검사합니다. snapshot UNVERIFIED, 역사적 경계 UNRESOLVED, H5 충돌은 유지됩니다.
+
+`bridge`가 반환한 **이번 세션의 loopback URL**을 사용합니다. 다른 Backend나 기본 localhost:8080 경로로 대체하지 않습니다. 별도 terminal에서 다음처럼 실행합니다. 아래 PORT는 bridge 출력의 실제 port로 바꿉니다.
+
+```sh
+cd frontend
+RECYCLEYOUNGS_DEMO_API_PROXY=http://127.0.0.1:PORT npm run dev -- --host 127.0.0.1 --port 5273 --strictPort
+```
+
+브라우저는 v2와 2026-10-14에 등록을 확인한 `http://localhost:5273/`을 사용합니다. 서버 바인딩은 127.0.0.1이며 DB host port는 없습니다. localhost와 127.0.0.1은 서로 다른 Kakao 등록 origin입니다. 먼저 port 사용 상태를 확인하고 5273이 사용 중이면 다른 process를 임의 종료하거나 origin을 임의 교체하지 않습니다. 다른 port는 그 정확한 origin의 별도 등록·검증이 필요합니다. Java HttpClient 전달·직렬 lock·매 요청 source hash/identity 비용은 API 자체 성능과 구분합니다.
+
+bridge는 응답 시작 후 두 번째 HTTP 상태줄을 쓰지 않습니다. BrokenPipe/Reset 및 503 fallback 작성 중 일반 예외도 실패한 연결을 닫고 lock을 해제합니다. 응답 전 오류의 정상 503 의미와 200 JSON 계약을 유지하며 예외 세부 정보를 HTTP에 노출하지 않습니다. 연결 종료 감지는 조회 완료 후 응답 작성 시점이고 Java/JDBC 즉시 취소는 없습니다.
+
+Kakao JavaScript 키는 정상 Vite 로딩의 `VITE_KAKAO_MAP_APP_KEY`로 설정합니다. 비밀 파일 원문을 직접 열지 않고 키 값을 문서/명령 출력/Git에 넣지 않습니다. [Kakao 공식 가이드](https://apis.map.kakao.com/web/guide/)에 따라 사용하는 JavaScript 키에 정확한 SDK 도메인을 등록합니다. v1에서는 키 감지 실패로 BLOCKED였지만 v2에서는 키가 감지됐고 127.0.0.1 origin에서 401 AccessDeniedError/domain mismatched를 확인했습니다. 사용자가 등록한 localhost:5273으로 맞추자 실제 SDK/tile/click/marker가 통과했습니다. SDK 사전 gate 전에는 Docker/DB/ETL을 실행하지 않습니다. Mock SDK로 대체하지 않습니다.
+
+**2026-10-13 v2 과거 기록**: 고정 API 기준 좌표는 서울시청 `(37.5665,126.9780)`·홍대입구 `(37.5563,126.9238)`·성수 `(37.5445,127.0557)`, CAFE/500m/20254이며 카페 155/291/123입니다. v2 실제 클릭은 `(37.566562889236884,126.9785165051903)`·`(37.55657470981089,126.92299569254334)`·`(37.54507206480014,127.05540199420889)`이고 카페 196/289/119, 목록 각각 100이었습니다. 동일 동 Q4 점포/매출은 219/20869742444·621/27768312903·170/5973450437입니다. 3개 등록·4번째 제한·홍대 삭제/교체·Q3 변경·통신 실패/복구·모바일을 확인했습니다. 이 값들은 최신 실제 클릭 138/202/221/266과 좌표가 다르므로 기대값으로 재사용하지 않습니다. v2 당시 일반 ETL 261 PASS/15 SKIP, bridge pure guard 20 PASS는 최신 277 PASS/15 SKIP·33 PASS와 별개입니다.
+
+시연 종료 전 controller에 `{"action":"final"}`을 다시 입력해 reader로 원본/DB 전수 무결성을 확인하고 frontend를 해당 terminal에서 종료합니다. 이어 `{"action":"cleanup"}`이 소유 container/network full ID·label·attachment·mount·port·network member를 재검사한 뒤 이번 자원만 제거합니다. 종료 후 자원 없음·loopback process 종료를 확인합니다. STOP 뒤에는 다음 stage를 실행하지 않고, 소유권이 확정된 이번 자원만 안전하게 정리합니다. 진행 중 transaction과 이미 commit한 종류를 구분합니다. 준비 실패로 SID가 없는 상태도 삭제 소유권 증명으로 정리하되 실행 연결 guard의 SID/준비 조건은 유지합니다. controller의 메모리 증명이 소실되면 label만 보고 삭제하지 않고 기록한 full ID·동일 격리 조건을 대조합니다. 원본·기존 volume·백업·다른 process는 정리 대상이 아닙니다.
+
+tmpfs 종료 후 데이터는 사라집니다. 다시 검증하려면 새 실행 승인·새 identity와 같은 guard를 거쳐야 하며 이전 시연 자원을 재사용하지 않습니다. 영구 volume·백업·보호 DB 이동은 별도 승인입니다. 2026-10-14 결과에 따라 README 7~10단계는 캡스톤 MVP·일회용 격리 시연 완료이고, 운영·원천 snapshot·역사적 경계·즉시 query 취소 등 위 한계는 유지합니다. Git stage/commit/push도 별도 최종 승인 대상입니다.
 
 ## 기술 결정과 Git 근거
 
