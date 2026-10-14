@@ -17,3 +17,13 @@ spring:
 app:
   cors:
     allowed-origins: ${FRONTEND_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+springdoc:
+  api-docs:
+    enabled: ${OPENAPI_ENABLED:false}
+    path: /api/v3/api-docs
+  swagger-ui:
+    enabled: ${OPENAPI_ENABLED:false}
+    path: /api/docs
+    disable-swagger-default-url: true
+  paths-to-match: /api/**
+  override-with-generic-response: false
