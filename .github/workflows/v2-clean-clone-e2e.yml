@@ -1,0 +1,309 @@
+# Local proposal only. Copy to .github/workflows/v2-clean-clone-e2e.yml only after approval.
+name: real-data-v2 clean clone E2E
+'on':
+  push:
+    branches: [codex/real-data-v2-activation]
+    paths: [.github/workflows/v2-clean-clone-e2e.yml]
+permissions:
+  contents: read
+concurrency:
+  group: real-data-v2-e2e-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    # Only the first workflow push directly after the reviewed activation commit.
+    # Any retry or later run requires a new reviewed approval and explicit guard update.
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/codex/real-data-v2-activation' &&
+      github.event.before == '5c12f773a0ee31968188c1ce1ec1429ea47ca83f' &&
+      github.run_number == '1' && github.run_attempt == '1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Reject unapproved repeated attempts before setup
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_RUN_NUMBER" != "1" || "$GITHUB_RUN_ATTEMPT" != "1" || "$GITHUB_REF" != "refs/heads/codex/real-data-v2-activation" ]]; then
+            printf '%s\n' '{"status":"FAIL","phase":"run_guard","code":"NEW_APPROVAL_REQUIRED"}'
+            exit 1
+          fi
+      - name: Clean checkout of the approved pushed ref
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Tooling and ordinary regressions (no DB opt-in)
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose version
+          python3 -m pip install -r etl/requirements.txt
+          (cd backend && ./gradlew test build --no-daemon)
+          (cd frontend && npm ci && npm test && npm run lint && npm run build && npm audit)
+          (cd etl && python3 -B -m unittest discover -s tests -v)
+      - name: Fresh Release download, owned DB, services and preserved rerun
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, re, signal, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
+          import psycopg
+          from psycopg.rows import dict_row
+          sys.path.insert(0, 'etl')
+          import team_dev
+          import team_dataset
+          assert os.environ.get('GITHUB_ACTIONS') == 'true'
+          assert os.environ.get('RUNNER_ENVIRONMENT') == 'github-hosted'
+          assert not pathlib.Path('.env').exists() and not pathlib.Path('frontend/.env.local').exists()
+          assert team_dataset.version() == 'real-data-v2'
+          assert pathlib.Path('data/release.json').is_file()
+          assert not list(pathlib.Path('data/raw').rglob('*.csv'))
+          assert not list(pathlib.Path('data/raw').rglob('*.zip'))
+          assert not any(k.startswith(('SPATIAL_TEST_', 'STORES_TEST_', 'STORES_REAL_')) for k in os.environ)
+          expected_contract = '0d27a0e526cd249d7adebf374b7be646fd5122ba5cede8b558117dd11d761994'
+          processes = []
+          logs = []
+          phase = 'isolation_preflight'
+          last_status_hint = 'UNCLASSIFIED'
+          def safe_hint(text):
+              # Return fixed categories only; never forward arbitrary log/error text.
+              for marker, code in [
+                  ('permission denied', 'PERMISSION_DENIED'), ('address already in use', 'PORT_IN_USE'),
+                  ('connection refused', 'CONNECTION_REFUSED'), ('release_unpublished', 'RELEASE_CONFIG_UNPUBLISHED'),
+                  ('download failed; no valid package published', 'RELEASE_DOWNLOAD_FAILED'),
+                  ('owned dataset version/contract mismatch', 'DATASET_BINDING_MISMATCH'),
+                  ('flyway history/checksum mismatch', 'MIGRATION_CHECKSUM_MISMATCH'),
+                  ('ready/actual db fingerprint mismatch', 'READY_FINGERPRINT_MISMATCH'),
+                  ('source/report/profile/version mismatch', 'SPATIAL_PROFILE_MISMATCH'),
+                  ('db_not_ready', 'DB_NOT_READY')]:
+                  if marker in text.lower(): return code
+              return 'UNCLASSIFIED'
+          class CommandFailure(RuntimeError):
+              def __init__(self, code, exit_code=None, service=None):
+                  super().__init__(code)
+                  self.safe_code, self.exit_code, self.service = code, exit_code, service
+          def command(args, timeout=1200):
+              try:
+                  result = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+              except subprocess.TimeoutExpired:
+                  raise CommandFailure('COMMAND_TIMEOUT') from None
+              if result.returncode:
+                  hint = safe_hint(result.stdout + '\n' + result.stderr)
+                  raise CommandFailure(hint if hint != 'UNCLASSIFIED' else 'COMMAND_FAILED', result.returncode)
+              return result.stdout
+          def safe_diagnostics():
+              diagnostics = dict(last_ready_status=last_status_hint)
+              allowed = {'inspect-proxy','preflight','data-init','team-postgres','db-identity','db-migrate','etl-init'}
+              try:
+                  ids = command(['docker','compose','ps','-aq'], 10).split()
+                  assert len(ids) <= 7 and all(re.fullmatch('[0-9a-f]{12,64}', x) for x in ids)
+                  services = []
+                  for item in json.loads(command(['docker','inspect',*ids], 10)) if ids else []:
+                      name = item['Config']['Labels'].get('com.docker.compose.service')
+                      if name not in allowed: continue
+                      state = item['State']; status = state.get('Status')
+                      status = status if status in {'created','running','paused','restarting','removing','exited','dead'} else 'UNKNOWN'
+                      health = state.get('Health',{}).get('Status')
+                      health = health if health in {'healthy','unhealthy','starting'} else None
+                      row = dict(service=name,state=status,health=health)
+                      if isinstance(state.get('ExitCode'),int): row['exit_code'] = state['ExitCode']
+                      if status == 'exited' and state.get('ExitCode'):
+                          row['hint'] = safe_hint(command(['docker','compose','logs','--tail=20','--no-log-prefix',name], 10))
+                      services.append(row)
+                  diagnostics['services'] = sorted(services, key=lambda x:x['service'])
+              except Exception:
+                  diagnostics['docker_metadata'] = 'UNAVAILABLE'
+              for name in ['backend','frontend']:
+                  path = pathlib.Path(os.environ['RUNNER_TEMP']) / (name + '.log')
+                  if path.is_file():
+                      with path.open('rb') as stream:
+                          stream.seek(max(0,path.stat().st_size-65536))
+                          diagnostics[name + '_hint'] = safe_hint(stream.read(65536).decode(errors='replace'))
+              return diagnostics
+          def report_failure(exc):
+              # No exception message, argv, DSN, HTTP body, traceback, raw API rows or log excerpt.
+              result = dict(status='FAIL',phase=phase,error_type=type(exc).__name__)
+              if isinstance(exc,CommandFailure):
+                  allowed_codes = {'COMMAND_FAILED','COMMAND_TIMEOUT','INITIALIZER_FAILED',
+                      'PERMISSION_DENIED','PORT_IN_USE','CONNECTION_REFUSED','RELEASE_CONFIG_UNPUBLISHED',
+                      'RELEASE_DOWNLOAD_FAILED','DATASET_BINDING_MISMATCH','MIGRATION_CHECKSUM_MISMATCH',
+                      'READY_FINGERPRINT_MISMATCH','SPATIAL_PROFILE_MISMATCH','DB_NOT_READY'}
+                  result['code'] = exc.safe_code if exc.safe_code in allowed_codes else 'UNCLASSIFIED'
+                  if isinstance(exc.exit_code,int): result['exit_code'] = exc.exit_code
+                  if exc.service in {'preflight','data-init','db-identity','db-migrate','etl-init'}:
+                      result['service'] = exc.service
+              if isinstance(exc,urllib.error.HTTPError): result['http_status'] = exc.code
+              sqlstate = getattr(exc,'sqlstate',None)
+              if isinstance(sqlstate,str) and re.fullmatch('[0-9A-Z]{5}',sqlstate): result['sqlstate'] = sqlstate
+              errno = getattr(exc,'errno',getattr(getattr(exc,'reason',None),'errno',None))
+              if isinstance(errno,int): result['errno'] = errno
+              try: result['diagnostics'] = safe_diagnostics()
+              except Exception: result['diagnostics'] = {'status':'UNAVAILABLE'}
+              print(json.dumps(result), flush=True)
+          def wait_ready():
+              global last_status_hint
+              deadline = time.monotonic() + 900
+              while time.monotonic() < deadline:
+                  # Inspect only this Compose project's services; print no raw logs or credentials.
+                  ids = command(['docker', 'compose', 'ps', '-aq'], 30).split()
+                  states = {}
+                  for item in json.loads(command(['docker', 'inspect', *ids], 30)) if ids else []:
+                      service = item['Config']['Labels']['com.docker.compose.service']
+                      states[service] = item['State']
+                  initializers = ['preflight', 'data-init', 'db-identity', 'db-migrate', 'etl-init']
+                  for service in initializers:
+                      state = states.get(service, {})
+                      if state.get('Status') == 'exited' and state['ExitCode'] != 0:
+                          raise CommandFailure('INITIALIZER_FAILED', state['ExitCode'], service)
+                  completed = all(states.get(s, {}).get('Status') == 'exited' and states[s]['ExitCode'] == 0 for s in initializers)
+                  if completed:
+                      result = subprocess.run(['python3', 'etl/team_dev.py', 'status'], capture_output=True, text=True, timeout=90)
+                      last_status_hint = safe_hint(result.stderr) if result.returncode else 'READY'
+                      if result.returncode == 0:
+                          proof = json.loads(result.stdout)
+                          if proof['status'] == 'READY':
+                              assert proof['version'] == 'real-data-v2' and proof['contract'] == expected_contract
+                              assert proof['sid'] not in ['7692329130053947430', '7696461093743411240']
+                              return proof
+                  time.sleep(10)
+              raise TimeoutError('DB_NOT_READY after bounded 15-minute wait')
+          def http(path, port=8080):
+              with urllib.request.urlopen('http://127.0.0.1:' + str(port) + path, timeout=60) as response:
+                  assert response.status == 200
+                  return response.read()
+          def api(path, port=8080): return json.loads(http(path, port))
+          def wait_http(path, port):
+              deadline = time.monotonic() + 180
+              while time.monotonic() < deadline:
+                  try: return http(path, port)
+                  except (OSError, urllib.error.URLError): time.sleep(2)
+              raise TimeoutError('Service startup timed out')
+          def last_action(service):
+              actions = []
+              for line in command(['docker', 'compose', 'logs', '--no-log-prefix', service], 60).splitlines():
+                  try: value = json.loads(line)
+                  except ValueError: continue
+                  if 'action' in value: actions.append(value['action'])
+              assert actions, 'Missing initializer result'
+              return actions[-1]
+          try:
+              daemon = command(['docker', 'info', '--format', '{{.ID}}'], 30).strip()
+              assert daemon != 'be7213ce-5f31-4050-a8bc-07d302b89514'
+              command(['python3', 'etl/team_dev.py', 'preflight'], 120)
+              phase = 'compose_first_up'
+              command(['docker', 'compose', 'up', '-d'])
+              phase = 'initial_ready'
+              before = wait_ready()
+              phase = 'db_verification'
+              fp = before['verification']['fingerprint']
+              for table, rows in [('store_stats_dong', 141218), ('sales_dong', 67113), ('stores', 554092),
+                                  ('admin_dong_boundaries', 425), ('commercial_area_boundaries', 1650)]:
+                  assert fp[table]['rows'] == rows
+              assert before['verification']['stores']['cafe'] == 22739
+              assert before['verification']['stores']['bad_points'] == before['verification']['stores']['conflicts'] == 0
+              assert before['verification']['migrations'] == team_dataset.expected_history()
+              assert len(before['verification']['spatial']) == 2
+              phase = 'services_start'
+              for cwd, args, name in [('backend', ['./gradlew', 'bootRun', '--no-daemon'], 'backend'),
+                                      ('frontend', ['npm', 'run', 'dev', '--', '--host', '127.0.0.1', '--strictPort'], 'frontend')]:
+                  output = open(pathlib.Path(os.environ['RUNNER_TEMP']) / (name + '.log'), 'x')
+                  logs.append(output)
+                  child_env = dict(os.environ)
+                  if name == 'frontend':
+                      child_env['RECYCLEYOUNGS_DEMO_API_PROXY'] = 'http://127.0.0.1:8080'
+                  processes.append(subprocess.Popen(args, cwd=cwd, env=child_env, stdout=output, stderr=subprocess.STDOUT, start_new_session=True))
+              phase = 'backend_http_ready'
+              wait_http('/api/v3/api-docs', 8080)
+              phase = 'frontend_http_ready'
+              wait_http('/', 5173)
+              phase = 'api_lookups'
+              dongs = api('/api/admin-dongs')
+              assert dongs and any(x['code'] == 'CAFE' for x in api('/api/industries'))
+              assert [x['code'] for x in api('/api/quarters')] == ['20251', '20252', '20253', '20254']
+              dong = dongs[0]['code']
+              suffix = urllib.parse.urlencode(dict(dongCode=dong, industryCode='CAFE'))
+              phase = 'api_stats_trends'
+              stats = api('/api/admin-dong-stats?' + suffix + '&quarterCode=20253')
+              trends = api('/api/admin-dong-trends?' + suffix)
+              assert [x['quarter']['code'] for x in trends['quarters']] == ['20251', '20252', '20253', '20254']
+              phase = 'locations_cafes'
+              for lat, lng in [(37.5665, 126.9780), (37.5638, 126.9850), (37.4980, 127.0276)]:
+                  query = urllib.parse.urlencode(dict(lat=lat, lng=lng))
+                  api('/api/locations/resolve?' + query)
+                  cafes = api('/api/nearby-stores?' + query + '&radius=500&industryCode=CAFE')
+                  assert isinstance(cafes['totalCount'], str)
+              phase = 'openapi_swagger'
+              assert len(api('/api/v3/api-docs')['paths']) == 7
+              assert b'swagger' in http('/api/docs').lower()
+              phase = 'vite_api_proxy'
+              assert api('/api/industries', 5173) == api('/api/industries')
+              phase = 'reader_acl'
+              password = team_dev.docker('exec', before['container_id'], 'cat', '/control/reader-password')
+              with psycopg.connect(host='127.0.0.1', port=55432, dbname='recycleyoungs_team_dev',
+                                   user='ry_team_reader', password=password, row_factory=dict_row,
+                                   connect_timeout=5, options='-c statement_timeout=60000') as db:
+                  db.execute('BEGIN READ ONLY')
+                  actor = db.execute("SELECT current_user AS actor,current_setting('transaction_read_only') AS readonly").fetchone()
+                  assert actor == dict(actor='ry_team_reader', readonly='on')
+                  assert not db.execute("SELECT rolsuper OR rolcreaterole OR rolcreatedb AS bad FROM pg_roles WHERE rolname=current_user").fetchone()['bad']
+                  assert not db.execute("SELECT EXISTS(SELECT 1 FROM pg_tables WHERE schemaname IN ('public','team_dev') AND has_table_privilege(current_user,quote_ident(schemaname)||'.'||quote_ident(tablename),'INSERT,UPDATE,DELETE,TRUNCATE')) AS bad").fetchone()['bad']
+                  source = db.execute("SELECT im.source_code FROM industry_mappings im JOIN industries i ON im.industry_id=i.id WHERE im.source='SEOUL' AND i.code='CAFE'").fetchone()['source_code']
+                  phase = 'q3_sql_api'
+                  for table, key, fields, stringify in [
+                      ('store_stats_dong', 'storeStats', [('storeCount','store_count'),('similarStoreCount','similar_store_count'),
+                       ('openingStoreCount','opening_store_count'),('closingStoreCount','closing_store_count'),('franchiseStoreCount','franchise_store_count')], False),
+                      ('sales_dong', 'salesStats', [('estimatedSalesAmount','sales_amount'),('transactionCount','transaction_count'),
+                       ('weekdayEstimatedSalesAmount','weekday_sales_amount'),('weekendEstimatedSalesAmount','weekend_sales_amount')], True)]:
+                      rows = db.execute('SELECT * FROM ' + table + ' WHERE dong_code=%s AND source_industry_code=%s AND quarter_code=20253', (dong, source)).fetchall()
+                      assert len(rows) <= 1
+                      expected = None if not rows else {a: (None if rows[0][b] is None else str(rows[0][b]) if stringify else rows[0][b]) for a,b in fields}
+                      assert stats[key] == expected
+                      assert stats['missingReasons'][key] == (None if rows else 'NO_ROW')
+                  db.rollback()
+              password = None
+              phase = 'compose_rerun'
+              command(['docker', 'compose', 'up', '-d'])
+              phase = 'rerun_ready'
+              after = wait_ready()
+              phase = 'rerun_fingerprint'
+              assert before['sid'] == after['sid'] and before['resources'] == after['resources']
+              assert before['contract'] == after['contract'] and before['verification'] == after['verification']
+              assert before['verification']['fingerprint'] == after['verification']['fingerprint']
+              phase = 'rerun_initializer_actions'
+              assert last_action('data-init') == 'VERIFIED_CACHE' and last_action('etl-init') == 'PRESERVED'
+              assert api('/api/industries', 5173) == api('/api/industries')
+              print(json.dumps(dict(status='PASS', dataset='real-data-v2', sid=after['sid'], api_get_contracts=7,
+                    fingerprint_sha256=hashlib.sha256(json.dumps(after['verification']['fingerprint'], sort_keys=True).encode()).hexdigest(),
+                    rerun_preserved=True, reader_readonly=True, q3_sql_api_equal=True,
+                    kakao_tiles_three_candidate_ui='NOT_VERIFIED: no test key supplied')))
+          except Exception as exc:
+              report_failure(exc)
+              raise SystemExit(1) from None
+          finally:
+              for process in reversed(processes):
+                  if process.poll() is None:
+                      try:
+                          os.killpg(process.pid, signal.SIGTERM)
+                          try: process.wait(timeout=20)
+                          except subprocess.TimeoutExpired:
+                              os.killpg(process.pid, signal.SIGKILL)
+                              process.wait()
+                      except ProcessLookupError:
+                          pass
+              for output in logs: output.close()
+              # No Docker prune/down/volume deletion. Only the new hosted VM is disposed by GitHub.
+          PY
