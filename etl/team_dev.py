@@ -2,11 +2,14 @@
 import argparse
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
 
-from team_data import DataError, VERSION, canonical, contract_sha, require
+from team_data import DataError, canonical, require
+from team_dataset import (SPATIAL_PROOF_SQL, contract_sha, expected_history, parse_json,
+                          validate_binding, validate_spatial, version)
 from team_guard import (DATABASE, NETWORK, OWNER, LABEL, PROJECT, SERVICES, VOLUMES,
                         inspect, prove_database)
 
@@ -18,6 +21,7 @@ def docker(*args, input=None):
 
 
 def preflight():
+    version()
     docker('info', '--format', '{{.ServerVersion}}')
     for name in ['COMPOSE_PROJECT_NAME', 'COMPOSE_FILE']:
         require(not os.getenv(name), 'Compose override rejected: ' + name)
@@ -34,11 +38,27 @@ def preflight():
     return dict(status='PASS', project=PROJECT, host_port=55432, collisions=0, db_connected=False)
 
 
+def validate_status(result, metadata, identity):
+    require(result['db'] == DATABASE and result['actor'] == 'ry_team_owner' and result['readonly'] == 'on'
+            and result['sid'] == identity['sid'] and result['owner'] == identity['owner']
+            and result['pgdata'] == metadata['pgdata'], 'Actual status connection identity rejected')
+    state = result['state']
+    require(state and state['owner'] == identity['owner'] and state['version'] == version()
+            and state['contract'] == contract_sha() and state['status'] == 'READY',
+            'DB_NOT_READY: selected version/contract is not READY; preserve resources and inspect initialization')
+    require(result['migrations'] == state['verification']['migrations'] == expected_history(), 'Flyway history/checksum mismatch')
+    require(result['fingerprint'] == state['verification']['fingerprint'], 'READY/actual DB fingerprint mismatch; preserve volume and review')
+    validate_spatial(result['spatial'])
+    require(re.fullmatch('[0-9a-f]{64}', result['spatial_proof'] or ''), 'Spatial proof missing')
+
+
 def proof():
     metadata = prove_database()
     cid = metadata['container_id']
-    ledger = json.loads(docker('exec', cid, 'cat', '/control/ownership.json'))
-    identity = json.loads(docker('exec', cid, 'cat', '/control/identity.json'))
+    ledger = parse_json(docker('exec', cid, 'cat', '/control/ownership.json'))
+    identity = parse_json(docker('exec', cid, 'cat', '/control/identity.json'))
+    validate_binding(ledger)
+    validate_binding(identity)
     require(identity['resources'] == ledger['resources'] == metadata['resources']
             and identity['owner'] == ledger['owner'] and identity['image'] == metadata['image'],
             'Persisted ownership proof mismatch')
@@ -51,18 +71,16 @@ def proof():
         'pgdata',current_setting('data_directory'),'owner',current_setting('recycleyoungs.owner',true),
         'readonly',current_setting('transaction_read_only'),
         'state',(SELECT to_jsonb(s) FROM team_dev.state s WHERE singleton),
-        'fingerprint',team_dev.fingerprint()); ROLLBACK;"""
-    result = json.loads(docker('exec', '-i', cid, 'psql', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1',
+        'fingerprint',team_dev.fingerprint(),
+        'migrations',(SELECT jsonb_agg(jsonb_build_object('version',version,'checksum',checksum,'success',success)
+          ORDER BY installed_rank) FROM public.flyway_schema_history),
+        'spatial',(SELECT jsonb_agg(to_jsonb(v) ORDER BY boundary_kind) FROM public.spatial_dataset_versions v),
+        'spatial_proof',(""" + SPATIAL_PROOF_SQL + """)); ROLLBACK;"""
+    result = parse_json(docker('exec', '-i', cid, 'psql', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1',
                               '-U', 'ry_team_owner', '-d', DATABASE, input=query))
-    require(result['db'] == DATABASE and result['actor'] == 'ry_team_owner' and result['readonly'] == 'on'
-            and result['sid'] == sid and result['owner'] == owner and result['pgdata'] == metadata['pgdata'],
-            'Actual status connection identity rejected')
+    validate_status(result, metadata, identity)
     state = result['state']
-    require(state and state['owner'] == owner and state['version'] == VERSION
-            and state['contract'] == contract_sha() and state['status'] == 'READY',
-            'DB_NOT_READY: docker compose logs etl-init; resolve the reported failure and rerun docker compose up -d')
-    require(result['fingerprint'] == state['verification']['fingerprint'], 'READY/actual DB fingerprint mismatch; preserve volume and review')
-    metadata.update(sid=sid, owner=owner, contract=state['contract'], version=VERSION,
+    metadata.update(sid=sid, owner=owner, contract=state['contract'], version=version(), spatial_proof=result['spatial_proof'],
                     verification=state['verification'], status='READY')
     return metadata
 
@@ -78,7 +96,8 @@ def main():
             if args.action == 'backend-proof':
                 # Only Gradle consumes this captured stdout, never log or save it.
                 password = docker('exec', value['container_id'], 'cat', '/control/reader-password')
-                value = dict(sid=value['sid'], owner=value['owner'], contract=value['contract'], password=password)
+                value = dict(sid=value['sid'], owner=value['owner'], contract=value['contract'], password=password,
+                             version=value['version'], spatial=value['spatial_proof'])
         print(canonical(value))
     except Exception as exc:
         print('TEAM_DEV_NOT_READY: ' + (str(exc) if isinstance(exc, DataError) else type(exc).__name__), file=sys.stderr)

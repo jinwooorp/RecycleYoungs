@@ -50,7 +50,7 @@ tasks.named('bootRun') {
             commandLine 'python3', 'etl/team_dev.py', 'backend-proof'
         }.standardOutput.asText.get()
         def proof = new groovy.json.JsonSlurper().parseText(captured)
-        ['sid', 'owner', 'contract', 'password'].each { key -> environment 'TEAM_DEV_' + key.toUpperCase(), proof[key] }
+        ['sid', 'owner', 'contract', 'password', 'version', 'spatial'].each { key -> environment 'TEAM_DEV_' + key.toUpperCase(), proof[key] }
         systemProperty 'spring.profiles.active', 'team-dev'
         systemProperty 'spring.flyway.enabled', 'false'
         logger.lifecycle('TEAM_DEV_IDENTITY_READY: reader on 127.0.0.1:55432/recycleyoungs_team_dev; migrations disabled')

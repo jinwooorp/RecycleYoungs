@@ -15,6 +15,10 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 public class TeamDevDataSourceConfiguration {
     static final String URL = "jdbc:postgresql://127.0.0.1:55432/recycleyoungs_team_dev"
         + "?connectTimeout=5&socketTimeout=35&ApplicationName=recycleyoungs_team_backend";
+    static final String SPATIAL_SQL = "SELECT encode(sha256(convert_to(jsonb_agg(jsonb_build_array("
+        + "id,boundary_kind,source_file_sha256,validation_report_sha256,processing_profile_sha256,"
+        + "processing_metadata,feature_count,load_status,is_current) ORDER BY boundary_kind)::text,'UTF8')),'hex') "
+        + "FROM public.spatial_dataset_versions";
 
     static String required(String key, String pattern) {
         String value = System.getenv("TEAM_DEV_" + key);
@@ -28,11 +32,12 @@ public class TeamDevDataSourceConfiguration {
     DataSource teamDevDataSource() throws SQLException {
         String sid = required("SID", "[0-9]+"), owner = required("OWNER", "[0-9a-f]{32}");
         String contract = required("CONTRACT", "[0-9a-f]{64}");
+        String version = required("VERSION", "real-data-v[12]"), spatial = required("SPATIAL", "[0-9a-f]{64}");
         if (sid.equals("7692329130053947430")) throw new IllegalStateException("Protected DB identity rejected");
         var delegate = new DriverManagerDataSource(URL, "ry_team_reader", required("PASSWORD", "[0-9a-f]{64}"));
         DataSource guarded = new AbstractDataSource() {
             @Override public Connection getConnection() throws SQLException {
-                return verify(delegate.getConnection(), sid, owner, contract);
+                return verify(delegate.getConnection(), sid, owner, contract, version, spatial);
             }
             @Override public Connection getConnection(String user, String password) throws SQLException {
                 throw new SQLException("Team development credential overrides forbidden");
@@ -44,8 +49,11 @@ public class TeamDevDataSourceConfiguration {
         return guarded;
     }
 
-    static Connection verify(Connection connection, String sid, String owner, String contract) throws SQLException {
+    static Connection verify(Connection connection, String sid, String owner, String contract, String version, String spatial) throws SQLException {
         try (var statement = connection.createStatement()) {
+            if (!"real-data-v1".equals(version) && !"real-data-v2".equals(version)) {
+                throw new SQLException("Unsupported team dataset version");
+            }
             statement.execute("SET default_transaction_read_only=on");
             statement.execute("SET statement_timeout='30s'");
             statement.execute("SET lock_timeout='5s'");
@@ -59,14 +67,15 @@ public class TeamDevDataSourceConfiguration {
                 + "(verification->'fingerprint'->'admin_dong_boundaries'->>'rows')::bigint=(SELECT count(*) FROM admin_dong_boundaries) AND "
                 + "(verification->'fingerprint'->'commercial_area_boundaries'->>'rows')::bigint=(SELECT count(*) FROM commercial_area_boundaries) AND "
                 + "verification->'migrations'=(SELECT jsonb_agg(jsonb_build_object('version',version,'checksum',checksum,'success',success) "
-                + "ORDER BY installed_rank) FROM flyway_schema_history) "
+                + "ORDER BY installed_rank) FROM flyway_schema_history), (" + SPATIAL_SQL + ") "
                 + "FROM team_dev.state WHERE singleton")) {
                 if (!rs.next() || !"recycleyoungs_team_dev".equals(rs.getString(1))
                     || !"ry_team_reader".equals(rs.getString(2)) || !"ry_team_reader".equals(rs.getString(3))
                     || !sid.equals(rs.getString(4)) || !"/var/lib/postgresql/data/team".equals(rs.getString(5))
                     || !owner.equals(rs.getString(6)) || !"on".equals(rs.getString(7))
-                    || !"real-data-v1".equals(rs.getString(8)) || !contract.equals(rs.getString(9))
-                    || !"READY".equals(rs.getString(10)) || !owner.equals(rs.getString(11)) || !rs.getBoolean(12)) {
+                    || !version.equals(rs.getString(8)) || !contract.equals(rs.getString(9))
+                    || !"READY".equals(rs.getString(10)) || !owner.equals(rs.getString(11)) || !rs.getBoolean(12)
+                    || !spatial.equals(rs.getString(13))) {
                     throw new SQLException("TEAM_DB_NOT_READY: verify Compose initialization and retry bootRun");
                 }
             }

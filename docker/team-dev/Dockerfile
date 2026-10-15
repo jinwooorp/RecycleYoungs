@@ -10,7 +10,7 @@ FROM base AS worker
 COPY etl/requirements.txt /workspace/etl/requirements.txt
 RUN pip install --no-cache-dir -r /workspace/etl/requirements.txt
 COPY etl/app /workspace/etl/app
-COPY etl/demo_worker.py etl/demo_safety.py etl/team_data.py etl/team_guard.py etl/team_db.py etl/team_checks.py /workspace/etl/
-COPY data/manifest.json data/release.json /workspace/data/
+COPY etl/demo_worker.py etl/demo_safety.py etl/team_data.py etl/team_public_data.py etl/team_dataset.py etl/team_guard.py etl/team_db.py etl/team_checks.py /workspace/etl/
+COPY data/manifest.json data/release.json data/public-data-v2.json /workspace/data/
 COPY backend/src/main/resources/db/migration /workspace/backend/src/main/resources/db/migration
 ENTRYPOINT ["python", "/workspace/etl/team_db.py"]

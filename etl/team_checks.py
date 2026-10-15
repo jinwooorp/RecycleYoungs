@@ -3,7 +3,8 @@ import argparse
 from unittest.mock import patch
 
 import team_db
-from team_data import DataError, VERSION, canonical, contract_sha, require
+from team_data import DataError, canonical, require
+from team_dataset import contract_sha, version
 
 
 def rejected(fn):
@@ -27,7 +28,7 @@ def run():
                 c.execute('UPDATE team_dev.state SET ' + column + '=%s', (value,))
                 rejected(lambda: team_db.assert_ready(c))
                 if column != 'status':
-                    rejected(lambda: team_db.migration_state(team_db.read_state(c), VERSION, contract_sha(), identity['owner']))
+                    rejected(lambda: team_db.migration_state(team_db.read_state(c), version(), contract_sha(), identity['owner']))
             checks.append(column.upper() + '_MISMATCH_REJECTED_WITHOUT_RELOAD')
         with c.transaction(force_rollback=True):
             c.execute("UPDATE stores SET name=name || ' fixture' WHERE id=(SELECT min(id) FROM stores)")

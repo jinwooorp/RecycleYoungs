@@ -37,7 +37,7 @@ db-info:
 	$(PYTHON) etl/team_dev.py status
 
 etl-validate:
-	$(PYTHON) etl/team_data.py validate
+	$(PYTHON) etl/team_dataset.py validate
 
 etl:
 	docker compose up -d

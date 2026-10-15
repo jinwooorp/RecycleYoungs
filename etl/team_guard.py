@@ -10,6 +10,7 @@ import subprocess
 import urllib.parse
 
 from team_data import DataError, canonical, require
+from team_dataset import binding, parse_json, validate_binding
 
 PROJECT = 'recycleyoungs-team-dev'
 LABEL = 'org.recycleyoungs.environment'
@@ -63,15 +64,17 @@ def claim(control=Path('/control')):
     actual = resources()
     ledger = control / 'ownership.json'
     if ledger.exists():
-        expected = json.loads(ledger.read_text())
+        expected = parse_json(ledger.read_bytes())
         require(expected['resources'] == actual and len(expected['owner']) == 32,
                 'Recorded Docker identities changed; preserve resources and review')
+        validate_binding(expected)
         os.chmod(control, 0o700)
     else:
         pending = control / 'ownership.pending'
         if pending.exists():
-            expected = json.loads(pending.read_text())
+            expected = parse_json(pending.read_bytes())
             require(expected['resources'] == actual, 'Pending ownership identities changed')
+            validate_binding(expected)
             require(not inspect('container', PROJECT + '-team-postgres-1')['State']['Running'],
                     'Pending credential setup cannot resume with a running DB')
         else:
@@ -79,7 +82,7 @@ def claim(control=Path('/control')):
             for v in actual['volumes'].values():
                 stamp = datetime.fromisoformat(v['created'].replace('Z', '+00:00')).timestamp()
                 require(abs(created - stamp) < 120, 'Unclaimed pre-existing volume; manual review required')
-            expected = dict(owner=secrets.token_hex(16), resources=actual)
+            expected = dict(owner=secrets.token_hex(16), resources=actual, dataset=binding())
             os.chmod(control, 0o700)
             with pending.open('x') as f:
                 f.write(canonical(expected)); f.flush(); os.fsync(f.fileno())

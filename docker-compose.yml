@@ -3,8 +3,11 @@ name: recycleyoungs-team-dev
 x-labels: &labels
   org.recycleyoungs.environment: team-development-v1
 
+x-runtime-env: &runtime-env
+  TEAM_DATA_VERSION: ${TEAM_DATA_VERSION:-real-data-v1}
+
 x-worker: &worker
-  image: recycleyoungs-team-dev-tools:real-data-v1
+  image: recycleyoungs-team-dev-tools:dataset-runtime-v2
   pull_policy: build
   build:
     context: .
@@ -14,6 +17,7 @@ x-worker: &worker
   restart: "no"
   read_only: true
   tmpfs: [/tmp]
+  environment: *runtime-env
 
 services:
   inspect-proxy:
@@ -45,17 +49,19 @@ services:
         condition: service_healthy
     networks: [inspect]
     environment:
+      <<: *runtime-env
       TEAM_PROJECT: ${COMPOSE_PROJECT_NAME:-recycleyoungs-team-dev}
     volumes:
       - team_control:/control
 
   data-init:
     <<: *worker
-    entrypoint: [python, /workspace/etl/team_data.py, init]
+    entrypoint: [python, /workspace/etl/team_dataset.py, init]
     depends_on:
       preflight:
         condition: service_completed_successfully
     environment:
+      <<: *runtime-env
       TEAM_DATA_MODE: ${TEAM_DATA_MODE:-local}
     networks: [download]
     volumes:
@@ -118,6 +124,7 @@ services:
         condition: service_completed_successfully
     networks: [team]
     environment:
+      <<: *runtime-env
       FLYWAY_URL: jdbc:postgresql://postgres:5432/recycleyoungs_team_dev
       FLYWAY_USER: ry_team_owner
       FLYWAY_LOCATIONS: filesystem:/flyway/sql

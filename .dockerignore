@@ -12,6 +12,7 @@
 !data/
 !data/manifest.json
 !data/release.json
+!data/public-data-v2.json
 !backend/
 !backend/src/
 !backend/src/main/

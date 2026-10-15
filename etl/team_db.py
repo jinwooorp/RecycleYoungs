@@ -6,13 +6,12 @@ import json
 import os
 from pathlib import Path
 import sys
-import zlib
-
-from team_data import (DataError, ROOT, VERSION, canonical, check_files, contract_sha, prepare, require)
+from team_data import DataError, ROOT, canonical, require
+from team_dataset import (binding, cache_path, check_files, contract_sha, expected_history, parse_json,
+                          prepare, validate_binding, validate_spatial, version)
 from team_guard import DATABASE, PGDATA, prove_database
 
 CONTROL = Path('/control')
-DATA = Path('/cache') / VERSION
 TABLES = ('industries', 'industry_mappings', 'commercial_areas', 'store_stats_dong', 'sales_dong',
           'sales_commercial_area', 'stores', 'spatial_dataset_versions', 'admin_dong_boundaries',
           'commercial_area_boundaries', 'flyway_schema_history')
@@ -49,14 +48,15 @@ def migration_state(state, version, digest, owner):
 
 
 def ownership():
-    value = json.loads((CONTROL / 'ownership.json').read_text())
+    value = parse_json((CONTROL / 'ownership.json').read_bytes())
     actual = prove_database()
     require(value['resources'] == actual['resources'], 'Ownership ledger/resources mismatch')
+    validate_binding(value)
     return value, actual
 
 
 def load_identity():
-    return None if not (CONTROL / 'identity.json').exists() else json.loads((CONTROL / 'identity.json').read_text())
+    return None if not (CONTROL / 'identity.json').exists() else parse_json((CONTROL / 'identity.json').read_bytes())
 
 
 def connect(bootstrap=False):
@@ -64,7 +64,9 @@ def connect(bootstrap=False):
     from psycopg.rows import dict_row
     owner, metadata = ownership()
     previous = load_identity()
-    if previous: prove_database(previous)
+    if previous:
+        validate_binding(previous)
+        prove_database(previous)
     c = psycopg.connect(host='postgres', hostaddr=metadata['ip'], port=5432, dbname=DATABASE,
                          user='ry_team_owner', password=(CONTROL / 'password').read_text(),
                          autocommit=True, connect_timeout=5, row_factory=dict_row,
@@ -91,37 +93,41 @@ def connect(bootstrap=False):
             actual['owner'] = owner['owner']
         validate_identity(actual, expected)
         require(c.execute('SELECT session_user AS u').fetchone()['u'] == 'ry_team_owner', 'Session user mismatch')
-        c.execute("SET default_transaction_read_only=off")
-        if bootstrap:
-            schemas = c.execute("SELECT schema_name FROM information_schema.schemata WHERE schema_name='team_dev'").fetchall()
-            if schemas:
-                state = read_state(c)
-                migration_state(state, VERSION, contract_sha(), owner['owner'])
+        state_exists = c.execute("SELECT to_regclass('team_dev.state') IS NOT NULL AS ok").fetchone()['ok']
+        if not state_exists:
+            require(not c.execute("SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name='team_dev') AS ok").fetchone()['ok'],
+                    'Incomplete/unknown team_dev schema without state; preserve DB and review')
+        if state_exists:
+            state = read_state(c)
+            migration_state(state, version(), contract_sha(), owner['owner'])
+            if bootstrap:
                 history(c)
-                decide_load(state, empty(c), VERSION, contract_sha())
+                decide_load(state, empty(c), version(), contract_sha())
                 if state['status'] == 'READY':
                     require(fingerprint(c) == state['verification']['fingerprint'], 'READY/actual DB mismatch BEFORE Flyway')
-            else:
+                    validate_spatial(list(c.execute('SELECT * FROM public.spatial_dataset_versions')))
+        # Dataset/owner mismatch is rejected while the actual connection is still READ ONLY.
+        c.execute("SET default_transaction_read_only=off")
+        if bootstrap:
+            if not state_exists:
                 tables = {r['tablename'] for r in c.execute("SELECT tablename FROM pg_tables WHERE schemaname='public'")}
                 for table in tables & set(DATA_TABLES):
                     require(c.execute('SELECT count(*) AS n FROM public.' + table).fetchone()['n'] == 0,
                             'Nonempty DB without team ownership state; migration refused')
                 require(tables <= set(TABLES) | {'spatial_ref_sys'}, 'Unknown public schema; migration refused')
-            metadata.update(sid=actual['sid'], owner=owner['owner'])
+            metadata.update(sid=actual['sid'], owner=owner['owner'], dataset=binding())
             (CONTROL / 'identity.json').write_text(canonical(metadata))
             (CONTROL / 'sid').write_text(actual['sid'])
             (CONTROL / 'owner').write_text(owner['owner'])
+            (CONTROL / 'dataset-version').write_text(version())
+            (CONTROL / 'dataset-contract').write_text(contract_sha())
         return c
     except BaseException:
         c.close(); raise
 
 
 def history(c):
-    expected = []
-    for p in sorted((ROOT / 'backend/src/main/resources/db/migration').glob('V*.sql')):
-        crc = 0
-        for line in p.read_text(encoding='utf-8-sig').splitlines(): crc = zlib.crc32(line.encode('utf-8'), crc)
-        expected.append(dict(version=p.name[1:].split('__')[0], checksum=crc if crc < 2 ** 31 else crc - 2 ** 32, success=True))
+    expected = expected_history()
     actual = list(c.execute('SELECT version,checksum,success FROM public.flyway_schema_history ORDER BY installed_rank'))
     require(actual == expected and len(actual) == 3, 'Flyway V1/V2/V3/checksum mismatch')
     return actual
@@ -155,20 +161,25 @@ def read_state(c):
 
 def assert_ready(c):
     state = read_state(c)
-    require(state and state['status'] == 'READY' and state['version'] == VERSION and state['contract'] == contract_sha(),
+    require(state and state['status'] == 'READY' and state['version'] == version() and state['contract'] == contract_sha(),
             'DB_NOT_READY: inspect etl-init logs; rerun compose after resolving failure')
     history(c)
+    validate_spatial(list(c.execute('SELECT * FROM public.spatial_dataset_versions')))
     require(fingerprint(c) == state['verification']['fingerprint'], 'READY/actual DB fingerprint mismatch')
     return state
 
 
 def checkpoint(c, status, stage, verification=None):
     from psycopg.types.json import Jsonb
-    c.execute('''INSERT INTO team_dev.state(singleton,version,contract,owner,status,stage,verification)
+    updated = c.execute('''INSERT INTO team_dev.state(singleton,version,contract,owner,status,stage,verification)
         VALUES(true,%s,%s,%s,%s,%s,%s) ON CONFLICT(singleton) DO UPDATE SET
-        status=excluded.status,stage=excluded.stage,verification=coalesce(excluded.verification,team_dev.state.verification),updated_at=now()''',
-        (VERSION, contract_sha(), (CONTROL / 'owner').read_text(), status, stage,
-         Jsonb(verification) if verification is not None else None))
+        status=excluded.status,stage=excluded.stage,verification=coalesce(excluded.verification,team_dev.state.verification),updated_at=now()
+        WHERE team_dev.state.version=excluded.version AND team_dev.state.contract=excluded.contract
+          AND team_dev.state.owner=excluded.owner RETURNING singleton''',
+        (version(), contract_sha(), (CONTROL / 'owner').read_text(), status, stage,
+         Jsonb(verification) if verification is not None else None)).fetchone()
+    # A conflicting identity is never updated, including by the failure checkpoint.
+    require(updated is not None, 'Checkpoint dataset identity mismatch; no state adoption')
 
 
 def empty(c):
@@ -179,7 +190,7 @@ def load_csv(c, fail_after=None):
     from app import etl_store_stats, etl_sales, etl_stores
     with c.transaction(), redirect_stdout(io.StringIO()):
         for name, fn in [('stats', etl_store_stats.run), ('sales', etl_sales.run_dong), ('stores', etl_stores.run)]:
-            fn(c, DATA / (name + '.csv'))
+            fn(c, cache_path() / (name + '.csv'))
             if fail_after == name: raise DataError('Injected CSV rollback fixture')
         checkpoint(c, 'LOADING', 'CSV_DONE')
 
@@ -190,7 +201,8 @@ def verify(c, polygons):
     with c.transaction():
         c.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
         migrations = history(c)
-        csv = projections(c, DATA, ROOT / 'data/manifest.json')
+        csv = projections(c, cache_path(), ROOT / 'data/manifest.json')
+        validate_spatial(list(c.execute('SELECT * FROM public.spatial_dataset_versions')))
         spatial = []
         for d in polygons:
             versions = list(c.execute('SELECT * FROM spatial_dataset_versions WHERE boundary_kind=%s', (d.spec.boundary_kind,)))
@@ -230,22 +242,23 @@ def reader(c):
 
 
 def initialize():
-    check_files(DATA)
-    _, polygons = prepare(DATA)
+    check_files(cache_path())
+    _, polygons = prepare(cache_path())
     with connect() as c:
         require(c.execute('SELECT pg_try_advisory_lock(726014,1) AS ok').fetchone()['ok'], 'Another initializer is running')
         history(c)
         with c.transaction():
-            setup(c)
-            state = read_state(c)
-            action = decide_load(state, empty(c), VERSION, contract_sha())
+            has_state = c.execute("SELECT to_regclass('team_dev.state') IS NOT NULL AS ok").fetchone()['ok']
+            state = read_state(c) if has_state else None
+            action = decide_load(state, empty(c), version(), contract_sha())
             if state is None:
                 # Schema creation and the first durable checkpoint are one atomic step.
+                setup(c)
                 checkpoint(c, 'LOADING', 'CSV')
         if action == 'VERIFY':
             result = verify(c, polygons)
             require(result == state['verification'], 'READY marker and actual DB disagree; preserve data and review')
-            return dict(status='READY', action='PRESERVED', version=VERSION, verification=result)
+            return dict(status='READY', action='PRESERVED', version=version(), verification=result)
         stage = 'CSV' if action == 'LOAD' else state['stage']
         try:
             checkpoint(c, 'LOADING', stage)
@@ -254,7 +267,7 @@ def initialize():
                 from demo_worker import projections
                 with c.transaction():
                     c.execute('SET TRANSACTION READ ONLY')
-                    projections(c, DATA, ROOT / 'data/manifest.json')
+                    projections(c, cache_path(), ROOT / 'data/manifest.json')
             stage = 'POLYGONS'; checkpoint(c, 'LOADING', stage)
             from app.spatial_load import publish
             for d in polygons:
@@ -266,7 +279,7 @@ def initialize():
             with c.transaction():
                 reader(c)
                 checkpoint(c, 'READY', 'VERIFIED', result)
-            return dict(status='READY', action='INITIALIZED' if action == 'LOAD' else 'RESUMED', version=VERSION, verification=result)
+            return dict(status='READY', action='INITIALIZED' if action == 'LOAD' else 'RESUMED', version=version(), verification=result)
         except BaseException:
             checkpoint(c, 'FAILED', 'CSV' if stage == 'CSV' else stage)
             raise
@@ -285,7 +298,7 @@ def main():
             with connect() as c, c.transaction():
                 c.execute('SET TRANSACTION READ ONLY')
                 state = assert_ready(c)
-                result = dict(status='READY', version=VERSION, verification=state['verification'])
+                result = dict(status='READY', version=version(), verification=state['verification'])
         print(canonical(result))
     except Exception as exc:
         print(canonical(dict(status='FAIL', reason=str(exc) if isinstance(exc, DataError) else type(exc).__name__)))

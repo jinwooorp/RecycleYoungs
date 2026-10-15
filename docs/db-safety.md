@@ -1,5 +1,15 @@
 # 기존 개발 DB 보호와 적용 정책
 
+## 2026-10-15 v2 runtime 준비와 v1 보존
+
+현재 v1 팀 DB `recycleyoungs_team_dev` / `127.0.0.1:55432`와 전용 db/control/cache volume은 보존 대상이다. 알려진 SID `7696461093743411240`은 이전 실측 기준이며 이번 runtime 작업에서는 DB에 접속하거나 SID를 다시 조회하지 않았다. 동일 full container ID·healthy/StartedAt 및 volume 생성시각/label은 읽기 전용 Docker metadata로 확인했다. legacy 백업과 원본·기존 ZIP은 접근 범위를 넓히거나 변경하지 않는다.
+
+v2 runtime은 명시적인 `TEAM_DATA_VERSION`과 고정 contract를 control ownership·cache·DB state·Flyway·Backend proof에 결속한다. version 정보가 없는 기존 ledger는 v1로만 인정하며 v2로 입양하지 않는다. SQL 쓰기 모드 전환 전에 state version/contract/owner를 검증하고 checkpoint의 conflict 갱신도 동일 identity만 허용한다. READY 검증 성공은 v1 업그레이드·재적재·report SHA 교체 승인이 아니다. 승인된 독립·빈 환경 외에서 v2 초기화를 실행하지 않는다.
+
+이번에는 별도 Docker daemon/VM이 없어 실제 v2 DB 적재·migration·실패 주입을 실행하지 않았다. 검증은 loopback HTTP/독립 cache·순수 ETL·DB/Backend fixture 및 정적 Compose/Flyway까지이며 실제 DB E2E는 NOT_VERIFIED다. 기존 v1의 Compose up/stop/recreate·DDL/DML·volume 정리는 하지 않았다. 공개·commit/push도 승인되지 않았으며 GitHub Release는 UNPUBLISHED다. [구현과 검증 범위](technical.md#v2-runtime-통합-준비--공개db-e2e-대기)를 참고한다.
+
+후속 CC BY 4.0 리포트 고지 반영은 별도 미공개 후보와 v2 dataset 계약·archive pin만 갱신했다. 기존 v1 계약·8개 원본·v1 ZIP·이전 v2 ZIP·기존 cache는 보존했다. 라이선스 갱신 단계에서는 기존 DB에 접속하거나 restart/migration/ETL을 실행하지 않았다. 동일한 `real-data-v2` 이름이라도 이전 후보의 ATTRIBUTION/dataset 계약과 다르므로 새 계약으로 자동 승격하지 않으며 불일치 시 보존하고 거부한다. 공공데이터 및 제3자 권리의 조건과 실제 DB 적용 승인은 리포트 라이선스 선택과 별개다.
+
 ## 2026-10-14 로컬 환경 통일
 
 사용자의 별도 승인으로 기존 `startup-analysis-postgres` / `startup_analysis` / `recycleyoungs_postgres_data`를 읽기 전용으로 감사하고, snapshot 연계 custom dump·schema SQL·역할/권한 정보를 비공개 로컬 경로에 보존했다. 원본 DB에는 migration·ETL·DDL/DML을 실행하지 않았다. 백업 파일·SHA-256·검증 증거는 삭제하지 않는다. 개인 절대 경로·credential은 이 문서에 기록하지 않는다.
@@ -20,6 +30,7 @@
 
 ## 목차
 
+- [2026-10-15 v2 runtime 준비와 v1 보존](#2026-10-15-v2-runtime-준비와-v1-보존)
 - [2026-10-14 로컬 환경 통일](#2026-10-14-로컬-환경-통일)
 - [보호 대상과 마지막 확인](#보호-대상과-마지막-확인)
 - [V1 보존과 허용 변경](#v1-보존과-허용-변경)

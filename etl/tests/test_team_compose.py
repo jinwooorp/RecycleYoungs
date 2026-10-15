@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 import unittest
 import tempfile
@@ -18,6 +19,53 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class TeamComposeTests(unittest.TestCase):
+    def test_flyway_shell_gate_checks_binding_without_invoking_a_database(self):
+        source=(ROOT/'docker/team-dev/migrate.sh').read_text()
+        syntax=subprocess.run(['sh','-n',str(ROOT/'docker/team-dev/migrate.sh')],capture_output=True,text=True)
+        self.assertEqual(syntax.returncode,0)
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            for name,value in {'sid':'12345','owner':'a'*32,'dataset-version':'real-data-v2',
+                               'dataset-contract':'b'*64,'password':'fixture-only'}.items():
+                (root/name).write_text(value)
+            script=source.replace('/control/',shlex.quote(str(root)+'/'))
+            script=script.replace('exec /flyway/flyway migrate', 'printf \'%s\' "$FLYWAY_INIT_SQL"')
+            self.assertNotIn('exec /flyway/flyway',script)
+            for selected,code in [('real-data-v2',0),('real-data-v1',1)]:
+                result=subprocess.run(['sh','-s'],input=script,env=dict(os.environ,TEAM_DATA_VERSION=selected),
+                                      capture_output=True,text=True)
+                self.assertEqual(result.returncode,code)
+                if not code:
+                    self.assertIn("version='real-data-v2'",result.stdout)
+                    self.assertIn("contract='"+'b'*64+"'",result.stdout)
+                    self.assertIn("current_database()<>'recycleyoungs_team_dev'",result.stdout)
+                else:self.assertEqual(result.stdout,'')
+
+    def test_fixed_contracts_are_in_worker_build_context_and_raw_is_excluded(self):
+        rules=(ROOT/'.dockerignore').read_text().splitlines()
+        self.assertIn('**',rules)
+        for name in ['data/manifest.json','data/release.json','data/public-data-v2.json']:
+            self.assertIn('!'+name,rules,'Required COPY source is excluded from the deny-by-default build context')
+        self.assertNotIn('!data/raw/**',rules)
+        self.assertNotIn('!.codex-local/**',rules)
+
+    @unittest.skipUnless(shutil.which('docker'), 'Docker CLI unavailable')
+    def test_explicit_v2_reaches_all_runtime_gates_without_changing_db_resources(self):
+        env = dict(os.environ, TEAM_DATA_VERSION='real-data-v2')
+        r = subprocess.run(['docker','compose','-f',str(ROOT/'docker-compose.yml'),'config','--format','json'],
+                           env=env,cwd=ROOT,capture_output=True,text=True)
+        self.assertEqual(r.returncode,0)
+        value=json.loads(r.stdout); services=value['services']
+        for service in ['preflight','data-init','db-identity','db-migrate','etl-init']:
+            self.assertEqual(services[service]['environment']['TEAM_DATA_VERSION'],'real-data-v2')
+        self.assertIn('/workspace/etl/team_dataset.py',services['data-init']['entrypoint'])
+        self.assertEqual(services['team-postgres']['environment']['POSTGRES_DB'],DATABASE)
+        self.assertEqual(services['team-postgres']['ports'][0]['published'],'55432')
+        self.assertEqual({v['name'] for v in value['volumes'].values()},set(VOLUMES.values()))
+        dockerfile=(ROOT/'docker/team-dev/Dockerfile').read_text()
+        for name in ['team_dataset.py','team_public_data.py','public-data-v2.json']:
+            self.assertIn(name,dockerfile)
+
     def test_make_check_db_routes_only_to_guarded_readonly_status(self):
         result = subprocess.run(['make', '-n', 'check-db'], cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0)

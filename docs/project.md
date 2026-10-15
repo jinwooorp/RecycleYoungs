@@ -4,6 +4,8 @@
 
 최신 로컬 개발 환경 상태는 **LOCAL_READY_RELEASE_PENDING**입니다. 새 영구 team-dev Compose에서 로컬 원본 8개 검증·V1~V3·CSV/Polygon 전수 적재·API/실지도/3후보 비교·실패 rollback·동일 데이터 재실행 보존을 확인했습니다. 실행 방법은 README, 실측·구조·테스트는 [technical의 팀 환경 절](technical.md#팀-공통-실자료-개발-환경)에 있습니다. GitHub Release는 미공개이며 이용조건·로컬 출처 연결·리포트 공개 검토와 후속 승인이 남았습니다. 최초 구축은 기존 DB 미접속으로 진행했으며, 후속 2026-10-14 로컬 환경 통일에서는 별도 승인된 읽기 전용 감사·백업·독립 복원·전수 대조 후 기존 환경을 제거했습니다. [보존·퇴역 기록](db-safety.md#2026-10-14-로컬-환경-통일)을 참고합니다. 코드 반영 상태는 Git main 이력으로 확인하며, 코드 공개와 실자료 Release 공개 승인은 구분합니다.
 
+2026-10-15의 v2 후속 작업은 **V2_LICENSED_PACKAGE_READY_APPROVAL_PENDING**입니다. 공개용 파생 report·명시적 v1/v2 runtime·cache/DB/Backend proof에 이어, 사용자가 보유·관리하는 권리 범위의 리포트 3개에 CC BY 4.0·출처표시명 RecycleYoungs 프로젝트를 반영한 새 후보를 만들었습니다. 원본 5개·공개 report 3개 bytes와 기존 후보는 보존하고 고지·dataset 계약·runtime pin만 갱신했습니다. 새 후보의 로컬 HTTP/빈 cache 및 일반 회귀를 검증했으며 기존 v1 READY와 기본 v1/local은 유지합니다. 독립 daemon/VM이 없어 **v2 실제 DB 적재·실 API/브라우저·GitHub 다운로드·clean clone은 미검증**입니다. 기록 밖의 제3자 권리·추가 동의는 확인할 수 없으며 최종 ZIP/hash 검토, Git commit/push와 Public Release 업로드는 별도 승인 대기입니다. 상세는 [v2 runtime](technical.md#v2-runtime-통합-준비--공개db-e2e-대기)에 구분합니다.
+
 이전 **2026-10-14 일회용 실자료 E2E**는 별도 기록입니다. 새 격리 DB의 지도 클릭 4개, 최종 3후보 Q3 통계, 대표 경계 2개, bridge abort·복구 3회 및 cleanup을 확인했습니다. 당시 README 7~10단계는 캡스톤 MVP·일회용 격리 시연 범위에서 완료했습니다. 이전 단계/v1/v2 기록은 [실자료 통합 결과](#실자료-통합-결과)에서 구분합니다.
 
 개발 인원은 1명이며 최종 목표는 **2026년 10월 31일까지 시연 가능한 MVP 완성**입니다. 카페는 우선 검증 업종이며 서비스를 카페 전용으로 제한하지 않습니다. 현재 구현 상태와 다음 개발 순서는 [현재 위치](#현재-위치와-지금-시작할-작업)와 [Now / Next / Later](#now--next--later)에서 확인합니다.

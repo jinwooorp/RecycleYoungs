@@ -1,0 +1,138 @@
+{
+  "schema_version": 1,
+  "version": "real-data-v2",
+  "asset": "recycleyoungs-real-data-v2.zip",
+  "policy": "public-reports-v1",
+  "source_contract_sha256": "57594dc6f49495bcc5644f753b07b0bedff07934ac48aecd428215c2329937c3",
+  "reports": {
+    "admin-report.json": {
+      "name": "admin-report.json",
+      "bytes": 22454,
+      "sha256": "676671b3de305fe45d63f6fd7c6f3f5bbf1a23f01aa5da6e05ddaf3c8aa5fae3"
+    },
+    "commercial-report.json": {
+      "name": "commercial-report.json",
+      "bytes": 485933,
+      "sha256": "5f64f4fe6d59f3831e413ddd7a47490bb628a35b5c35ae44ca6b26b1148fdbd2"
+    },
+    "repair-report.json": {
+      "name": "repair-report.json",
+      "bytes": 269967,
+      "sha256": "133b23b6ed9dc07fe8ba3f6801acc499f8232eef3f12b902d917e87d81716e74"
+    }
+  },
+  "attribution": {
+    "package_version": "real-data-v2",
+    "source_snapshot_version": "real-data-v1",
+    "verification_date": "2026-10-15",
+    "purpose": "동일한 실자료를 사용하는 RecycleYoungs 개발용 고정 snapshot. 운영 데이터나 창업 성과를 보장하지 않습니다.",
+    "no_endorsement": "서울특별시·서울신용보증재단·소상공인시장진흥공단이 이 프로젝트를 후원하거나 검증했다는 의미가 아닙니다.",
+    "license_scope": "파일별 이용조건을 구분합니다. 아래 프로젝트 리포트의 CC BY 4.0은 서울시·SEMAS 원본 데이터나 허락 권한이 없는 제3자 자료의 이용조건을 변경하지 않습니다.",
+    "sources": [
+      {
+        "member": "stats.csv",
+        "title": "서울시 상권분석서비스(점포-행정동)_2025년",
+        "institution": "서울특별시 / 서울신용보증재단",
+        "dataset_id": "OA-22172",
+        "source_page": "https://data.seoul.go.kr/dataList/OA-22172/S/1/datasetView.do",
+        "license": "공공누리 제1유형: 출처표시",
+        "license_url": "https://www.kogl.or.kr/info/licenseType1.do",
+        "period": "2025년 1~4분기",
+        "official_identity": "2026-10-15 공식 2025 ZIP의 CSV member와 bytes/SHA-256 일치. 최초 로컬 다운로드 시점은 UNKNOWN.",
+        "modification": "원본 CSV bytes 변경 없음"
+      },
+      {
+        "member": "sales.csv",
+        "title": "서울시 상권분석서비스(추정매출-행정동)_2025년",
+        "institution": "서울특별시 / 서울신용보증재단",
+        "dataset_id": "OA-22175",
+        "source_page": "https://data.seoul.go.kr/dataList/OA-22175/S/1/datasetView.do",
+        "license": "공공누리 제1유형: 출처표시",
+        "license_url": "https://www.kogl.or.kr/info/licenseType1.do",
+        "period": "2025년 1~4분기",
+        "official_identity": "2026-10-15 공식 2025 ZIP의 CSV member와 bytes/SHA-256 일치. 최초 로컬 다운로드 시점은 UNKNOWN.",
+        "modification": "원본 CSV bytes 변경 없음"
+      },
+      {
+        "member": "stores.csv",
+        "title": "소상공인시장진흥공단_상가(상권)정보_20260630 중 서울 202606 CSV",
+        "institution": "소상공인시장진흥공단",
+        "dataset_id": "15083033",
+        "source_page": "https://www.data.go.kr/data/15083033/fileData.do",
+        "license": "공공데이터포털 이용허락범위: 제한 없음",
+        "period": "파일명 202606, 공식 배포 페이지 20260630. 정확한 원천 snapshot 기준일은 UNVERIFIED.",
+        "official_identity": "2026-10-15 공식 전국 ZIP의 서울 member와 bytes/SHA-256 일치. 최초 로컬 다운로드 시점은 UNKNOWN.",
+        "modification": "전국 ZIP에서 서울 CSV를 그대로 사용. 원본 CSV bytes 변경 없음",
+        "content_notice": "공식 공개 점포명·업종·주소·건물 및 층 정보·좌표를 포함합니다. snapshot 누락을 폐업으로 해석하지 않습니다."
+      },
+      {
+        "member": "admin.zip",
+        "title": "서울시 상권분석서비스(영역-행정동)",
+        "institution": "서울특별시 / 서울신용보증재단",
+        "dataset_id": "OA-22160",
+        "source_page": "https://data.seoul.go.kr/dataList/OA-22160/S/1/datasetView.do",
+        "license": "공공누리 제1유형: 출처표시",
+        "license_url": "https://www.kogl.or.kr/info/licenseType1.do",
+        "period": "원본 파일 수정일 2023-10-31. 실제 경계 기준일·version UNKNOWN, EPSG:5181.",
+        "official_identity": "2026-10-15 공식 ZIP 전체 bytes/SHA-256 일치. 보관 provenance의 다운로드 기록 2026-10-07.",
+        "modification": "원본 ZIP·SHP bytes 변경 없음. 적재 시 Polygon을 MultiPolygon으로 감싸며 geometry 의미 보존"
+      },
+      {
+        "member": "commercial.zip",
+        "title": "서울시 상권분석서비스(영역-상권)",
+        "institution": "서울특별시 / 서울신용보증재단",
+        "dataset_id": "OA-15560",
+        "source_page": "https://data.seoul.go.kr/dataList/OA-15560/S/1/datasetView.do",
+        "license": "공공누리 제1유형: 출처표시",
+        "license_url": "https://www.kogl.or.kr/info/licenseType1.do",
+        "period": "원본 파일 수정일 2023-10-23. 실제 경계 기준일·version UNKNOWN, EPSG:5181.",
+        "official_identity": "2026-10-15 공식 ZIP 전체 bytes/SHA-256 일치. 보관 provenance의 다운로드 기록 2026-10-07.",
+        "modification": "원본 ZIP·SHP bytes 변경 없음. 적재용 operational geometry만 승인된 6개 code에 linework/keep_collapsed=true 적용",
+        "repair_codes": ["3110137", "3110270", "3110234", "3110407", "3110515", "3110542"]
+      }
+    ],
+    "project_reports": {
+      "members": ["admin-report.json", "commercial-report.json", "repair-report.json"],
+      "origin": "2026-10-07 RecycleYoungs 검증 작업의 생성·실행·보관 기록과 사용자 진술을 확인했습니다. 완성된 외부 기관 리포트로 취급하지 않습니다.",
+      "derivation": "원본 hash를 기록하고 허용 목록의 실행 환경 metadata만 제거한 파생본입니다. 수치·판정·features·재현 hash 및 승인된 6개 repair 결과는 보존합니다.",
+      "license_status": "프로젝트가 보유하거나 적법하게 허락할 수 있는 권리 범위에서 사용자가 CC BY 4.0 배포조건을 선택했습니다. Public 업로드 승인은 별도입니다.",
+      "license": "CC BY 4.0",
+      "license_name": "Creative Commons Attribution 4.0 International",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution_name": "RecycleYoungs 프로젝트",
+      "license_scope": "프로젝트가 보유하거나 적법하게 허락할 수 있는 공개용 파생 검증 리포트 3개의 표현과 산출물에만 적용합니다. 원본 공공데이터 및 허락 권한이 없는 제3자의 권리에는 적용하지 않습니다.",
+      "permitted_uses": ["copy", "share", "redistribute", "adapt", "commercial_use"],
+      "conditions": {
+        "attribution": "RecycleYoungs 프로젝트라는 출처표시명과 제공된 저작권·라이선스·면책 고지 및 자료 출처 링크를 합리적인 방식으로 유지합니다.",
+        "license_link": "CC BY 4.0 라이선스 링크를 제공합니다.",
+        "changes_notice": "변경한 경우 변경 사실을 알리고 기존 공개용 파생본의 변경 고지도 유지합니다.",
+        "no_endorsement": "원저작자나 RecycleYoungs 프로젝트의 후원·보증을 받았다고 오인시키지 않습니다.",
+        "no_additional_restrictions": "라이선스가 허용한 이용을 법적으로 제한하는 추가 조건이나 기술적 조치를 적용하지 않습니다."
+      },
+      "attribution_example": "RecycleYoungs 프로젝트, real-data-v2 공개용 검증 리포트, CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). 원본 대비 실행 환경 metadata 제거 및 공개용 provenance 추가. 재이용 시 실제 자료 출처 링크와 추가 변경 사항을 함께 표시합니다.",
+      "rights_limit": "허락자가 보유하거나 적법하게 관리하는 권리만 허락합니다. 생성 기록·사용자 진술만으로 다른 팀원·학교·외부 기관의 권리 부재를 보증하지 않습니다. 적용되는 법정 예외와 제한은 영향을 받지 않으며 개인정보·인격권·상표권 등 별도 권리를 일괄 허락하지 않습니다. CC BY 4.0 조건을 준수하는 이용허락은 임의로 철회할 수 없습니다.",
+      "third_party_rights": {
+        "status": "UNKNOWN",
+        "review_result": "검토한 프로젝트 기록에서 외부 완성 리포트 제공, 별도 권리 양도 약정 또는 구체적인 제3자 권리 주장을 발견하지 못했습니다. 기록 밖의 계약까지 없다고 확인한 것은 아닙니다.",
+        "notice": "다른 팀원·학교·외부 기관에 별도 권리가 있다면 그 권리자의 동의나 해당 이용조건 확인이 필요합니다. 해당 제3자 자료에는 별도 조건이 적용될 수 있습니다."
+      },
+      "publication_notice": "이 라이선스 고지는 외부 공개를 승인하거나 Release 상태를 나타내지 않습니다. 실제 공개 상태는 저장소의 data/release.json에서 확인하며 GitHub Release 생성·업로드 승인은 별도로 받습니다.",
+      "additional_references": [
+        "https://data.seoul.go.kr/dataList/OA-15572/S/1/datasetView.do",
+        "https://bigdata.sbiz.or.kr/#/notice/267352041576902656"
+      ],
+      "reference_scope": "상권 catalog·상권 매출·SEMAS 분류표와의 검증 결과를 기록합니다. 이 패키지에 해당 보조 CSV·안내문·분류표 원문은 포함하지 않습니다."
+    },
+    "limitations": [
+      "서울시 2024년 이후 집계 기준 변경과 역사적 경계 호환성 UNRESOLVED 유지",
+      "원본 overlap 및 홍지문 H5 속성 충돌을 숨기거나 보정하지 않음",
+      "원본·source geometry와 operational geometry를 구분",
+      "공식 source와의 byte identity는 최초 취득 이력 또는 실제 경계·snapshot 기준일을 확정하지 않음",
+      "최초 CSV 취득일 UNKNOWN. 공식 자료와의 대조일을 최초 다운로드일로 해석하지 않음",
+      "정확한 Polygon 경계 기준일 UNKNOWN. 파일 수정일·다운로드일과 구분",
+      "데이터 snapshot 완전성을 보증하지 않으며 SEMAS snapshot 누락을 폐업으로 단정하지 않음",
+      "승인된 6개 operational repair만 적용하며 원본 source geometry를 보존",
+      "실제 매출·입지 분석 결과는 창업 성공·수익·폐업을 예측하거나 보장하지 않음"
+    ]
+  }
+}

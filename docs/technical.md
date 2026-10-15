@@ -51,7 +51,7 @@ socket의 `:ro`는 Docker API 권한을 제한하지 않는다. socket을 가진
 
 `./gradlew bootRun`은 팀 전용 profile과 고정 loopback reader를 사용한다. 루트 `.env`를 Spring에 읽히지 않으며 process `DB_*`/`PG*`/`FLYWAY_*`/`SPRING_*` 주입과 CLI override를 거부한다. reader는 기본 READ ONLY이며 매 실제 JDBC 연결에서 SID/owner/DB/role/READY/버전/row count/Flyway history를 확인한다. 시작 전에는 전체 fingerprint도 검사한다. 일반 application.yaml/bootJar의 기본 OpenAPI 비활성 정책은 유지한다.
 
-Release 후보에는 고정 원본 8개와 출처/기간/hash/ETL 계약 `dataset.json`만 들어간다. `data/release.json`은 현재 UNPUBLISHED이며 임의 URL/latest를 받지 않는다. 공개 시 고정 tag·정확한 asset URL·archive SHA가 모두 필요하고 redirect host/상태/크기/전체 hash/ZIP 경로/내부 개별 hash/report를 검사한다. cache 손상은 자동 대체하지 않는다. 공개 업로드는 별도 승인 단계다.
+기존 v1 후보에는 고정 원본 8개와 출처/기간/hash/ETL 계약 `dataset.json`이 있다. 후속 검토에서 원본 report의 개인 임시 경로를 발견해 v1 후보 공개를 차단했다. 공개 검토용 v2 파생 후보는 아래에 별도로 구분한다. `data/release.json`은 현재 UNPUBLISHED이며 임의 URL/latest를 받지 않는다. 공개 시 고정 tag·정확한 asset URL·archive SHA가 모두 필요하고 redirect host/상태/크기/전체 hash/ZIP 경로/내부 개별 hash/report를 검사한다. cache 손상은 자동 대체하지 않는다. 공개 업로드는 별도 승인 단계다.
 
 ### 2026-10-14 팀 개발 환경 실측
 
@@ -91,6 +91,45 @@ Release 후보에는 고정 원본 8개와 출처/기간/hash/ETL 계약 `datase
 | 패키지 | 기존 후보 87,885,265 bytes와 위 archive SHA 유지. 8개 개별 bytes/SHA와 dataset.json 계약·9 members·byte 동일성 재확인. 원본/후보 덮어쓰기 없음 |
 
 현재 READY DB를 초기화하거나 실패 주입으로 변조하지 않았다. 최초 적재·실제 실패 rollback은 앞 절의 기존 구축 증거이며 이번 일반 회귀·재실행 보존과 구분한다. 공개 데이터의 취득 이력·리포트 배포 권한 검토와 사용자 후속 승인, 실제 Release 공개·다운로드 및 clean clone 재현은 남아 있다.
+
+### 공개용 파생 리포트와 v2 계약
+
+2026-10-15 사용자 승인 범위는 원본 보존·공개용 파생본 생성·안전한 로컬 검증까지다. 공개 업로드·Git stage/commit/push는 승인되지 않았다. 원본 report 3개·기존 v1 ZIP·READY DB는 변경하지 않는다.
+
+기존 `real-data-v1` 계약 SHA는 `57594dc6f49495bcc5644f753b07b0bedff07934ac48aecd428215c2329937c3`이다. manifest·원본 `spatial_sources.py`·geometry/loader·migration을 바꾸면 기존 READY 검증도 실패하므로 이 파일들은 유지한다. [team_public_data.py](../etl/team_public_data.py)는 DB나 Docker에 접근하지 않는 별도 도구다. [public-data-v2.json](../data/public-data-v2.json)이 `real-data-v2`와 새 report bytes/SHA를 고정한다. 이 데이터 계약과 실제 공개 상태(`release.json`)는 분리한다.
+
+- CSV 3개와 원본 Polygon ZIP 2개는 byte-identical이다. 리포트 3개는 지정한 환경 metadata만 제거한 파생본이다. 원본 report SHA·제거한 필드명·파생 정책을 기록하고 나머지 JSON 값은 전부 보존한다.
+- 행정동 report의 script 경로·명령·임시 환경, 상권 quality report의 로컬 재사용 경로, repair report의 container/network/storage/cleanup·전체 빌드 문자열을 제거한다. PostgreSQL 16.4/PostGIS 3.4.3/GEOS 3.9.0/PROJ 7.2.1 검증 엔진 버전은 정규화해 남긴다. feature별 수치·linework/structure/buffer0 결과·원본/repair WKB hash·replay·6개 승인 판정은 제거하지 않는다.
+- 기존 `prepare_dataset`에 새 고정 report hash를 갖는 불변 spec을 명시적으로 전달한다. 원본 전역 SPECS는 변경하지 않는다. 같은 source/operational geometry 결과여도 profile의 report hash/상대 artifact 이름이 다르므로 기존 DB version에 자동으로 채택할 수 없다.
+- 새 ZIP은 입력 8개와 `ATTRIBUTION.json`, `dataset.json`의 10개 member다. 전체/내부 hash·정확한 member·경로·symlink·ZIP metadata·canonical dataset 계약을 검증한 후에만 새 디렉터리로 해제한다. 개인 Unix/Windows 경로·인증 문자열·URL 내 credential/query와 허용하지 않은 환경 필드는 거부한다. scanner는 모든 개인정보 부재를 보증하는 수단이 아니며 hash-pinned 입력과 내용 검토를 함께 적용한다.
+
+최초 파생 후보 검증 당시에는 runtime이 v1만 지원했다. 후속 runtime 구현은 다음 절에 구분한다. 기본값은 계속 v1/local이고 실제 v2 DB 적재·GitHub 다운로드·clean clone E2E는 미검증이다. `release.json`만 v2로 바꾸거나 기존 READY DB에 report hash를 덮어쓰는 전환은 금지한다.
+
+자료별 공식 출처·고지와 남은 권리는 [README](../README.md#원본-이용조건과-공개-보류)에 있다. 공식 CSV/ZIP 5개 byte 일치와 프로젝트 report 생성 기록은 확인했지만 최초 CSV 취득 시점·실제 경계 기준일은 미확인이다. 후속 요청에서 보유·관리 권리 범위의 report 3개 CC BY 4.0·출처표시명 RecycleYoungs 프로젝트를 선택했다. 제3자 권리까지 허락한 것으로 처리하지 않으며 Public 업로드 승인은 대기 중이다.
+
+이번 로컬 검증은 Python 3.12.14의 일반 회귀 327개 중 **312 PASS / 15 SKIP**이며, 그중 공개 파생 도구 테스트는 11개다. Unix/macOS/Windows 경로·URL credential·원본 hash 불일치·계약/내부 bytes 변경·JSON 중복 키·ZIP comment/path·검증 후 archive 교체·기존 출력 덮어쓰기 거부와 결정적 패키징을 검사했다. 실제 후보 해제 후 통계 141,218행·매출 67,113행·점포 554,092행·CAFE 22,739행을 다시 검증했다. 원본/파생 report로 준비한 행정동 425개·상권 1,650개 feature의 모든 필드와 승인 6개 repair 결과가 동일했고 profile 차이는 `reports`뿐이었다. 원본 8개·v1 ZIP·v1 계약 hash도 유지됐다. DB 접속·migration·적재와 Backend/Frontend 재실행은 이번 범위에서 수행하지 않았다.
+
+### v2 runtime 통합 준비 — 공개·DB E2E 대기
+
+현재 상태는 **V2_LICENSED_PACKAGE_READY_APPROVAL_PENDING**이다. [team_dataset.py](../etl/team_dataset.py)는 v1/v2 contract와 prepare를 위임한다. 기존 `team_data.py`·`team_public_data.py`·hash 대상 원본 ETL·migration은 유지한다. CC BY 4.0 고지를 반영한 새 후보는 **87,870,777 bytes**, SHA `6b11901f46d1a207c5b36353483e209f00a10fb401edcc5fd036a3025238ff0b`, dataset contract SHA `0d27a0e526cd249d7adebf374b7be646fd5122ba5cede8b558117dd11d761994`, ATTRIBUTION SHA `4701182c7479caed7b480a97e3a792907e79feebe884897c2ecad511f8af0f67`다. CSV·Polygon 5개와 공개 report 3개 bytes는 그대로이며 ATTRIBUTION·dataset 및 runtime archive pin만 바뀌었다. 이전 미공개 v2 후보(87,869,626 bytes, SHA `1f9cf2dc539096c2ccd0addcb30935814d8490e5afc21f755a2532ed54243805`, contract `ff5bbc74b382dbfe09327476640f53a9e1b11d20e376d691382b729beca57c45`)는 덮어쓰지 않고 보존하며 새 계약으로는 거부한다. 아직 v2를 공개하지 않았으므로 version은 유지하지만 다른 계약의 cache/DB를 자동 채택하지 않는다. 기존 v1 계약도 불변이다.
+
+| 경계 | 구현·검증 |
+| --- | --- |
+| 선택·cache | `TEAM_DATA_VERSION` allowlist, 기본 v1. version별 cache·계약 및 정확한 member/hash 검사. v2 Local은 원본 8개에서 고정 파생본을 만들고 Release는 고정 asset pin을 검사. HTTP fixture 외 URL 우회 기능은 없음 |
+| 동시/실패 | container의 `flock`으로 writer 한 개, 충돌 즉시 오류·프로세스 종료 시 해제. 실패 staging은 보존, 최종 cache는 검증 후 rename. 손상 cache 자동 삭제·교체 없음 |
+| control/DB | 신규 ownership ledger에 version/contract 저장. 기존 미기록 ledger는 v1로만 해석. 불일치는 control 변경/SQL 쓰기 전 거부. 실제 연결 DB/actor/SID/owner/PGDATA와 Flyway history·fingerprint 유지 |
+| Flyway | identity 단계가 검증한 version/contract를 control에 전달. migrate.sh는 매 실제 Flyway 연결에서 SID/owner와 기존 state의 version/contract를 검사. 원본 V1~V3·baseline/clean 정책 불변 |
+| ETL/state | 선택 cache·report spec으로 기존 loader/publication 재사용. 실제 profile/source/geometry/ID/sequence/fingerprint 검증 후 READY. checkpoint conflict는 동일 version/contract/owner만 status 갱신. READY 경로는 setup DDL·checkpoint·loader 생략 |
+| Backend | 호스트 proof가 선택 version·기대 migration·실제 공간 metadata/report/source/profile hash를 검사. 단일 READ ONLY SQL snapshot의 공간 proof를 Gradle이 메모리로 전달. JDBC 매 연결에서 version/contract·기존 identity/count/history·동일 공간 proof 확인, reader/Flyway-disabled/OpenAPI 계약 유지 |
+| Compose | 초기화 서비스 5개에 version 전달, Dockerfile에 새 runtime/고정 공개 계약 포함. 프로젝트·image/SID·volume/network/port·inspect proxy 권한 검사는 유지. dataset과 infrastructure label `team-development-v1`은 다른 개념 |
+
+라이선스 후보 갱신 후 이번 회귀는 Backend **249 PASS**(`test build --no-daemon --rerun-tasks`), Frontend **235 PASS** + `npm ci`/lint/build/audit **0건**, ETL **334 PASS / 15 SKIP**(349개)다. 파생 도구 14개·runtime fixture 16개에 리포트 한정 라이선스/출처·한계 고지/계약 결속과 이전 후보 pin 거부를 포함했다. Compose propagation/build-context/Flyway shell gate 3개와 기존 v1/inspect proxy/공통 회귀도 유지했다. DB/raw opt-in은 활성화하지 않았다. 이전 runtime 준비 회귀의 330 PASS / 15 SKIP 및 최초 파생 회귀의 312 PASS / 15 SKIP은 당시 결과다.
+
+실제 최종 ZIP을 loopback HTTP로 **빈 별도 로컬 cache**에 다운로드·SHA/10-member/CSV/geometry 검증했다. 두 번째 release 실행과 같은 cache의 local 실행은 VERIFIED_CACHE였고 HTTP 요청 1회, 10개 파일 bytes/hash/mtime 불변이었다. 입력 행 수 141,218 / 67,113 / 554,092·CAFE 22,739 및 geometry 425 / 1,650·6개 repair가 확인됐다. 이는 **DB 적재 건수나 실제 GitHub 성공이 아니다**. 실제 prepared geometry로 `dataset_metadata`와 버전 검증도 조합했지만 DB engine version 응답은 fixture이며 실측 profile로 주장하지 않는다.
+
+`default`/`desktop-linux` daemon ID가 같고 별도 VM/daemon 도구가 없어 실제 독립 DB E2E는 **NOT_VERIFIED**다. 기존 v1에 SQL 접속·Compose up/recreate·migration/ETL/실패 주입을 하지 않았다. Backend/Frontend는 일반 회귀만 수행했으며 v2 실 API·Swagger·Kakao/3후보 브라우저는 미검증이다. 실제 통합 검증은 clone·Compose·Backend·Frontend를 모두 별도 daemon/VM에서 실행해야 한다.
+
+현재 기본값·`data/release.json`은 v1/local·UNPUBLISHED/null이다. 공개 후 새 clone 기본값 변경 시 기존 v1 사용자는 Compose 및 Backend/status 셸의 명시적 v1/local 설정을 유지해야 한다. mismatch는 자동 이관 대신 기동을 거부한다. 현재 v2는 같은 Docker daemon에서 별도 `-p` namespace로 실행할 수 없다. 리포트 배포조건을 정하고 ATTRIBUTION을 갱신하면 새 ZIP·dataset SHA와 runtime pin의 재검토가 필요하다. Release 생성/업로드·Git stage/commit/push는 이번 작업에서 하지 않는다.
 
 ## 시스템과 기술 선택
 
