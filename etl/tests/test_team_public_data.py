@@ -201,7 +201,7 @@ class PublicPackageTests(unittest.TestCase):
             self.assertEqual(spec.archive_sha256, original.archive_sha256)
             self.assertEqual(spec.invalid_codes, original.invalid_codes)
             self.assertNotEqual(spec.report_hashes, original.report_hashes)
-        self.assertEqual(json.loads((team_data.ROOT / 'data/release.json').read_text())['status'], 'UNPUBLISHED')
+        self.assertEqual(json.loads((team_data.ROOT / 'data/release.json').read_text())['status'], 'PUBLISHED')
 
     def test_hidden_duplicate_json_metadata_and_zip_comment_rejected(self):
         m = self.public()

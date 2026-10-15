@@ -199,7 +199,7 @@ source는 `GEOMETRY(GEOMETRY,5181)`, operational은 `GEOMETRY(MULTIPOLYGON,5181)
 
 ### 입력·출처·기간
 
-실자료는 새 clone에 포함되지 않습니다. [manifest](data/manifest.json)의 파일명·바이트·SHA-256·decoder·행 수·키·조사 범위와 [Polygon 고정 입력](etl/app/spatial_sources.py)을 대조해 별도로 확보해야 합니다.
+실자료는 Git에 포함되지 않습니다. 기본 Compose는 공개된 `real-data-v2` Release를 자동 다운로드하고 고정 bytes/SHA·CSV·Polygon/report 계약을 검증합니다. 아래 원본을 직접 준비하는 절차는 고급 Local mode에만 필요합니다. [manifest](data/manifest.json)와 [Polygon 고정 입력](etl/app/spatial_sources.py)은 원본 identity의 기준입니다.
 
 | 입력 | 원천·구성 | 사용·한계 |
 | --- | --- | --- |
@@ -212,7 +212,7 @@ source는 `GEOMETRY(GEOMETRY,5181)`, operational은 `GEOMETRY(MULTIPOLYGON,5181)
 | 행정동 Polygon ZIP | 서울시 [OA-22160](https://data.seoul.go.kr/dataList/OA-22160/S/1/datasetView.do), 425 feature·quality report | EPSG:5181 operational 경계 |
 | 상권 Polygon ZIP | 서울시 [OA-15560](https://data.seoul.go.kr/dataList/OA-15560/S/1/datasetView.do), 1,650 feature·quality/repair report | overlap·H5 속성 충돌·승인 repair 보존 |
 
-CSV의 정확한 파일명은 manifest에 있습니다. SEMAS 출처 후보는 [공공데이터포털](https://www.data.go.kr/data/15012005/openapi.do)입니다. byte/hash 일치는 최초 배포 이력·이용 조건·원천 기간의 증명과 다릅니다. UTF-8-SIG decoder만으로 BOM 존재를 단정하지 않습니다. manifest의 초기 CRS/BOM 기록과 후속 조사 범위 차이는 [기술 명세](docs/technical.md#manifest와-후속-검증의-범위)에 구분돼 있습니다.
+CSV의 정확한 파일명은 manifest에 있습니다. 공개 패키지의 SEMAS 공식 출처는 [파일데이터 15083033](https://www.data.go.kr/data/15083033/fileData.do)입니다. byte/hash 일치는 최초 취득 시점·정확한 원천 기준일의 증명과 다릅니다. UTF-8-SIG decoder만으로 BOM 존재를 단정하지 않습니다. manifest의 초기 CRS/BOM 기록과 후속 조사 범위 차이는 [기술 명세](docs/technical.md#manifest와-후속-검증의-범위)에 구분돼 있습니다.
 
 ### CSV ETL
 
@@ -345,14 +345,11 @@ RecycleYoungs/
 
 Java 21, Node.js/npm(현재 검증 Node 24), Python 3.12 권장, Docker Engine/Desktop와 Compose v2 이상을 준비합니다. Docker에 약 4GB 이상의 여유 메모리와 데이터·이미지용 디스크 공간이 필요합니다. Backend/Frontend는 호스트에서 실행합니다.
 
-**현재 Release는 미공개입니다.** 새 clone만으로 공공데이터 다운로드가 성공하는 상태는 아닙니다. 현재 기본값은 `real-data-v1` / Local mode이며 아래 원본 8개를 별도로 확보해야 합니다. v2 런타임 선택·검증 경로는 구현했지만 실제 v2 DB E2E와 공개 Release 다운로드는 미검증입니다.
+공개된 [real-data-v2 Release](https://github.com/jinwooorp/RecycleYoungs/releases/tag/real-data-v2)를 기본 `release` 모드로 사용합니다. CSV·Polygon을 따로 준비할 필요가 없습니다. 실제 공개 HTTPS 다운로드·패키지 무결성·cache 재사용은 검증했으며, **이 활성화 변경의 독립 DB·서비스 clean clone E2E는 아직 검증 대기**입니다. 운영 배포 완료를 뜻하지 않습니다.
 
 ```sh
 git clone https://github.com/jinwooorp/RecycleYoungs.git
 cd RecycleYoungs
-
-# 아래 표의 원본 8개가 data/raw/에 있는지 확인
-python3 etl/team_dataset.py validate
 
 # 최초 실행: DB 접속 없는 동일 이름 자원·포트 충돌 검사
 python3 etl/team_dev.py preflight
@@ -369,7 +366,7 @@ docker compose logs --tail=30 inspect-proxy preflight data-init db-identity db-m
 python3 etl/team_dev.py status
 ```
 
-별도 터미널 두 개에서 실행합니다. `bootRun`은 READY·Docker 소유권·DB 전수 fingerprint를 검사하고, 새 팀 DB의 읽기 전용 계정만 사용합니다. 준비 전에는 명확한 오류로 종료합니다. process에 예전 `DB_*`/`PG*`/`FLYWAY_*`/`SPRING_*` 설정이 있으면 제거한 별도 셸을 사용합니다. 루트의 기존 `.env`는 수정하지 않아도 됩니다.
+별도 터미널 두 개에서 실행합니다. `bootRun`은 READY·Docker 소유권·DB 전수 fingerprint를 검사하고, 새 팀 DB의 읽기 전용 계정만 사용합니다. 준비 전에는 명확한 오류로 종료합니다. process에 예전 `DB_*`/`PG*`/`FLYWAY_*`/`SPRING_*` 설정이 있으면 제거한 별도 셸을 사용합니다. 새 사용자는 루트 `.env` 없이 기본 v2를 사용합니다. **기존 v1 사용자는 아래 보존 설정을 먼저 적용해야 합니다.**
 
 Backend:
 
@@ -401,9 +398,18 @@ Docker socket은 전용 `inspect-proxy` 하나만 마운트합니다. 초기화 
 
 종료는 각 개발 서버 터미널에서 `Ctrl+C`입니다. DB/cache/control volume은 기본 보존합니다. DB를 멈출 때만 `docker compose stop team-postgres`를 사용하고, 재시작은 `docker compose up -d` 후 status로 확인합니다. `down -v`·volume 삭제·자동 재적재는 빠른 시작 절차에 없습니다. 다른 사람의 listener/process를 종료하지 않습니다.
 
-### Local mode 입력 8개
+### 기존 v1 보존과 고급 Local mode
 
-기본 Dataset version은 **real-data-v1**입니다. v2 Local mode도 같은 원본 8개를 읽기 전용 입력으로 받아 고정된 공개용 report를 파생·검증합니다. 원본 내용은 저장소에 없으며 Git 추적 대상이 아닙니다. 다음 경로는 저장소 기준 상대 경로입니다.
+기본 Dataset version은 **real-data-v2**입니다. 기존 v1 DB는 자동 업그레이드하지 않습니다. 기존 루트 `.env`를 덮어쓰지 말고 다음 두 설정을 직접 명시합니다. `.env` 전체를 source하지 않습니다.
+
+```dotenv
+TEAM_DATA_MODE=local
+TEAM_DATA_VERSION=real-data-v1
+```
+
+기존 v1 Backend와 status를 실행할 **각 호스트 셸**에서도 `export TEAM_DATA_VERSION=real-data-v1`을 지정합니다. 루트 `.env`는 Compose만 읽으며 Python/Gradle에는 자동 전달되지 않습니다. version/contract가 기존 ledger·cache·DB와 다르면 자동 이관 대신 명확히 거부합니다. 원인을 확인하기 위해 기존 볼륨을 삭제하거나 초기화하지 않습니다.
+
+Local mode는 원본 8개를 이미 가진 사용자를 위한 명시적 선택입니다. 기존 v1은 위 설정을 유지하고, **기존 v1과 분리된 새 daemon/VM**에서만 `TEAM_DATA_MODE=local TEAM_DATA_VERSION=real-data-v2 docker compose up -d`로 공개용 파생 report를 생성·검증할 수 있습니다. 해당 Backend/status 셸도 같은 버전을 사용해야 합니다. 다음은 Local mode 전용 저장소 상대 경로이며 새 사용자의 Release 빠른 시작에는 필요하지 않습니다.
 
 | 입력 | 경로 |
 | --- | --- |
@@ -418,48 +424,49 @@ Docker socket은 전용 `inspect-proxy` 하나만 마운트합니다. 초기화 
 
 CSV는 [manifest](data/manifest.json)의 bytes/SHA/기간/행 수, Polygon/report는 [spatial_sources.py](etl/app/spatial_sources.py)의 고정 identity와 승인된 6개 repair 계약으로 검증합니다. 다른 기간·report로 대체하지 않습니다. `data-init`은 원본을 read-only로 읽고 검증된 byte-identical 사본만 전용 cache volume에 공개합니다.
 
-### Release mode와 패키지 후보
+### Release mode와 고정 데이터
 
-현재 [release.json](data/release.json)은 `UNPUBLISHED`이며 tag·URL·SHA가 null입니다. [런타임 선택](etl/team_dataset.py)은 `TEAM_DATA_VERSION`의 v1/v2 allowlist, 선택한 version과 같은 고정 tag·asset·SHA를 검증합니다. v2 archive SHA는 검토한 후보로 추가 고정합니다. `latest`·임의 URL·환경 변수 URL은 받지 않으며 현재 release mode는 cache가 있어도 `RELEASE_UNPUBLISHED`로 거부합니다.
+현재 [release.json](data/release.json)은 실제 공개 asset을 `PUBLISHED`로 고정합니다. [런타임 선택](etl/team_dataset.py)은 v1/v2 allowlist, 선택 version과 같은 tag·asset·SHA를 검증하며 v2 archive SHA도 추가 고정합니다. `latest`·임의 URL·환경 변수 URL을 받지 않습니다. v1은 공개하지 않았으므로 `v1/local`을 명시하며, v2 Release 설정과 v1을 혼용하면 cache가 있어도 거부합니다.
 
-공개 승인 이후에는 최종 권리 고지·ZIP/SHA 확정 → 실제 공개 asset URL/SHA 검증 → `release.json`의 version/tag/URL/SHA·PUBLISHED 전환 → 신규 환경 기본값을 v2/release로 전환(Compose·런타임 기본 version·`.env.example` 함께 검토) → 코드 승인·일반 push → 깨끗한 clone·별도 daemon/VM의 새 volume에서 ETL·Backend/Frontend 검증 → 안내 갱신 순서로 진행합니다. 현재는 공개·기본값 전환·Git push가 미실행입니다. 이후에도 기존 v1 사용자는 Compose와 Backend/status 셸 모두 `TEAM_DATA_VERSION=real-data-v1`, `TEAM_DATA_MODE=local`을 명시해 보존합니다. 명시하지 않은 버전 불일치는 기동을 거부하며 DB를 자동 전환하지 않습니다.
+- Tag: `real-data-v2`, asset: `recycleyoungs-real-data-v2.zip`.
+- [고정 다운로드 URL](https://github.com/jinwooorp/RecycleYoungs/releases/download/real-data-v2/recycleyoungs-real-data-v2.zip), 87,870,777 bytes.
+- SHA-256: `6b11901f46d1a207c5b36353483e209f00a10fb401edcc5fd036a3025238ff0b`.
+- dataset contract: `0d27a0e526cd249d7adebf374b7be646fd5122ba5cede8b558117dd11d761994`.
+
+공개된 asset·tag·계약은 불변입니다. 데이터 갱신은 새 버전·hash와 별도 검증이 필요하며 기존 DB는 자동 업데이트하지 않습니다. 독립 환경의 clean clone DB·서비스 E2E는 아직 대기 중입니다.
 
 다운로드는 HTTP 상태/redirect host/길이/전체 SHA → 안전한 ZIP 경로 → 버전별 내부 SHA·중복 없는 JSON·report/ETL 계약을 검증합니다. v1은 9 members, v2는 ATTRIBUTION을 포함한 10 members입니다. 부분 파일이나 손상 cache는 정상 처리하지 않습니다. cache는 version별 디렉터리와 즉시 실패하는 writer lock을 사용하며, 검증 성공 후에만 공개합니다. 실패 staging은 보존하고 프로세스 종료 시 lock은 해제돼 안전한 재시도가 가능합니다. 동일 버전 재실행은 전체 cache를 재검증하며 다운로드와 destructive ETL을 생략합니다.
 
 기존 `real-data-v1` 후보는 원본 리포트의 개인 임시 경로를 포함해 **공개하지 않습니다**. 원본 8개와 기존 후보 ZIP은 보존하며, 현재 READY DB도 계속 v1 계약을 사용합니다.
 
-공개 검토용 파생 후보는 별도의 **`real-data-v2`**입니다. Python 3.12와 ETL requirements가 준비된 환경에서 생성합니다(업로드 없음).
+공개된 **`real-data-v2`**는 아래 원본·파생본을 묶은 고정 패키지입니다. 새 사용자는 이미 검증된 asset을 다운로드하며 재패키징하지 않습니다.
 
-```sh
-python3 etl/team_public_data.py package --output .codex-local/tmp/recycleyoungs-real-data-v2.zip
-```
-
-CSV 3개·Polygon ZIP 2개의 bytes/SHA는 v1과 동일합니다. 리포트 3개는 경로·실행 명령·컨테이너 metadata만 명시적으로 제거한 파생본이며, 원본 hash·변경 항목·보존한 검증 엔진 버전을 기록합니다. 공간 수치·판정·features·재현 hash·6개 repair 결과는 보존합니다. 8개 입력과 `ATTRIBUTION.json`·`dataset.json`, 총 10개 member입니다. [공개 후보 계약](data/public-data-v2.json)이 새 리포트 hash와 출처를 고정하며 파일 덮어쓰기를 거부합니다. 후보와 파생 리포트는 Git에서 무시되는 로컬 경로에만 둡니다.
+CSV 3개·Polygon ZIP 2개의 bytes/SHA는 v1과 동일합니다. 리포트 3개는 경로·실행 명령·컨테이너 metadata만 명시적으로 제거한 파생본이며, 원본 hash·변경 항목·보존한 검증 엔진 버전을 기록합니다. 공간 수치·판정·features·재현 hash·6개 repair 결과는 보존합니다. 8개 입력과 `ATTRIBUTION.json`·`dataset.json`, 총 10개 member입니다. [공개 데이터 계약](data/public-data-v2.json)이 리포트 hash와 출처를 고정합니다. 실자료·ZIP·리포트를 Git blob에 추가하지 않습니다.
 
 `team_public_data.py`는 offline 파생/패키징 전용이며, `team_dataset.py`가 버전별 다운로드/cache/순수 ETL 준비를 담당합니다. DB 초기화는 기존 `team_db.py` 경로를 재사용합니다. control ownership·DB state·Flyway 연결·Backend proof에 선택 version과 contract를 결속하며 SID·volume·full fingerprint·reader 검사를 유지합니다. 기존 v1 ledger에 version이 없으면 v1로만 해석하고, v2 선택 시 chmod·credential 생성·SQL 쓰기 모드 전환 전에 거부합니다. READY 재실행은 setup DDL·checkpoint·loader를 실행하지 않습니다.
 
-기본값은 계속 v1/local이며 기존 READY DB를 v2로 선언하거나 재적재하지 않습니다. **같은 Docker daemon에서 기존 v1과 v2를 별도 project override로 병행 실행하지 않습니다.** 승인된 독립·빈 환경에서만 `TEAM_DATA_VERSION=real-data-v2 TEAM_DATA_MODE=local docker compose up -d`를 사용하며 Backend/status 셸에도 같은 version을 설정합니다. v2 실제 DB E2E는 아직 미검증입니다. 이번에는 실제 후보의 loopback HTTP → 빈 cache → 입력/geometry 검증 → release/local cache 재사용을 확인했으며 실제 GitHub 다운로드가 아닙니다.
+새 환경 기본값은 v2/release이며 기존 READY DB를 v2로 선언하거나 재적재하지 않습니다. **같은 Docker daemon에서 기존 v1과 v2를 별도 project override로 병행 실행하지 않습니다.** 기존 v1 DB가 있는 경우 v2 최초 실행은 독립 daemon/VM/runner에서만 수행합니다. 공개 HTTPS → 새 빈 cache → 10개 member/입력/geometry 검증 → cache 재사용은 확인했고, 실제 v2 DB 적재·API·지도·clean clone E2E는 별도 검증 범위입니다.
 
-### 원본 이용조건과 공개 보류
+### 원본 이용조건과 공개 고지
 
 2026-10-15 공식 페이지 재확인 결과입니다. 공공누리 1유형은 출처표시 조건으로 공유·상업적 이용·변경을 허용하며 기관 후원으로 오인시키면 안 됩니다([일반증서](https://www.kogl.or.kr/info/licenseType1.do)). 같은 날 공식 파일을 다시 읽어 로컬 원본 CSV 3개와 Polygon ZIP 2개의 bytes/SHA 일치를 확인했습니다. 이는 최초 취득 시점·경계 기준일을 확정하거나 프로젝트 리포트에 별도 공개 허락을 부여하는 증거가 아닙니다. 기존 manifest의 NULL은 보존합니다.
 
-| 자료 | 공식 출처·이용조건 | 공개 전 남은 확인 |
+| 자료 | 공식 출처·이용조건 | 공개 고지·남은 한계 |
 | --- | --- | --- |
 | 점포-행정동 2025 | [서울시 OA-22172](https://data.seoul.go.kr/dataList/OA-22172/S/1/datasetView.do), 공공누리 1유형 | 공식 2025 ZIP member와 byte 일치. 기관·자료명·링크·이용조건을 후보에 고지. 최초 다운로드 시점 UNKNOWN |
 | 추정매출-행정동 2025 | [서울시 OA-22175](https://data.seoul.go.kr/dataList/OA-22175/S/1/datasetView.do), 공공누리 1유형 | 위와 동일 |
 | SEMAS 서울 202606 | [파일데이터 15083033](https://www.data.go.kr/data/15083033/fileData.do), 이용허락범위 제한 없음 | 공식 20260630 전국 ZIP의 서울 202606 member와 byte 일치. 최초 취득 시점·정확한 snapshot 기준일은 미확인. 공개 점포명·주소·좌표 포함 고지 |
 | 행정동 Polygon | [서울시 OA-22160](https://data.seoul.go.kr/dataList/OA-22160/S/1/datasetView.do), 공공누리 1유형 | 공식 ZIP 전체 byte 일치. 출처표시 고지. 실제 경계 기준일 UNKNOWN |
 | 상권 Polygon | [서울시 OA-15560](https://data.seoul.go.kr/dataList/OA-15560/S/1/datasetView.do), 공공누리 1유형 | 위와 동일. source 원본 보존, operational repair 6개 고지 |
-| 행정동 validation report | 프로젝트 생성 기록·사용자 진술 확인, v2는 파생본. 보유·관리 권리 범위의 CC BY 4.0 선택 | 개인 임시 경로 제거. 제3자 권리는 별도 조건이며 Public 업로드 승인은 대기 |
+| 행정동 validation report | 프로젝트 생성 기록·사용자 진술 확인, v2는 파생본. 보유·관리 권리 범위의 CC BY 4.0 | 개인 임시 경로 제거. 사용자가 공개 권한·필요 동의 확인 후 Public 업로드 승인. 제3자 권리는 별도 조건 |
 | 상권 quality report | 위와 동일 | 원본 판정·통계 보존, 불필요한 재사용 경로 제거. 보조자료 인용 관계 고지 |
-| 상권 repair report | 위와 동일 | 실행 환경 제거, 검증 엔진 버전·6개 승인 결과·replay 보존. Public 업로드 승인은 대기 |
+| 상권 repair report | 위와 동일 | 실행 환경 제거, 검증 엔진 버전·6개 승인 결과·replay 보존. 동일한 Public 공개 승인 범위 |
 
-공개 상태는 **UNPUBLISHED**입니다. 라이선스를 반영한 로컬 후보는 **V2_LICENSED_PACKAGE_READY_APPROVAL_PENDING**이며, 사용자 후속 승인 전 GitHub Release 생성·asset 업로드·Git LFS 공개를 하지 않습니다. 서울시 2024년 이후 집계 기준 변경, 역사적 경계 호환성 UNRESOLVED·H5 충돌·source overlap 한계는 그대로 유지합니다.
+공개 상태는 **PUBLISHED**입니다. 사용자 명시 승인 후 검증된 코드 커밋을 대상으로 `real-data-v2`를 공개하고 서버 digest·실제 HTTPS 다운로드를 검증했습니다. 추가 데이터나 새 버전의 공개 승인을 대신하지 않습니다. 서울시 2024년 이후 집계 기준 변경, 역사적 경계 호환성 UNRESOLVED·H5 충돌·source overlap 한계는 그대로 유지합니다.
 
 사용자는 보유하거나 적법하게 관리하는 권리 범위에서 공개용 report 3개의 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 배포조건을 선택했고, 출처표시명은 **RecycleYoungs 프로젝트**입니다. 공유·재배포·변경·상업적 이용을 허용하며 출처·라이선스 링크·변경 고지와 후원 오인 금지 조건을 따릅니다. 허용된 이용을 추가로 제한할 수 없으며 조건을 준수하는 이용허락은 임의 철회할 수 없습니다. 이 조건은 프로젝트가 허락할 수 있는 리포트의 표현과 산출물에만 적용하고 서울시·SEMAS 원본 및 다른 권리자의 권리를 변경하지 않습니다. 검토한 기록에서 팀원·학교 등의 별도 권리 약정은 찾지 못했지만 기록 밖의 계약은 UNKNOWN입니다. 별도 권리가 있다면 해당 권리자의 동의나 이용조건 확인이 필요합니다.
 
-이 고지를 `ATTRIBUTION.json`에 반영한 새 후보는 **87,870,777 bytes**, SHA-256 `6b11901f46d1a207c5b36353483e209f00a10fb401edcc5fd036a3025238ff0b`입니다. 이전 v2 후보를 보존하고 고지·dataset 계약·runtime pin만 갱신했습니다. CSV·Polygon·공개 report 8개 bytes는 그대로입니다. 어떤 v2 후보도 공개하지 않았으므로 version은 `real-data-v2`를 유지하되, 기존 후보/cache는 새 계약과 혼용할 수 없습니다. v1 계약·기본 v1/local·기존 READY DB는 유지합니다.
+이 고지를 `ATTRIBUTION.json`에 반영해 공개한 ZIP은 **87,870,777 bytes**, SHA-256 `6b11901f46d1a207c5b36353483e209f00a10fb401edcc5fd036a3025238ff0b`입니다. 이전 v2 후보·원본·v1 계약·기존 READY DB는 보존합니다. 공개된 `real-data-v2`는 이 계약으로 고정하며 이전 미공개 후보/cache와 혼용하지 않습니다. 신규 기본값 변경은 기존 v1의 데이터나 설정을 자동 변경하지 않습니다.
 
 ### DB 없는 문서·회귀 검사와 기존 DB 보호
 
@@ -555,9 +562,9 @@ JSON은 `{code,message,field}`입니다. 400은 오류 query 이름, 500/503은 
 
 | 설정 | 적용 범위 | 기본값·정책 |
 | --- | --- | --- |
-| `TEAM_DATA_MODE` | 새 팀 Compose의 data-init | `local`. 향후 고정 Release 설정이 공개된 뒤에만 `release` |
-| `TEAM_DATA_VERSION` | Compose worker·Flyway / 호스트 status·bootRun | 기본 `real-data-v1`, 명시적 `real-data-v2` 지원. 같은 version을 각 셸에 설정. 루트 `.env`는 호스트 Python/Gradle에 전달되지 않음 |
-| Dataset version / URL / SHA | [data/release.json](data/release.json)·[런타임 선택](etl/team_dataset.py) | 현재 `UNPUBLISHED`. v1/v2 계약을 분리하며 임의 URL/latest·자동 version 변경 금지 |
+| `TEAM_DATA_MODE` | 새 팀 Compose의 data-init | 기본 `release`. 기존 v1 사용자는 개인 `.env`에 `local` 명시 |
+| `TEAM_DATA_VERSION` | Compose worker·Flyway / 호스트 status·bootRun | 기본 `real-data-v2`. 기존 v1은 개인 `.env`와 각 호스트 셸에 `real-data-v1` 명시. 루트 `.env`는 Python/Gradle에 자동 전달되지 않음 |
+| Dataset version / URL / SHA | [data/release.json](data/release.json)·[런타임 선택](etl/team_dataset.py) | `PUBLISHED`, 정확한 v2 tag/asset/SHA 고정. v1/v2 계약 분리, 임의 URL/latest·자동 DB version 변경 금지 |
 | DB host port·이름·role | 새 팀 Compose / guarded bootRun | `127.0.0.1:55432/recycleyoungs_team_dev`. 고정 identity, 비밀번호는 control volume에서 임의 생성 |
 | `TEAM_DEV_*` | Gradle → team-dev JVM 내부 전달 | metadata/READY 확인 후 메모리로 전달. 직접 설정하거나 로그에 출력하지 않음 |
 | `DB_*`, `PG*`, `FLYWAY_*`, `SPRING_*` | 기존 일반 실행·독립 ETL 또는 기존 테스트 | 새 Compose는 참조하지 않음. 일반 `bootRun`에서는 process 주입을 거부. 보호 DB 접속 승인 아님 |

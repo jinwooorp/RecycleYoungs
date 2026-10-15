@@ -19,6 +19,25 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class TeamComposeTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which('docker'), 'Docker CLI unavailable')
+    def test_fresh_checkout_defaults_v2_release_and_v1_local_override_reaches_every_gate(self):
+        base = dict(os.environ)
+        for name in ['TEAM_DATA_MODE', 'TEAM_DATA_VERSION', 'COMPOSE_PROJECT_NAME', 'COMPOSE_FILE']:
+            base.pop(name, None)
+        for overrides, version, mode in [({}, 'real-data-v2', 'release'),
+                ({'TEAM_DATA_VERSION': 'real-data-v1', 'TEAM_DATA_MODE': 'local'}, 'real-data-v1', 'local')]:
+            with self.subTest(version=version):
+                result = subprocess.run(['docker', 'compose', '--env-file', os.devnull,
+                    '-f', str(ROOT / 'docker-compose.yml'), 'config', '--format', 'json'],
+                    env=dict(base, **overrides), cwd=ROOT, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, 'Compose rendering failed')
+                config = json.loads(result.stdout)
+                self.assertEqual(config['name'], PROJECT)
+                for service in ['preflight', 'data-init', 'db-identity', 'db-migrate', 'etl-init']:
+                    self.assertEqual(config['services'][service]['environment']['TEAM_DATA_VERSION'], version)
+                self.assertEqual(config['services']['data-init']['environment']['TEAM_DATA_MODE'], mode)
+                self.assertEqual({v['name'] for v in config['volumes'].values()}, set(VOLUMES.values()))
+
     def test_flyway_shell_gate_checks_binding_without_invoking_a_database(self):
         source=(ROOT/'docker/team-dev/migrate.sh').read_text()
         syntax=subprocess.run(['sh','-n',str(ROOT/'docker/team-dev/migrate.sh')],capture_output=True,text=True)

@@ -26,9 +26,11 @@ class TeamRuntimeTests(unittest.TestCase):
         import team_dataset
         return team_dataset
 
-    def test_selection_defaults_v1_and_rejects_unknown_versions(self):
+    def test_new_checkout_selects_public_v2_and_explicit_v1_keeps_its_contract(self):
         m = self.runtime()
-        with patch.dict(os.environ, {}, clear=True): self.assertEqual(m.version(), 'real-data-v1')
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(m.binding(), dict(version='real-data-v2',
+                contract='0d27a0e526cd249d7adebf374b7be646fd5122ba5cede8b558117dd11d761994'))
         for version in ['real-data-v1', 'real-data-v2']:
             with patch.dict(os.environ, {'TEAM_DATA_VERSION': version}):
                 self.assertEqual(m.contract()['version'], version)
@@ -36,6 +38,42 @@ class TeamRuntimeTests(unittest.TestCase):
         for version in ['', 'latest', 'real-data-v3', '../real-data-v2']:
             with self.subTest(version=version), self.assertRaises(team_data.DataError): m.version(version)
         self.assertEqual(team_data.contract_sha(), team_public_data.SOURCE_CONTRACT_SHA)
+
+    def test_tracked_release_pin_is_usable_by_the_default_runtime_only(self):
+        m = self.runtime()
+        config = m.parse_json((team_data.ROOT / 'data/release.json').read_bytes())
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(m.release_url(config),
+                'https://github.com/jinwooorp/RecycleYoungs/releases/download/real-data-v2/'
+                'recycleyoungs-real-data-v2.zip')
+        with self.assertRaises(team_data.DataError):
+            m.release_url(config, 'real-data-v1')
+
+    def test_initializer_cli_defaults_to_release_and_preserves_local_override(self):
+        m = self.runtime()
+        for environment, mode in [({}, 'release'), ({'TEAM_DATA_MODE': 'local'}, 'local')]:
+            with self.subTest(mode=mode), patch.dict(os.environ, environment, clear=True), \
+                 patch('sys.argv', ['team_dataset.py', 'init']), \
+                 patch.object(m, 'initialize', return_value={'status': 'PASS'}) as initialize, \
+                 patch('sys.stdout', new_callable=io.StringIO):
+                m.main()
+            self.assertEqual(initialize.call_args.args,
+                             (Path('/source'), Path('/cache'), mode))
+
+    def test_default_host_proof_rejects_v1_ledger_before_any_sql(self):
+        metadata = dict(container_id='b' * 64)
+        calls = []
+        def docker(*args, input=None):
+            calls.append(args)
+            self.assertEqual(args[:3], ('exec', 'b' * 64, 'cat'))
+            self.assertIn(args[3], ['/control/ownership.json', '/control/identity.json'])
+            return team_data.canonical(dict(owner='a' * 32, sid='12345'))
+        with patch.dict(os.environ, {}, clear=True), \
+             patch.object(team_dev, 'prove_database', return_value=metadata), \
+             patch.object(team_dev, 'docker', side_effect=docker), \
+             self.assertRaisesRegex(team_data.DataError, 'Owned dataset version/contract mismatch'):
+            team_dev.proof()
+        self.assertEqual(len(calls), 2)
 
     def test_fixed_version_asset_sha_and_unpublished_gate(self):
         m = self.runtime()

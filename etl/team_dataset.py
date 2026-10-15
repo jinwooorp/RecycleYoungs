@@ -22,7 +22,7 @@ SPATIAL_PROOF_SQL = """SELECT encode(sha256(convert_to(jsonb_agg(jsonb_build_arr
 
 
 def version(value=None):
-    value = os.environ.get('TEAM_DATA_VERSION', v1.VERSION) if value is None else value
+    value = os.environ.get('TEAM_DATA_VERSION', v2.VERSION) if value is None else value
     require(value in {v1.VERSION, v2.VERSION}, 'Unknown TEAM_DATA_VERSION; choose real-data-v1 or real-data-v2')
     return value
 
@@ -210,7 +210,7 @@ def main():
     parser.add_argument('action', choices=['init', 'validate'])
     args = parser.parse_args()
     try:
-        if args.action == 'init': result = initialize(Path('/source'), Path('/cache'), os.getenv('TEAM_DATA_MODE', 'local'))
+        if args.action == 'init': result = initialize(Path('/source'), Path('/cache'), os.getenv('TEAM_DATA_MODE', 'release'))
         else:
             v1.check_files(ROOT, original=True)
             result = dict(status='PASS', version=version(), contract=contract_sha(), source_files=8)

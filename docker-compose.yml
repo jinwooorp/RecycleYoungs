@@ -4,7 +4,7 @@ x-labels: &labels
   org.recycleyoungs.environment: team-development-v1
 
 x-runtime-env: &runtime-env
-  TEAM_DATA_VERSION: ${TEAM_DATA_VERSION:-real-data-v1}
+  TEAM_DATA_VERSION: ${TEAM_DATA_VERSION:-real-data-v2}
 
 x-worker: &worker
   image: recycleyoungs-team-dev-tools:dataset-runtime-v2
@@ -62,7 +62,7 @@ services:
         condition: service_completed_successfully
     environment:
       <<: *runtime-env
-      TEAM_DATA_MODE: ${TEAM_DATA_MODE:-local}
+      TEAM_DATA_MODE: ${TEAM_DATA_MODE:-release}
     networks: [download]
     volumes:
       - team_cache:/cache

@@ -2,9 +2,9 @@
 
 서비스의 과거·현재·미래를 관리하는 기준 문서입니다. 기술/API/데이터/개발 방법은 [technical](technical.md), 실제 DB 보호·실측 증거·승인은 [db-safety](db-safety.md)에 둡니다.
 
-최신 로컬 개발 환경 상태는 **LOCAL_READY_RELEASE_PENDING**입니다. 새 영구 team-dev Compose에서 로컬 원본 8개 검증·V1~V3·CSV/Polygon 전수 적재·API/실지도/3후보 비교·실패 rollback·동일 데이터 재실행 보존을 확인했습니다. 실행 방법은 README, 실측·구조·테스트는 [technical의 팀 환경 절](technical.md#팀-공통-실자료-개발-환경)에 있습니다. GitHub Release는 미공개이며 이용조건·로컬 출처 연결·리포트 공개 검토와 후속 승인이 남았습니다. 최초 구축은 기존 DB 미접속으로 진행했으며, 후속 2026-10-14 로컬 환경 통일에서는 별도 승인된 읽기 전용 감사·백업·독립 복원·전수 대조 후 기존 환경을 제거했습니다. [보존·퇴역 기록](db-safety.md#2026-10-14-로컬-환경-통일)을 참고합니다. 코드 반영 상태는 Git main 이력으로 확인하며, 코드 공개와 실자료 Release 공개 승인은 구분합니다.
+팀 환경의 v1 실자료 DB 구축·API/실지도·재실행 보존은 2026-10-14의 기존 검증 기록입니다. 2026-10-15에는 별도 사용자 승인으로 [real-data-v2 Release](https://github.com/jinwooorp/RecycleYoungs/releases/tag/real-data-v2)를 Public으로 공개하고 서버 digest·실제 HTTPS 다운로드·빈 cache 및 재사용을 확인했습니다. 현재 후속 작업은 **v2/release 기본 활성화 준비와 독립 clean clone E2E 승인 대기**입니다. 실제 v2 DB·서비스 통합 성공을 뜻하지 않습니다. 실행 방법은 README, 실측·구조·검증 범위는 [technical](technical.md#팀-공통-실자료-개발-환경)에 구분합니다. legacy는 별도 승인된 감사·백업·독립 복원·전수 대조 후 제거됐고 [백업·보호 정책](db-safety.md#2026-10-14-로컬-환경-통일)은 유지합니다.
 
-2026-10-15의 v2 후속 작업은 **V2_LICENSED_PACKAGE_READY_APPROVAL_PENDING**입니다. 공개용 파생 report·명시적 v1/v2 runtime·cache/DB/Backend proof에 이어, 사용자가 보유·관리하는 권리 범위의 리포트 3개에 CC BY 4.0·출처표시명 RecycleYoungs 프로젝트를 반영한 새 후보를 만들었습니다. 원본 5개·공개 report 3개 bytes와 기존 후보는 보존하고 고지·dataset 계약·runtime pin만 갱신했습니다. 새 후보의 로컬 HTTP/빈 cache 및 일반 회귀를 검증했으며 기존 v1 READY와 기본 v1/local은 유지합니다. 독립 daemon/VM이 없어 **v2 실제 DB 적재·실 API/브라우저·GitHub 다운로드·clean clone은 미검증**입니다. 기록 밖의 제3자 권리·추가 동의는 확인할 수 없으며 최종 ZIP/hash 검토, Git commit/push와 Public Release 업로드는 별도 승인 대기입니다. 상세는 [v2 runtime](technical.md#v2-runtime-통합-준비--공개db-e2e-대기)에 구분합니다.
+활성화는 기존 main과 분리한 로컬 worktree에서 준비하며, 새 환경은 v2/release를 기본 선택합니다. 기존 사용자는 개인 `.env`의 v1/local과 Backend/status 각 셸의 명시적 v1 설정을 유지해야 합니다. 기존 v1 DB·volume·계약은 자동 변경하지 않습니다. **독립 v2 DB 적재·Flyway·API/Swagger·Kakao/3후보·clean clone은 NOT_VERIFIED**이며 원격 branch/main push·workflow 실행도 별도 승인이 필요합니다. 리포트 3개만 보유·관리 권리 범위의 CC BY 4.0이고 원본 공공데이터 조건은 그대로입니다. 자세한 버전 결속과 검증 범위는 [v2 runtime](technical.md#v2-runtime-통합-준비--기본-활성화db-e2e-대기)에 있습니다.
 
 이전 **2026-10-14 일회용 실자료 E2E**는 별도 기록입니다. 새 격리 DB의 지도 클릭 4개, 최종 3후보 Q3 통계, 대표 경계 2개, bridge abort·복구 3회 및 cleanup을 확인했습니다. 당시 README 7~10단계는 캡스톤 MVP·일회용 격리 시연 범위에서 완료했습니다. 이전 단계/v1/v2 기록은 [실자료 통합 결과](#실자료-통합-결과)에서 구분합니다.
 
@@ -62,7 +62,7 @@ MVP는 처음 완성할 핵심 서비스 범위입니다. 현재 첫 흐름은 �
 
 ## 현재 위치와 지금 시작할 작업
 
-7~10단계의 캡스톤 MVP·일회용 격리 실자료 시연 검증과 팀 영구 개발 환경 구축을 2026-10-14에 완료했습니다. 대표 실제 source 경계 2개와 bridge abort·재요청도 PASS이며, README 완료 표시와 더 넓은 backlog의 운영·발표·배포 범위를 구분합니다. 다음 팀 환경 작업은 **데이터 이용조건·출처/리포트 공개 승인 → Release 공개 → 기본 다운로드 전환 → clean clone 재현**입니다. 코드 스타일 도구·가독성·UI 정리는 별도 후속이며 이번 보안 검토 범위에 포함하지 않습니다. 운영 배포·성능·원천 snapshot 검증은 미완료입니다.
+7~10단계 MVP·일회용 격리 시연과 v1 영구 팀 환경 구축은 2026-10-14의 완료 기록입니다. v2 Public Release·실제 다운로드는 후속 승인으로 완료했습니다. 다음 팀 환경 작업은 **독립 작업 브랜치의 활성화 검증 → 원격 테스트 ref/workflow 승인 → 독립 DB·서비스 E2E → 결과 검토와 main 반영 승인 → 새 main clone 재검증**입니다. 가독성/UI·운영 배포·성능·원천 snapshot 검증은 별도 후속입니다.
 
 ### 최근 완료한 범위
 
@@ -259,8 +259,8 @@ Now는 완료한 MVP와 구현·검증한 코드/계약, Next는 가독성·UI �
 
 | 구분 | 트랙 A | 트랙 B |
 | --- | --- | --- |
-| Now | Audit/보존/비활성 계약 구현. legacy는 NOT_READY 상태를 보존 감사 후 퇴역, 백업 비공개 보존 | MVP·격리 E2E와 영구 team-dev READY. 실자료 Release UNPUBLISHED |
-| Next | 아래 source 트랙은 향후 별도 대상·범위 승인 시 검토 | 이용조건·공개 승인 → Release/기본 다운로드 전환 → clean clone 재현. 가독성/UI·발표는 별도 후속 |
+| Now | Audit/보존/비활성 계약 구현. legacy 퇴역, 백업 비공개 보존 | v1 과거 READY·v2 Public 다운로드 검증. 별도 worktree에서 v2/release 활성화 준비 |
+| Next | 아래 source 트랙은 향후 별도 대상·범위 승인 시 검토 | 승인된 테스트 ref·독립 runner에서 v2 E2E → main 반영 승인·새 clone 검증. 가독성/UI·발표는 별도 후속 |
 | Later | 추가 격리→독립 리뷰/명시 승인→V2/V3/Polygon-only | 운영 배포·성능·원천 출처/snapshot/catalog 검증. 추가 지표·업종·기간·점수는 자료/계산식 검증 뒤 검토 |
 
 ## 트랙 A — 기존 DB에 안전하게 적용하기
