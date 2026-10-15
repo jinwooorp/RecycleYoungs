@@ -12,6 +12,23 @@ from team_guard import LABEL, OWNER, PROJECT, SERVICES, VOLUMES
 
 
 class TeamInspectProxyTests(unittest.TestCase):
+    def test_only_fixed_postgis_image_inspect_is_exposed_without_config_or_env(self):
+        reference = 'postgis/postgis@sha256:44126d872ac91993766c341e369c539e8196614321765d36a6f1bab0419a5fa5'
+        value = dict(Id='sha256:' + 'a' * 64, RepoDigests=[reference, 'private-fixture'],
+                     Os='linux', Architecture='amd64', Config={'Env': ['password=private-fixture']})
+        with self.server(value) as (port, fetch):
+            status, body = self.request(port, 'GET', '/inspect/image/postgis-pinned')
+            self.assertEqual(status, 200)
+            self.assertEqual(json.loads(body), dict(Id=value['Id'], RepoDigests=[reference],
+                                                   Os='linux', Architecture='amd64'))
+            self.assertNotIn(b'private-fixture', body)
+            fetch.assert_called_once_with('/images/' + reference + '/json')
+            fetch.reset_mock()
+            for path in ['/inspect/image/other', '/images/json', '/inspect/image/postgis-pinned?x=1',
+                         '/inspect/image/postgis-pinned/extra']:
+                self.assertEqual(self.request(port, 'GET', path)[0], 403)
+            fetch.assert_not_called()
+
     def container(self, **extra):
         return dict(Id='a' * 64, Name='/' + PROJECT + '-preflight-1', Image='sha256:fixture',
                     Created='2026-10-14T00:00:00Z', State={'Running': True, 'Error': 'private'},

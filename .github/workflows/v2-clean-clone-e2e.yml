@@ -1,4 +1,4 @@
-# Bounded autonomous E2E: this push consumes execution 1 of the approved 4.
+# Bounded autonomous E2E: this push consumes execution 2 of the approved 4.
 name: real-data-v2 clean clone E2E
 'on':
   push:
@@ -15,8 +15,8 @@ jobs:
     if: >-
       github.event_name == 'push' &&
       github.ref == 'refs/heads/codex/real-data-v2-activation' &&
-      github.event.before == 'ed9707dd4a24648cbce6d845240dde937a4dc5fc' &&
-      github.run_number == '3' && github.run_attempt == '1'
+      github.event.before == '433409b96caa057653e0aa72388e488b596af62a' &&
+      github.run_number == '4' && github.run_attempt == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -24,7 +24,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_RUN_NUMBER" != "3" || "$GITHUB_RUN_ATTEMPT" != "1" || "$GITHUB_REF" != "refs/heads/codex/real-data-v2-activation" ]]; then
+          if [[ "$GITHUB_RUN_NUMBER" != "4" || "$GITHUB_RUN_ATTEMPT" != "1" || "$GITHUB_REF" != "refs/heads/codex/real-data-v2-activation" ]]; then
             printf '%s\n' '{"status":"FAIL","phase":"run_guard","code":"NEW_APPROVAL_REQUIRED"}'
             exit 1
           fi

@@ -17,6 +17,7 @@ SERVICES = {'inspect-proxy', 'preflight', 'data-init', 'team-postgres', 'db-iden
 NETWORKS = {PROJECT + '-' + key for key in ('net', 'host', 'download', 'inspect')}
 VOLUMES = {PROJECT + '-' + key for key in ('db', 'control', 'cache')}
 MAX_RESPONSE = 1024 * 1024
+DB_IMAGE_REFERENCE = 'postgis/postgis@sha256:44126d872ac91993766c341e369c539e8196614321765d36a6f1bab0419a5fa5'
 
 
 class UnixConnection(http.client.HTTPConnection):
@@ -47,6 +48,13 @@ def owned_labels(value):
 
 
 def inspect_path(path):
+    if path == '/inspect/image/postgis-pinned':
+        # One immutable public image only; no generic image endpoint or config/Env.
+        value = fetch_engine('/images/' + DB_IMAGE_REFERENCE + '/json')
+        digests = value.get('RepoDigests')
+        if not isinstance(digests, list): raise ValueError('Image digests unavailable')
+        return dict(Id=value['Id'], RepoDigests=[d for d in digests if d == DB_IMAGE_REFERENCE],
+                    Os=value['Os'], Architecture=value['Architecture'])
     match = re.fullmatch(r'/inspect/(container|network|volume)/([a-z0-9][a-z0-9_.-]{0,127})', path)
     if not match:
         raise PermissionError('Path rejected')
@@ -69,7 +77,8 @@ def inspect_path(path):
         env = [entry for entry in value['Config'].get('Env', []) if entry.split('=', 1)[0] in
                {'POSTGRES_DB', 'POSTGRES_USER', 'PGDATA', 'POSTGRES_PASSWORD_FILE'}]
         return dict(Id=value['Id'], Name=value['Name'], Image=value['Image'], Created=value['Created'],
-                    Config=dict(Labels=labels, Env=env), State=dict(Running=value['State']['Running']),
+                    Config=dict(Labels=labels, Env=env, Image=value['Config'].get('Image')),
+                    State=dict(Running=value['State']['Running']),
                     HostConfig=dict(PortBindings=value['HostConfig'].get('PortBindings')),
                     NetworkSettings={key: value['NetworkSettings'].get(key) for key in ('Networks', 'Ports')},
                     Mounts=[{key: mount[key] for key in ('Destination', 'Type', 'Name', 'RW') if key in mount}

@@ -142,18 +142,18 @@ class TeamComposeTests(unittest.TestCase):
             self.assertNotIn(match[1], terms)
             terms[match[1]] = match[2]
         expected = dict(event_name='push', ref='refs/heads/codex/real-data-v2-activation',
-                        run_number='3', run_attempt='1')
-        expected['event.before'] = 'ed9707dd4a24648cbce6d845240dde937a4dc5fc'
+                        run_number='4', run_attempt='1')
+        expected['event.before'] = '433409b96caa057653e0aa72388e488b596af62a'
         self.assertEqual(terms, expected)
         for overrides in [{}, {'event_name': 'workflow_dispatch'}, {'ref': 'refs/heads/main'},
                           {'event.before': '5c12f773a0ee31968188c1ce1ec1429ea47ca83f'},
-                          {'run_number': '2'}, {'run_number': '4'}, {'run_attempt': '2'}]:
+                          {'run_number': '3'}, {'run_number': '5'}, {'run_attempt': '2'}]:
             with self.subTest(context=overrides):
                 context = dict(expected, **overrides)
                 self.assertEqual(all(context.get(k) == v for k, v in terms.items()), not overrides)
-        for run, attempt, ref, code in [('3', '1', expected['ref'], 0),
-                ('2', '1', expected['ref'], 1), ('4', '1', expected['ref'], 1),
-                ('3', '2', expected['ref'], 1), ('3', '1', 'refs/heads/main', 1)]:
+        for run, attempt, ref, code in [('4', '1', expected['ref'], 0),
+                ('3', '1', expected['ref'], 1), ('5', '1', expected['ref'], 1),
+                ('4', '2', expected['ref'], 1), ('4', '1', 'refs/heads/main', 1)]:
             with self.subTest(shell_context=(run, attempt, ref)):
                 result = subprocess.run(['bash', '-s'], input=job['steps'][0]['run'],
                     env={'PATH': os.defpath, 'GITHUB_RUN_NUMBER': run, 'GITHUB_RUN_ATTEMPT': attempt,
@@ -312,7 +312,8 @@ class TeamComposeTests(unittest.TestCase):
         volumes = {name: dict(Name=name, Driver='local', Options=None, Labels=labels, CreatedAt='2026-10-14T00:00:00Z')
                    for name in VOLUMES.values()}
         db = dict(Id='b' * 64, Name='/' + PROJECT + '-team-postgres-1', Image=DB_IMAGE, State={'Running': True},
-                  Config={'Labels': labels, 'Env': ['POSTGRES_DB=' + DATABASE, 'POSTGRES_USER=ry_team_owner',
+                  Config={'Labels': labels, 'Image': 'postgis/postgis@' + DB_IMAGE,
+                          'Env': ['POSTGRES_DB=' + DATABASE, 'POSTGRES_USER=ry_team_owner',
                          'PGDATA=' + PGDATA, 'POSTGRES_PASSWORD_FILE=/control/password']},
                   HostConfig={'PortBindings': {'5432/tcp': [{'HostIp': '127.0.0.1', 'HostPort': '55432'}]}},
                   NetworkSettings={'Networks': {NETWORK: {'NetworkID': network['Id'], 'Aliases': ['postgres'], 'IPAddress': '172.20.0.2'},
@@ -323,9 +324,32 @@ class TeamComposeTests(unittest.TestCase):
                           dict(Destination='/docker-entrypoint-initdb.d', Type='bind', RW=False)])
         def inspect(kind, name):
             host_network = dict(network, Id='d' * 64, Internal=False, Containers={db['Id']: {}})
+            image = dict(Id=DB_IMAGE, RepoDigests=['postgis/postgis@' + DB_IMAGE], Os='linux', Architecture='amd64')
             return {'network': lambda: network if name == NETWORK else host_network,
+                    'image': lambda: image,
                     'volume': lambda: volumes[name], 'container': lambda: db}[kind]()
         return db, network, volumes, inspect
+
+    def test_manifest_and_verified_config_stores_require_the_same_immutable_image(self):
+        config = 'sha256:06287eb8e12c43f425773085c48d6ad02d73f8b442ac209810c1b211eb0a643b'
+        for image_id in [DB_IMAGE, config]:
+            with self.subTest(image_id=image_id):
+                db, _, _, base = self.fixture(); db['Image'] = image_id
+                image = dict(Id=image_id, RepoDigests=['postgis/postgis@' + DB_IMAGE], Os='linux', Architecture='amd64')
+                def inspect(kind, name): return image if kind == 'image' else base(kind, name)
+                with patch('team_guard.inspect', side_effect=inspect):
+                    self.assertEqual(prove_database()['image'], image_id)
+                for mutate in [lambda: image.update(Id='sha256:' + 'f' * 64),
+                               lambda: image.update(RepoDigests=[]),
+                               lambda: image.update(Architecture='arm64'),
+                               lambda: image.update(Os='windows'),
+                               lambda: db['Config'].update(Image='postgis/postgis:latest'),
+                               lambda: db.update(Image='sha256:' + 'f' * 64)]:
+                    old_image = copy.deepcopy(image); old_db = copy.deepcopy(db)
+                    mutate()
+                    with patch('team_guard.inspect', side_effect=inspect), self.assertRaises(DataError):
+                        prove_database()
+                    image.clear(); image.update(old_image); db.clear(); db.update(old_db)
 
     def test_actual_metadata_checks_reject_protected_or_foreign_targets(self):
         db, network, volumes, inspect = self.fixture()

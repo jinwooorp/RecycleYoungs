@@ -21,6 +21,10 @@ PGDATA = '/var/lib/postgresql/data/team'
 NETWORK = PROJECT + '-net'
 VOLUMES = {key: PROJECT + '-' + key for key in ('db', 'control', 'cache')}
 DB_IMAGE = 'sha256:44126d872ac91993766c341e369c539e8196614321765d36a6f1bab0419a5fa5'
+DB_IMAGE_REFERENCE = 'postgis/postgis@' + DB_IMAGE
+# Verified against the SHA-checked registry manifest above and its config blob.
+# Classic stores report this config ID; containerd stores may report the manifest ID.
+DB_IMAGE_CONFIG = 'sha256:06287eb8e12c43f425773085c48d6ad02d73f8b442ac209810c1b211eb0a643b'
 SERVICES = {'inspect-proxy', 'preflight', 'data-init', 'team-postgres', 'db-identity', 'db-migrate', 'etl-init'}
 
 # Exact, project-owned messages only. Never print an arbitrary exception message.
@@ -99,10 +103,12 @@ def failure_from_logs(text):
 
 
 def inspect(kind, name):
-    require(kind in {'container', 'network', 'volume'}, 'Metadata kind rejected')
+    require(kind in {'container', 'network', 'volume', 'image'}, 'Metadata kind rejected')
+    require(kind != 'image' or name == DB_IMAGE_REFERENCE, 'Image selector rejected')
     if os.getenv('TEAM_CONTAINER') == '1':
         with closing(http.client.HTTPConnection('inspect-proxy', 8081, timeout=15)) as conn:
-            conn.request('GET', '/inspect/' + kind + '/' + urllib.parse.quote(name, safe=''))
+            selector = 'postgis-pinned' if kind == 'image' else urllib.parse.quote(name, safe='')
+            conn.request('GET', '/inspect/' + kind + '/' + selector)
             response = conn.getresponse()
             data = response.read(1024 * 1024 + 1)
             require(response.status == 200 and len(data) <= 1024 * 1024, 'Required Docker metadata missing/rejected: ' + name)
@@ -183,7 +189,12 @@ def prove_database(expected=None):
     db = inspect('container', PROJECT + '-team-postgres-1')
     labels(db, 'team-postgres')
     require(db['State']['Running'], 'DB is not running')
-    require(db['Image'] == DB_IMAGE, 'DB image identity rejected')
+    require(db['Image'] in {DB_IMAGE, DB_IMAGE_CONFIG}
+            and db['Config'].get('Image') == DB_IMAGE_REFERENCE, 'DB image identity rejected')
+    image = inspect('image', DB_IMAGE_REFERENCE)
+    require(image.get('Id') == db['Image'] and isinstance(image.get('RepoDigests'), list)
+            and DB_IMAGE_REFERENCE in image['RepoDigests'] and image.get('Os') == 'linux'
+            and image.get('Architecture') == 'amd64', 'DB image identity rejected')
     require(db['Name'] == '/' + PROJECT + '-team-postgres-1' and len(db['Id']) == 64, 'DB full container identity rejected')
     host_name = PROJECT + '-host'
     require(set(db['NetworkSettings']['Networks']) == {NETWORK, host_name}, 'Unexpected DB network')
