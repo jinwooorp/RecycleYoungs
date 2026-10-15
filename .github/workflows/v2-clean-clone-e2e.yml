@@ -11,13 +11,13 @@ concurrency:
   cancel-in-progress: false
 jobs:
   verify:
-    # Only the first workflow push directly after the reviewed activation commit.
+    # Only the separately approved second push after the first E2E workflow commit.
     # Any retry or later run requires a new reviewed approval and explicit guard update.
     if: >-
       github.event_name == 'push' &&
       github.ref == 'refs/heads/codex/real-data-v2-activation' &&
-      github.event.before == '5c12f773a0ee31968188c1ce1ec1429ea47ca83f' &&
-      github.run_number == '1' && github.run_attempt == '1'
+      github.event.before == '22d29549e9149079bc93c7fc71c15d7476ec4d92' &&
+      github.run_number == '2' && github.run_attempt == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -25,7 +25,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_RUN_NUMBER" != "1" || "$GITHUB_RUN_ATTEMPT" != "1" || "$GITHUB_REF" != "refs/heads/codex/real-data-v2-activation" ]]; then
+          if [[ "$GITHUB_RUN_NUMBER" != "2" || "$GITHUB_RUN_ATTEMPT" != "1" || "$GITHUB_REF" != "refs/heads/codex/real-data-v2-activation" ]]; then
             printf '%s\n' '{"status":"FAIL","phase":"run_guard","code":"NEW_APPROVAL_REQUIRED"}'
             exit 1
           fi

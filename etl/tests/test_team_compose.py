@@ -3,11 +3,13 @@ import copy
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import shlex
 import subprocess
 import unittest
 import tempfile
+import textwrap
 from datetime import datetime, timezone
 from unittest.mock import patch
 
@@ -19,6 +21,145 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class TeamComposeTests(unittest.TestCase):
+    def parse_source_yaml(self, source):
+        # Compose's own YAML parser preserves explicit false in extension metadata,
+        # without normalizing a ServiceVolumeBind and dropping false via omitempty.
+        wrapped = ('name: recycleyoungs-source-check\nx-source:\n' + textwrap.indent(source, '  ')
+                   + '\nservices:\n  source-check:\n    image: unused-source-validation\n')
+        result = subprocess.run(['docker', 'compose', '--env-file', os.devnull, '-f', '-',
+            'config', '--no-interpolate', '--no-normalize', '--format', 'json'],
+            input=wrapped, capture_output=True, text=True, cwd=ROOT, timeout=30)
+        self.assertEqual(result.returncode, 0, 'Source YAML parsing failed')
+        source = json.loads(result.stdout)['x-source']
+        self.assertIsInstance(source, dict)
+        return source
+
+    def assert_raw_mount(self, config, expected_source):
+        volumes = config['services']['data-init']['volumes']
+        self.assertIsInstance(volumes, list)
+        candidates = [m for m in volumes if isinstance(m, dict) and m.get('target') == '/source/data/raw']
+        self.assertEqual(len(candidates), 1, 'Expected exactly one raw-data target')
+        mount = candidates[0]
+        self.assertEqual(mount.get('type'), 'bind')
+        self.assertEqual(mount.get('source'), expected_source)
+        self.assertIs(mount.get('read_only'), True)
+        self.assertIsInstance(mount.get('bind', {}), dict)
+        self.assertEqual([m for m in volumes if isinstance(m, dict) and m.get('type') == 'bind'], [mount],
+                         'Unexpected extra bind mount')
+        return mount
+
+    def assert_source_raw_mount(self, source):
+        mount = self.assert_raw_mount(source, './data/raw')
+        self.assertIn('bind', mount)
+        self.assertIn('create_host_path', mount['bind'], 'Source must explicitly disable host path creation')
+        self.assertIs(mount['bind']['create_host_path'], False)
+
+    def assert_rendered_raw_mount(self, rendered):
+        # The independent source check must still require explicit false.
+        # compose-go v2.7.1 omits false in JSON; newer versions retain it.
+        mount = self.assert_raw_mount(rendered, str(ROOT / 'data/raw'))
+        self.assertIs(mount.get('bind', {}).get('create_host_path', False), False)
+
+    def raw_mount_fixture(self, source='./data/raw'):
+        mount = dict(type='bind', source=source, target='/source/data/raw', read_only=True,
+                     bind={'create_host_path': False})
+        return {'services': {'data-init': {'volumes': [mount]}}}
+
+    def test_rendered_raw_bind_accepts_omitted_or_false_create_host_path(self):
+        for form in ['explicit_false', 'omitted_field', 'omitted_bind']:
+            with self.subTest(form=form):
+                config = self.raw_mount_fixture(str(ROOT / 'data/raw'))
+                mount = config['services']['data-init']['volumes'][0]
+                if form == 'omitted_field': mount['bind'].pop('create_host_path')
+                if form == 'omitted_bind': mount.pop('bind')
+                self.assert_rendered_raw_mount(config)
+
+    def test_raw_bind_checks_reject_unsafe_source_and_rendered_mounts(self):
+        mutations = [
+            ('true', lambda m: m['bind'].update(create_host_path=True)),
+            ('string_false', lambda m: m['bind'].update(create_host_path='false')),
+            ('zero', lambda m: m['bind'].update(create_host_path=0)),
+            ('null', lambda m: m['bind'].update(create_host_path=None)),
+            ('readonly_missing', lambda m: m.pop('read_only')),
+            ('readonly_false', lambda m: m.update(read_only=False)),
+            ('source', lambda m: m.update(source='/unexpected/raw')),
+            ('target', lambda m: m.update(target='/unexpected/raw')),
+            ('volume', lambda m: m.update(type='volume')),
+            ('type_missing', lambda m: m.pop('type')),
+            ('invalid_bind', lambda m: m.update(bind=[])),
+        ]
+        for source, check in [('./data/raw', self.assert_source_raw_mount),
+                              (str(ROOT / 'data/raw'), self.assert_rendered_raw_mount)]:
+            for name, mutate in mutations:
+                with self.subTest(source_form=source == './data/raw', mutation=name):
+                    config = self.raw_mount_fixture(source)
+                    mutate(config['services']['data-init']['volumes'][0])
+                    with self.assertRaises(AssertionError): check(config)
+            for form in ['extra_bind', 'duplicate_target']:
+                with self.subTest(source_form=source == './data/raw', mutation=form):
+                    config = self.raw_mount_fixture(source)
+                    extra = copy.deepcopy(config['services']['data-init']['volumes'][0])
+                    if form == 'extra_bind': extra['target'] = '/unexpected/extra'
+                    config['services']['data-init']['volumes'].append(extra)
+                    with self.assertRaises(AssertionError): check(config)
+
+    def test_source_raw_bind_requires_explicit_false(self):
+        self.assert_source_raw_mount(self.raw_mount_fixture())
+        for form in ['omitted_field', 'omitted_bind']:
+            with self.subTest(form=form):
+                config = self.raw_mount_fixture()
+                mount = config['services']['data-init']['volumes'][0]
+                if form == 'omitted_field': mount['bind'].pop('create_host_path')
+                else: mount.pop('bind')
+                with self.assertRaises(AssertionError): self.assert_source_raw_mount(config)
+
+    @unittest.skipUnless(shutil.which('docker'), 'Docker CLI unavailable (parser is offline)')
+    def test_source_yaml_parser_preserves_false_and_detects_removed_safety(self):
+        source = self.parse_source_yaml((ROOT / 'docker-compose.yml').read_text())
+        self.assert_source_raw_mount(source)
+        changed = copy.deepcopy(source)
+        mount = next(m for m in changed['services']['data-init']['volumes']
+                     if isinstance(m, dict) and m.get('target') == '/source/data/raw')
+        mount['bind'].pop('create_host_path')
+        # JSON is valid YAML: mutate the parsed document, never the repository file.
+        parsed = self.parse_source_yaml(json.dumps(changed))
+        with self.assertRaises(AssertionError): self.assert_source_raw_mount(parsed)
+
+    @unittest.skipUnless(shutil.which('docker'), 'Docker CLI unavailable (parser is offline)')
+    def test_retry_workflow_only_allows_second_approved_push(self):
+        workflow = self.parse_source_yaml((ROOT / '.github/workflows/v2-clean-clone-e2e.yml').read_text())
+        self.assertEqual(workflow['on'], {'push': {'branches': ['codex/real-data-v2-activation'],
+                          'paths': ['.github/workflows/v2-clean-clone-e2e.yml']}})
+        job = workflow['jobs']['verify']
+        self.assertEqual(workflow['permissions'], {'contents': 'read'})
+        self.assertEqual(job['runs-on'], 'ubuntu-24.04')
+        self.assertEqual(job['timeout-minutes'], 45)
+        terms = {}
+        for clause in job['if'].split('&&'):
+            match = re.fullmatch(r"github\.(event_name|ref|event\.before|run_number|run_attempt) == '([^']+)'",
+                                 clause.strip())
+            self.assertIsNotNone(match, 'Unexpected workflow guard expression')
+            self.assertNotIn(match[1], terms)
+            terms[match[1]] = match[2]
+        expected = dict(event_name='push', ref='refs/heads/codex/real-data-v2-activation',
+                        run_number='2', run_attempt='1')
+        expected['event.before'] = '22d29549e9149079bc93c7fc71c15d7476ec4d92'
+        self.assertEqual(terms, expected)
+        for overrides in [{}, {'event_name': 'workflow_dispatch'}, {'ref': 'refs/heads/main'},
+                          {'event.before': '5c12f773a0ee31968188c1ce1ec1429ea47ca83f'},
+                          {'run_number': '1'}, {'run_number': '3'}, {'run_attempt': '2'}]:
+            with self.subTest(context=overrides):
+                context = dict(expected, **overrides)
+                self.assertEqual(all(context.get(k) == v for k, v in terms.items()), not overrides)
+        for run, attempt, ref, code in [('2', '1', expected['ref'], 0),
+                ('1', '1', expected['ref'], 1), ('3', '1', expected['ref'], 1),
+                ('2', '2', expected['ref'], 1), ('2', '1', 'refs/heads/main', 1)]:
+            with self.subTest(shell_context=(run, attempt, ref)):
+                result = subprocess.run(['bash', '-s'], input=job['steps'][0]['run'],
+                    env={'PATH': os.defpath, 'GITHUB_RUN_NUMBER': run, 'GITHUB_RUN_ATTEMPT': attempt,
+                         'GITHUB_REF': ref}, capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, code, 'Workflow shell guard rejected fixture incorrectly')
+
     @unittest.skipUnless(shutil.which('docker'), 'Docker CLI unavailable')
     def test_fresh_checkout_defaults_v2_release_and_v1_local_override_reaches_every_gate(self):
         base = dict(os.environ)
@@ -126,8 +267,8 @@ class TeamComposeTests(unittest.TestCase):
             self.assertNotIn(forbidden, r.stdout)
         self.assertEqual(set(value['volumes'][v]['name'] for v in value['volumes']), set(VOLUMES.values()))
         self.assertTrue(value['networks']['team']['internal'])
-        source = next(v for v in services['data-init']['volumes'] if v['type'] == 'bind')
-        self.assertTrue(source['read_only']); self.assertFalse(source['bind']['create_host_path'])
+        self.assert_source_raw_mount(self.parse_source_yaml((ROOT / 'docker-compose.yml').read_text()))
+        self.assert_rendered_raw_mount(value)
         for service in services.values(): self.assertEqual(service['labels'][LABEL], OWNER)
         self.assertEqual(services['etl-init']['depends_on']['db-migrate']['condition'], 'service_completed_successfully')
         self.assertEqual(services['db-migrate']['environment']['FLYWAY_BASELINE_ON_MIGRATE'], 'false')
