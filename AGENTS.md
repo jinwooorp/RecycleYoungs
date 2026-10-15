@@ -20,7 +20,7 @@
 - `etl/tests/`: 회귀·공간/점포·격리 통합 검증과 테스트용 safety gate.
 - `etl/control*.py`: 격리 실행 제어. 테스트용 safety gate와 실제 실행 증거를 구분한다.
 - `etl/source_validation.py`, `etl/source_control.py`, `etl/source_audit.py`: 순수 보존 비교·비활성 SIMULATED_ONLY 모델·UNVERIFIED 계약. 실제 collector/executor나 DB 적용 승인으로 취급하지 않는다.
-- `data/manifest.json`, `data/raw/`: 데이터 목록과 Git 제외 원본. `legacy/`는 이전 실험 보존용이다.
+- `data/manifest.json`, `data/raw/`: 데이터 목록과 Git 제외 원본.
 - `docker-compose.yml`, `Makefile`: 실행 진입점. 실제 동작과 부작용을 먼저 읽는다.
 - 버전은 build.gradle·package.json/lockfile·requirements.txt·Compose·Dockerfile에서 확인한다.
 - 기존 스택을 유지하고, 요구 없는 프레임워크/DB 전환·dependency 추가·무관한 리팩터링을 피한다.

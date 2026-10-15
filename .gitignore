@@ -16,7 +16,6 @@ htmlcov/
 # Local configuration
 .env
 .env.*
-!.env.example
 !frontend/.env.local.example
 .DS_Store
 .idea/

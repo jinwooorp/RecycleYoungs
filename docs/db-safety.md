@@ -1,204 +1,343 @@
-# 기존 개발 DB 보호와 적용 정책
+# DB 안전 정책
 
-## 2026-10-15 v2 runtime 준비와 v1 보존
+DB에 접속하거나 데이터를 바꾸기 전에 확인할 조건을 정리합니다. 정상 개발 실행은 [README](../README.md#실행-방법), 구현 구조는 [기술 명세](technical.md)를 참고합니다.
 
-현재 v1 팀 DB `recycleyoungs_team_dev` / `127.0.0.1:55432`와 전용 db/control/cache volume은 보존 대상이다. 알려진 SID `7696461093743411240`은 이전 실측 기준이며 이번 runtime 작업에서는 DB에 접속하거나 SID를 다시 조회하지 않았다. 동일 full container ID·healthy/StartedAt 및 volume 생성시각/label은 읽기 전용 Docker metadata로 확인했다. legacy 백업과 원본·기존 ZIP은 접근 범위를 넓히거나 변경하지 않는다.
-
-v2 runtime은 명시적인 `TEAM_DATA_VERSION`과 고정 contract를 control ownership·cache·DB state·Flyway·Backend proof에 결속한다. version 정보가 없는 기존 ledger는 v1로만 인정하며 v2로 입양하지 않는다. SQL 쓰기 모드 전환 전에 state version/contract/owner를 검증하고 checkpoint의 conflict 갱신도 동일 identity만 허용한다. READY 검증 성공은 v1 업그레이드·재적재·report SHA 교체 승인이 아니다. 승인된 독립·빈 환경 외에서 v2 초기화를 실행하지 않는다.
-
-후속 사용자 승인으로 v2 runtime 코드를 commit/push하고 정확한 `real-data-v2` asset을 Public Release로 공개했다. 서버 digest·Draft byte 비교·실제 공개 HTTPS 다운로드 및 새 cache 재사용을 확인했다. 현재 활성화 작업은 별도 worktree에서 실제 Release pin·신규 기본 v2/release를 연결하며 main은 보존한다. 기존 v1은 개인 `.env`에 `TEAM_DATA_MODE=local`, `TEAM_DATA_VERSION=real-data-v1`, Backend/status 각 셸에도 같은 version을 명시해야 한다. `.env`를 자동 수정하거나 전체 source하지 않는다.
-
-후속 승인된 [독립 GitHub-hosted Ubuntu E2E](https://github.com/jinwooorp/RecycleYoungs/actions/runs/38731532178)에서 새 v2 DB의 migration·실자료 적재·READY·API/Swagger·Vite 프록시·재실행 보존을 확인했다. 로컬 v1에는 SQL/Compose/Docker mutation을 수행하지 않았으며 그 SID·READY를 이번 실측으로 주장하지 않는다. 실제 브라우저/Kakao·3후보 UI, 실제 v2 DB 실패 주입, main 반영 후 새 clone은 NOT_VERIFIED다. 같은 daemon의 project override나 기존 v1 DB를 시험 대상으로 쓰지 않는다. 기존 v1 Compose up/stop/recreate·DDL/DML·control/cache 변경·volume 정리는 금지한다. main 반영은 계속 별도 승인 대상이다. [구현과 검증 범위](technical.md#v2-runtime-통합과-독립-e2e)를 참고한다.
-
-후속 CC BY 4.0 리포트 고지 반영은 별도 미공개 후보와 v2 dataset 계약·archive pin만 갱신했다. 기존 v1 계약·8개 원본·v1 ZIP·이전 v2 ZIP·기존 cache는 보존했다. 라이선스 갱신 단계에서는 기존 DB에 접속하거나 restart/migration/ETL을 실행하지 않았다. 동일한 `real-data-v2` 이름이라도 이전 후보의 ATTRIBUTION/dataset 계약과 다르므로 새 계약으로 자동 승격하지 않으며 불일치 시 보존하고 거부한다. 공공데이터 및 제3자 권리의 조건과 실제 DB 적용 승인은 리포트 라이선스 선택과 별개다.
-
-## 2026-10-14 로컬 환경 통일
-
-사용자의 별도 승인으로 기존 `startup-analysis-postgres` / `startup_analysis` / `recycleyoungs_postgres_data`를 읽기 전용으로 감사하고, snapshot 연계 custom dump·schema SQL·역할/권한 정보를 비공개 로컬 경로에 보존했다. 원본 DB에는 migration·ETL·DDL/DML을 실행하지 않았다. 백업 파일·SHA-256·검증 증거는 삭제하지 않는다. 개인 절대 경로·credential은 이 문서에 기록하지 않는다.
-
-독립 PostgreSQL 16/PostGIS 3.4에서 실제 복원을 완료했다. 원본과 복원본의 전체 행 SHA-256·NULL·컬럼·제약/index·sequence 정의/값/ownership·전체 Flyway history·role attributes/membership·owner/ACL이 일치했고 schema SQL도 byte-identical이었다. 역할 비밀번호/hash는 추출하지 않았으며 복원 리허설의 인증에는 격리용 임시 비밀번호를 사용했다. 향후 실제 복구 시 인증 secret은 별도로 설정해야 한다.
-
-기존 V1 통계 141,218행·매출 67,113행·업종 5개·SEOUL mapping 4개는 surrogate ID 대신 business key와 전체 필드/분류/NULL projection으로 팀 DB와 전수 대조했다. 기존 stores·commercial_areas·sales_commercial_area는 모두 0행이고, postgres/template1에는 별도 사용자 데이터가 없었다. 기존 전용 미분류 업무 데이터는 없었으며 BASELINE 이력·기존 ID/sequence·owner/ACL은 검증된 백업에 보존했다.
-
-15개 삭제 안전 조건 통과 후 full container ID·SID·전용 volume의 생성시점/label/mount·network ID·미사용 여부를 다시 확인하고 기존 컨테이너를 정상 종료했다. 해당 컨테이너·전용 volume·비어 있는 기존 전용 network만 제거했다. 팀 DB `recycleyoungs_team_dev`와 DB/control/cache volume 3개는 유지한다. 기본 개발 경로는 `recycleyoungs-team-dev`, loopback `55432`, guarded `bootRun`, Vite `5173`이다. Release는 여전히 UNPUBLISHED이고 Git stage/commit/push는 하지 않았다.
-
-퇴역 후 5432 포트 해제와 팀 DB의 동일 SID·READY를 확인했다. `docker compose up -d`를 다시 실행해 cache 재검증·ETL 생략과 전체 데이터/ID/sequence fingerprint 보존을 확인했고, GET 7개·Vite proxy·Kakao 위치/카페/후보 통계·Swagger UI/JSON을 재검증했다. 이번에 만든 독립 복원 container/network/volume만 소유권 확인 후 정리했으며 백업과 검증 증거는 유지했다. 애플리케이션 기능·dependency·migration은 이번 퇴역 작업에서 변경하지 않았다.
-
-아래 NOT_READY·source 적용 정책과 마지막 감사 설명은 **퇴역 전의 역사적 적용 상태**다. 같은 이름의 자원이 다시 생겨도 이번 승인을 재사용하거나 자동 연결·재사용·삭제하지 않는다. 복구·원본 적용·백업 삭제에는 대상 identity와 범위를 확인한 별도 승인이 필요하다.
-
-**NOT_READY / STOP. V2/V3 migration·행정동/상권 Polygon은 마지막 확인 기록에서 기존 개발 DB에 미적용입니다. 실제 source collector와 source execution runner는 미구현입니다.** 비활성 모델·순수 보존/Audit 계약은 구현됐지만 실행 가능 상태가 아닙니다. 격리 PASS·백업 존재·READY 판정은 실제 mutation 승인이 아닙니다.
-
-정적 대조 기준은 2026-10-11의 [`d06f675`](https://github.com/jinwooorp/RecycleYoungs/commit/d06f675921b1edc34d38ef6646fdbb48bc66533e)입니다. 이번 문서 개편에서 DB·Docker·raw·백업·테스트·Spring/ETL을 실행하거나 확인하지 않았습니다. 과거 read-only 기록을 현재 DB 상태로 표현하지 않습니다. 작업 순서는 [트랙 A](project.md#트랙-a--기존-db에-안전하게-적용하기), schema/CLI/검증 도구의 구현 계약은 [technical](technical.md)에 둡니다.
+코드·문서 확인 기준일은 **2026-10-16**입니다. 이 개편에서는 DB·Docker에 접속하거나 자원을 변경하지 않았습니다. 아래의 과거 감사·백업 기록을 현재 상태나 실행 승인으로 사용하지 않습니다.
 
 ## 목차
 
-- [2026-10-15 v2 runtime 준비와 v1 보존](#2026-10-15-v2-runtime-준비와-v1-보존)
-- [2026-10-14 로컬 환경 통일](#2026-10-14-로컬-환경-통일)
-- [보호 대상과 마지막 확인](#보호-대상과-마지막-확인)
+- [적용 범위와 보호 대상](#적용-범위와-보호-대상)
+- [접속·변경·정리의 승인 범위](#접속변경정리의-승인-범위)
+- [연결 identity·writer·권한](#연결-identitywriter권한)
 - [V1 보존과 허용 변경](#v1-보존과-허용-변경)
+- [백업·독립 restore와 복구 가능성](#백업독립-restore와-복구-가능성)
+- [STOP·복구·Go/No-Go](#stop복구gono-go)
 - [실행·검증 계층과 결과 상태](#실행검증-계층과-결과-상태)
 - [실제 source collector와 provenance 요구](#실제-source-collector와-provenance-요구)
-- [과거 검증과 Git 근거](#과거-검증과-git-근거)
-- [연결 identity·writer·권한](#연결-identitywriter권한)
-- [백업·독립 restore와 복구 가능성](#백업독립-restore와-복구-가능성)
 - [향후 source 실행과 검증 gate](#향후-source-실행과-검증-gate)
 - [FINAL 검증의 분리](#final-검증의-분리)
-- [STOP·복구·Go/No-Go](#stop복구gono-go)
+- [과거 검증과 Git 근거](#과거-검증과-git-근거)
 
-## 보호 대상과 마지막 확인
+## 적용 범위와 보호 대상
 
-보호 대상은 container `startup-analysis-postgres`, volume `recycleyoungs_postgres_data`입니다. 이름만으로 연결 대상을 확정하지 않으며 현재 full ID/image/PGDATA/network와 연결 자체의 SID를 다시 확인해야 합니다.
+### 현행 팀 개발 환경
 
-마지막 전수 SQL 감사는 **2026-10-09에 커밋된 8-C2B-2 기록**입니다. 8-C2A supplemental snapshot과 같았고 B-3은 source SQL 접속 없이 Docker metadata만 대조했습니다. 아래를 현재값으로 가정하지 않습니다.
+Compose가 관리하는 대상은 다음과 같습니다. 이름은 코드상 식별자이며 실제 자원의 존재·소유권은 작업 전에 확인합니다.
 
-| 항목 | 마지막 감사 기록 |
+| 대상 | 식별자 |
 | --- | --- |
-| Flyway | 성공 V1 BASELINE 1건, checksum NULL, failed row 없음, V2/V3 미적용 |
-| V1 구조 | reference와 169column·19constraint·22index·7sequence/ownership 및 extension/trigger 대조 |
-| industries / industry_mappings | 5 / SEOUL mapping 4, SEMAS/I21201 없음 |
-| store_stats_dong / sales_dong | 141,218 / 67,113 |
-| commercial_areas / sales_commercial_area / **stores** | **0 / 0 / 0** |
-| V3 예상 backfill | I21201 대상·충돌 0, backfill **0건**. 원본 전체 점포 건수를 실행 조건으로 고정하지 않음 |
-| 보존 증거 | 실제 전 column/ID/FK·169field NULL·POINT NDR/SRID·분포·sequence·history/catalog 비교 |
+| Compose 프로젝트 | `recycleyoungs-team-dev` |
+| DB | `recycleyoungs_team_dev`, 호스트 `127.0.0.1:55432` |
+| DB 볼륨 | `recycleyoungs-team-dev-db` |
+| 제어 기록 볼륨 | `recycleyoungs-team-dev-control` |
+| 데이터 cache 볼륨 | `recycleyoungs-team-dev-cache` |
 
-기존 개발 DB에 전체 CSV가 적재됐다고 주장하지 않습니다. 빈 세 table을 채우는 작업은 V2/V3/Polygon 적용 범위에 자동 포함하지 않습니다.
+기존 DB·control·cache는 하나의 환경으로 보존합니다. 데이터 버전·계약·소유권이 다르면 기존 환경을 새 버전으로 자동 채택하거나 재적재하지 않습니다.
 
-## V1 보존과 허용 변경
+과거 팀 DB의 v1 기록과 신규 기본 `real-data-v2`는 다른 데이터 계약입니다. 신규 기본값은 기존 DB의 업그레이드 승인이 아닙니다. 보존 여부를 판단하려고 개인 설정을 덮어쓰지 않습니다.
 
-V1 BASELINE의 **NULL checksum을 유지**합니다. SQL V1 checksum으로 바꾸거나 repair/rebaseline하지 않습니다. 성공 SQL migration checksum도 수정하지 않습니다. 과거 target=1 validate 성공과 전체 validate의 V2/V3 pending 오류는 별개였으며 ignoreMigrationPatterns로 숨기지 않았습니다.
+### 퇴역한 개발 DB와 백업
 
-정확한 DDL/DML은 [V1/V2/V3 SQL](../backend/src/main/resources/db/migration/)이 기준입니다.
+`startup-analysis-postgres` / `startup_analysis` / `recycleyoungs_postgres_data`는 과거 보호 대상입니다.
 
-- V2는 새 공간 3table·제약/index/guard를 추가하며 V1 table·값·ID·POINT·NULL·sequence를 보존합니다.
-- V3는 mapping/stores에 SHARE ROW EXCLUSIVE lock을 걸고 CAFE 존재·mapping/non-CAFE 충돌을 검사합니다. SEMAS/I21201→CAFE를 추가하고 기존 I21201/industry_id NULL만 UPDATE합니다. 실제 대상 수=변경 수·NULL/충돌 잔존 0을 검증합니다.
-- V3의 예상 mapping insert/sequence 변화와 대상 industry_id 외에는 V1 값·ID·FK·POINT·NULL·sequence·history/catalog를 보존합니다. 다른 소분류·이미 CAFE row는 바꾸지 않습니다.
-- source와 operational Polygon만 별도 ETL로 적재합니다. V1 대표 POINT·stores/통계 재적재·원본 geometry 교체는 포함하지 않습니다.
-- full CSV/점포 loader는 TRUNCATE/ID 재시작·연도 DELETE를 수행하므로 기존 DB backfill/일반 검증에 사용하지 않습니다.
+기존 기록에 따르면 2026-10-14 별도 승인으로 읽기 전용 감사, 백업, 독립 복원, 팀 DB 전수 대조를 수행한 뒤 해당 컨테이너·볼륨·전용 빈 네트워크를 제거했습니다.
 
-원행과 source ID/FK·전체 column·NULL/실제0/빈 문자열·POINT NDR/SRID·sequence state/정의/ownership·catalog/ACL·full history를 보존합니다. 승인된 V2 additions와 V3 mapping/대상 industry_id/예상 sequence 변화만 허용합니다. catalog에 owner/RLS·column type/nullability/default/identity/collation·제약/index/trigger 정의·schema/extension/function 정의와 owner를 포함합니다. 빈 table도 구조/ACL 비교 대상입니다.
+이 기록은 같은 이름의 자원을 재생성·연결·삭제해도 된다는 뜻이 아닙니다. 다시 나타나면 소유권을 확인하고 별도 대상으로 검토합니다.
 
-V1 BASELINE은 `<< Flyway Baseline >>` script/description과 NULL checksum profile을 독립적으로 확인합니다. actor/time/duration은 과거 값을 새 실행 기대값으로 고정하지 않으며 기존 history 원행은 그대로 보존합니다. V2/V3 신규 history는 실제 migration actor·정확한 SQL/checksum·관찰 시점을 결속합니다.
+원본 백업·역할·권한 자료는 비공개 보존 대상입니다. 문서 정리를 위해 열람·인덱싱·이동·삭제하지 않습니다. private 경로나 접속값은 공개 문서에 적지 않습니다.
 
-## 실행·검증 계층과 결과 상태
+## 접속·변경·정리의 승인 범위
 
-| 계층 | 현재 구현과 결과 | 실제 source 판정으로 확대하면 안 되는 것 |
-| --- | --- | --- |
-| control/controller/backend/worker | 실제 격리 11단계·ISOLATED_MEASURED 실행 증거 | 과거 고정 backup·image·empty stores profile. source 실행 모드 없음 |
-| source_validation | 공급 before/after JSON evidence의 V1/V2/V3 순수 비교 | PASS는 공급 증거의 일관성/보존뿐. DB 출처·실행·rollback·승인 증명 아님 |
-| source_control / SourceSimulation | inspect=NOT_READY, db_state=UNMEASURED, 실행 항상 거부 | 합성 PASS/SIMULATION_COMPLETE도 SIMULATED_ONLY. HMAC/approval fixture는 사람 승인 아님 |
-| source_audit | serialization·UNVERIFIED_CLAIMS의 형식/결속 검사 | 성공도 CONTRACT_VALID_UNVERIFIED, boolean false·db_observed/execution_authorized false |
-| 실제 collector/executor·durable crash 처리 | 미구현 | CLI flag/config/env·합성 승인값으로 활성화할 경로 없음 |
+세션에서 승인한 대상과 작업만 수행합니다. 문서·일반 테스트에는 DB 접속이 필요하지 않습니다.
 
-코드: [source_validation](../etl/source_validation.py), [source_control](../etl/source_control.py), [source_audit](../etl/source_audit.py). 신규 세 모듈의 회귀 테스트 source는 있으나 이번에 실행하지 않았습니다. 이전 세션에서 보고된 결과와 현재 Git에 존재하는 실행 기록도 구분하며 해당 커밋의 실행 결과는 확인하지 못했습니다.
+| 작업 | 실행 전 확인 |
+| --- | --- |
+| 최초 팀 환경 준비 | 이름·포트 충돌, 사용할 daemon과 생성 범위 |
+| 기존 팀 상태 조회 | 자원 소유권·실제 연결 대상, 읽기 전용 범위 |
+| 기존 DB migration·ETL | 변경 범위 승인, 보존 기준, 최신 백업·독립 복원 |
+| 중지·재생성·복원·삭제 | 자원별 소유권과 명시적 승인 범위 |
 
-preservation 결과는 PASS/UNEXPECTED_CHANGE/INSUFFICIENT_EVIDENCE/INDETERMINATE입니다. missing evidence·UNKNOWN·불명확한 sequence 변화는 PASS가 아닙니다. stage는 V1/V2/V3만 지원하므로 Polygon 전후 source 보존·공간 additions 검증 계약은 후속 작업입니다. independently reviewed V2 additions reference와 migration actor가 필요합니다.
+`docker compose up -d`, `make db`, `make etl`은 현재 같은 준비 경로입니다. 새 환경을 만들거나 기존 컨테이너를 시작·재생성할 수 있으므로 실제 영향을 먼저 읽습니다.
 
-old integration snapshot은 full catalog/ACL/sequence definition·installed_by/on/execution_time 전체를 수집하지 않습니다. 이것만 신규 source evidence로 사용할 수 없습니다. source_control은 preservation validator를 실측 수집에 연결하지 않고, source_audit도 before/after 보존 comparator·SourceSimulation을 호출하지 않습니다.
+`make db-info`, `make check-db`는 현재 읽기 전용 팀 status입니다. SQL 조회가 포함되므로 문서 검증용 명령으로 사용하지 않습니다.
 
-## 실제 source collector와 provenance 요구
+`make db-migrate`와 `make db-baseline`은 현재 Makefile에서 거부합니다. 직접 Flyway로 우회하지 않습니다.
 
-Audit 계약→fake connection collector→실제 READ ONLY 수집→실측 provenance 결속 순으로 준비합니다. fake connection의 query/stream/evidence·오류·timeout 검증은 DB를 관찰한 결과가 아닙니다. 실제 접속·수집은 별도 대상/범위 승인이 필요합니다.
+다음 작업은 해당 범위의 명시적 승인 없이 실행하지 않습니다.
 
-collector는 승인된 **같은 connection·READ ONLY REPEATABLE READ transaction·같은 snapshot**에서 full evidence를 수집해야 합니다. reconnect/recollection·일부 component 누락·중간 실패는 거부합니다. DB identity·actor/writer·수집 window와 code/SQL/input/profile/reference hash를 실측 증거에 결속하며 별도 사전 연결 PASS를 대체 증거로 쓰지 않습니다.
+- 기존 DB에 대한 Flyway migrate/baseline/repair/clean
+- Polygon `--load`, 전체 CSV·점포 loader
+- DDL/DML, GRANT·ALTER ROLE, sequence 변경
+- 기존 컨테이너 stop/restart/recreate, 볼륨 mount/delete
+- 기존 DB restore, 백업 복사·이동·삭제·덮어쓰기
+- `docker compose down -v`
 
-snapshot/audit에는 physical/raw digest·모든 table ID/NULL·POINT NDR/SRID·columns/full catalog/ACL·sequence state/정의·full Flyway history가 필요합니다. V3는 complete industries/mappings/stores projection과 projection digest·ID digest·NULL count·FK를 대조합니다. ACL은 database/schema/default ACL·roles/memberships·객체 owner/ACL을 포함합니다. 누락/UNKNOWN과 확인된 빈 배열/SQL NULL ACL은 다릅니다.
+팀 `bootRun`은 READY 확인 후 읽기 전용 계정을 쓰고 Flyway를 끕니다. 일반 애플리케이션 설정·`dbTest`에는 같은 보장을 적용할 수 없으므로 설정을 먼저 확인합니다.
 
-row digest는 정해진 PostgreSQL text serialization의 UTF-8 bytes를 정렬 ID 순서로 8byte unsigned big-endian 길이 framing해 SHA-256합니다. physical·industry_id 제외 raw·논리 분류 digest를 분리하고 예상 V3 변경만 허용합니다. ID·POINT·전 field NULL·sequence·history/catalog는 별도 전수 검사합니다. count·몇 개 샘플·ST_Equals만으로 보존을 주장하지 않습니다. serialization/ID/projection profile은 [source_audit](../etl/source_audit.py)의 고정 계약을 따릅니다.
-
-Audit envelope는 run/collection/stage·1-based 순서·validation stage·artifacts/component bindings·payload/previous digest·scope·collection outcome·connection/transaction/snapshot window를 결속합니다. TTL≤1800초와 start 기준 freshness, reconnect/recollect=false를 검사하지만 **현재는 모두 caller claim**입니다. CONFIRMED라는 claim이나 stage label은 실제 관찰/완료 증명이 아닙니다. 이전 digest의 실제 존재·성공과 before/after 관찰점은 미래 collector/runner가 증명해야 합니다. NULL snapshot ID에 descriptor/local transaction ID를 적는 계약도 실제 PostgreSQL XID 할당을 뜻하지 않습니다.
-
-실측 provenance는 Git/SQL·collector/validator 및 adapter dependency code·입력/처리/serialization/V2 reference·target·backup 증거까지 결속해야 합니다. 수집 payload/envelope는 민감할 수 있으므로 공개 로그에는 고정 오류 category/field만 사용하고 row·SQL·접속값·private 경로를 노출하지 않습니다.
-
-## 과거 검증과 Git 근거
-
-아래는 **당시의 실행 결과**이며 해당 고정 SHA/path의 원문 존재를 확인했습니다. 과거 보고서는 현재 작업 트리에 없는 역사적 문서입니다. 상세 로그·수치는 Git에 두고 private 원본/백업/접속값은 공개 문서에 복제하지 않습니다.
-
-| 단계 | 핵심 결과·제한 | 보존된 commit SHA와 원문 |
-| --- | --- | --- |
-| 8-C1 | 실제 전체 Fresh/Populated 격리 적재·백업/분리 복원·전수 값/ID/sequence·geometry/hash·rollback·공간/index 검증. 기존 DB 미접속 | [b6113585ea4c2ba10d1edf3d57ec999403e9b5dd](https://github.com/jinwooorp/RecycleYoungs/blob/b6113585ea4c2ba10d1edf3d57ec999403e9b5dd/docs/integration-validation-8c1.md) |
-| 8-C2A | source READ ONLY/REPEATABLE READ 감사·exported snapshot 연계 dump·격리 전수 restore. 최초 restore는 no-owner/no-acl로 권한 복구까지 증명하지 않음 | [deaed745b31fdcb16355ecc241f46b3dc2b46045](https://github.com/jinwooorp/RecycleYoungs/blob/deaed745b31fdcb16355ecc241f46b3dc2b46045/docs/development-db-8c2a-preflight.md) |
-| 8-C2B-1 | source 백업으로 V2→보존→V3→Polygon/retry 격리 리허설. 원본 role/authentication 전체 재현과 실사용자 write 경로는 미검증 | [38e87328e843e78419e4a1c0dd5584fbf3a326b7](https://github.com/jinwooorp/RecycleYoungs/blob/38e87328e843e78419e4a1c0dd5584fbf3a326b7/docs/development-db-8c2b-rehearsal.md) |
-| 8-C2B-2 | 원본 권한 catalog·role/ACL 격리 재현/실행, source same-connection READ ONLY SDK 검사, 테스트용 SIMULATED_ONLY gate. 인증 secret은 격리용 | [bde7050ee99e65c45fd276e20394bd41c720cb46](https://github.com/jinwooorp/RecycleYoungs/blob/bde7050ee99e65c45fd276e20394bd41c720cb46/docs/development-db-8c2b-safety-gates.md) |
-| 8-C2B-3 | 승인된 영속 백업 복사, 실측 격리 runner/validator 결속·JDBC/publication 연결 검사·STOP | [c36f44fb204fa77ffd77cb4595a63be57f6967bb](https://github.com/jinwooorp/RecycleYoungs/blob/c36f44fb204fa77ffd77cb4595a63be57f6967bb/docs/development-db-8c2b-execution-guard.md) |
-
-B-3 일반 회귀 결과는 **93 PASS / 0 FAIL / 15 SKIP**입니다. 별도 격리 **11단계 pipeline 성공**과 잘못된 SID를 넣은 실제 JDBC/SDK 연결 거부는 이 건수에 합산하지 않았습니다. 15 SKIP은 spatial DB 8·실제 ZIP 2·stores DB 4·실제 CSV 1이며 DB/raw opt-in 없는 결과를 실제 DB 성공으로 확대하지 않습니다.
-
-B-3 pipeline은 V2/V3 history/checksum·V1 보존, mapping 1건 추가/0건 backfill, 격리 mapping sequence 4→5, 행정동 425·상권 1644 valid/6 repair, source invalid/H5/B/UNRESOLVED 보존, READY/current·최종 retry snapshot 동등성을 확인했습니다. 이는 원본 개발 DB의 migration·권한/authentication 검증 결과가 아닙니다.
-
-이전 날짜별 구현·원본 조사·DDL spike 기록도 [deaed745의 프로젝트 기록](https://github.com/jinwooorp/RecycleYoungs/blob/deaed745b31fdcb16355ecc241f46b3dc2b46045/docs/project-status.md)에 있습니다. Git 조회는 `git show <SHA>:<원래 문서 경로>`로 수행하며 reset/restore로 작업 트리를 바꾸지 않습니다.
+Git stage·commit·push도 별도 승인 범위를 따릅니다. 작업 규칙은 [AGENTS](../AGENTS.md)가 기준입니다.
 
 ## 연결 identity·writer·권한
 
-접속 전 full container ID·image immutable ID·실제 image inspect·PGDATA/volume·network ID/alias/DNS/port를 확인합니다. 접속은 승인된 explicit host/port/database/user/secret으로 고정하고 ambient libpq/Flyway override·잘못된 route를 거부합니다. secret·JDBC URL·환경 전체·원본 row를 로그/인덱스/Git에 노출하지 않습니다.
+여기서 identity는 **실제로 접속한 DB가 승인된 대상인지 확인하는 정보**입니다. writer는 DB 값을 바꿀 수 있는 프로그램·계정·예약 작업입니다.
 
-반환할 **같은 연결**에서 current_database/current_user/session_user/SID·PGDATA/내부 port·READ ONLY/격리수준·timeout·idle/autocommit을 검사합니다. 별도 사전 연결의 PASS를 실제 write/publication 연결 증거로 사용하지 않습니다. 실패하면 연결을 닫고 STOP합니다. source 조회는 READ ONLY transaction이며 권한 검사를 위한 시험 쓰기는 금지합니다.
+### 접속 전 대상 확인
 
-writer 확인은 DB client·프로젝트 backend/ETL·prepared transaction·subscription·예약 실행 등 관찰 가능한 쓰기 경로와 실제 통제 범위를 포함합니다. 일시적으로 client가 없었다는 사실은 미래 writer 부재의 보장이 아닙니다. snapshot/dump/migration 전후 검증 창의 변화는 STOP입니다.
+- full container ID, 고정 image ID와 실제 image inspect 결과
+- PGDATA·볼륨·mount와 소유권
+- network ID·alias·DNS·host/내부 port
+- 명시한 host·port·database·user와 승인된 secret
 
-권한은 실제 migration actor의 role attributes/membership·DB/schema/default ACL·table/column/sequence/function/type owner/ACL/effective privileges를 대조합니다. V2 생성·history INSERT/조회·V3 row lock/SELECT/UPDATE·mapping INSERT/sequence·Polygon lifecycle/trigger 권한을 나누며 superuser라는 가정이나 catalog true만으로 실제 실행 성공을 주장하지 않습니다. password/hash 원문은 조회/복제하지 않고 상세 근거는 private 보관합니다.
+환경에 남은 libpq·Flyway 설정으로 다른 DB에 연결하지 않습니다. secret·JDBC URL·환경 전체·원본 행은 로그·Git·인덱스에 노출하지 않습니다.
 
-격리 B-3 Flyway는 public schema 고정, createSchemas=false·baselineOnMigrate=false·cleanDisabled=true·group=false·outOfOrder=false·connectRetries=0·executeInTransaction=true·mixed=false, target 2/3 분리입니다. initSql이 **같은 JDBC 연결**의 database/user/SID/PGDATA/port·5s lock/10min statement timeout을 검사하고 불일치 시 division-by-zero로 거부합니다. source의 과거 readonly info/validate와 source mutation JDBC 경로의 승인을 혼동하지 않습니다.
+### 같은 연결에서 재확인
 
-격리 worker가 주입하는 Polygon factory는 실제 반환 연결의 user/session_user/SID/PGDATA/port·write session/timeout·idle autocommit을 검사하고 그 연결을 publish에 전달합니다. standalone CLI 기본 연결에는 이 actual guard가 없습니다. explicit DSN만으로 source 안전 경로가 되지 않습니다. 보호 구조는 [control.py](../etl/control.py), [control_backend.py](../etl/control_backend.py), [control_worker.py](../etl/control_worker.py), [spatial_main.py](../etl/app/spatial_main.py)에 있습니다. 현재 개발 DB 경로의 구현·리뷰·실사용자 검증은 남아 있습니다.
+반환해 사용할 **같은 연결**에서 다음을 확인합니다.
+
+- current_database, current_user, session_user
+- system identifier(SID), PGDATA, 내부 port
+- READ ONLY와 격리 수준
+- statement/lock timeout, idle·autocommit 상태
+
+별도 사전 연결의 성공으로 실제 migration·publication 연결 검사를 대신하지 않습니다. 불일치하면 연결을 닫고 중단합니다.
+
+승인된 조회는 READ ONLY 트랜잭션입니다. 권한을 시험하려고 임시 쓰기를 하지 않습니다.
+
+### 쓰기 주체와 권한
+
+DB client, Backend·ETL, prepared transaction, subscription, 예약 작업을 확인합니다. 잠깐 client가 없었다는 사실은 검증 중 쓰기가 없다는 보장이 아닙니다.
+
+실제 변경 계정의 role 속성·membership과 객체 권한을 대조합니다. DB·schema·default ACL, table·column·sequence·function·type의 owner·유효 권한을 포함합니다.
+
+V2 생성, Flyway history 기록, V3 잠금·행 변경, 매핑 sequence, 경계 trigger 권한을 따로 확인합니다. superuser 가정이나 catalog의 true 값만으로 실제 실행 성공을 주장하지 않습니다.
+
+비밀번호·비밀번호 hash는 추출·복제하지 않습니다. 상세 권한 근거는 비공개로 보관합니다.
+
+### 격리 도구의 연결 검사
+
+과거 B-3 Flyway는 public schema와 target 2/3을 분리해 사용했습니다. 설정은 다음과 같습니다.
+
+```text
+createSchemas=false
+baselineOnMigrate=false
+cleanDisabled=true
+group=false
+outOfOrder=false
+connectRetries=0
+executeInTransaction=true
+mixed=false
+```
+
+같은 JDBC 연결에서 DB·사용자·SID·PGDATA·port와 timeout을 검사했습니다. lock timeout은 5초, statement timeout은 10분이었습니다.
+
+격리 Polygon factory도 같은 반환 연결을 검사해 publication에 전달합니다. 단독 CLI에는 이 검사가 없으므로 명시적 DSN만으로 안전 경로가 되지 않습니다.
+
+[control](../etl/control.py)·[backend](../etl/control_backend.py)·[worker](../etl/control_worker.py)의 검사는 격리용입니다. 기존 DB에 재사용하려면 별도 구현·리뷰·실사용자 검증이 필요합니다.
+
+## V1 보존과 허용 변경
+
+이 절의 V1~V3는 스키마 버전입니다. `real-data-v1/v2` 패키지와 구분합니다. 정확한 변경 정의는 [migration SQL](../backend/src/main/resources/db/migration/)이 기준입니다.
+
+기존 V1 BASELINE의 NULL checksum과 history 원행을 유지합니다. SQL V1 checksum으로 바꾸거나 repair·rebaseline하지 않습니다. 기존 성공 migration의 checksum도 수정하지 않습니다.
+
+| 단계 | 허용 변화 |
+| --- | --- |
+| V2 | 공간 테이블 3개와 관련 제약·인덱스·guard 추가 |
+| V3 | SEMAS/I21201→CAFE 매핑과 해당 소분류의 빈 industry_id만 보완 |
+| 경계 ETL | 별도 경계 테이블에 승인된 원본·조회용 도형과 버전 저장 |
+
+V3는 매핑·stores 잠금과 CAFE 참조 검사를 수행합니다. 실제 대상 수와 변경 수, 잔존 NULL·분류 충돌을 확인합니다.
+
+다른 소분류·이미 CAFE인 행은 바꾸지 않습니다. 예상 매핑 INSERT와 그 sequence 변화, 승인된 industry_id 변경 외에는 기존 데이터를 보존합니다.
+
+보존 비교는 다음을 포함합니다.
+
+- 모든 행·컬럼·ID·원천 ID·FK
+- NULL·실제 0·빈 문자열
+- POINT의 WKB·SRID
+- sequence 값·정의·ownership·dependency
+- 전체 Flyway history
+- 컬럼 형식·nullability·default·identity·collation
+- 제약·인덱스·trigger·schema·extension·function 정의
+- owner·ACL·RLS
+
+빈 테이블도 구조·권한 비교 대상입니다. 기존 history의 actor·시간·duration은 원행을 보존하되 새 실행 기대값으로 고정하지 않습니다.
+
+새 V2/V3 history는 실제 계정·SQL·checksum·관찰 시점과 연결합니다. PENDING 오류를 ignoreMigrationPatterns로 숨기지 않습니다.
+
+전체 loader는 TRUNCATE·ID 재시작이나 연도 DELETE를 수행할 수 있습니다. 기존 데이터 보존·backfill 검사에 사용하지 않으며, V2/V3/경계 승인에 빈 테이블 채우기를 포함하지 않습니다.
 
 ## 백업·독립 restore와 복구 가능성
 
-8-C2A는 READ ONLY/REPEATABLE READ coordinator의 exported snapshot을 baseline과 pg_dump -Fc --snapshot에 공유하고 전후 전수 값을 대조했습니다. sequence는 MVCC 밖이므로 last_value/is_called·설정·ownership/dependency를 별도로 검사했습니다. 새 격리 restore의 값/ID/POINT/NULL·history/catalog를 원본 snapshot과 비교했습니다.
+기존 DB 변경 직전에는 변경 전 상태에 연결된 새 백업과 독립 복원이 필요합니다. 백업 파일의 존재나 과거 복원 성공만으로 충분하지 않습니다.
 
-B-2의 영속 위치 미승인 blocker 이후 B-3에서 승인된 private 위치에 새 복사본을 만들고 원본을 유지했습니다. byte/SHA·0700 directory/0600 file·추가 ACL 없음·소유자·symlink/overwrite 방지를 확인했습니다. **이 복사본은 과거 8-C2A snapshot**이고 최신성이나 별도 디스크 재해복구 백업을 보증하지 않습니다.
+1. 검증 기간의 writer를 통제하고 하나의 DB 조회 시점을 확보합니다.
+2. 비교 기준과 `pg_dump -Fc --snapshot`에 같은 exported snapshot을 사용합니다.
+3. 새 격리 DB에 복원합니다.
+4. 전체 값·ID·POINT·NULL·history·구조·권한을 원본과 비교합니다.
+5. 실제 계정의 복구·접속 가능성과 전환·중단 계획을 확인합니다.
 
-실제 적용 직전 writer 통제·새 snapshot-bound backup·새 독립 restore·owner/ACL/role·실사용자 복구/접속 가능성을 다시 확인해야 합니다. 내부 SSD/FileVault 복사와 별도 암호화 매체를 구분하고 role/ACL metadata 영속 보관·관리자·retention·키 관리·복구 리허설 정책을 확정합니다. 백업 원본/복사본은 최종 적용 리뷰·복구 검증 종료까지 보존하며 삭제/이동/덮어쓰기·기존 DB restore는 별도 승인 대상입니다.
+sequence는 MVCC 밖에서 움직이므로 last_value/is_called·정의·ownership을 따로 확인합니다. no-owner/no-acl 복원은 권한 복구의 증거가 아닙니다.
 
-격리 대상은 전용 internal network, host port 없음, 기존 volume/mount 없음, data/init tmpfs, 승인된 고정 image·자원 소유 label·새 run을 사용합니다. 이름 prefix/proof만으로 격리를 주장하지 않고 실제 inspect와 server identity를 대조합니다. 만든 자원만 정리합니다.
+백업은 승인된 프로젝트 밖 비공개 위치에 둡니다. 디렉터리 0700·파일 0600, 소유자·추가 ACL·SHA·크기를 확인합니다.
 
-## 향후 source 실행과 검증 gate
+symlink·덮어쓰기를 허용하지 않습니다. 내부 SSD의 복사본과 별도 매체의 재해 복구 백업을 구분합니다.
 
-아래는 **향후 실제 source 적용을 위해 승인 전 검토할 계약**이며 실행 경로는 미구현입니다. 격리 코드/합성 모델이 같은 stage 이름을 사용해도 실제 동작·승인 범위가 같지 않습니다. 일반 Makefile/직접 ETL로 단계를 건너뛰거나 격리 guard를 완화해 source에 연결하지 않습니다. feature 수는 승인된 고정 입력 profile의 기대값이며 현재 source DB 실측값이 아닙니다.
+관리자·보존 기간·암호화 키·역할/ACL 자료 보관·복구 리허설 정책도 확인합니다. 백업 원본·복사본은 적용 리뷰와 복구 검증 종료까지 보존합니다.
 
-| 순서 | 실행/검증 | 통과 조건 |
-| --- | --- | --- |
-| 1 PRECHECK | Git·실제 대상/연결·writer·권한·history·catalog·전수 baseline·입력 검사 | 예상 상태와 일치, source 보호, 최신 proof·고정 SQL/image/manifest |
-| 2 BACKUP_RESTORE_VERIFIED | 새 snapshot-bound backup·독립 restore | backup SHA/size·복원 값/ID/POINT/NULL/sequence/history/권한·복구 가능성 |
-| 3 V2_APPLIED | Flyway target=2 migrate | 실제 JDBC identity·exit/history/checksum, V1 변경 없음 |
-| 4 V2_VERIFIED | target=2 validate·전수 보존 | V1 전 값/ID/sequence·history 원행, 공간 3table 초기 상태 |
-| 5 V3_APPLIED | target=3 migrate | lock·충돌 검사·reference·NULL 대상 최소 backfill |
-| 6 V3_VERIFIED | 전체 validate·전수 보존 | 예상 대상 수/변경/분류, 허용 mapping/sequence 변화만, 다른 V1 값 불변 |
-| 7 ADMIN_POLYGON_APPLIED | explicit 입력·실제 guarded 연결로 admin-only | 승인 profile·source/operational/hash와 transaction publication |
-| 8 ADMIN_POLYGON_VERIFIED | 전수 경계·current·V1 보존 | 425 VALID_SOURCE·READY/current·B/UNRESOLVED·원본 불변 |
-| 9 COMMERCIAL_POLYGON_APPLIED | explicit 입력·guarded 연결로 commercial-only | 승인 6건 외 repair 없음, transaction publication |
-| 10 COMMERCIAL_POLYGON_VERIFIED | 전수 경계·current·V1 보존 | 1644 VALID_SOURCE/6 REPAIRED_OPERATIONAL, H5/raw 속성·hash·version 유지 |
-| 11 FINAL_VERIFIED | READ ONLY 최종 전수 보존·source hash·공간/version 감사 | V3 이후 V1·공간 ID/loaded_at/hash/current 유지, 실제 identity·관찰 증거, 실패/skip 분리. retry publication 없음 |
+격리 복원 대상은 다음 조건을 충족해야 합니다.
 
-전수 검증의 evidence 요구는 [collector/provenance](#실제-source-collector와-provenance-요구)를 따릅니다. [integration_support](../etl/tests/integration_support.py)는 기존 격리 snapshot/보존 도구이고 신규 source profile의 full evidence를 대신하지 않습니다. stage 실측 수집과 source_validation·Polygon 보존 검증을 연결하는 경로는 아직 없습니다.
+- 전용 internal network, host port 없음
+- 기존 볼륨·mount 없음, data/init tmpfs
+- 승인된 고정 이미지와 실제 소유권 확인
+- 새 실행 ID와 실제 server identity 대조
+- 만든 자원만 정리
 
-현재 격리 runner는 SQL·DB/Flyway/ETL image·backup/reference·ZIP/member/report·processing profile·app/controller/전이 validator source·Git/target·private config hash를 stage 전후 결속합니다. 실측 exit와 validator·연결 identity·fingerprint를 수집하며 외부 PASS나 SIMULATED_ONLY를 받지 않습니다. 미래 source runner도 실제 수집/판정 결속이 필요하며 현재 합성/UNVERIFIED 모듈이 이를 수행한다고 표현하지 않습니다.
-
-격리 runner 증거는 project 밖 소유자 일치/0700·빈 private 작업 위치에 symlink 없이 exclusive 생성합니다. fresh nonce·순서·최대 30분 TTL·hash/HMAC chain·로그/validator/snapshot SHA·atomic state·메모리 anchor를 검사합니다. source simulation은 메모리 모델이고 이런 private 실측 파일을 생성하지 않습니다. hash/HMAC는 변조 탐지이며 사람 승인이나 코드/config/secret을 통제하는 actor에 대한 독립 보안 경계가 아닙니다.
-
-## FINAL 검증의 분리
-
-### 현재 격리 runner FINAL
-
-[control_worker의 final](../etl/control_worker.py)은 admin/commercial Polygon publication을 실제로 다시 호출한 뒤 전후 snapshot 동등성을 확인합니다. 이는 승인된 격리 환경에서 idempotence를 검증하는 write retry입니다. 과거 pipeline 성공·실측 snapshot·공간/index 검증과 연결되지만 source에 자동 적용할 절차가 아닙니다.
-
-### 향후 실제 source FINAL
-
-최종 source 단계는 **읽기 전용 전수 보존 감사**여야 합니다. load·retry publication·DDL/DML·ANALYZE 등 write 경로를 dispatch하지 않습니다. 격리 final 함수를 재사용하면 publication writes가 발생하므로 분리 구현·검증해야 합니다. source_control/source_audit의 FINAL은 합성/claim label이며 실제 FINAL 구현이나 완료 증거가 아닙니다. retry 실측은 승인된 격리 검증의 별도 항목으로 둡니다.
+이름 prefix만으로 격리를 증명하지 않습니다. 이 일회용 격리 조건은 호스트 포트를 사용하는 팀 개발 환경과 구분합니다.
 
 ## STOP·복구·Go/No-Go
 
-identity/input/hash/context 변화, writer/권한·backup/restore 불일치, 새로운 충돌, missing/FAIL/UNKNOWN gate, exit!=0/validator false, 순서/중복·stale/future/cross-run·TTL 만료·state/log/snapshot 변조는 **terminal STOP**입니다. 자동/force/resume 재개는 없고 원인 리뷰 후 새 run/PRECHECK와 필요한 승인을 요구합니다.
+다음이면 즉시 중단합니다.
 
-durable source crash 감지·persisted STOP·재시작 관찰 정책은 미구현입니다. 합성 모델의 STOP나 격리 atomic state만으로 source crash 처리를 완료했다고 보지 않습니다. timeout/process exit는 rollback 증명이 아니므로 실제 상태는 UNKNOWN/UNMEASURED로 중단하고, 증거/DB 상태를 별도 승인된 조회로 확인하기 전 진행하지 않습니다. 새 인스턴스 생성도 자동 resume 허가가 아닙니다.
+- 연결 대상·입력·해시·실행 조건이 변경됨
+- writer·권한·백업·복원 결과가 불일치함
+- 새 충돌 또는 FAIL·UNKNOWN·누락된 증거가 있음
+- 실행 종료 코드가 0이 아니거나 validator가 거부함
+- 순서·중복·다른 실행의 증거·유효기간 오류가 있음
+- 상태·로그·snapshot 변조가 감지됨
 
-- V2 실패: script rollback·history·V1 보존을 확인하고 중단합니다.
-- V2 성공/V3 실패: V2 schema는 남습니다. V3 rollback·기존 값 보존을 확인하며 repair/full ETL로 통과시키지 않습니다.
-- Polygon 실패: 실패 kind transaction만 rollback합니다. 이미 성공한 다른 kind를 자동 삭제하거나 사후 identity 검출이 commit을 되돌렸다고 주장하지 않습니다.
-- 보존 실패: reader 공개/후속 쓰기를 중지하고 증거를 확보합니다. 원본 초기화·DROP·volume 삭제·backup 덮어쓰기를 하지 않습니다.
-- 복구가 필요하면 검증된 backup을 **새 분리 DB**에 복원·검증하고, 기존 DB restore/접속 전환 범위를 별도 승인받습니다. 자동 원본 restore는 없습니다.
+실제 기존 DB 적용의 중단은 자동·force·resume으로 해제하지 않습니다. 원인을 검토하고 새 실행의 PRECHECK와 필요한 승인을 다시 확보합니다.
 
-Go 검토는 최신 모든 조건·실제 연결 경로·복구 계획·독립 리뷰·예상 변경 범위가 충족돼야 합니다. 이 조건이나 과거 PASS만으로 mutation은 허용되지 않으며 **대상과 V2/V3/Polygon 범위의 명시적 사용자 승인**이 마지막에 필요합니다. 현재는 개발 DB runner·최신 snapshot/권한/연결 검증·승인이 없어 NOT_READY입니다.
+프로세스 종료나 timeout은 rollback 증명이 아닙니다. 상태가 불명확하면 UNKNOWN/UNMEASURED로 두고, 승인된 조회로 확인하기 전 진행하지 않습니다.
 
-`make db`/`make db-info`/`docker compose up`도 container 시작·재생성 범위를 확인합니다. `make db-migrate`·`make etl`·`make db-baseline`·Flyway migrate/baseline/repair/clean·Polygon --load·DDL/DML·role/ACL/sequence 변경과 기존 container stop/restart/recreate·volume mount/delete·restore는 승인 없이 실행하지 않습니다. Spring bootRun·dbTest는 pending migration을 자동 실행할 수 있어 사전 점검 경로가 아닙니다.
+| 실패 시점 | 처리 |
+| --- | --- |
+| V2 실패 | rollback·history·V1 보존 확인 후 중단 |
+| V2 성공·V3 실패 | 남은 V2를 인정하고 V3 rollback·보존 확인 |
+| 경계 적재 실패 | 실패한 종류만 rollback. 다른 종류 자동 삭제 금지 |
+| 보존 실패 | reader 공개·후속 쓰기 중지, 증거 확보 |
+| 복구 필요 | 새 분리 DB에 복원·검증 후 전환 범위 승인 |
 
-Git stage/commit/push는 해당 범위의 별도 명시적 승인 후에만 수행하며 코드 리뷰 전 실행하지 않습니다. reset/restore/clean/stash·임의 branch/worktree·자동 merge/rebase·force push로 상태를 복구하지 않습니다. 필수 에이전트 규칙은 [AGENTS](../AGENTS.md)를 함께 따릅니다.
+복구를 위해 원본 초기화·DROP·볼륨 삭제·백업 덮어쓰기를 하지 않습니다. 사후에 identity 오류를 발견해도 이미 commit된 변경이 취소됐다고 주장하지 않습니다.
+
+기존 DB용 crash 감지·영속 STOP·재시작 처리 기능은 미구현입니다. 합성 모델의 중단 상태나 격리 도구의 atomic state가 이를 대신하지 않습니다.
+
+Go 검토에는 최신 증거·실제 연결·복구 계획·독립 리뷰·예상 변경 범위가 필요합니다. 마지막으로 대상과 변경 범위의 명시적 승인이 필요하며 READY만으로 실행하지 않습니다.
+
+이 제한은 기존 DB 적용 경로에 대한 것입니다. 이미 구현된 팀 Compose의 보존·재검증 동작은 [기술 문서](technical.md#팀-공통-실자료-개발-환경)에서 따로 설명합니다.
+
+## 실행·검증 계층과 결과 상태
+
+| 모듈 | 하는 일 | 성공의 한계 |
+| --- | --- | --- |
+| control 계열 | 격리 환경의 단계 실행·검사 | 기존 DB 실행 모드 없음 |
+| source_validation | 제공받은 전후 자료 비교 | 자료의 실제 출처·실행·복구 증명 아님 |
+| source_control | 가짜 자료로 단계 전환 검사 | 실제 실행 거부, SIMULATED_ONLY |
+| source_audit | 출처 기록의 형식·연결 검사 | CONTRACT_VALID_UNVERIFIED |
+| 실제 수집기·실행기 | 미구현 | 설정·flag로 활성화할 경로 없음 |
+
+비교 결과는 PASS, UNEXPECTED_CHANGE, INSUFFICIENT_EVIDENCE, INDETERMINATE입니다. UNKNOWN·증거 누락·불명확한 sequence 변화는 PASS가 아닙니다.
+
+source_control의 기본 검사는 `NOT_READY`, DB 상태는 `UNMEASURED`입니다. 모의 완료도 실제 실행을 허용하지 않습니다.
+
+`source_validation`은 V1/V2/V3 단계만 지원합니다. 경계 적재 전후의 허용 변화·보존 비교는 후속 계약이 필요합니다.
+
+`source_audit`의 db_observed와 execution_authorized는 false입니다. CONFIRMED 같은 입력 claim도 실제 관찰·승인을 뜻하지 않습니다.
+
+과거 integration snapshot은 모든 catalog·ACL·sequence 정의·history 필드를 수집하지 않습니다. 신규 기존 DB 감사 자료로 그대로 사용하지 않습니다.
+
+## 실제 source collector와 provenance 요구
+
+이 절은 **향후 기존 DB 감사 자료 수집기의 요구사항**입니다. 원본 파일 수집이나 팀 환경 초기화 도구와 구분합니다.
+
+먼저 가짜 연결로 질문·응답 조립·실패·timeout 처리를 검사합니다. 그 다음에만 별도 승인된 DB에서 실제 수집을 검토합니다.
+
+실제 수집은 같은 연결·READ ONLY REPEATABLE READ 트랜잭션·같은 조회 시점에서 수행해야 합니다. 재연결·재수집, 일부 항목 누락, 중간 실패는 거부합니다.
+
+### 필요한 관찰 자료
+
+- 전체 행의 값·ID·NULL·POINT WKB/SRID
+- 컬럼·구조·전체 catalog·ACL·역할·membership
+- sequence 상태·정의와 전체 Flyway history
+- V3 대상 industries/mappings/stores의 전체 비교값
+- 실행 계정·writer·수집 시간 범위
+- 입력·코드·SQL·처리 기준·백업의 해시
+
+확인된 빈 배열이나 SQL NULL ACL은 항목 누락·UNKNOWN과 다릅니다. 일부 샘플·행 수·ST_Equals만으로 전체 보존을 판정하지 않습니다.
+
+### 전체 행 해시
+
+정해진 PostgreSQL text 표현을 UTF-8 bytes로 변환합니다. ID순으로 정렬하고 각 행 길이를 8byte unsigned big-endian으로 붙인 뒤 SHA-256을 계산합니다.
+
+물리 값, industry_id를 제외한 원천 값, 논리 분류의 해시를 분리합니다. 승인된 V3 변화만 허용하며 ID·POINT·NULL·sequence·구조·history도 따로 전수 검사합니다.
+
+정확한 직렬화 기준은 [source_audit](../etl/source_audit.py)의 고정 계약을 따릅니다.
+
+### 출처 기록과 실행 연결
+
+관찰 자료에는 실행·수집·단계, 1부터 시작하는 순서, 입력 파일과 이전 해시를 연결합니다. 연결·트랜잭션·조회 시점의 관찰 시간도 포함합니다.
+
+현재 형식은 최대 1800초와 시작 시점의 신선도, reconnect/recollect=false 등을 검사하지만 입력자의 주장일 뿐입니다. 이전 해시의 실제 존재·성공은 미래 수집기·실행기가 증명해야 합니다.
+
+NULL snapshot ID에 descriptor·local transaction ID를 기록해도 실제 PostgreSQL XID가 할당됐다는 뜻은 아닙니다.
+
+전체 근거에는 collector·validator·adapter 의존 코드와 V2 참조 기준도 포함합니다. 공개 로그에는 고정 오류 category/field만 남기며 행·SQL·접속값·private 경로를 노출하지 않습니다.
+
+## 향후 source 실행과 검증 gate
+
+아래는 **미구현 실행 경로의 검토 기준**입니다. 퇴역 DB의 복원 계획이나 실행 안내가 아닙니다.
+
+| 단계 | 통과 조건 |
+| --- | --- |
+| 1 PRECHECK | 대상·writer·권한·history·구조·기준 데이터·입력 일치 |
+| 2 BACKUP_RESTORE_VERIFIED | 새 백업·독립 복원·권한과 복구 가능성 확인 |
+| 3 V2_APPLIED | 실제 JDBC 연결·종료 코드·이력·checksum 확인 |
+| 4 V2_VERIFIED | V1 전체 보존, 새 공간 구조의 초기 상태 확인 |
+| 5 V3_APPLIED | 잠금·매핑 충돌 검사, 허용된 빈 값만 보완 |
+| 6 V3_VERIFIED | 실제 대상·변경 수·분류와 예상 sequence 변화 확인 |
+| 7 ADMIN_POLYGON_APPLIED | 승인 입력·검사된 실제 연결로 행정동 공개 |
+| 8 ADMIN_POLYGON_VERIFIED | 경계·버전·current와 V1 보존 확인 |
+| 9 COMMERCIAL_POLYGON_APPLIED | 승인한 6개 보정만 포함해 상권 공개 |
+| 10 COMMERCIAL_POLYGON_VERIFIED | 원본 속성·해시·버전·품질과 V1 보존 확인 |
+| 11 FINAL_VERIFIED | 읽기 전용 전체 감사, ID·적재일·해시·current 보존 |
+
+425 행정동과 1,644 유효·6 보정 상권은 고정 입력 기준의 기대값입니다. 현재 기존 DB 실측값으로 사용하지 않습니다. B/UNRESOLVED·H5 충돌도 그대로 보존해야 합니다.
+
+새 V2 참조 구조와 실제 migration 계정은 독립 검토가 필요합니다. 일반 Makefile·직접 ETL로 단계를 생략하거나 격리 guard를 완화하지 않습니다.
+
+격리 runner는 단계 전후에 코드·SQL·이미지·입력·백업·비교 기준·private config 해시를 함께 확인합니다. 실제 종료 코드·validator·연결·fingerprint를 수집하며 외부 PASS나 SIMULATED_ONLY를 받지 않습니다.
+
+격리 증거는 프로젝트 밖 승인된 빈 private 위치에 생성합니다. 소유자·0700 권한·symlink 없음과 배타적 생성을 확인합니다.
+
+새 nonce·순서·최대 30분 TTL, hash/HMAC chain, 로그·validator·snapshot SHA, atomic state·메모리 anchor를 검사합니다.
+
+HMAC는 변조 탐지 수단입니다. 사람 승인이나 코드·설정·secret을 통제하는 주체에 대한 독립 보안 경계는 아닙니다. 모의 모델은 이런 실측 파일을 생성하지 않습니다.
+
+## FINAL 검증의 분리
+
+현재 [격리 runner의 final](../etl/control_worker.py)은 경계 publication을 다시 호출해 재실행 동등성을 검사합니다. 승인된 격리 대상의 **쓰기 재시도 검사**입니다.
+
+향후 기존 DB의 FINAL은 **읽기 전용 전수 감사**여야 합니다. load·retry publication·DDL/DML·ANALYZE를 실행하지 않습니다.
+
+격리 final을 그대로 재사용하지 않습니다. source_control/source_audit의 FINAL label도 실제 구현·완료 증거가 아닙니다.
+
+## 과거 검증과 Git 근거
+
+과거 결과는 해당 입력·대상·승인 범위로 한정합니다. 현재 상태나 다음 실행 승인으로 확대하지 않습니다.
+
+| 기록 | 핵심 범위 | 근거 |
+| --- | --- | --- |
+| 8-C1 | 새 격리 적재·백업·복원·전체 값 비교 | [b611358](https://github.com/jinwooorp/RecycleYoungs/blob/b6113585ea4c2ba10d1edf3d57ec999403e9b5dd/docs/integration-validation-8c1.md) |
+| 8-C2A | 읽기 전용 감사·snapshot 연계 dump·복원 | [deaed745](https://github.com/jinwooorp/RecycleYoungs/blob/deaed745b31fdcb16355ecc241f46b3dc2b46045/docs/development-db-8c2a-preflight.md) |
+| 8-C2B-1 | 백업 기반 V2→V3→경계 리허설 | [38e8732](https://github.com/jinwooorp/RecycleYoungs/blob/38e87328e843e78419e4a1c0dd5584fbf3a326b7/docs/development-db-8c2b-rehearsal.md) |
+| 8-C2B-2 | 역할·ACL 재현과 같은 연결 검사 | [bde7050](https://github.com/jinwooorp/RecycleYoungs/blob/bde7050ee99e65c45fd276e20394bd41c720cb46/docs/development-db-8c2b-safety-gates.md) |
+| 8-C2B-3 | 격리 runner·실측 증거·중단 처리 | [c36f44f](https://github.com/jinwooorp/RecycleYoungs/blob/c36f44fb204fa77ffd77cb4595a63be57f6967bb/docs/development-db-8c2b-execution-guard.md) |
+
+8-C2A의 최초 no-owner/no-acl 복원은 권한 복구까지 증명하지 않았습니다. B-3의 영속 복사본은 과거 snapshot이며 최신 백업·별도 매체의 재해 복구를 보장하지 않습니다.
+
+2026-10-14 퇴역 기록에서는 원본·복원본의 전체 행, NULL, 구조, sequence, history, 역할·ACL을 대조했습니다. 역할 비밀번호는 추출하지 않았고 임시 인증을 사용했으므로 실제 복구 인증은 별도 준비해야 합니다.
+
+과거 기존 DB는 V1 BASELINE 상태였으며 stores·상권 목록·상권 매출이 비어 있었습니다. 전체 CSV가 적재돼 있었다고 설명하지 않습니다.
+
+후속 팀 환경·독립 Ubuntu E2E는 [기술 문서 이력](technical.md#검증-이력)에 있습니다. 그 성공을 기존 DB 변경 경로의 구현 완료로 보지 않습니다.
+
+개편 전 상세 감사 수치·보존 기록은 [기존 DB 정책](https://github.com/jinwooorp/RecycleYoungs/blob/e1668ca1100616b3f19d984fc6942ebc28b827b8/docs/db-safety.md)에 보존합니다. 원문은 `git show <SHA>:<문서 경로>`로 읽고 작업 트리를 reset·restore하지 않습니다.
