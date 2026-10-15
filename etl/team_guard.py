@@ -5,6 +5,7 @@ import http.client
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import subprocess
 import urllib.parse
@@ -21,6 +22,80 @@ NETWORK = PROJECT + '-net'
 VOLUMES = {key: PROJECT + '-' + key for key in ('db', 'control', 'cache')}
 DB_IMAGE = 'sha256:44126d872ac91993766c341e369c539e8196614321765d36a6f1bab0419a5fa5'
 SERVICES = {'inspect-proxy', 'preflight', 'data-init', 'team-postgres', 'db-identity', 'db-migrate', 'etl-init'}
+
+# Exact, project-owned messages only. Never print an arbitrary exception message.
+FAILURE_REASONS = {
+    'DB image/running identity rejected': 'DB_IMAGE_IDENTITY_MISMATCH',
+    'DB image identity rejected': 'DB_IMAGE_IDENTITY_MISMATCH',
+    'DB is not running': 'DB_NOT_RUNNING',
+    'DB full container identity rejected': 'DB_CONTAINER_IDENTITY_MISMATCH',
+    'Foreign Docker resource ownership; do not reuse/delete it': 'DOCKER_OWNERSHIP_MISMATCH',
+    'Docker service ownership mismatch': 'DOCKER_OWNERSHIP_MISMATCH',
+    'Network is not dedicated/internal': 'DB_NETWORK_IDENTITY_MISMATCH',
+    'Unexpected DB network': 'DB_NETWORK_IDENTITY_MISMATCH',
+    'DB endpoint/alias mismatch': 'DB_NETWORK_IDENTITY_MISMATCH',
+    'Host access network must contain only the owned DB': 'DB_NETWORK_IDENTITY_MISMATCH',
+    'Unknown network member': 'DB_NETWORK_IDENTITY_MISMATCH',
+    'Unexpected volume driver/mount': 'DB_VOLUME_IDENTITY_MISMATCH',
+    'Unexpected DB mount': 'DB_VOLUME_IDENTITY_MISMATCH',
+    'DB volume identity/access mismatch': 'DB_VOLUME_IDENTITY_MISMATCH',
+    'DB init scripts must be read-only': 'DB_VOLUME_IDENTITY_MISMATCH',
+    'DB host binding rejected': 'DB_PORT_BINDING_MISMATCH',
+    'Declared port was not actually published': 'DB_PORT_BINDING_MISMATCH',
+    'DB bootstrap configuration rejected': 'DB_BOOTSTRAP_CONFIGURATION_MISMATCH',
+    'Actual team DB connection identity rejected': 'DB_SQL_IDENTITY_MISMATCH',
+    'Session user mismatch': 'DB_SQL_IDENTITY_MISMATCH',
+    'Missing owner marker on a populated DB; refusing adoption': 'DB_OWNER_MARKER_MISMATCH',
+    'Missing owner marker with unknown schema': 'DB_OWNER_MARKER_MISMATCH',
+    'Ownership ledger/resources mismatch': 'CONTROL_LEDGER_MISMATCH',
+    'Persisted Docker proof mismatch': 'CONTROL_LEDGER_MISMATCH',
+    'Host network identity changed': 'CONTROL_LEDGER_MISMATCH',
+    'Recorded Docker identities changed; preserve resources and review': 'CONTROL_LEDGER_MISMATCH',
+    'Dataset/ETL/owner mismatch BEFORE Flyway; preserve volume and review': 'DATASET_BINDING_MISMATCH',
+    'Owned dataset version/contract mismatch; preserve existing resources': 'DATASET_BINDING_MISMATCH',
+    'Flyway V1/V2/V3/checksum mismatch': 'MIGRATION_CHECKSUM_MISMATCH',
+    'READY/actual DB fingerprint mismatch': 'READY_FINGERPRINT_MISMATCH',
+    'READY/actual DB mismatch BEFORE Flyway': 'READY_FINGERPRINT_MISMATCH',
+    'Spatial source/report/profile/version mismatch': 'SPATIAL_PROFILE_MISMATCH',
+}
+FAILURE_CODES = frozenset(FAILURE_REASONS.values()) | {
+    'DATA_VALIDATION_FAILED', 'DATABASE_OPERATION_FAILED', 'UNEXPECTED_EXCEPTION', 'OS_OPERATION_FAILED'}
+EXCEPTION_TYPES = frozenset({'DataError', 'ValueError', 'KeyError', 'TypeError', 'RuntimeError',
+    'AssertionError', 'OSError', 'PermissionError', 'FileNotFoundError', 'TimeoutError',
+    'OperationalError', 'ProgrammingError', 'UndefinedTable', 'InsufficientPrivilege',
+    'InvalidPassword', 'ConnectionException', 'CheckViolation', 'UniqueViolation'})
+
+
+def failure_details(exc):
+    name = type(exc).__name__
+    code = FAILURE_REASONS.get(str(exc), 'DATA_VALIDATION_FAILED') if isinstance(exc, DataError) else (
+        'OS_OPERATION_FAILED' if isinstance(exc, OSError) else
+        'DATABASE_OPERATION_FAILED' if getattr(exc, 'sqlstate', None) else 'UNEXPECTED_EXCEPTION')
+    result = dict(code=code, error_type=name if name in EXCEPTION_TYPES else 'OtherException')
+    sqlstate = getattr(exc, 'sqlstate', None)
+    if isinstance(sqlstate, str) and re.fullmatch('[0-9A-Z]{5}', sqlstate): result['sqlstate'] = sqlstate
+    return result
+
+
+def failure_from_logs(text):
+    # Service failures can be surrounded by Docker log lines. Extract bounded JSON
+    # records and reconstruct a small allowlisted result, never return the record.
+    for line in reversed(text[-65536:].splitlines()):
+        try: value = parse_json(line.encode())
+        except (DataError, ValueError): continue
+        if not isinstance(value, dict) or value.get('status') != 'FAIL': continue
+        code = value.get('code')
+        if not isinstance(code, str) or code not in FAILURE_CODES:
+            reason = value.get('reason')
+            code = FAILURE_REASONS.get(reason) if isinstance(reason, str) else None
+        if code is None: continue
+        result = dict(code=code)
+        name = value.get('error_type')
+        if isinstance(name, str) and name in EXCEPTION_TYPES | {'OtherException'}: result['error_type'] = name
+        sqlstate = value.get('sqlstate')
+        if isinstance(sqlstate, str) and re.fullmatch('[0-9A-Z]{5}', sqlstate): result['sqlstate'] = sqlstate
+        return result
+    return {}
 
 
 def inspect(kind, name):
@@ -107,7 +182,8 @@ def prove_database(expected=None):
     actual = resources()
     db = inspect('container', PROJECT + '-team-postgres-1')
     labels(db, 'team-postgres')
-    require(db['Image'] == DB_IMAGE and db['State']['Running'], 'DB image/running identity rejected')
+    require(db['State']['Running'], 'DB is not running')
+    require(db['Image'] == DB_IMAGE, 'DB image identity rejected')
     require(db['Name'] == '/' + PROJECT + '-team-postgres-1' and len(db['Id']) == 64, 'DB full container identity rejected')
     host_name = PROJECT + '-host'
     require(set(db['NetworkSettings']['Networks']) == {NETWORK, host_name}, 'Unexpected DB network')
@@ -147,6 +223,6 @@ def prove_database(expected=None):
 
 if __name__ == '__main__':
     try: print(canonical(claim()))
-    except (DataError, OSError, ValueError) as exc:
-        print(canonical(dict(status='FAIL', reason=str(exc) if isinstance(exc, DataError) else type(exc).__name__)))
+    except Exception as exc:
+        print(canonical(dict(status='FAIL', **failure_details(exc))))
         raise SystemExit(1)

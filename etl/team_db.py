@@ -9,7 +9,7 @@ import sys
 from team_data import DataError, ROOT, canonical, require
 from team_dataset import (binding, cache_path, check_files, contract_sha, expected_history, parse_json,
                           prepare, validate_binding, validate_spatial, version)
-from team_guard import DATABASE, PGDATA, prove_database
+from team_guard import DATABASE, PGDATA, failure_details, prove_database
 
 CONTROL = Path('/control')
 TABLES = ('industries', 'industry_mappings', 'commercial_areas', 'store_stats_dong', 'sales_dong',
@@ -301,7 +301,7 @@ def main():
                 result = dict(status='READY', version=version(), verification=state['verification'])
         print(canonical(result))
     except Exception as exc:
-        print(canonical(dict(status='FAIL', reason=str(exc) if isinstance(exc, DataError) else type(exc).__name__)))
+        print(canonical(dict(status='FAIL', **failure_details(exc))))
         raise SystemExit(1)
 
 

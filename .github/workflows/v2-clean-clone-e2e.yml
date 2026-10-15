@@ -1,4 +1,4 @@
-# Local proposal only. Copy to .github/workflows/v2-clean-clone-e2e.yml only after approval.
+# Bounded autonomous E2E: this push consumes execution 1 of the approved 4.
 name: real-data-v2 clean clone E2E
 'on':
   push:
@@ -11,13 +11,12 @@ concurrency:
   cancel-in-progress: false
 jobs:
   verify:
-    # Only the separately approved second push after the first E2E workflow commit.
-    # Any retry or later run requires a new reviewed approval and explicit guard update.
+    # Exact next push only. Each later execution requires reviewed code and a new guard.
     if: >-
       github.event_name == 'push' &&
       github.ref == 'refs/heads/codex/real-data-v2-activation' &&
-      github.event.before == '22d29549e9149079bc93c7fc71c15d7476ec4d92' &&
-      github.run_number == '2' && github.run_attempt == '1'
+      github.event.before == 'ed9707dd4a24648cbce6d845240dde937a4dc5fc' &&
+      github.run_number == '3' && github.run_attempt == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -25,7 +24,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_RUN_NUMBER" != "2" || "$GITHUB_RUN_ATTEMPT" != "1" || "$GITHUB_REF" != "refs/heads/codex/real-data-v2-activation" ]]; then
+          if [[ "$GITHUB_RUN_NUMBER" != "3" || "$GITHUB_RUN_ATTEMPT" != "1" || "$GITHUB_REF" != "refs/heads/codex/real-data-v2-activation" ]]; then
             printf '%s\n' '{"status":"FAIL","phase":"run_guard","code":"NEW_APPROVAL_REQUIRED"}'
             exit 1
           fi
@@ -66,6 +65,7 @@ jobs:
           sys.path.insert(0, 'etl')
           import team_dev
           import team_dataset
+          from team_guard import DB_IMAGE, FAILURE_CODES, failure_from_logs
           assert os.environ.get('GITHUB_ACTIONS') == 'true'
           assert os.environ.get('RUNNER_ENVIRONMENT') == 'github-hosted'
           assert not pathlib.Path('.env').exists() and not pathlib.Path('frontend/.env.local').exists()
@@ -80,6 +80,8 @@ jobs:
           phase = 'isolation_preflight'
           last_status_hint = 'UNCLASSIFIED'
           def safe_hint(text):
+              structured = failure_from_logs(text)
+              if structured: return structured['code']
               # Return fixed categories only; never forward arbitrary log/error text.
               for marker, code in [
                   ('permission denied', 'PERMISSION_DENIED'), ('address already in use', 'PORT_IN_USE'),
@@ -122,7 +124,15 @@ jobs:
                       row = dict(service=name,state=status,health=health)
                       if isinstance(state.get('ExitCode'),int): row['exit_code'] = state['ExitCode']
                       if status == 'exited' and state.get('ExitCode'):
-                          row['hint'] = safe_hint(command(['docker','compose','logs','--tail=20','--no-log-prefix',name], 10))
+                          tail = command(['docker','compose','logs','--tail=20','--no-log-prefix',name], 10)
+                          row['hint'] = safe_hint(tail)
+                          row.update(failure_from_logs(tail))
+                      if name == 'team-postgres':
+                          # Boolean comparisons only; never log Docker Env or raw metadata.
+                          row['image_checks'] = dict(
+                              container_image_equals_manifest_pin=item.get('Image') == DB_IMAGE,
+                              requested_image_equals_pin=item['Config'].get('Image') == 'postgis/postgis@' + DB_IMAGE,
+                              container_image_equals_verified_config=item.get('Image') == 'sha256:06287eb8e12c43f425773085c48d6ad02d73f8b442ac209810c1b211eb0a643b')
                       services.append(row)
                   diagnostics['services'] = sorted(services, key=lambda x:x['service'])
               except Exception:
@@ -142,7 +152,7 @@ jobs:
                       'PERMISSION_DENIED','PORT_IN_USE','CONNECTION_REFUSED','RELEASE_CONFIG_UNPUBLISHED',
                       'RELEASE_DOWNLOAD_FAILED','DATASET_BINDING_MISMATCH','MIGRATION_CHECKSUM_MISMATCH',
                       'READY_FINGERPRINT_MISMATCH','SPATIAL_PROFILE_MISMATCH','DB_NOT_READY'}
-                  result['code'] = exc.safe_code if exc.safe_code in allowed_codes else 'UNCLASSIFIED'
+                  result['code'] = exc.safe_code if exc.safe_code in allowed_codes | FAILURE_CODES else 'UNCLASSIFIED'
                   if isinstance(exc.exit_code,int): result['exit_code'] = exc.exit_code
                   if exc.service in {'preflight','data-init','db-identity','db-migrate','etl-init'}:
                       result['service'] = exc.service
