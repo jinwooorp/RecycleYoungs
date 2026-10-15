@@ -1,4 +1,4 @@
-# Bounded autonomous E2E: this push consumes execution 2 of the approved 4.
+# Bounded autonomous E2E: this push consumes execution 3 of the approved 4.
 name: real-data-v2 clean clone E2E
 'on':
   push:
@@ -15,8 +15,8 @@ jobs:
     if: >-
       github.event_name == 'push' &&
       github.ref == 'refs/heads/codex/real-data-v2-activation' &&
-      github.event.before == '433409b96caa057653e0aa72388e488b596af62a' &&
-      github.run_number == '4' && github.run_attempt == '1'
+      github.event.before == '794e78c7f60d41276018cca848ab66c78bee3cae' &&
+      github.run_number == '5' && github.run_attempt == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -24,7 +24,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_RUN_NUMBER" != "4" || "$GITHUB_RUN_ATTEMPT" != "1" || "$GITHUB_REF" != "refs/heads/codex/real-data-v2-activation" ]]; then
+          if [[ "$GITHUB_RUN_NUMBER" != "5" || "$GITHUB_RUN_ATTEMPT" != "1" || "$GITHUB_REF" != "refs/heads/codex/real-data-v2-activation" ]]; then
             printf '%s\n' '{"status":"FAIL","phase":"run_guard","code":"NEW_APPROVAL_REQUIRED"}'
             exit 1
           fi
@@ -196,6 +196,14 @@ jobs:
                   assert response.status == 200
                   return response.read()
           def api(path, port=8080): return json.loads(http(path, port))
+          def compare_statistics(rows, payload, key, fields, stringify):
+              assert len(rows) <= 1
+              expected = None if not rows else {a: (None if rows[0][b] is None else str(rows[0][b]) if stringify else rows[0][b]) for a,b in fields}
+              # JSON types keep actual 0 distinct from false and string "0".
+              assert json.dumps(payload[key], sort_keys=True) == json.dumps(expected, sort_keys=True)
+              assert payload['missingReasons'][key] == (None if rows else 'NO_ROW')
+              values = [] if not rows else [rows[0][b] for _,b in fields]
+              return dict(null=any(v is None for v in values), zero=any(v == 0 for v in values), no_row=not rows)
           def wait_http(path, port):
               deadline = time.monotonic() + 180
               while time.monotonic() < deadline:
@@ -227,6 +235,12 @@ jobs:
               assert before['verification']['stores']['bad_points'] == before['verification']['stores']['conflicts'] == 0
               assert before['verification']['migrations'] == team_dataset.expected_history()
               assert len(before['verification']['spatial']) == 2
+              print(json.dumps(dict(status='PROGRESS', phase='db_verified', dataset='real-data-v2',
+                  sid=before['sid'], rows={name:fp[name]['rows'] for name in ['store_stats_dong','sales_dong',
+                  'stores','admin_dong_boundaries','commercial_area_boundaries']},
+                  cafe=before['verification']['stores']['cafe'], flyway_versions=['1','2','3'],
+                  flyway_checksums_verified=True, full_source_db_projection=True,
+                  source_operational_wkb_verified=True)), flush=True)
               phase = 'services_start'
               for cwd, args, name in [('backend', ['./gradlew', 'bootRun', '--no-daemon'], 'backend'),
                                       ('frontend', ['npm', 'run', 'dev', '--', '--host', '127.0.0.1', '--strictPort'], 'frontend')]:
@@ -272,17 +286,43 @@ jobs:
                   assert not db.execute("SELECT rolsuper OR rolcreaterole OR rolcreatedb AS bad FROM pg_roles WHERE rolname=current_user").fetchone()['bad']
                   assert not db.execute("SELECT EXISTS(SELECT 1 FROM pg_tables WHERE schemaname IN ('public','team_dev') AND has_table_privilege(current_user,quote_ident(schemaname)||'.'||quote_ident(tablename),'INSERT,UPDATE,DELETE,TRUNCATE')) AS bad").fetchone()['bad']
                   source = db.execute("SELECT im.source_code FROM industry_mappings im JOIN industries i ON im.industry_id=i.id WHERE im.source='SEOUL' AND i.code='CAFE'").fetchone()['source_code']
+                  repaired = db.execute("SELECT sum(n)::integer AS n FROM (SELECT count(*) AS n FROM admin_dong_boundaries WHERE quality_status='REPAIRED_OPERATIONAL' UNION ALL SELECT count(*) FROM commercial_area_boundaries WHERE quality_status='REPAIRED_OPERATIONAL') repairs").fetchone()['n']
+                  assert repaired == 6
                   phase = 'q3_sql_api'
+                  semantics = dict(null='NOT_PRESENT_IN_SUPPORTED_SNAPSHOT', zero='NOT_PRESENT', no_row='NOT_PRESENT')
+                  dong_codes = [x['code'] for x in dongs]
+                  industry_codes = [x['code'] for x in api('/api/industries')]
+                  quarter_codes = [int(x['code']) for x in api('/api/quarters')]
                   for table, key, fields, stringify in [
                       ('store_stats_dong', 'storeStats', [('storeCount','store_count'),('similarStoreCount','similar_store_count'),
                        ('openingStoreCount','opening_store_count'),('closingStoreCount','closing_store_count'),('franchiseStoreCount','franchise_store_count')], False),
                       ('sales_dong', 'salesStats', [('estimatedSalesAmount','sales_amount'),('transactionCount','transaction_count'),
                        ('weekdayEstimatedSalesAmount','weekday_sales_amount'),('weekendEstimatedSalesAmount','weekend_sales_amount')], True)]:
                       rows = db.execute('SELECT * FROM ' + table + ' WHERE dong_code=%s AND source_industry_code=%s AND quarter_code=20253', (dong, source)).fetchall()
-                      assert len(rows) <= 1
-                      expected = None if not rows else {a: (None if rows[0][b] is None else str(rows[0][b]) if stringify else rows[0][b]) for a,b in fields}
-                      assert stats[key] == expected
-                      assert stats['missingReasons'][key] == (None if rows else 'NO_ROW')
+                      compare_statistics(rows, stats, key, fields, stringify)
+                      phase = 'observed_http_semantics'
+                      for kind, predicate in [('null',' IS NULL'), ('zero','=0')]:
+                          condition = ' OR '.join('s.' + column + predicate for _,column in fields)
+                          witness = db.execute('SELECT s.dong_code,s.quarter_code,i.code AS industry,m.source_code FROM ' + table +
+                              " s JOIN industry_mappings m ON m.source='SEOUL' AND m.source_code=s.source_industry_code JOIN industries i ON i.id=m.industry_id WHERE i.code=ANY(%s) AND s.dong_code=ANY(%s) AND s.quarter_code=ANY(%s) AND (" + condition + ') LIMIT 1',
+                              (industry_codes,dong_codes,quarter_codes)).fetchone()
+                          if witness:
+                              query = urllib.parse.urlencode(dict(dongCode=witness['dong_code'], industryCode=witness['industry'], quarterCode=witness['quarter_code']))
+                              payload = api('/api/admin-dong-stats?' + query)
+                              actual = db.execute('SELECT * FROM ' + table + ' WHERE dong_code=%s AND source_industry_code=%s AND quarter_code=%s',
+                                  (witness['dong_code'],witness['source_code'],witness['quarter_code'])).fetchall()
+                              assert compare_statistics(actual,payload,key,fields,stringify)[kind]
+                              semantics[kind] = 'PASS'
+                      witness = db.execute("SELECT d.dong_code,q.quarter_code,i.code AS industry FROM unnest(%s::text[]) d(dong_code) CROSS JOIN unnest(%s::smallint[]) q(quarter_code) CROSS JOIN industry_mappings m JOIN industries i ON i.id=m.industry_id WHERE m.source='SEOUL' AND i.code=ANY(%s) AND NOT EXISTS(SELECT 1 FROM " + table +
+                          ' s WHERE s.dong_code=d.dong_code AND s.quarter_code=q.quarter_code AND s.source_industry_code=m.source_code) LIMIT 1',
+                          (dong_codes,quarter_codes,industry_codes)).fetchone()
+                      if witness:
+                          query = urllib.parse.urlencode(dict(dongCode=witness['dong_code'], industryCode=witness['industry'], quarterCode=witness['quarter_code']))
+                          assert compare_statistics([],api('/api/admin-dong-stats?' + query),key,fields,stringify)['no_row']
+                          semantics['no_row'] = 'PASS'
+                  assert semantics['zero'] == semantics['no_row'] == 'PASS'
+                  print(json.dumps(dict(status='PROGRESS',phase='http_semantics_verified',semantics=semantics,
+                                        approved_repairs=repaired)), flush=True)
                   db.rollback()
               password = None
               phase = 'compose_rerun'
@@ -299,6 +339,7 @@ jobs:
               print(json.dumps(dict(status='PASS', dataset='real-data-v2', sid=after['sid'], api_get_contracts=7,
                     fingerprint_sha256=hashlib.sha256(json.dumps(after['verification']['fingerprint'], sort_keys=True).encode()).hexdigest(),
                     rerun_preserved=True, reader_readonly=True, q3_sql_api_equal=True,
+                    observed_http_semantics=semantics, approved_repairs=repaired,
                     kakao_tiles_three_candidate_ui='NOT_VERIFIED: no test key supplied')))
           except Exception as exc:
               report_failure(exc)

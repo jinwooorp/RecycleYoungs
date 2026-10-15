@@ -8,7 +8,7 @@ v2 runtime은 명시적인 `TEAM_DATA_VERSION`과 고정 contract를 control own
 
 후속 사용자 승인으로 v2 runtime 코드를 commit/push하고 정확한 `real-data-v2` asset을 Public Release로 공개했다. 서버 digest·Draft byte 비교·실제 공개 HTTPS 다운로드 및 새 cache 재사용을 확인했다. 현재 활성화 작업은 별도 worktree에서 실제 Release pin·신규 기본 v2/release를 연결하며 main은 보존한다. 기존 v1은 개인 `.env`에 `TEAM_DATA_MODE=local`, `TEAM_DATA_VERSION=real-data-v1`, Backend/status 각 셸에도 같은 version을 명시해야 한다. `.env`를 자동 수정하거나 전체 source하지 않는다.
 
-실제 독립 v2 DB 적재·migration·실패 주입·API/브라우저 E2E는 아직 NOT_VERIFIED다. 같은 daemon의 project override나 기존 v1 DB를 시험 대상으로 쓰지 않는다. 기존 v1 Compose up/stop/recreate·DDL/DML·control/cache 변경·volume 정리는 금지한다. 원격 테스트 branch/workflow 실행·main 반영은 각각 별도 승인 단계다. [구현과 검증 범위](technical.md#v2-runtime-통합-준비--기본-활성화db-e2e-대기)를 참고한다.
+후속 승인된 [독립 GitHub-hosted Ubuntu E2E](https://github.com/jinwooorp/RecycleYoungs/actions/runs/38731532178)에서 새 v2 DB의 migration·실자료 적재·READY·API/Swagger·Vite 프록시·재실행 보존을 확인했다. 로컬 v1에는 SQL/Compose/Docker mutation을 수행하지 않았으며 그 SID·READY를 이번 실측으로 주장하지 않는다. 실제 브라우저/Kakao·3후보 UI, 실제 v2 DB 실패 주입, main 반영 후 새 clone은 NOT_VERIFIED다. 같은 daemon의 project override나 기존 v1 DB를 시험 대상으로 쓰지 않는다. 기존 v1 Compose up/stop/recreate·DDL/DML·control/cache 변경·volume 정리는 금지한다. main 반영은 계속 별도 승인 대상이다. [구현과 검증 범위](technical.md#v2-runtime-통합과-독립-e2e)를 참고한다.
 
 후속 CC BY 4.0 리포트 고지 반영은 별도 미공개 후보와 v2 dataset 계약·archive pin만 갱신했다. 기존 v1 계약·8개 원본·v1 ZIP·이전 v2 ZIP·기존 cache는 보존했다. 라이선스 갱신 단계에서는 기존 DB에 접속하거나 restart/migration/ETL을 실행하지 않았다. 동일한 `real-data-v2` 이름이라도 이전 후보의 ATTRIBUTION/dataset 계약과 다르므로 새 계약으로 자동 승격하지 않으며 불일치 시 보존하고 거부한다. 공공데이터 및 제3자 권리의 조건과 실제 DB 적용 승인은 리포트 라이선스 선택과 별개다.
 

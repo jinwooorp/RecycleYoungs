@@ -142,18 +142,18 @@ class TeamComposeTests(unittest.TestCase):
             self.assertNotIn(match[1], terms)
             terms[match[1]] = match[2]
         expected = dict(event_name='push', ref='refs/heads/codex/real-data-v2-activation',
-                        run_number='4', run_attempt='1')
-        expected['event.before'] = '433409b96caa057653e0aa72388e488b596af62a'
+                        run_number='5', run_attempt='1')
+        expected['event.before'] = '794e78c7f60d41276018cca848ab66c78bee3cae'
         self.assertEqual(terms, expected)
         for overrides in [{}, {'event_name': 'workflow_dispatch'}, {'ref': 'refs/heads/main'},
                           {'event.before': '5c12f773a0ee31968188c1ce1ec1429ea47ca83f'},
-                          {'run_number': '3'}, {'run_number': '5'}, {'run_attempt': '2'}]:
+                          {'run_number': '4'}, {'run_number': '6'}, {'run_attempt': '2'}]:
             with self.subTest(context=overrides):
                 context = dict(expected, **overrides)
                 self.assertEqual(all(context.get(k) == v for k, v in terms.items()), not overrides)
-        for run, attempt, ref, code in [('4', '1', expected['ref'], 0),
-                ('3', '1', expected['ref'], 1), ('5', '1', expected['ref'], 1),
-                ('4', '2', expected['ref'], 1), ('4', '1', 'refs/heads/main', 1)]:
+        for run, attempt, ref, code in [('5', '1', expected['ref'], 0),
+                ('4', '1', expected['ref'], 1), ('6', '1', expected['ref'], 1),
+                ('5', '2', expected['ref'], 1), ('5', '1', 'refs/heads/main', 1)]:
             with self.subTest(shell_context=(run, attempt, ref)):
                 result = subprocess.run(['bash', '-s'], input=job['steps'][0]['run'],
                     env={'PATH': os.defpath, 'GITHUB_RUN_NUMBER': run, 'GITHUB_RUN_ATTEMPT': attempt,

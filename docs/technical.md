@@ -45,7 +45,9 @@
 
 재실행은 동일 contract의 READY DB를 전수 재검증하고 ETL을 생략한다. CSV transaction과 `CSV_DONE` checkpoint는 원자적이다. 실패·프로세스 중단 후에는 CSV 이전의 빈 DB만 다시 적재하고, CSV_DONE 이후에는 source projection을 확인한 뒤 immutable Polygon publication을 재사용한다. 알 수 없는 비어 있지 않은 DB·다른 데이터 버전·다른 처리 계약은 자동 TRUNCATE/refresh하지 않는다. READY와 실측이 다르면 정상 상태를 반환하지 않는다. 기본 보존 대상은 새 DB/cache/control volume 모두다.
 
-host preflight는 최초 `python3 etl/team_dev.py preflight`로 포트·기존 동일 이름 충돌을 검사한다. Compose 내 guard는 다시 실제 metadata를 검사한다. preflight/db-identity/etl-init은 직접 socket을 받지 않고 전용 internal inspect network의 proxy를 사용한다. proxy는 정확한 container/network/volume inspect만 허용하며 mutation·exec·list·archive·query/encoded/경로 탈출·타 프로젝트를 거부한다. 응답에서 임의 Env·명령·host mount 경로를 제거하되 실제 image/mount/network/port/생성시각 검증 필드는 유지한다. host status/bootRun의 Docker CLI와 실제 DB SID/owner/PGDATA 검사는 별개로 유지한다.
+host preflight는 최초 `python3 etl/team_dev.py preflight`로 포트·기존 동일 이름 충돌을 검사한다. Compose 내 guard는 다시 실제 metadata를 검사한다. preflight/db-identity/etl-init은 직접 socket을 받지 않고 전용 internal inspect network의 proxy를 사용한다. proxy는 정확한 container/network/volume inspect와 고정 PostGIS ref 한 개의 image inspect만 허용하며 mutation·exec·list·archive·query/encoded/경로 탈출·타 프로젝트를 거부한다. 응답에서 임의 Env·명령·host mount 경로를 제거하되 실제 image/mount/network/port/생성시각 검증 필드는 유지한다. host status/bootRun의 Docker CLI와 실제 DB SID/owner/PGDATA 검사는 별개로 유지한다.
+
+이미지 manifest digest와 config digest는 서로 다른 식별자다. [Docker Registry manifest](https://docs.docker.com/reference/api/registry/latest/operations/GetImageManifest/)의 bytes/SHA를 대조해 고정 manifest에 포함된 config digest·linux/amd64를 확인했다. guard는 두 저장 방식의 알려진 ID만 허용하고, 컨테이너의 요청 ref·실제 image ID·고정 ref의 image inspect ID/RepoDigest·플랫폼을 함께 검증한다. v1의 저장된 actual image proof 형식과 비교는 유지한다. 초기화 실패는 고정 오류 코드·허용된 예외 타입·형식 검증한 SQLSTATE만 출력하며 원문 예외·Env·DSN·원행은 전달하지 않는다.
 
 socket의 `:ro`는 Docker API 권한을 제한하지 않는다. socket을 가진 proxy 자체의 침해는 여전히 daemon 전체 권한으로 이어질 수 있다. 별도 stdlib 전용 build stage·고정 base digest·읽기 전용 filesystem·cap_drop ALL·no-new-privileges·외부 port 없는 internal network로 노출을 줄인다. 신뢰한 로컬 개발 환경 전용이며 daemon을 외부 TCP에 공개하지 않는다. DB·입력 mount·volume 소유권을 검증하지 않은 cleanup은 금지한다.
 
@@ -109,9 +111,9 @@ socket의 `:ro`는 Docker API 권한을 제한하지 않는다. socket을 가진
 
 이번 로컬 검증은 Python 3.12.14의 일반 회귀 327개 중 **312 PASS / 15 SKIP**이며, 그중 공개 파생 도구 테스트는 11개다. Unix/macOS/Windows 경로·URL credential·원본 hash 불일치·계약/내부 bytes 변경·JSON 중복 키·ZIP comment/path·검증 후 archive 교체·기존 출력 덮어쓰기 거부와 결정적 패키징을 검사했다. 실제 후보 해제 후 통계 141,218행·매출 67,113행·점포 554,092행·CAFE 22,739행을 다시 검증했다. 원본/파생 report로 준비한 행정동 425개·상권 1,650개 feature의 모든 필드와 승인 6개 repair 결과가 동일했고 profile 차이는 `reports`뿐이었다. 원본 8개·v1 ZIP·v1 계약 hash도 유지됐다. DB 접속·migration·적재와 Backend/Frontend 재실행은 이번 범위에서 수행하지 않았다.
 
-### v2 runtime 통합 준비 — 기본 활성화·DB E2E 대기
+### v2 runtime 통합과 독립 E2E
 
-현재는 **Public Release 다운로드 검증 완료 / 기본 활성화·독립 DB E2E 승인 대기**다. [team_dataset.py](../etl/team_dataset.py)는 v1/v2 contract와 prepare를 위임한다. `team_data.py`·`team_public_data.py`·원본 ETL·migration·데이터 계약은 유지한다. 공개된 최종 asset은 **87,870,777 bytes**, SHA `6b11901f46d1a207c5b36353483e209f00a10fb401edcc5fd036a3025238ff0b`, dataset contract SHA `0d27a0e526cd249d7adebf374b7be646fd5122ba5cede8b558117dd11d761994`, ATTRIBUTION SHA `4701182c7479caed7b480a97e3a792907e79feebe884897c2ecad511f8af0f67`다. tag `real-data-v2`는 검증된 runtime 코드 commit을 가리키며 서버 digest·Draft byte 비교·실제 공개 HTTPS→새 빈 cache→두 번째 cache 재사용을 검증했다. 이전 미공개 후보와 기존 v1 계약·ZIP·DB는 그대로 보존하며 새 계약에 자동 채택하지 않는다.
+현재는 **Public Release·테스트 브랜치의 독립 DB E2E 검증 완료 / main 반영 승인 대기**다. [team_dataset.py](../etl/team_dataset.py)는 v1/v2 contract와 prepare를 위임한다. `team_data.py`·`team_public_data.py`·원본 ETL·migration·데이터 계약은 유지한다. 공개된 최종 asset은 **87,870,777 bytes**, SHA `6b11901f46d1a207c5b36353483e209f00a10fb401edcc5fd036a3025238ff0b`, dataset contract SHA `0d27a0e526cd249d7adebf374b7be646fd5122ba5cede8b558117dd11d761994`, ATTRIBUTION SHA `4701182c7479caed7b480a97e3a792907e79feebe884897c2ecad511f8af0f67`다. tag `real-data-v2`는 검증된 runtime 코드 commit을 가리키며 서버 digest·Draft byte 비교·실제 공개 HTTPS→새 빈 cache→두 번째 cache 재사용을 검증했다. 이전 미공개 후보와 기존 v1 계약·ZIP·DB는 그대로 보존하며 새 계약에 자동 채택하지 않는다.
 
 | 경계 | 구현·검증 |
 | --- | --- |
@@ -127,13 +129,13 @@ socket의 `:ro`는 Docker API 권한을 제한하지 않는다. socket을 가진
 
 실제 최종 ZIP을 loopback HTTP로 **빈 별도 로컬 cache**에 다운로드·SHA/10-member/CSV/geometry 검증했다. 두 번째 release 실행과 같은 cache의 local 실행은 VERIFIED_CACHE였고 HTTP 요청 1회, 10개 파일 bytes/hash/mtime 불변이었다. 입력 행 수 141,218 / 67,113 / 554,092·CAFE 22,739 및 geometry 425 / 1,650·6개 repair가 확인됐다. 이는 **DB 적재 건수나 실제 GitHub 성공이 아니다**. 실제 prepared geometry로 `dataset_metadata`와 버전 검증도 조합했지만 DB engine version 응답은 fixture이며 실측 profile로 주장하지 않는다.
 
-`default`/`desktop-linux` daemon ID가 같고 별도 VM/daemon 도구가 없어 실제 독립 DB E2E는 **NOT_VERIFIED**다. 기존 v1에 SQL 접속·Compose up/recreate·migration/ETL/실패 주입을 하지 않았다. Backend/Frontend는 일반 회귀만 수행했으며 v2 실 API·Swagger·Kakao/3후보 브라우저는 미검증이다. 실제 통합 검증은 clone·Compose·Backend·Frontend를 모두 별도 daemon/VM에서 실행해야 한다.
+로컬 `default`/`desktop-linux`는 같은 daemon이므로 v2 DB 실험에 사용하지 않았다. 후속 승인된 [GitHub-hosted Ubuntu 24.04 run 4](https://github.com/jinwooorp/RecycleYoungs/actions/runs/38731532178)는 테스트 브랜치 commit `794e78c7f60d41276018cca848ab66c78bee3cae`의 새 checkout·빈 cache/volume에서 실제 공개 다운로드→Flyway V1~V3→CSV/Polygon ETL→READY→Backend GET 7개/Swagger→Vite 프록시→Compose 재실행 보존을 통과했다. SID는 `7696864147976323112`, 통계 141,218·매출 67,113·점포 554,092·CAFE 22,739·행정동 425·상권 1,650행이며 전수 source projection·WKB/repair/profile·checksum·ID/sequence fingerprint를 검사했다. reader READ ONLY와 Q3 SQL/API 9개 지표도 일치했다. 일반 회귀는 Backend 249·Frontend 235·ETL 350 PASS / 15 SKIP, audit 0건이다. 실제 Kakao SDK·타일·3후보 UI와 main 반영 후 새 clone은 미검증이며, NULL/0/NO_ROW별 HTTP 관측은 별도로 보강 중이다. 기존 로컬 v1 SQL/Compose/Docker mutation은 수행하지 않았다.
 
 별도 활성화 worktree에서는 실제 `data/release.json` pin을 PUBLISHED/v2로 바꾸고 Compose·예시·공통 runtime을 v2/release로 맞춘다. 호스트 status/Gradle proof가 같은 `version()`을 사용하므로 Makefile·Backend에 기본값을 중복 추가하지 않는다. 기존 v1 사용자는 개인 `.env`에 v1/local, **각 Backend/status 셸**에는 `export TEAM_DATA_VERSION=real-data-v1`을 명시해야 한다. `.env`를 자동 변경하거나 전체 source하지 않는다. mismatch는 자동 이관 대신 기동을 거부한다.
 
-현재 main·기존 v1 DB와 control/cache/DB volume은 보존하며 활성화 commit/push는 승인 대기다. 같은 daemon에서 `-p` override로 병행 실행하지 않는다. 독립 VM/daemon/runner에서 최초 DB·Flyway·ETL·reader/API/Swagger·재실행 fingerprint를 검증해야 하며, Actions workflow push·실행에는 별도 승인이 필요하다. 공개된 ZIP·tag·asset·리포트/ATTRIBUTION/dataset hash는 이번 활성화에서 변경하지 않는다.
+현재 main·기존 v1 DB와 control/cache/DB volume은 보존하며 main 반영은 승인 대기다. 테스트 브랜치의 commit/push와 최대 4회의 추가 독립 Actions 실행은 후속 사용자 승인 범위에서만 수행한다. 같은 daemon에서 `-p` override로 병행 실행하지 않는다. 위 독립 runner의 최초 DB·Flyway·ETL·reader/API/Swagger·재실행 fingerprint 검증과 실제 브라우저·main 반영 후 새 clone 검증을 구분한다. 공개된 ZIP·tag·asset·리포트/ATTRIBUTION/dataset hash는 이번 활성화에서 변경하지 않는다.
 
-이번 활성화 worktree의 일반 회귀는 Backend **249 PASS**·build, Frontend **235 PASS**·lint/build/audit **0건**, ETL **338 PASS / 15 SKIP**(353개)다. 새 기본 선택·실제 고정 Release pin·CLI 모드·Compose 전체 gate의 v2 기본/v1 명시 선택과 기본 host proof의 v1 ledger 사전 거부를 확인했다. 실제 추적된 PUBLISHED 설정을 그대로 사용한 HTTPS→새 빈 cache→재사용도 통과했으며, URL/config override 없이 다운로드 1회·10개 member bytes/hash/mtime 보존을 확인했다. 이 결과를 실제 DB 적재·서비스 E2E로 간주하지 않는다.
+활성화 초기 worktree 준비 단계의 일반 회귀는 Backend **249 PASS**·build, Frontend **235 PASS**·lint/build/audit **0건**, ETL **338 PASS / 15 SKIP**(353개)였다. 새 기본 선택·실제 고정 Release pin·CLI 모드·Compose 전체 gate의 v2 기본/v1 명시 선택과 기본 host proof의 v1 ledger 사전 거부를 확인했다. 실제 추적된 PUBLISHED 설정을 그대로 사용한 HTTPS→새 빈 cache→재사용도 통과했으며, URL/config override 없이 다운로드 1회·10개 member bytes/hash/mtime 보존을 확인했다. 이 초기 결과와 후속 독립 runner의 DB·서비스 E2E는 별개 증거다.
 
 ## 시스템과 기술 선택
 
@@ -149,7 +151,7 @@ flowchart LR
 
 각 부분이 맡는 일은 분명합니다. React는 조건 입력과 로딩·오류·결과 표시, Spring은 조건/자료의 일관성 확인과 응답 조립, PostgreSQL은 자료 저장과 조건별 SQL 조회를 담당합니다. PostGIS는 점포의 좌표와 지역 경계를 다루는 DB 확장입니다. 통계 API는 행정동 code를 사용하고 공간 포함 판정은 별도 `/api/locations/resolve`에서 담당합니다.
 
-서로 다른 원천의 통계를 DB table로 나눠 저장하면 동·업종·분기라는 key로 필요한 자료를 읽고 중복/연결 조건을 검사할 수 있습니다. CSV 검증과 변환은 별도 Python ETL이 맡으므로 요청마다 원본을 읽거나 다시 적재할 필요가 없습니다. 공식 원본의 자동 수집·정기 갱신 스케줄링은 미구현입니다. 고정 Release 다운로드 코드는 구현했지만 실제 데이터 공개·GitHub 다운로드·clean clone 검증은 대기 중입니다.
+서로 다른 원천의 통계를 DB table로 나눠 저장하면 동·업종·분기라는 key로 필요한 자료를 읽고 중복/연결 조건을 검사할 수 있습니다. CSV 검증과 변환은 별도 Python ETL이 맡으므로 요청마다 원본을 읽거나 다시 적재할 필요가 없습니다. 공식 원본의 자동 수집·정기 갱신 스케줄링은 미구현입니다. 고정 v2 Release의 실제 공개 다운로드와 테스트 브랜치의 독립 runner E2E를 확인했으며, main 반영 후 새 clone·실제 지도 UI 검증은 구분해 남겨 둡니다.
 
 실제 코드는 Backend의 Controller→Service→JdbcClient Repository, Frontend의 API client→types→hooks→components로 나눠 책임을 관리합니다. Frontend는 DB에 직접 접속하거나 Backend 계산을 별도로 구현하지 않습니다. Compose·Makefile은 실행 진입점일 뿐 승인이나 대상 확인을 대신하지 않습니다.
 

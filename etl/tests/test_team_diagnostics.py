@@ -108,5 +108,26 @@ class TeamDiagnosticsTests(unittest.TestCase):
         self.assertEqual(value['services'][0]['sqlstate'], '28000')
         self.assertNotIn('private-fixture', json.dumps(value))
 
+    def test_workflow_statistics_comparison_requires_distinct_null_zero_and_no_row(self):
+        path = Path(__file__).resolve().parents[2] / '.github/workflows/v2-clean-clone-e2e.yml'
+        body = path.read_text().split("python3 - <<'PY'\n", 1)[1].split('\n          PY', 1)[0]
+        nodes = [node for node in ast.parse(textwrap.dedent(body)).body if isinstance(node, ast.FunctionDef)
+                 and node.name == 'compare_statistics']
+        self.assertEqual(len(nodes), 1, 'HTTP semantics need explicit observed witnesses')
+        scope = {'json': json}; exec(compile(ast.Module(body=nodes, type_ignores=[]), str(path), 'exec'), scope)
+        compare = scope['compare_statistics']; fields = [('value', 'value')]
+        for sql_value, api_value, stringify in [(None, None, False), (0, 0, False),
+                (None, None, True), (0, '0', True), (9223372036854775807, '9223372036854775807', True)]:
+            value = dict(storeStats={'value': api_value}, missingReasons={'storeStats': None})
+            flags = compare([{'value': sql_value}], value, 'storeStats', fields, stringify)
+            self.assertEqual(flags, dict(null=sql_value is None, zero=sql_value == 0, no_row=False))
+        missing = dict(storeStats=None, missingReasons={'storeStats': 'NO_ROW'})
+        self.assertEqual(compare([], missing, 'storeStats', fields, False),
+                         dict(null=False, zero=False, no_row=True))
+        for payload in [dict(storeStats={'value': None}, missingReasons={'storeStats': 'NO_ROW'}),
+                        dict(storeStats={'value': False}, missingReasons={'storeStats': None}),
+                        dict(storeStats={'value': '0'}, missingReasons={'storeStats': None})]:
+            with self.assertRaises(AssertionError): compare([{'value': 0}], payload, 'storeStats', fields, False)
+
 
 if __name__ == '__main__': unittest.main()

@@ -345,7 +345,7 @@ RecycleYoungs/
 
 Java 21, Node.js/npm(현재 검증 Node 24), Python 3.12 권장, Docker Engine/Desktop와 Compose v2 이상을 준비합니다. Docker에 약 4GB 이상의 여유 메모리와 데이터·이미지용 디스크 공간이 필요합니다. Backend/Frontend는 호스트에서 실행합니다.
 
-공개된 [real-data-v2 Release](https://github.com/jinwooorp/RecycleYoungs/releases/tag/real-data-v2)를 기본 `release` 모드로 사용합니다. CSV·Polygon을 따로 준비할 필요가 없습니다. 실제 공개 HTTPS 다운로드·패키지 무결성·cache 재사용은 검증했으며, **이 활성화 변경의 독립 DB·서비스 clean clone E2E는 아직 검증 대기**입니다. 운영 배포 완료를 뜻하지 않습니다.
+공개된 [real-data-v2 Release](https://github.com/jinwooorp/RecycleYoungs/releases/tag/real-data-v2)를 기본 `release` 모드로 사용합니다. CSV·Polygon을 따로 준비할 필요가 없습니다. 활성화 테스트 브랜치의 [독립 Ubuntu E2E](https://github.com/jinwooorp/RecycleYoungs/actions/runs/38731532178)에서 빈 cache의 실제 HTTPS 다운로드·새 DB 적재·API/Swagger·Frontend 프록시·재실행 보존을 검증했습니다. **main 반영은 별도 승인 대기이므로, 아직 원격 main을 clone하면 기존 기본값을 읽습니다.** 아래 안내는 활성화 변경 기준이며 운영 배포 완료를 뜻하지 않습니다. Kakao SDK·타일·3후보 UI는 이번 runner에서 검증하지 않았습니다.
 
 ```sh
 git clone https://github.com/jinwooorp/RecycleYoungs.git

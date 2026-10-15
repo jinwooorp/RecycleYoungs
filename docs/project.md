@@ -2,9 +2,9 @@
 
 서비스의 과거·현재·미래를 관리하는 기준 문서입니다. 기술/API/데이터/개발 방법은 [technical](technical.md), 실제 DB 보호·실측 증거·승인은 [db-safety](db-safety.md)에 둡니다.
 
-팀 환경의 v1 실자료 DB 구축·API/실지도·재실행 보존은 2026-10-14의 기존 검증 기록입니다. 2026-10-15에는 별도 사용자 승인으로 [real-data-v2 Release](https://github.com/jinwooorp/RecycleYoungs/releases/tag/real-data-v2)를 Public으로 공개하고 서버 digest·실제 HTTPS 다운로드·빈 cache 및 재사용을 확인했습니다. 현재 후속 작업은 **v2/release 기본 활성화 준비와 독립 clean clone E2E 승인 대기**입니다. 실제 v2 DB·서비스 통합 성공을 뜻하지 않습니다. 실행 방법은 README, 실측·구조·검증 범위는 [technical](technical.md#팀-공통-실자료-개발-환경)에 구분합니다. legacy는 별도 승인된 감사·백업·독립 복원·전수 대조 후 제거됐고 [백업·보호 정책](db-safety.md#2026-10-14-로컬-환경-통일)은 유지합니다.
+팀 환경의 v1 실자료 DB 구축·API/실지도·재실행 보존은 2026-10-14의 기존 검증 기록입니다. 2026-10-15에는 별도 사용자 승인으로 [real-data-v2 Release](https://github.com/jinwooorp/RecycleYoungs/releases/tag/real-data-v2)를 Public으로 공개하고 서버 digest·실제 HTTPS 다운로드·빈 cache 및 재사용을 확인했습니다. 후속 승인된 테스트 브랜치의 [독립 Ubuntu E2E](https://github.com/jinwooorp/RecycleYoungs/actions/runs/38731532178)에서 v2 최초 DB 적재·서비스·재실행 보존을 검증했습니다. 현재는 **main 반영 승인 대기**입니다. 실행 방법은 README, 실측·구조·검증 범위는 [technical](technical.md#팀-공통-실자료-개발-환경)에 구분합니다. legacy는 별도 승인된 감사·백업·독립 복원·전수 대조 후 제거됐고 [백업·보호 정책](db-safety.md#2026-10-14-로컬-환경-통일)은 유지합니다.
 
-활성화는 기존 main과 분리한 로컬 worktree에서 준비하며, 새 환경은 v2/release를 기본 선택합니다. 기존 사용자는 개인 `.env`의 v1/local과 Backend/status 각 셸의 명시적 v1 설정을 유지해야 합니다. 기존 v1 DB·volume·계약은 자동 변경하지 않습니다. **독립 v2 DB 적재·Flyway·API/Swagger·Kakao/3후보·clean clone은 NOT_VERIFIED**이며 원격 branch/main push·workflow 실행도 별도 승인이 필요합니다. 리포트 3개만 보유·관리 권리 범위의 CC BY 4.0이고 원본 공공데이터 조건은 그대로입니다. 자세한 버전 결속과 검증 범위는 [v2 runtime](technical.md#v2-runtime-통합-준비--기본-활성화db-e2e-대기)에 있습니다.
+활성화는 기존 main과 분리한 worktree·테스트 브랜치에서 준비하며, 새 환경은 v2/release를 기본 선택합니다. 기존 사용자는 개인 `.env`의 v1/local과 Backend/status 각 셸의 명시적 v1 설정을 유지해야 합니다. 기존 v1 DB·volume·계약은 자동 변경하지 않습니다. 독립 runner의 Flyway·ETL·READY·GET 7개·Swagger·Vite 프록시는 통과했으나 **실제 Kakao·3후보 UI와 main 반영 후 새 clone은 NOT_VERIFIED**입니다. 원격 main 반영은 별도 승인 대상입니다. 리포트 3개만 보유·관리 권리 범위의 CC BY 4.0이고 원본 공공데이터 조건은 그대로입니다. 자세한 버전 결속과 검증 범위는 [v2 runtime](technical.md#v2-runtime-통합과-독립-e2e)에 있습니다.
 
 이전 **2026-10-14 일회용 실자료 E2E**는 별도 기록입니다. 새 격리 DB의 지도 클릭 4개, 최종 3후보 Q3 통계, 대표 경계 2개, bridge abort·복구 3회 및 cleanup을 확인했습니다. 당시 README 7~10단계는 캡스톤 MVP·일회용 격리 시연 범위에서 완료했습니다. 이전 단계/v1/v2 기록은 [실자료 통합 결과](#실자료-통합-결과)에서 구분합니다.
 
@@ -331,6 +331,6 @@ source 적용 전 A-01~02 순수 계약/fake collector, B-02 metadata 설계·DT
 - B/H5 해결 미완료와 operational MVP 개발 가능 여부는 별개입니다. 한계 표시·확정 membership 정책을 지켜 개발하되 source 적용 안전 조건은 그대로 유지합니다.
 - manifest 초기 CRS/후속 결론 시점·BOM 기록 차이는 [technical](technical.md#manifest와-후속-검증의-범위)에 구분. 2026-10-14 고정 입력 hash 검증과 원천 기간·완전성 검증은 별개.
 - 카카오맵 SDK는 선택·연동됐으며 시연/배포 대상·추가 지표 필수 범위·점수 가중치는 미확정. 팀원 PC 재현 증거 별도 필요.
-- 과거 합성/Mock·v1 SDK 실패·2026-10-13 v2·최종 격리 검증과 후속 팀 환경·legacy 퇴역 검증을 구분합니다. MVP·대표 exact boundary는 PASS이나 운영 부하·원천 snapshot은 별도입니다. 공개 데이터 권리·clean clone 다운로드는 여전히 미검증입니다.
+- 과거 합성/Mock·v1 SDK 실패·2026-10-13 v2·최종 격리 검증과 후속 팀 환경·legacy 퇴역 검증을 구분합니다. MVP·대표 exact boundary는 PASS이나 운영 부하·원천 snapshot은 별도입니다. 공개 v2의 권리 범위·출처 한계는 고지대로 유지하며, 공개 다운로드·테스트 브랜치의 독립 E2E와 main 반영 후 팀원 PC 재현을 구분합니다.
 
 완료는 코드·mock·몇 개 샘플만으로 판단하지 않습니다. 해당 환경의 입력/제외·원본/DB·값/NULL·단위/기간·연결·재실행·실패 보존을 대조하고 PASS/FAIL/SKIP·미실행·blocker를 구분합니다.
