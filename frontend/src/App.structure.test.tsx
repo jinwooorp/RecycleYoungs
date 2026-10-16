@@ -33,7 +33,7 @@ it('keeps registration next to the selected location, and preserves candidates a
   render(<App />)
   await waitFor(() => expect(map.listeners.size).toBe(1))
   expect(screen.getByRole('button', { name: '지도 탐색' })).toHaveAttribute('aria-current', 'page')
-  expect(screen.queryByRole('button', { name: '조회하기' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: '통계 다시 불러오기' })).not.toBeInTheDocument()
   act(() => map.click(37.5665, 126.978))
   await screen.findByRole('heading', { name: '청운효자동' })
   const panel = screen.getByRole('region', { name: '선택 지역 분석 요약' })
@@ -58,7 +58,7 @@ it('offers manual statistics even when the map key is unavailable', async () => 
   render(<App />)
   openStatisticsPanel()
   await waitFor(() => expect(screen.getByLabelText('자치구')).toBeEnabled())
-  expect(screen.getByRole('button', { name: '조회하기' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '통계 다시 불러오기' })).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: '행정동 직접 조회' })).not.toBeInTheDocument()
 })
 

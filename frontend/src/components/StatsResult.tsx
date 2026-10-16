@@ -11,7 +11,7 @@ export function StatsResult({ stats }: { stats: AdminDongStats }) {
       <header className="result-header">
         <p className="eyebrow">조회 결과</p>
         <h2 id="result-title">{dong.name} · {industry.name}</h2>
-        <p>{quarter.label} 기준 원본 보고값</p>
+        <p>{quarter.label} 자료에 집계된 값입니다.</p>
       </header>
       {empty ? <p className="notice" role="status">해당 조건의 점포 및 추정매출 자료가 없습니다.</p> : (
         <div className="stats-summary grid gap-4">
@@ -50,7 +50,7 @@ export function StatsResult({ stats }: { stats: AdminDongStats }) {
           </Card>
         </div>
       )}
-      <p className="data-note">추정매출은 실제 매출이나 이익을 뜻하지 않습니다. 개업·폐업 점포 수는 성공률·실패율이 아닙니다. 결측값은 ‘자료 없음’으로 표시합니다.</p>
+      <p className="data-note">점포 수에는 기간 중 폐업한 곳이 포함될 수 있어 현재 영업 중인 카페 수와 다를 수 있습니다. 매출 건수는 자료에 집계된 거래 횟수이며 손님 수가 아닙니다. 추정매출은 실제 매출이나 이익을 뜻하지 않습니다. 개업·폐업 점포 수는 성공률·실패율이 아닙니다. ‘자료 없음’은 값이 제공되지 않은 상태이며 실제 0과 구분합니다.</p>
     </section>
   )
 }

@@ -136,7 +136,7 @@ it('preserves manual statistics after cafe data failure', async () => {
   fireEvent.change(screen.getByLabelText('행정동'), { target: { value: normalTrend.dong.code } })
   fireEvent.change(screen.getByLabelText('분기'), { target: { value: '20251' } })
   openStatisticsPanel()
-  fireEvent.click(screen.getByRole('button', { name: '조회하기' }))
+  fireEvent.click(screen.getByRole('button', { name: '통계 다시 불러오기' }))
   await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => String(u).startsWith('/api/admin-dong-stats?'))).toBe(true))
   expect(await screen.findByRole('heading', { name: '2025년 4개 분기 추세' })).toBeInTheDocument()
 })

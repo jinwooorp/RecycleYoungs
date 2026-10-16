@@ -4,6 +4,7 @@ import { formatCount, formatDecimal } from '../lib/formatStats'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption } from './ui/table'
 import { candidateTitle } from '../lib/candidatePresentation'
 import type { ChangeScores, ConsumptionScores } from '../types/regions'
+import { formatChangeRate } from '../lib/readableNumbers'
 
 const storeMetrics: { key: keyof StoreStats; label: string }[] = [
   { key: 'storeCount', label: '행정동 점포 수' }, { key: 'similarStoreCount', label: '유사 업종 점포 수' },
@@ -38,7 +39,7 @@ export function CandidateComparisonTable({ candidates, quarter, blockReason, con
           if (changeLoading) return '조회 중'
           if (changeError) return '점수 조회 실패'
           const value = change?.quarter.code === quarter ? change.items.find(i => i.dong.code === c.location.result?.adminDong.resolvedDong?.code) : null
-          return value ? value.score === null ? '산정 불가' : `${value.score}/100점 · ${value.direction === 'INCREASE' ? '+' : ''}${value.changeRate}%` : '미조회'
+          return value ? value.score === null ? '산정 불가' : `${value.score}/100점 · ${formatChangeRate(value.changeRate, value.direction)}` : '미조회'
         })()}</TableCell>)}</TableRow>
         <TableRow><TableHead scope="row">카페 소비규모 점수 (100점)</TableHead>{candidates.map(c => <TableCell key={c.id}>{(() => {
           if (blockReason(c)) return '조회 조건 확인 필요'
@@ -56,10 +57,10 @@ export function CandidateComparisonTable({ candidates, quarter, blockReason, con
             : c.nearby.result ? `${BigInt(c.nearby.result.totalCount).toLocaleString('ko-KR')}개` : '미조회'}
         </TableCell>)}</TableRow>
         {storeMetrics.map(m => <TableRow key={m.key}><TableHead scope="row">{m.label}</TableHead>{candidates.map(c => <TableCell key={c.id}>
-          {metric(c, s => s.storeStats === null ? '조회 행 없음(NO_ROW)' : s.storeStats[m.key] === null ? '값 없음(NULL)' : formatCount(s.storeStats[m.key]))}
+          {metric(c, s => s.storeStats === null ? '집계 자료 없음' : s.storeStats[m.key] === null ? '값이 제공되지 않음' : formatCount(s.storeStats[m.key]))}
         </TableCell>)}</TableRow>)}
         {salesMetrics.map(m => <TableRow key={m.key}><TableHead scope="row">{m.label}</TableHead>{candidates.map(c => <TableCell key={c.id}>
-          {metric(c, s => s.salesStats === null ? '조회 행 없음(NO_ROW)' : s.salesStats[m.key] === null ? '값 없음(NULL)' : formatDecimal(s.salesStats[m.key], m.unit))}
+          {metric(c, s => s.salesStats === null ? '집계 자료 없음' : s.salesStats[m.key] === null ? '값이 제공되지 않음' : formatDecimal(s.salesStats[m.key], m.unit))}
         </TableCell>)}</TableRow>)}
         <TableRow><TableHead scope="row">통계 조회 상태</TableHead>{candidates.map(c => <TableCell key={c.id}>
           {c.stats.error ? <p role="alert">통계 조회 실패: {c.stats.error.message}</p> : stats(c)?.quarter.label ?? (blockReason(c) ? '후보 상세에서 조회 조건을 확인하세요.' : '같은 분기로 후보 분석을 눌러 주세요.')}

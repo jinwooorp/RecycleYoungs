@@ -23,6 +23,7 @@ import { AnalysisCharts } from './components/AnalysisCharts'
 import { useAnalysisRoute } from './hooks/useAnalysisRoute'
 import { useAnalysisStatistics } from './hooks/useAnalysisStatistics'
 import seoulBoundary from './data/seoul-boundary.json'
+import { RegionBoundaryInfo } from './components/DataProvenance'
 import './App.css'
 
 function App() {
@@ -138,7 +139,7 @@ function App() {
               } }} />
             {!scoreCode && <p role="status">행정동이 확정되지 않아 통계와 점수를 연결하지 않습니다.</p>}
             {!pointDetail && <p className="my-5 text-sm text-muted-foreground">행정동 전체 분석입니다. 주변 카페와 후보 추가는 지도에서 구체적인 위치를 선택해 주세요.</p>}
-            {detailBoundary.result && <details className="source-details my-5"><summary>경계 자료 기준</summary><p className="text-xs">OA-22160 · 버전 {detailBoundary.result.datasetVersion} · {detailBoundary.result.qualityStatus} · 과거 통계와 경계 호환성 미검증. {detailBoundary.result.qualityDetail}</p></details>}
+            {detailBoundary.result && <RegionBoundaryInfo boundary={detailBoundary.result} />}
           </>}
           {pointDetail && !route.error && <section className="mt-6 flex flex-col gap-4" aria-label="선택 위치 상세">
               <LocationResult result={state.location.result} loading={state.location.loading} error={state.location.error} lookupLoading={state.lookupLoading} lookupError={!!state.lookupError}
@@ -155,7 +156,8 @@ function App() {
     <Dialog open={view === 'guide'} onClose={() => setView('explore')} labelledBy="data-guide-title" closeLabel="안내 닫기">
       <div className="flex flex-col gap-5"><h2 id="data-guide-title" className="text-2xl font-semibold">데이터 안내</h2>
         <p>서울시 행정동 통계와 소상공인시장진흥공단 점포 자료로 카페 창업 환경을 비교합니다.</p>
-        <p className="text-sm text-muted-foreground">반경 500m 점포 snapshot과 2025년 행정동 통계는 시점·집계 단위가 다릅니다. 점포 원본 기준일·완전성과 과거 경계 호환성은 미검증입니다. 창업 성공이나 수익을 예측·보장하지 않습니다.</p>
+        <p className="text-sm text-muted-foreground">주변 카페는 선택한 지점에서 500m 안의 수집된 점포 목록입니다. 점수와 매출은 2025년 행정동 전체 통계입니다. 두 자료는 작성 시기와 지역 범위가 다릅니다. 자료의 기준일과 빠진 점포가 없는지, 지도와 과거 통계의 지역 구분이 같은지는 확인 전입니다.</p>
+        <section className="flex flex-col gap-2 text-sm"><h3 className="font-semibold">현재 제공하는 점수</h3><p>소비규모는 거래가 얼마나 많은 편인지, 소비증감은 지난 분기와 비교한 변화가 어느 정도인지 보여줍니다. 높은 점수가 창업 성공이나 수익을 보장하지 않습니다.</p></section>
         <section aria-labelledby="keyboard-guide"><h3 id="keyboard-guide" className="font-semibold">지도 사용법·키보드 조작</h3><p className="mt-2 text-sm">Tab으로 지도에 초점을 맞춘 뒤 방향키로 지도를 이동하고, Enter로 지도 중심을 후보 위치로 선택하세요. 지도 클릭으로도 선택할 수 있습니다. 선택 위치로 이동 버튼은 이미 선택한 지점으로 돌아갑니다. 지도 위 지역 선택기로 자치구와 행정동을 찾을 수 있습니다.</p></section>
         <details className="source-details"><summary>자료 출처</summary><div className="mt-2 flex flex-col gap-2 text-sm">
           <a className="underline" href="https://data.seoul.go.kr/dataList/OA-22172/S/1/datasetView.do" target="_blank" rel="noreferrer">서울시 점포 통계 · 행정동</a>
@@ -164,7 +166,7 @@ function App() {
           <a className="underline" href={regions.result?.sourceUrl ?? 'https://data.seoul.go.kr/dataList/OA-22160/S/1/datasetView.do'} target="_blank" rel="noreferrer">서울 행정동 목록·경계 출처 · OA-22160</a>
           <a className="underline" href={seoulBoundary.properties.sourceUrl} target="_blank" rel="noreferrer">서울 외곽선 출처 · OA-22162</a><p>서울특별시·서울신용보증재단, 공공누리 제1유형. 공식 2023-10-31 파일의 표시용 경계(50m 단순화)이며 기준일은 미검증입니다.</p>
         </div></details>
-        {view === 'guide' && <CafeAssessment />}
+        <details className="source-details"><summary>앞으로 추가할 평가는 무엇인가요?</summary>{view === 'guide' && <CafeAssessment />}</details>
       </div>
     </Dialog>
   </div>

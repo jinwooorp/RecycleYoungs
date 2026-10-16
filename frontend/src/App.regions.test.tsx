@@ -48,7 +48,7 @@ it('reports NO_ROW for an official dong even if it is absent from the statistics
   await waitFor(() => expect(screen.getByLabelText('자치구')).toBeEnabled())
   chooseRegion()
   const card = await screen.findByRole('region', { name: '카페 소비규모 점수' })
-  await within(card).findByText('해당 분기의 거래 집계 행이 없습니다.')
+  await within(card).findByText('해당 분기의 거래 집계 자료가 없습니다.')
   expect(within(card).getByText('산정 불가')).toBeInTheDocument()
   expect(within(card).queryByText('행정동과 분기를 선택하면 점수를 확인할 수 있습니다.')).not.toBeInTheDocument()
   expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).startsWith('/api/admin-dong-stats'))).toBe(false)

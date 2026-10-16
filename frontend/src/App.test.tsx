@@ -114,7 +114,7 @@ describe('행정동 통계 화면', () => {
     expect(screen.queryByRole('combobox', { name: '업종' })).not.toBeInTheDocument()
     expect(within(screen.getByRole('region', { name: '조회 조건' })).getByRole('option', { name: '2025년 1분기' })).toHaveValue('20251')
     expect(screen.getByLabelText('행정동')).toHaveValue('')
-    expect(screen.getByRole('button', { name: '조회하기' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '통계 다시 불러오기' })).toBeDisabled()
     choose()
     await screen.findByRole('heading', { name: '청운효자동 · 카페' })
   })
@@ -179,7 +179,7 @@ describe('행정동 통계 화면', () => {
     await search()
     expect(await screen.findByRole('alert')).toHaveTextContent(message)
     expect(screen.queryByText('해당 조건의 점포 및 추정매출 자료가 없습니다.')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '조회하기' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '통계 다시 불러오기' })).toBeEnabled()
   })
 
   it('통계 network 실패는 안전한 fallback을 표시한다', async () => {
@@ -226,7 +226,7 @@ describe('행정동 통계 화면', () => {
     fetchMock.mockImplementation(async input => regionFixtureResponse(input) ?? json([]))
     render(<App />)
     expect(await screen.findByText('현재 조회 가능한 조건이 없습니다.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '조회하기' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '통계 다시 불러오기' })).toBeDisabled()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
@@ -246,7 +246,7 @@ describe('행정동 통계 화면', () => {
     await details()
     const pending = deferred<Response>()
     statsResponse = () => pending.promise
-    fireEvent.click(screen.getByRole('button', { name: '조회하기' }))
+    fireEvent.click(screen.getByRole('button', { name: '통계 다시 불러오기' }))
     expect(screen.getByRole('button', { name: '조회 중...' })).toBeDisabled()
     expect(screen.queryByRole('region', { name: '청운효자동 · 카페' })).not.toBeInTheDocument()
     expect(screen.getByText('통계를 조회하는 중입니다.')).toBeInTheDocument()
@@ -291,7 +291,7 @@ describe('행정동 통계 화면', () => {
 })
 
 describe('선택 분기 상세와 고정 4분기 추세', () => {
-  const openTrend = () => { if (!screen.queryByRole('button', { name: '추세 닫기' })) fireEvent.click(screen.getByRole('button', { name: '추세 자세히 보기' })) }
+  const openTrend = () => { if (!screen.queryByRole('button', { name: '추세 닫기' })) fireEvent.click(screen.getByRole('button', { name: '2025년 전체 자료 보기' })) }
   const storeTable = () => { openTrend(); return screen.getByRole('table', { name: '청운효자동 카페 2025년 점포 추세' }) }
   const salesTable = () => { openTrend(); return screen.getByRole('table', { name: '청운효자동 카페 2025년 추정매출 추세' }) }
 
@@ -308,7 +308,7 @@ describe('선택 분기 상세와 고정 4분기 추세', () => {
     expect(screen.queryByRole('region', { name: '청운효자동 · 카페' })).not.toBeInTheDocument()
     await act(async () => { pending.resolve(json(normal)); await pending.promise })
     expect((await details()).getByText('114개')).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByRole('button', { name: '조회하기' })).toBeEnabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: '통계 다시 불러오기' })).toBeEnabled())
   })
 
   it('semantic table에 네 분기와 점포 5개/매출 4개 metric을 정확히 표시한다', async () => {
@@ -375,7 +375,7 @@ describe('선택 분기 상세와 고정 4분기 추세', () => {
     body.quarters.forEach(row => { row.storeStats = null; row.salesStats = null; row.missingReasons = { storeStats: 'NO_ROW', salesStats: 'NO_ROW' } })
     trendResponse = async () => json(body)
     render(<App />); await search()
-    await screen.findByRole('button', { name: '추세 자세히 보기' })
+    await screen.findByRole('button', { name: '2025년 전체 자료 보기' })
     openTrend()
     expect(screen.getByText('2025년 네 분기 모두 점포 및 추정매출 자료가 없습니다.')).toBeInTheDocument()
     expect(within(storeTable()).getAllByRole('columnheader')).toHaveLength(5)
@@ -419,18 +419,18 @@ describe('선택 분기 상세와 고정 4분기 추세', () => {
     expect(fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/admin-dong-stats?'))).toHaveLength(1)
     expect(fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/admin-dong-trends?'))).toHaveLength(1)
     await act(async () => { pending.resolve(json(normalTrend)); await pending.promise })
-    await waitFor(() => expect(screen.getByRole('button', { name: '조회하기' })).toBeEnabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: '통계 다시 불러오기' })).toBeEnabled())
   })
 
   it('분기만 변경해도 두 결과를 정리하고 두 요청을 다시 시작한다', async () => {
     render(<App />); await search()
     await screen.findByRole('heading', { name: '2025년 4개 분기 추세' })
-    await waitFor(() => expect(screen.getByRole('button', { name: '조회하기' })).toBeEnabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: '통계 다시 불러오기' })).toBeEnabled())
     fireEvent.change(screen.getByLabelText('분기'), { target: { value: '' } })
     expect(screen.queryByRole('heading', { name: '2025년 4개 분기 추세' })).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: '청운효자동 · 카페' })).not.toBeInTheDocument()
     choose()
-    fireEvent.click(screen.getByRole('button', { name: '조회하기' }))
+    fireEvent.click(screen.getByRole('button', { name: '통계 다시 불러오기' }))
     await screen.findByRole('heading', { name: '2025년 4개 분기 추세' })
     expect(fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/admin-dong-trends?'))).toHaveLength(2)
   })
@@ -442,11 +442,11 @@ describe('선택 분기 상세와 고정 4분기 추세', () => {
     await waitFor(() => expect(screen.getAllByRole('alert')).toHaveLength(2))
     fireEvent.change(screen.getByLabelText('분기'), { target: { value: '' } })
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(screen.getByText('행정동과 분기를 선택한 후 조회하기를 눌러 주세요.')).toBeInTheDocument()
+    expect(screen.getByText('지도에서 지역을 고르고 분석할 분기를 선택해 주세요.')).toBeInTheDocument()
     statsResponse = async () => json(normal)
     trendResponse = async () => json(normalTrend)
     choose()
-    fireEvent.click(screen.getByRole('button', { name: '조회하기' }))
+    fireEvent.click(screen.getByRole('button', { name: '통계 다시 불러오기' }))
     await screen.findByRole('heading', { name: '2025년 4개 분기 추세' })
     expect((await details()).getByText('114개')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()

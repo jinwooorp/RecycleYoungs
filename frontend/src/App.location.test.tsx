@@ -54,7 +54,7 @@ const locationCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).s
 const statCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/admin-dong-'))
 function manualSearchButton() {
   openStatisticsPanel()
-  return screen.getByRole('button', { name: '조회하기' })
+  return screen.getByRole('button', { name: '통계 다시 불러오기' })
 }
 function chooseOtherConditions() {
   fireEvent.change(screen.getByLabelText('분석 분기'), { target: { value: '20251' } })

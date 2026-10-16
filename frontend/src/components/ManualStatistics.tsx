@@ -14,10 +14,10 @@ export function ManualStatistics({ state, visualization }: { state: ReturnType<t
   const resolvedDong = state.location.result?.adminDong.resolvedDong
   const linked = !lookupLoading && !lookupError && resolvedDong && state.selection.dongCode === resolvedDong.code
   const sourceDescription = state.mode === 'manual'
-    ? '지도 상단에서 선택한 행정동을 사용합니다. 후보 비교의 공통 분기는 별도로 선택합니다.'
+    ? '이 지역의 통계를 보고 있습니다. 분기를 바꾸면 자동으로 불러옵니다. 지도와 후보 비교의 분기는 바뀌지 않습니다.'
     : state.location.loading || lookupLoading ? '지도 위치와 통계 지원 목록을 확인하는 중입니다.'
       : lookupError ? '조회 조건 목록을 불러오지 못해 지도 위치의 통계 연결을 확인할 수 없습니다.'
-        : linked ? `지도에서 판정한 ${resolvedDong.name}이 반영됐습니다. 분기를 선택해 주세요.`
+        : linked ? `지도에서 확인한 ${resolvedDong.name}의 통계입니다. 분기를 바꾸면 자동으로 불러옵니다.`
           : '지도 상단에서 지역을 선택하거나 지도에서 구체적인 위치를 선택해 주세요.'
   return <div className="flex min-w-0 flex-col gap-4">
     <header className="flex flex-col gap-2"><h2 className="text-lg font-semibold">행정동 카페 통계</h2>
@@ -31,7 +31,7 @@ export function ManualStatistics({ state, visualization }: { state: ReturnType<t
         </NativeSelect></Field>
         <p className="mt-2 text-sm text-muted-foreground">분석 업종: 카페 · 지역은 지도 상단에서 선택합니다.</p>
         <Button type="button" variant="outline" className="mt-3" disabled={lookupLoading || !!lookupError || !!noLookups || !state.selection.dongCode || !state.selection.quarterCode || state.searchLoading}
-          onClick={() => { void state.search() }}>{state.searchLoading ? '조회 중...' : '조회하기'}</Button>
+          onClick={() => { void state.search() }}>{state.searchLoading ? '조회 중...' : '통계 다시 불러오기'}</Button>
         {lookupLoading && <p className="notice" role="status">조회 조건을 불러오는 중입니다.</p>}
         {lookupError && <Alert variant="destructive" className="mt-4"><AlertDescription><p>조회 조건을 불러오지 못했습니다. {lookupError.message}</p>
           <Button type="button" onClick={state.retryLookups}>다시 시도</Button></AlertDescription></Alert>}
@@ -52,7 +52,7 @@ export function ManualStatistics({ state, visualization }: { state: ReturnType<t
     {trendError && <Alert variant="destructive"><AlertDescription>4개 분기 추세를 조회하지 못했습니다. {trendError.message}</AlertDescription></Alert>}
     {trend && <TrendResult trend={trend} />}
     {!stats && !trend && !state.searchLoading && !statsError && !trendError && !lookupError && !noLookups && <p className="initial-message">
-      {state.selection.dongCode && state.selection.quarterCode ? '조회하기를 눌러 통계를 확인하세요.' : '행정동과 분기를 선택한 후 조회하기를 눌러 주세요.'}
+      {state.selection.dongCode && state.selection.quarterCode ? '통계를 아직 확인하지 못했습니다. 통계 다시 불러오기를 눌러 주세요.' : '지도에서 지역을 고르고 분석할 분기를 선택해 주세요.'}
     </p>}
   </div>
 }

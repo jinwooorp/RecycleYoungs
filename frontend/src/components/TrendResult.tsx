@@ -2,7 +2,6 @@ import type { AdminDongTrend, SalesStats, StoreStats } from '../types/api'
 import { formatCount, formatDecimal } from '../lib/formatStats'
 import { Card, CardContent } from '@/components/ui/card'
 import { useState } from 'react'
-import { NativeSelect } from './ui/native-select'
 import { Button } from './ui/button'
 import { Dialog } from './ui/dialog'
 
@@ -21,22 +20,11 @@ const salesMetrics: { key: keyof SalesStats; label: string; unit: '원' | '건' 
 ]
 
 export function TrendResult({ trend }: { trend: AdminDongTrend }) {
-  const [metric, setMetric] = useState('transactionCount')
   const [open, setOpen] = useState(false)
-  const store = storeMetrics.find(m => m.key === metric)
-  const sales = salesMetrics.find(m => m.key === metric)
-  return <section className="result" aria-label="분기 추세 요약">
-    <h2>2025년 4개 분기 추세</h2>
-    <label htmlFor="trend-metric" className="text-sm">추세 지표</label>
-    <NativeSelect id="trend-metric" value={metric} onChange={e => setMetric(e.target.value)}>
-      {[...storeMetrics, ...salesMetrics].map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
-    </NativeSelect>
-    <dl className="mt-3 divide-y divide-border">{trend.quarters.map(q => <div key={q.quarter.code} className="py-3">
-      <dt className="text-sm text-muted-foreground">{q.quarter.label}</dt>
-      <dd className="mt-1 break-all font-semibold tabular-nums">{store ? q.storeStats ? formatCount(q.storeStats[store.key]) : '자료 없음'
-        : sales && q.salesStats ? formatDecimal(q.salesStats[sales.key], sales.unit) : '자료 없음'}</dd>
-    </div>)}</dl>
-    <Button type="button" variant="outline" onClick={() => setOpen(true)}>추세 자세히 보기</Button>
+  return <section className="result flex flex-col gap-3" aria-label="2025년 전체 원자료">
+    <h2 className="text-lg font-semibold">2025년 4개 분기 추세</h2>
+    <p className="text-sm text-muted-foreground">위 그래프는 선택한 분기까지 보여줍니다. 한 해의 모든 지표는 아래 전체 표에서 확인할 수 있습니다. 선택한 분기 이후의 자료도 포함합니다.</p>
+    <Button type="button" variant="outline" onClick={() => setOpen(true)}>2025년 전체 자료 보기</Button>
     <Dialog open={open} onClose={() => setOpen(false)} labelledBy="trend-title" closeLabel="추세 닫기">{open && <WideTrendResult trend={trend} />}</Dialog>
   </section>
 }

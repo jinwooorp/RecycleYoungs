@@ -14,6 +14,7 @@ import { useConsumptionScores } from '../hooks/useConsumptionScores'
 import { ConsumptionScoreCard } from './ConsumptionScoreCard'
 import { useChangeScores } from '../hooks/useChangeScores'
 import { ChangeScoreCard } from './ChangeScoreCard'
+import { DataIdentifiers } from './DataProvenance'
 import type { Candidate } from '../types/comparison'
 
 export function CandidateComparison({ state, lookups, lookupLoading, lookupError, onRetryLookups, onExplore, onSelectCandidate }: {
@@ -61,7 +62,7 @@ export function CandidateComparison({ state, lookups, lookupLoading, lookupError
         </div></CardContent>
       </Card>
       <div className="grid gap-4 lg:grid-cols-3">{[...new Set(scoreCodes)].map(code => <div key={code} className="flex flex-col gap-3"><ConsumptionScoreCard {...consumption} dongCode={code} onRetry={consumption.retry} /><ChangeScoreCard {...change} dongCode={code} onRetry={change.retry} /></div>)}</div>
-      {versionMismatch && <Alert variant="warning" role="status"><AlertDescription>후보별 공간 dataset version이 다릅니다. 동일한 경계 자료 기준의 비교가 아닙니다. 필요한 후보의 지역 판정을 다시 조회해 주세요.</AlertDescription></Alert>}
+      {versionMismatch && <Alert variant="warning" role="status"><AlertDescription>후보마다 지역을 확인한 지도 자료의 버전이 다릅니다. 같은 경계로 비교한 결과가 아닐 수 있으므로 후보의 지역 정보를 다시 불러와 주세요.</AlertDescription></Alert>}
       {sameDong && <Alert role="status"><AlertDescription>같은 행정동에 속한 후보가 있습니다. 통계는 동일 행정동의 집계값이며 좌표별 독립 통계가 아닙니다. 합산하지 않습니다.</AlertDescription></Alert>}
       {spread !== null && <Alert role="note"><AlertDescription>
         <p>조회 자료상 후보 간 반경 500m 카페 수 차이는 {spread.toLocaleString('ko-KR')}개입니다.</p>
@@ -77,9 +78,11 @@ export function CandidateComparison({ state, lookups, lookupLoading, lookupError
     </>}
     <details className="source-details"><summary>향후 종합지수 확장 계획</summary><CafeAssessment /></details>
     <details className="source-details"><summary>비교 자료의 출처와 한계</summary><div className="mt-3 flex flex-col gap-3 text-sm text-muted-foreground">
-      <p>경쟁 카페는 각 좌표의 반경 500m 자료이고 추정매출은 선택 분기의 행정동 집계입니다. 매출을 반경에 배분하지 않습니다. NULL·조회 행 없음(NO_ROW)·실제 0을 구분합니다.</p>
-      <p>2025년 행정동 통계와 SEMAS 점포 자료는 시점·공간 단위가 다릅니다. 점포 snapshot은 UNVERIFIED이며 모든 후보 요청의 동일 원본 snapshot·기준일·완전성을 보장하지 않습니다. 같은 분기 코드가 원본 snapshot 동일성을 뜻하지 않으며 통계 snapshot/version metadata는 제공되지 않습니다.</p>
-      <p>공간 판정은 각 요청의 current operational boundary 기준입니다. 버전·품질·과거 경계 호환성 한계를 후보별로 확인하세요. 비교 결과는 창업 성공·수익·추천 순위를 예측하지 않습니다. 점포 분류는 SEMAS I21201입니다.</p>
+      <p>주변 카페는 선택한 지점에서 직선거리 500m 안의 목록입니다. 추정매출과 점수는 행정동 전체의 값입니다. 행정동 매출을 반경 500m의 매출로 나누어 계산하지 않습니다.</p>
+      <p>‘값이 제공되지 않음’, ‘해당 지역·분기의 집계 자료가 없음’, ‘실제 0으로 집계됨’은 서로 다릅니다. 자료가 없다고 카페나 거래가 없다고 단정하지 않습니다.</p>
+      <p>2025년 행정동 통계와 수집해 둔 점포 목록은 시기와 지역 범위가 다릅니다. 점포 자료의 기준일과 빠진 가게가 없는지는 확인 전입니다. 같은 분기를 골라도 모든 후보가 정확히 같은 시점의 원자료로 계산됐다고 보장하지 않습니다.</p>
+      <p>각 후보의 지역은 조회할 때 사용 가능한 지도 경계로 확인합니다. 그 경계가 과거 통계의 지역 구분과 일치하는지도 확인 전입니다. 비교 결과가 창업 성공·수익·추천 순위를 예측하지는 않습니다.</p>
+      <DataIdentifiers><p>미제공 정보: 통계 원본 snapshot/version metadata. 점포 확인 상태: UNVERIFIED · 분류: SEMAS I21201.</p></DataIdentifiers>
     </div></details>
   </section>
 }
