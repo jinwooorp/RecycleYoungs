@@ -1,109 +1,168 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { KakaoMap, type MapCoordinate } from './components/KakaoMap'
 import { LocationResult } from './components/LocationResult'
 import { NearbyResult } from './components/NearbyResult'
 import { CandidateComparison } from './components/CandidateComparison'
 import { AppNavigation, type AppView } from './components/AppNavigation'
-import { CandidateTray } from './components/CandidateTray'
 import { ManualStatistics } from './components/ManualStatistics'
 import { ExploreWorkspace } from './components/ExploreWorkspace'
-import { AnalysisPanel, type PanelTab } from './components/AnalysisPanel'
 import { ComparisonDialog } from './components/ComparisonDialog'
 import { CafeAssessment } from './components/CafeAssessment'
 import { Dialog } from './components/ui/dialog'
 import { useLocationAnalysis } from './hooks/useLocationAnalysis'
 import { useCandidateComparison } from './hooks/useCandidateComparison'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Empty, EmptyTitle, EmptyDescription } from '@/components/ui/empty'
+import { Button } from './components/ui/button'
+import { NativeSelect } from './components/ui/native-select'
+import { RegionSelector } from './components/RegionSelector'
+import { useRegions, useRegionBoundary } from './hooks/useRegions'
+import { useConsumptionScores } from './hooks/useConsumptionScores'
+import { useChangeScores } from './hooks/useChangeScores'
+import { ConsumptionScoreCard } from './components/ConsumptionScoreCard'
+import { ChangeScoreCard } from './components/ChangeScoreCard'
+import { AnalysisCharts } from './components/AnalysisCharts'
+import { useAnalysisRoute } from './hooks/useAnalysisRoute'
+import { useAnalysisStatistics } from './hooks/useAnalysisStatistics'
+import seoulBoundary from './data/seoul-boundary.json'
 import './App.css'
 
 function App() {
   const [view, setView] = useState<AppView>('explore')
-  const [tab, setTab] = useState<PanelTab>('overview')
   const [panelCollapsed, setPanelCollapsed] = useState(false)
   const [mapFocus, setMapFocus] = useState<{ coordinate: MapCoordinate; request: number } | null>(null)
   const [visibleStoreCount, setVisibleStoreCount] = useState(5)
   const [activeStoreId, setActiveStoreId] = useState<string | null>(null)
-  const state = useLocationAnalysis()
-  const comparison = useCandidateComparison(state.lookups, state.lookupLoading, !!state.lookupError)
+  const state = useLocationAnalysis(), regions = useRegions(), route = useAnalysisRoute()
   const coordinate = state.location.coordinate
+  const pointKey = coordinate ? `${coordinate.lat},${coordinate.lng}` : ''
+  const orphanDetail = route.detail && !route.code && (!route.pointKey || route.pointKey !== pointKey)
+  const activeCode = state.mode === 'location' ? state.location.result?.adminDong.resolvedDong?.code ?? '' : state.selection.dongCode
+  const activeDong = regions.result?.districts.flatMap(d => d.dongs).find(d => d.code === activeCode)
+  const boundaryVersion = state.mode === 'location' ? state.location.result?.adminDong.dataset.version ?? null : regions.result?.boundaryVersion ?? null
+  const boundary = useRegionBoundary(activeCode, boundaryVersion)
+  const [regionFit, setRegionFit] = useState<{ code: string; request: number } | null>(null)
+  const scoreCode = route.detail ? route.code || (orphanDetail ? '' : activeCode) : activeCode
+  const scoreQuarter = route.detail && route.quarterSpecified ? route.quarter : state.selection.quarterCode
+  const scoreCodes = !route.error && state.lookups?.industries.some(i => i.code === 'CAFE') && state.lookups.quarters.some(q => q.code === scoreQuarter)
+    && (regions.result?.districts.some(d => d.dongs.some(a => a.code === scoreCode)) || state.lookups.adminDongs.some(d => d.code === scoreCode)) ? [scoreCode] : []
+  const consumption = useConsumptionScores(scoreCodes, scoreQuarter)
+  const change = useChangeScores(scoreCodes, scoreQuarter)
+  const comparison = useCandidateComparison(state.lookups, state.lookupLoading, !!state.lookupError)
   const visibleStores = useMemo(() => state.nearby.result?.stores.slice(0, visibleStoreCount) ?? [], [state.nearby.result, visibleStoreCount])
   const region = state.location.loading ? '지역 확인 중' : state.location.error ? '지역 확인 실패'
-    : state.location.result?.adminDong.resolvedDong?.name ?? (coordinate ? '행정동 미확정' : '지도에서 위치를 선택하세요')
-  const duplicate = !!coordinate && comparison.candidates.some(candidate => candidate.coordinate.lat === coordinate.lat && candidate.coordinate.lng === coordinate.lng)
+    : state.location.result?.adminDong.resolvedDong?.name ?? activeDong?.name ?? (coordinate ? '행정동 미확정' : '지도에서 지역이나 위치를 선택하세요')
+  const duplicate = !!coordinate && comparison.candidates.some(c => c.coordinate.lat === coordinate.lat && c.coordinate.lng === coordinate.lng)
   const limitReached = comparison.candidates.length >= 3
+  const knownRoute = !route.code || !!regions.result?.districts.some(d => d.dongs.some(a => a.code === route.code)) || !!state.lookups?.adminDongs.some(d => d.code === route.code)
+  const routeQuarterValid = !route.quarter || !!state.lookups?.quarters.some(q => q.code === route.quarter)
+  const routeError = route.error ?? (state.lookupError ? '분석 조건 목록을 불러오지 못했습니다.'
+    : regions.result && state.lookups && !knownRoute ? '조회 가능한 서울 행정동이 아닙니다.'
+      : state.lookups && !routeQuarterValid ? '지원하지 않는 분기입니다.'
+        : state.lookups && !knownRoute && regions.error ? '행정동 목록을 확인하지 못했습니다. 지역 목록을 다시 조회해 주세요.' : null)
+  const separateDetail = route.detail && (orphanDetail || !!route.code && (route.code !== activeCode || scoreQuarter !== state.selection.quarterCode))
+  const detailStatistics = useAnalysisStatistics(scoreCode, scoreQuarter, separateDetail && !routeError && knownRoute, state.lookups)
+  const detailState = separateDetail ? { ...state, ...detailStatistics, mode: 'manual' as const, selection: { dongCode: scoreCode, quarterCode: scoreQuarter, industryCode: 'CAFE' } } : state
+  const historicalBoundary = useRegionBoundary(route.detail && route.code !== activeCode ? scoreCode : '', regions.result?.boundaryVersion ?? null)
+  const detailBoundary = separateDetail && route.code !== activeCode ? historicalBoundary : boundary
+  const detailRegion = separateDetail ? state.lookups?.adminDongs.find(d => d.code === scoreCode)?.name ?? regions.result?.districts.flatMap(d => d.dongs).find(d => d.code === scoreCode)?.name ?? '행정동 미확정' : region
+  const canonicalizeRoute = useEffectEvent(() => {
+    if (route.detail && !routeError && !route.code && route.pointKey === pointKey && coordinate && /^11[0-9]{6}$/.test(activeCode))
+      route.open(activeCode, state.selection.quarterCode, route.pointKey, true)
+  })
+  useEffect(() => { canonicalizeRoute() }, [route.detail, route.code, route.pointKey, routeError, activeCode, pointKey])
+  const wasDetail = useRef(false)
+  useLayoutEffect(() => {
+    if (route.detail) document.getElementById('detail-title')?.focus()
+    else if (wasDetail.current) document.getElementById('open-detail')?.focus()
+    wasDetail.current = route.detail
+  }, [route.detail])
   function navigate(next: AppView) {
+    if (next === 'explore' && route.detail) route.close()
     setView(next)
-    if (next === 'statistics') { setTab('statistics'); setPanelCollapsed(false) }
-    if (next === 'explore') { setTab('overview'); setPanelCollapsed(false) }
   }
   function selectPoint(point: MapCoordinate) {
-    state.selectCoordinate(point)
-    setPanelCollapsed(false)
-    setVisibleStoreCount(5)
-    setActiveStoreId(null)
+    setRegionFit(null); state.selectCoordinate(point); setPanelCollapsed(false); setVisibleStoreCount(5); setActiveStoreId(null)
   }
   function focusPoint(point: MapCoordinate) {
     setMapFocus(current => ({ coordinate: point, request: (current?.request ?? 0) + 1 }))
   }
+  const pointDetail = route.pointKey === pointKey && !!coordinate && (!route.code || activeCode === route.code)
   const nearby = <NearbyResult result={state.nearby.result} loading={state.nearby.loading} error={state.nearby.error}
-    compact={tab === 'overview'}
-    unsupported={false} selected={!!coordinate} onRetry={state.retryNearby} visibleCount={visibleStoreCount}
+    compact={false} unsupported={false} selected={!!coordinate} onRetry={state.retryNearby} visibleCount={visibleStoreCount}
     onVisibleCountChange={setVisibleStoreCount} activeStoreId={activeStoreId} onSelectStore={store => {
-      setActiveStoreId(store.sourceStoreId)
-      focusPoint(store.coordinate)
+      setActiveStoreId(store.sourceStoreId); focusPoint(store.coordinate); if (route.detail) route.close()
     }} />
+  const scores = (compact: boolean) => <div className={compact ? 'panel-scores' : 'detail-scores'}>
+    <ConsumptionScoreCard {...consumption} dongCode={scoreCode} onRetry={consumption.retry} compact={compact} />
+    <ChangeScoreCard {...change} dongCode={scoreCode} onRetry={change.retry} compact={compact} />
+  </div>
+  const detailReady = !routeError && (!route.code || !!state.lookups && knownRoute)
   return <div className="app-shell">
     <a href="#main-content" className="skip-link">본문으로 바로가기</a>
-    <AppNavigation view={view === 'compare' || view === 'guide' ? view : tab === 'statistics' ? 'statistics' : 'explore'}
-      count={comparison.candidates.length} onChange={navigate} />
+    <AppNavigation view={view === 'compare' || view === 'guide' ? view : 'explore'} count={comparison.candidates.length} onChange={navigate} />
     <main id="main-content" tabIndex={-1}>
+      <div className="explore-surface" hidden={route.detail}>
       <h1 className="visually-hidden">서울 카페 창업 후보지 탐색</h1>
-      <ExploreWorkspace summary={region} collapsed={panelCollapsed} onCollapsedChange={setPanelCollapsed} map={<KakaoMap selectedCoordinate={coordinate} onCoordinateChange={selectPoint}
-        candidates={comparison.candidates} stores={visibleStores}
-        focusRequest={mapFocus} activeStoreId={activeStoreId} onStoreSelect={id => { setActiveStoreId(id); setTab('nearby'); setPanelCollapsed(false) }}
-        onCandidateSelect={candidate => { selectPoint(candidate.coordinate); focusPoint(candidate.coordinate); setTab('overview') }} />}
-        panel={<AnalysisPanel tab={tab} onTabChange={setTab} selectionKey={coordinate ? `${coordinate.lat},${coordinate.lng}` : ''}
-          header={<section aria-labelledby="selected-location-title" className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 lg:block">
-            <div className="hidden items-center justify-between gap-2 lg:flex"><h2 id="selected-location-title" className="text-sm font-medium">선택 위치 요약</h2><Badge variant="secondary">카페 · 500m</Badge></div>
-            <p className="min-w-0 text-base font-semibold lg:mt-2 lg:text-xl" aria-live="polite">{region}</p>
-            <div className="flex flex-col gap-2 lg:mt-3"><Button type="button" disabled={!coordinate || duplicate || limitReached}
-              onClick={() => { if (coordinate) comparison.add(coordinate) }}>후보지에 추가</Button></div>
-            <p className="mt-2 hidden text-xs text-muted-foreground lg:block" role="status">{limitReached
-              ? '최대 3곳까지 등록할 수 있습니다. 후보를 삭제하면 새 위치를 추가할 수 있습니다.'
-              : duplicate ? '선택한 위치가 이미 후보에 등록돼 있습니다.' : coordinate ? '새 위치를 탐색해도 담은 후보는 유지됩니다.' : '먼저 지도에서 위치를 선택해 주세요.'}</p>
-          </section>}
-          overview={<>
-            {!coordinate && <Empty><EmptyTitle>어느 동네에 카페를 열까요?</EmptyTitle><EmptyDescription>지도를 클릭하거나 지도 중심을 선택하면 주변 카페와 행정동을 확인할 수 있습니다.</EmptyDescription></Empty>}
-            {coordinate && <div className="flex flex-col gap-4">
-              {tab === 'overview' && nearby}
-              <LocationResult result={state.location.result} loading={state.location.loading} error={state.location.error}
-                lookupLoading={state.lookupLoading} lookupError={!!state.lookupError}
-                linked={!!state.location.result?.adminDong.resolvedDong && state.selection.dongCode === state.location.result.adminDong.resolvedDong.code}
-                manual={state.mode === 'manual'} onRetry={state.retryLocation} />
-              <Button type="button" variant="outline" onClick={() => { setTab('statistics'); setView('statistics'); document.getElementById('tab-statistics')?.focus() }}>행정동 통계 확인</Button>
-            </div>}
+      <ExploreWorkspace summary={region} collapsed={panelCollapsed} onCollapsedChange={setPanelCollapsed}
+        regionControl={<RegionSelector key={`${regions.result?.catalogVersion}:${activeCode}`} regions={regions.result} activeCode={activeCode}
+          loading={regions.loading} error={regions.error} onRetry={regions.retry} onSelect={dong => {
+            state.selectRegion(dong.code); setPanelCollapsed(false); setView('explore'); setActiveStoreId(null)
+            setRegionFit(current => ({ code: dong.code, request: (current?.request ?? 0) + 1 }))
+          }} />}
+        map={<KakaoMap selectedCoordinate={coordinate} onCoordinateChange={selectPoint} regionBoundary={boundary.result} regionFitRequest={regionFit}
+          candidates={comparison.candidates} stores={visibleStores} focusRequest={mapFocus} activeStoreId={activeStoreId}
+          onStoreSelect={id => { setActiveStoreId(id); route.open(activeCode, state.selection.quarterCode, pointKey) }}
+          onCandidateSelect={candidate => { selectPoint(candidate.coordinate); focusPoint(candidate.coordinate) }} />}
+        panel={<section className="score-panel" aria-label="선택 지역 분석 요약">
+          <div><p className="text-xs text-muted-foreground">{coordinate ? '선택 위치 · 반경 500m' : '선택 지역 · 행정동 전체'}</p><h2 className="mt-1 break-words text-xl font-semibold" aria-live="polite">{region}</h2></div>
+          <label className="text-sm" htmlFor="panel-quarter">분석 분기</label><NativeSelect id="panel-quarter" value={state.selection.quarterCode} disabled={state.lookupLoading || !!state.lookupError}
+            onChange={e => state.changeSelection('quarterCode', e.target.value)}><option value="">분기를 선택하세요</option>{state.lookups?.quarters.map(q => <option key={q.code} value={q.code}>{q.label}</option>)}</NativeSelect>
+          {scores(true)}
+          <p className="text-xs text-muted-foreground">행정동 전체의 상대 점수이며 창업 성공률이 아닙니다.</p>
+          <Button id="open-detail" disabled={!activeCode && !coordinate} onClick={() => route.open(activeCode, state.selection.quarterCode, pointKey || false)}>상세 분석 보기</Button>
+          <Button variant="outline" disabled={!coordinate || duplicate || limitReached} onClick={() => { if (coordinate) comparison.add(coordinate) }}>후보지에 추가</Button>
+          <p className="text-xs text-muted-foreground" role="status">{limitReached ? '최대 3곳까지 등록할 수 있습니다. 상단 후보 비교에서 삭제해 주세요.' : duplicate ? '선택한 위치가 이미 후보에 등록돼 있습니다.' : !coordinate ? '후보 추가는 지도에서 구체적인 위치를 선택해 주세요.' : '담은 후보는 상단 후보 비교에서 확인하세요.'}</p>
+          {state.lookupError && <div role="alert"><p>조회 조건을 불러오지 못했습니다.</p><Button variant="outline" onClick={state.retryLookups}>조회 조건 다시 시도</Button></div>}
+          {state.location.error && <p role="status">지역 확인 실패. 상세 분석에서 다시 시도할 수 있습니다.</p>}
+          {state.location.result?.adminDong.status === 'AMBIGUOUS_BOUNDARY' && <p role="status" className="text-sm">행정동 경계가 겹쳐 점수를 연결하지 않습니다. 상세 분석에서 판정 근거를 확인하세요.</p>}
+          {state.location.result?.adminDong.status === 'OUTSIDE_OR_UNSUPPORTED' && <p role="status" className="text-sm">행정동이 확정되지 않아 점수를 연결하지 않습니다. 주변 카페는 상세 분석에서 별도로 확인하세요.</p>}
+          {boundary.error && <div role="status"><p className="text-sm">경계 표시 불가: {boundary.error}</p><Button variant="outline" onClick={() => { boundary.retry(); regions.retry() }}>경계 다시 조회</Button></div>}
+        </section>} />
+      </div>
+      {route.detail && <article className="analysis-detail">
+        <div className="detail-inner"><Button variant="outline" onClick={route.close}>지도로 돌아가기</Button>
+          <header className="my-5"><p className="text-sm text-muted-foreground">서울 · 카페 · 행정동 상세 분석</p><h1 id="detail-title" tabIndex={-1} className="mt-2 text-2xl font-semibold">{routeError ? '상세 분석을 확인해 주세요' : detailRegion}</h1><p className="mt-2 text-sm">점수는 창업 환경을 살펴보는 참고 지표입니다. 성공·수익을 예측하거나 보장하지 않습니다.</p></header>
+          {routeError ? <div role="alert"><p>{routeError}</p>{state.lookupError && <Button variant="outline" onClick={state.retryLookups}>조회 조건 다시 시도</Button>}{regions.error && <Button variant="outline" onClick={regions.retry}>지역 목록 다시 조회</Button>}</div> : !detailReady ? <p role="status">상세 분석 조건을 확인하는 중입니다.</p> : <>
+            {scoreCode && scores(false)}
+            <ManualStatistics visualization={detailState.trend && <AnalysisCharts trend={detailState.trend} quarter={scoreQuarter} />} state={{ ...detailState, changeSelection: (key, value) => {
+                if (key === 'quarterCode') route.open(scoreCode, value, pointDetail ? pointKey : false, true)
+              } }} />
+            {!scoreCode && <p role="status">행정동이 확정되지 않아 통계와 점수를 연결하지 않습니다.</p>}
+            {!pointDetail && <p className="my-5 text-sm text-muted-foreground">행정동 전체 분석입니다. 주변 카페와 후보 추가는 지도에서 구체적인 위치를 선택해 주세요.</p>}
+            {detailBoundary.result && <details className="source-details my-5"><summary>경계 자료 기준</summary><p className="text-xs">OA-22160 · 버전 {detailBoundary.result.datasetVersion} · {detailBoundary.result.qualityStatus} · 과거 통계와 경계 호환성 미검증. {detailBoundary.result.qualityDetail}</p></details>}
           </>}
-          nearby={nearby}
-          statistics={<ManualStatistics state={state} />}
-          candidates={<CandidateTray candidates={comparison.candidates} onCompare={() => setView('compare')}
-            onRemove={comparison.remove} onSelect={candidate => {
-              selectPoint(candidate.coordinate); focusPoint(candidate.coordinate); setTab('overview')
-            }} />} />} />
+          {pointDetail && !route.error && <section className="mt-6 flex flex-col gap-4" aria-label="선택 위치 상세">
+              <LocationResult result={state.location.result} loading={state.location.loading} error={state.location.error} lookupLoading={state.lookupLoading} lookupError={!!state.lookupError}
+                linked={!!state.location.result?.adminDong.resolvedDong && state.selection.dongCode === state.location.result.adminDong.resolvedDong.code} manual={state.mode === 'manual'} onRetry={state.retryLocation} />
+              {nearby}
+            </section>}
+        </div>
+      </article>}
     </main>
-    <ComparisonDialog open={view === 'compare'} onClose={() => setView(tab === 'statistics' ? 'statistics' : 'explore')}>
-      <CandidateComparison state={comparison} lookups={state.lookups} lookupLoading={state.lookupLoading}
-        lookupError={!!state.lookupError} onRetryLookups={state.retryLookups} onExplore={() => navigate('explore')} />
+    <ComparisonDialog open={view === 'compare'} onClose={() => setView('explore')}>
+      <CandidateComparison state={comparison} lookups={state.lookups} lookupLoading={state.lookupLoading} lookupError={!!state.lookupError} onRetryLookups={state.retryLookups} onExplore={() => navigate('explore')}
+        onSelectCandidate={candidate => { selectPoint(candidate.coordinate); focusPoint(candidate.coordinate); navigate('explore') }} />
     </ComparisonDialog>
-    <Dialog open={view === 'guide'} onClose={() => setView(tab === 'statistics' ? 'statistics' : 'explore')} labelledBy="data-guide-title" closeLabel="안내 닫기">
+    <Dialog open={view === 'guide'} onClose={() => setView('explore')} labelledBy="data-guide-title" closeLabel="안내 닫기">
       <div className="flex flex-col gap-5"><h2 id="data-guide-title" className="text-2xl font-semibold">데이터 안내</h2>
         <p>서울시 행정동 통계와 소상공인시장진흥공단 점포 자료로 카페 창업 환경을 비교합니다.</p>
         <p className="text-sm text-muted-foreground">반경 500m 점포 snapshot과 2025년 행정동 통계는 시점·집계 단위가 다릅니다. 점포 원본 기준일·완전성과 과거 경계 호환성은 미검증입니다. 창업 성공이나 수익을 예측·보장하지 않습니다.</p>
+        <section aria-labelledby="keyboard-guide"><h3 id="keyboard-guide" className="font-semibold">지도 사용법·키보드 조작</h3><p className="mt-2 text-sm">Tab으로 지도에 초점을 맞춘 뒤 방향키로 지도를 이동하고, Enter로 지도 중심을 후보 위치로 선택하세요. 지도 클릭으로도 선택할 수 있습니다. 선택 위치로 이동 버튼은 이미 선택한 지점으로 돌아갑니다. 지도 위 지역 선택기로 자치구와 행정동을 찾을 수 있습니다.</p></section>
         <details className="source-details"><summary>자료 출처</summary><div className="mt-2 flex flex-col gap-2 text-sm">
           <a className="underline" href="https://data.seoul.go.kr/dataList/OA-22172/S/1/datasetView.do" target="_blank" rel="noreferrer">서울시 점포 통계 · 행정동</a>
           <a className="underline" href="https://data.seoul.go.kr/dataList/OA-22175/S/1/datasetView.do" target="_blank" rel="noreferrer">서울시 추정매출 · 행정동</a>
           <p>주변 점포: SEMAS I21201. 분류에 따라 다른 음료 업태가 포함될 수 있습니다.</p>
+          <a className="underline" href={regions.result?.sourceUrl ?? 'https://data.seoul.go.kr/dataList/OA-22160/S/1/datasetView.do'} target="_blank" rel="noreferrer">서울 행정동 목록·경계 출처 · OA-22160</a>
+          <a className="underline" href={seoulBoundary.properties.sourceUrl} target="_blank" rel="noreferrer">서울 외곽선 출처 · OA-22162</a><p>서울특별시·서울신용보증재단, 공공누리 제1유형. 공식 2023-10-31 파일의 표시용 경계(50m 단순화)이며 기준일은 미검증입니다.</p>
         </div></details>
         {view === 'guide' && <CafeAssessment />}
       </div>

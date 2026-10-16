@@ -14,6 +14,8 @@ vi.mock('../lib/loadKakaoMaps', async (importOriginal) => ({
 }))
 let mock: ReturnType<typeof createKakaoMapsMock>
 beforeEach(() => {
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800)
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600)
   mock = createKakaoMapsMock()
   vi.mocked(loadKakaoMaps).mockReset().mockResolvedValue(mock.sdk)
 })
@@ -26,6 +28,25 @@ function Selection() {
 async function ready() { await waitFor(() => expect(mock.listeners.size).toBe(1)) }
 
 describe('지도 위치 선택', () => {
+  it('fits Seoul once after a positive viewport and preserves the camera across hidden and resized layouts', async () => {
+    let width = 0, resize = () => {}
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => width)
+    vi.stubGlobal('ResizeObserver', class { constructor(callback: () => void) { resize = callback }; observe() {}; disconnect() {} })
+    const setBounds = vi.fn(), relayout = vi.fn(), center = new mock.sdk.LatLng(37.57, 126.98), setCenter = vi.fn()
+    mock.sdk.LatLngBounds = class { extend = vi.fn() }
+    vi.mocked(mock.sdk.Map).mockImplementationOnce(function () { const instance = { relayout, setBounds, getCenter: () => center, setCenter }; mock.maps.push(instance); return instance })
+    render(<KakaoMap selectedCoordinate={null} onCoordinateChange={vi.fn()} />)
+    await ready()
+    expect(setBounds).not.toHaveBeenCalled(); expect(relayout).not.toHaveBeenCalled()
+    width = 800; act(() => resize())
+    expect(setBounds).toHaveBeenCalledTimes(1)
+    width = 0; act(() => resize())
+    expect(relayout).toHaveBeenCalledTimes(1)
+    width = 1000; act(() => resize())
+    expect(setBounds).toHaveBeenCalledTimes(1)
+    expect(setCenter).toHaveBeenLastCalledWith(center)
+    expect(screen.queryByRole('button', { name: '지도 중심 선택' })).not.toBeInTheDocument()
+  })
   it('preserves the last user center when relayout changes the SDK viewport geometry', async () => {
     vi.stubGlobal('ResizeObserver', undefined)
     const userCenter = new mock.sdk.LatLng(37.58, 127.01)
@@ -91,10 +112,10 @@ describe('지도 위치 선택', () => {
     vi.mocked(loadKakaoMaps).mockResolvedValue({ ...mock.sdk, Circle })
     const view = render(<KakaoMap selectedCoordinate={null} onCoordinateChange={change} />)
     await ready()
-    fireEvent.keyDown(screen.getByRole('button', { name: '방향키로 지도 이동' }), { key: 'ArrowRight' })
+    fireEvent.keyDown(screen.getByLabelText('창업 후보 위치 지도'), { key: 'ArrowRight' })
     expect(panBy).toHaveBeenCalled()
     expect(change).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: '지도 중심 선택' }))
+    fireEvent.keyDown(screen.getByLabelText('창업 후보 위치 지도'), { key: 'Enter' })
     expect(change).toHaveBeenCalledWith({ lat: 37.58, lng: 127.01 })
     view.rerender(<KakaoMap selectedCoordinate={{ lat: 37.58, lng: 127.01 }} onCoordinateChange={change} />)
     expect(Circle).toHaveBeenCalledWith(expect.objectContaining({ radius: 500 }))
@@ -282,7 +303,7 @@ describe('지도 위치 선택', () => {
     await ready()
     expect(observe).toHaveBeenCalledWith(screen.getByLabelText('창업 후보 위치 지도'))
     resize()
-    expect(mock.maps[0].relayout).toHaveBeenCalledTimes(1)
+    expect(mock.maps[0].relayout).toHaveBeenCalledTimes(2)
     view.unmount()
     expect(disconnect).toHaveBeenCalledTimes(1)
   })
@@ -373,12 +394,12 @@ describe('지도 위치 선택', () => {
     fireEvent.click(screen.getByRole('button', { name: '지도 다시 시도' }))
     await ready()
     fireEvent(window, new Event('resize'))
-    expect(mock.maps[1].relayout).toHaveBeenCalledTimes(1)
+    expect(mock.maps[1].relayout).toHaveBeenCalledTimes(2)
     act(() => mock.click(37.58, 127.01))
     expect(mock.markers).toHaveLength(1)
     view.unmount()
     fireEvent(window, new Event('resize'))
-    expect(mock.maps[1].relayout).toHaveBeenCalledTimes(1)
+    expect(mock.maps[1].relayout).toHaveBeenCalledTimes(2)
     expect(mock.listeners.size).toBe(0)
     expect(mock.markers[0].map).toBeNull()
   })

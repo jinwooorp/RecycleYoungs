@@ -1,36 +1,44 @@
 import type { useLocationAnalysis } from '../hooks/useLocationAnalysis'
-import { SearchForm } from './SearchForm'
+import type { ReactNode } from 'react'
 import { StatsResult } from './StatsResult'
 import { TrendResult } from './TrendResult'
 import { Button } from './ui/button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from './ui/card'
 import { Alert, AlertDescription } from './ui/alert'
+import { NativeSelect } from './ui/native-select'
+import { Field, FieldLabel } from './ui/field'
 
-export function ManualStatistics({ state }: { state: ReturnType<typeof useLocationAnalysis> }) {
+export function ManualStatistics({ state, visualization }: { state: ReturnType<typeof useLocationAnalysis>; visualization?: ReactNode }) {
   const { lookups, lookupLoading, lookupError, stats, statsLoading, statsError, trend, trendLoading, trendError } = state
   const noLookups = lookups && (!lookups.adminDongs.length || !lookups.industries.some(i => i.code === 'CAFE') || !lookups.quarters.length)
   const resolvedDong = state.location.result?.adminDong.resolvedDong
   const linked = !lookupLoading && !lookupError && resolvedDong && state.selection.dongCode === resolvedDong.code
   const sourceDescription = state.mode === 'manual'
-    ? '직접 선택한 행정동을 사용합니다. 후보 비교의 공통 조건과는 별개입니다.'
+    ? '지도 상단에서 선택한 행정동을 사용합니다. 후보 비교의 공통 분기는 별도로 선택합니다.'
     : state.location.loading || lookupLoading ? '지도 위치와 통계 지원 목록을 확인하는 중입니다.'
       : lookupError ? '조회 조건 목록을 불러오지 못해 지도 위치의 통계 연결을 확인할 수 없습니다.'
         : linked ? `지도에서 판정한 ${resolvedDong.name}이 반영됐습니다. 분기를 선택해 주세요.`
-          : '지도 위치의 행정동 통계를 연결할 수 없습니다. 지원 목록에서 직접 선택해 주세요.'
+          : '지도 상단에서 지역을 선택하거나 지도에서 구체적인 위치를 선택해 주세요.'
   return <div className="flex min-w-0 flex-col gap-4">
-    <header className="flex flex-col gap-2"><h2 className="text-lg font-semibold">행정동 통계 직접 조회</h2>
+    <header className="flex flex-col gap-2"><h2 className="text-lg font-semibold">행정동 카페 통계</h2>
       <p className="text-sm text-muted-foreground">카페 업종의 행정동 전체 점포와 소비 흐름을 확인하세요. 선택 지점 반경 500m와 범위가 다릅니다.</p></header>
     <Card asChild><section aria-labelledby="search-title">
       <CardHeader><CardTitle id="search-title">조회 조건</CardTitle><CardDescription>{sourceDescription}</CardDescription></CardHeader>
       <CardContent>
-        <SearchForm lookups={lookups} selection={state.selection} disabled={lookupLoading || !!lookupError || !!noLookups}
-          loading={state.searchLoading} onChange={state.changeSelection} onSearch={() => { void state.search() }} />
+        <Field><FieldLabel htmlFor="quarter">분기</FieldLabel><NativeSelect id="quarter" value={state.selection.quarterCode}
+          disabled={lookupLoading || !!lookupError || !!noLookups} onChange={event => state.changeSelection('quarterCode', event.target.value)}>
+          <option value="">분기를 선택하세요</option>{lookups?.quarters.map(q => <option key={q.code} value={q.code}>{q.label}</option>)}
+        </NativeSelect></Field>
+        <p className="mt-2 text-sm text-muted-foreground">분석 업종: 카페 · 지역은 지도 상단에서 선택합니다.</p>
+        <Button type="button" variant="outline" className="mt-3" disabled={lookupLoading || !!lookupError || !!noLookups || !state.selection.dongCode || !state.selection.quarterCode || state.searchLoading}
+          onClick={() => { void state.search() }}>{state.searchLoading ? '조회 중...' : '조회하기'}</Button>
         {lookupLoading && <p className="notice" role="status">조회 조건을 불러오는 중입니다.</p>}
         {lookupError && <Alert variant="destructive" className="mt-4"><AlertDescription><p>조회 조건을 불러오지 못했습니다. {lookupError.message}</p>
           <Button type="button" onClick={state.retryLookups}>다시 시도</Button></AlertDescription></Alert>}
         {noLookups && <p className="notice" role="status">현재 조회 가능한 조건이 없습니다.</p>}
       </CardContent>
     </section></Card>
+    {visualization}
     <div aria-live="polite" aria-atomic="true">
       {statsLoading && <p className="notice" role="status">통계를 조회하는 중입니다.</p>}
       {!statsLoading && stats && <span className="visually-hidden">선택 분기 통계 조회가 완료되었습니다.</span>}

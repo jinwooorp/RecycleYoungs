@@ -1,18 +1,32 @@
-import type { ReactNode } from 'react'
+import { useLayoutEffect, useRef, type ReactNode } from 'react'
 import { Button } from './ui/button'
 import { cn } from '../lib/utils'
 
-export function ExploreWorkspace({ panel, map, summary, collapsed, onCollapsedChange }: {
-  panel: ReactNode; map: ReactNode; summary: string; collapsed: boolean; onCollapsedChange: (collapsed: boolean) => void
+export function ExploreWorkspace({ panel, map, summary, collapsed, onCollapsedChange, regionControl }: {
+  panel: ReactNode; map: ReactNode; summary: string; collapsed: boolean; onCollapsedChange: (collapsed: boolean) => void; regionControl?: ReactNode
 }) {
+  const menu = useRef<HTMLButtonElement>(null)
+  const dockMenu = useRef<HTMLButtonElement>(null)
+  const toggleFocus = useRef(false)
+  useLayoutEffect(() => {
+    if (!toggleFocus.current) return
+    toggleFocus.current = false
+    ;(collapsed ? menu : dockMenu).current?.focus({ preventScroll: true })
+  }, [collapsed])
+  const icon = <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
   return <div className={cn('explore-workspace', collapsed && 'panel-collapsed')}>
-    <aside className="analysis-dock" aria-label="위치 분석 패널">
+    <aside className="analysis-dock" aria-label="위치 분석 패널" hidden={collapsed}>
       <div className="dock-toolbar"><div className="min-w-0"><p className="text-xs font-medium text-primary">카페 창업 환경</p>
         <p className="truncate text-sm" title={summary}>{summary}</p></div>
-        <Button type="button" size="sm" variant="ghost" aria-expanded={!collapsed} aria-controls="analysis-content"
-          onClick={() => onCollapsedChange(!collapsed)}>{collapsed ? '분석 열기' : '접기'}</Button></div>
+        <Button ref={dockMenu} type="button" size="icon" variant="ghost" aria-label="분석 패널 닫기" aria-expanded={!collapsed} aria-controls="analysis-content"
+          onClick={() => { toggleFocus.current = true; onCollapsedChange(true) }}>{icon}</Button></div>
       <div id="analysis-content" className="analysis-content" hidden={collapsed}>{panel}</div>
     </aside>
-    <section className="map-workspace" aria-label="창업 후보 위치 선택">{map}</section>
+    <section className="map-workspace" aria-label="창업 후보 위치 선택">
+      {collapsed && <div className="map-menu"><Button ref={menu} type="button" variant="outline" size="icon" aria-label="분석 패널 열기"
+        aria-expanded={false} aria-controls="analysis-content" onClick={() => { toggleFocus.current = true; onCollapsedChange(false) }}>{icon}</Button></div>}
+      {regionControl}
+      {map}
+    </section>
   </div>
 }

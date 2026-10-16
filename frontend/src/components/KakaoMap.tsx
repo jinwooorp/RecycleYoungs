@@ -5,6 +5,9 @@ import type { KakaoCircle, KakaoMapInstance, KakaoMapMouseEvent, KakaoMapsSDK, K
 import type { Candidate } from '../types/comparison'
 import type { NearbyStore } from '../types/nearby'
 import { candidateTitle } from '../lib/candidatePresentation'
+import type { PolygonGeometry, RegionBoundary } from '../types/regions'
+import seoulBoundary from '../data/seoul-boundary.json'
+import { validGeometry } from '../api/regionApi'
 
 export interface MapCoordinate { lat: number; lng: number }
 
@@ -23,12 +26,13 @@ function releaseLayer(layer: MapLayer) {
 }
 
 export function KakaoMap({ selectedCoordinate, onCoordinateChange, candidates = noCandidates, stores = noStores,
-  focusRequest, activeStoreId, onStoreSelect, onCandidateSelect }: {
+  focusRequest, activeStoreId, onStoreSelect, onCandidateSelect, regionBoundary, regionFitRequest }: {
   selectedCoordinate: MapCoordinate | null
   onCoordinateChange: (coordinate: MapCoordinate) => void
   candidates?: Candidate[]; stores?: NearbyStore[]
   focusRequest?: { coordinate: MapCoordinate; request: number } | null
   activeStoreId?: string | null; onStoreSelect?: (id: string) => void; onCandidateSelect?: (candidate: Candidate) => void
+  regionBoundary?: RegionBoundary | null; regionFitRequest?: { code: string; request: number } | null
 }) {
   const container = useRef<HTMLDivElement>(null)
   const map = useRef<KakaoMapInstance | null>(null)
@@ -39,6 +43,9 @@ export function KakaoMap({ selectedCoordinate, onCoordinateChange, candidates = 
   const [attempt, setAttempt] = useState(0)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [error, setError] = useState('')
+  const boundaryStatus = useRef<HTMLParagraphElement>(null)
+  const initialIntent = useRef({ selectedCoordinate, regionFitRequest, focusRequest })
+  useEffect(() => { initialIntent.current = { selectedCoordinate, regionFitRequest, focusRequest } }, [selectedCoordinate, regionFitRequest, focusRequest])
   const onClick = useEffectEvent((event: KakaoMapMouseEvent) => {
     const coordinate = { lat: event.latLng.getLat(), lng: event.latLng.getLng() }
     if (isValidCoordinate(coordinate)) onCoordinateChange(coordinate)
@@ -68,16 +75,28 @@ export function KakaoMap({ selectedCoordinate, onCoordinateChange, candidates = 
       try {
         let stableCenter = new maps.LatLng(37.5665, 126.978)
         const instance = new maps.Map(element, { center: stableCenter, level: 4 })
+        stableCenter = instance.getCenter?.() ?? stableCenter
         map.current = instance
         sdk.current = maps
         const handler = (event: KakaoMapMouseEvent) => { if (!canceled && map.current === instance) onClick(event) }
         const rememberCenter = () => { if (!canceled && map.current === instance) stableCenter = instance.getCenter?.() ?? stableCenter }
+        let initiallyFitted = false
         const relayout = () => {
-          if (!canceled && map.current === instance) {
+          if (!canceled && map.current === instance && element.clientWidth > 0 && element.clientHeight > 0) {
             const center = stableCenter
             instance.relayout()
-            if (instance.setCenter) instance.setCenter(center)
+            const intent = initialIntent.current
+            if (!initiallyFitted && !intent.selectedCoordinate && !intent.regionFitRequest && !intent.focusRequest && maps.LatLngBounds && instance.setBounds && validGeometry(seoulBoundary.geometry)) {
+              const bounds = new maps.LatLngBounds()
+              const geometry: PolygonGeometry = seoulBoundary.geometry as PolygonGeometry
+              const parts = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates
+              for (const rings of parts) for (const ring of rings) for (const [lng, lat] of ring) bounds.extend(new maps.LatLng(lat, lng))
+              const height = element.closest('.map-workspace')?.querySelector('.region-selector')?.getBoundingClientRect().height ?? 56
+              instance.setBounds(bounds, height + 36, 36, 36, 36)
+              stableCenter = instance.getCenter?.() ?? stableCenter
+            } else if (instance.setCenter) instance.setCenter(center)
             else instance.panTo?.(center)
+            initiallyFitted = true
           }
         }
         const resources: { observer?: ResizeObserver } = {}
@@ -97,6 +116,7 @@ export function KakaoMap({ selectedCoordinate, onCoordinateChange, candidates = 
         resources.observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(relayout)
         if (resources.observer) resources.observer.observe(element)
         else window.addEventListener('resize', relayout)
+        relayout()
         setStatus('ready')
       } catch {
         clearMap()
@@ -115,6 +135,43 @@ export function KakaoMap({ selectedCoordinate, onCoordinateChange, candidates = 
       clearMap()
     }
   }, [attempt])
+
+  const drawBoundary = useEffectEvent((geometry: PolygonGeometry, fill: boolean) => {
+    const maps = sdk.current, instance = map.current
+    if (!maps?.Polygon || !instance) return []
+    const parts = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates
+    const created: KakaoOverlay[] = []
+    try {
+      for (const rings of parts) created.push(new maps.Polygon({ map: instance,
+        path: rings.map(ring => ring.map(([lng, lat]) => new maps.LatLng(lat, lng))),
+        strokeWeight: fill ? 3 : 2, strokeColor: '#245B4B', strokeOpacity: fill ? 0.95 : 0.65,
+        fillColor: '#245B4B', fillOpacity: fill ? 0.13 : 0, zIndex: fill ? 1 : 0 }))
+    } catch {
+      created.forEach(p => p.setMap(null))
+      if (boundaryStatus.current) boundaryStatus.current.textContent = '경계 표시를 준비하지 못했습니다. 통계는 계속 조회할 수 있습니다.'
+      return []
+    }
+    return created
+  })
+  useEffect(() => {
+    if (status !== 'ready' || !validGeometry(seoulBoundary.geometry)) return
+    const shapes = drawBoundary(seoulBoundary.geometry, false)
+    return () => shapes.forEach(p => p.setMap(null))
+  }, [status])
+  useEffect(() => {
+    if (status !== 'ready' || !regionBoundary) return
+    const shapes = drawBoundary(regionBoundary.geometry, true)
+    return () => shapes.forEach(p => p.setMap(null))
+  }, [status, regionBoundary])
+  useEffect(() => {
+    const maps = sdk.current, instance = map.current
+    if (status !== 'ready' || !regionBoundary || regionFitRequest?.code !== regionBoundary.code || !maps?.LatLngBounds || !instance?.setBounds) return
+    const bounds = new maps.LatLngBounds()
+    const parts = regionBoundary.geometry.type === 'Polygon' ? [regionBoundary.geometry.coordinates] : regionBoundary.geometry.coordinates
+    for (const rings of parts) for (const ring of rings) for (const [lng, lat] of ring) bounds.extend(new maps.LatLng(lat, lng))
+    const barHeight = container.current?.closest('.map-workspace')?.querySelector('.region-selector')?.getBoundingClientRect().height ?? 56
+    instance.setBounds(bounds, barHeight + 36, 36, 36, 36)
+  }, [status, regionBoundary, regionFitRequest])
 
   useEffect(() => {
     if (status !== 'ready' || !map.current || !sdk.current) return
@@ -191,9 +248,20 @@ export function KakaoMap({ selectedCoordinate, onCoordinateChange, candidates = 
 
   return (
     <div className="map-shell">
-      <div ref={container} aria-label="창업 후보 위치 지도" aria-busy={status === 'loading'}
-        className="map-canvas" />
-      <div>
+      <div ref={container} aria-label="창업 후보 위치 지도" aria-busy={status === 'loading'} tabIndex={0}
+        aria-describedby="map-keyboard-help" className="map-canvas" onKeyDown={event => {
+          if (event.target !== event.currentTarget || status !== 'ready' || event.altKey || event.ctrlKey || event.metaKey) return
+          const offsets: Record<string, [number, number]> = { ArrowLeft: [-80, 0], ArrowRight: [80, 0], ArrowUp: [0, -80], ArrowDown: [0, 80] }
+          const offset = offsets[event.key]
+          if (offset) { event.preventDefault(); map.current?.panBy?.(...offset) }
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            const center = map.current?.getCenter?.()
+            if (center) { const point = { lat: center.getLat(), lng: center.getLng() }; if (isValidCoordinate(point)) onCoordinateChange(point) }
+          }
+        }} />
+      <p id="map-keyboard-help" className="map-keyboard-help">방향키로 이동 · Enter로 중심 선택 · 자세한 사용법은 데이터 안내</p>
+      <div className="map-message">
       <div role="status" aria-live="polite" aria-atomic="true" className={status === 'ready' ? 'visually-hidden' : 'map-status'}>
         {status === 'loading' && <p>지도를 불러오는 중입니다.</p>}
         {status === 'error' && <p className="text-destructive">{error}</p>}
@@ -203,26 +271,11 @@ export function KakaoMap({ selectedCoordinate, onCoordinateChange, candidates = 
         setStatus('loading')
         setAttempt((value) => value + 1)
       }}>지도 다시 시도</Button>}
-      <div className="map-actionbar">
-        <Button type="button" size="sm" variant="outline" disabled={status !== 'ready'} aria-label="방향키로 지도 이동"
-          title="이 버튼에 초점을 둔 뒤 방향키로 지도를 이동하세요" onKeyDown={event => {
-            const offsets: Record<string, [number, number]> = { ArrowLeft: [-80, 0], ArrowRight: [80, 0], ArrowUp: [0, -80], ArrowDown: [0, 80] }
-            const offset = offsets[event.key]
-            if (offset) { event.preventDefault(); map.current?.panBy?.(...offset) }
-          }}>지도 이동 ↔</Button>
-        <Button type="button" size="sm" disabled={status !== 'ready'} onClick={() => {
-          const center = map.current?.getCenter?.()
-          if (center) {
-            const point = { lat: center.getLat(), lng: center.getLng() }
-            if (isValidCoordinate(point)) onCoordinateChange(point)
-          }
-        }}>지도 중심 선택</Button>
-        {selectedCoordinate && <Button type="button" size="sm" variant="ghost" disabled={status !== 'ready'} onClick={() => {
+        <p ref={boundaryStatus} role="status" className="text-xs empty:hidden" />
+      </div>
+        {selectedCoordinate && <Button type="button" size="sm" className="absolute right-3 bottom-9 z-10" variant="outline" disabled={status !== 'ready'} onClick={() => {
           if (sdk.current && isValidCoordinate(selectedCoordinate)) map.current?.panTo?.(new sdk.current.LatLng(selectedCoordinate.lat, selectedCoordinate.lng))
         }}>선택 위치로 이동</Button>}
-        <p className="text-xs text-muted-foreground">서울 · 카페 반경 500m</p>
-      </div>
-      </div>
     </div>
   )
 }

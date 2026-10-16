@@ -56,12 +56,13 @@ class OpenApiTests {
         verifyNoInteractions(jdbc);
     }
 
-    @Test void generatesExactlySevenGetOperationsAndValidSchemaReferences() {
+    @Test void generatesExactlyTenGetOperationsAndValidSchemaReferences() {
         assertThat(document.path("openapi").asText()).startsWith("3.1.");
         assertThat(document.path("info").path("title").asText()).isEqualTo("RecycleYoungs API");
         assertThat(names(document.path("paths"))).containsExactlyInAnyOrder(
             "/api/admin-dongs", "/api/industries", "/api/quarters", "/api/admin-dong-stats",
-            "/api/admin-dong-trends", "/api/locations/resolve", "/api/nearby-stores");
+            "/api/admin-dong-trends", "/api/locations/resolve", "/api/nearby-stores", "/api/regions",
+            "/api/regions/admin-dongs/{dongCode}/boundary", "/api/cafe-consumption-scores", "/api/cafe-change-scores");
         document.path("paths").properties().forEach(entry -> {
             assertThat(names(entry.getValue())).containsExactly("get");
             var operation = entry.getValue().path("get");
@@ -156,8 +157,8 @@ class OpenApiTests {
     @Test void generatedDocumentParsesAsOpenApiModel() throws Exception {
         var parsed = io.swagger.v3.core.util.Json31.mapper().readValue(document.toString(), io.swagger.v3.oas.models.OpenAPI.class);
         assertThat(parsed.getOpenapi()).startsWith("3.1.");
-        assertThat(parsed.getPaths()).hasSize(7);
-        assertThat(parsed.getComponents().getSchemas()).hasSize(21);
+        assertThat(parsed.getPaths()).hasSize(11);
+        assertThat(parsed.getComponents().getSchemas()).hasSize(document.path("components").path("schemas").size());
     }
 
     @Test void servesSwaggerHtmlAssetsAndSpecificationOverRealLoopbackHttp() throws Exception {
@@ -180,7 +181,7 @@ class OpenApiTests {
             var spec = http(client, config.path("url").asText());
             assertThat(spec.statusCode()).isEqualTo(200);
             var liveDocument = JsonMapper.builder().build().readTree(spec.body());
-            assertThat(liveDocument.path("paths").size()).isEqualTo(7);
+            assertThat(liveDocument.path("paths").size()).isEqualTo(11);
             assertThat(liveDocument.path("info").path("title").asText()).isEqualTo("RecycleYoungs API");
         }
         verifyNoInteractions(jdbc);
@@ -194,11 +195,12 @@ class OpenApiTests {
 
     @Test void businessApiRoutesKeepTheirOriginalPrefix() throws Exception {
         for (var path : names(document.path("paths"))) {
-            var response = mvc.perform(get(path).param("undefined", "value"))
+            var concrete = path.replace("{dongCode}", "11110515");
+            var response = mvc.perform(get(concrete).param("undefined", "value"))
                 .andExpect(status().isBadRequest()).andReturn().getResponse();
             assertThat(JsonMapper.builder().build().readTree(response.getContentAsString()).path("code").asText())
                 .isEqualTo("INVALID_PARAMETER");
-            mvc.perform(get(path.replaceFirst("/api/", "/api/api/"))).andExpect(status().isNotFound());
+            mvc.perform(get(concrete.replaceFirst("/api/", "/api/api/"))).andExpect(status().isNotFound());
         }
         verifyNoInteractions(jdbc);
     }

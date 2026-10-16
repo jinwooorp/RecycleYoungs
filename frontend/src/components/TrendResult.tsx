@@ -1,6 +1,10 @@
 import type { AdminDongTrend, SalesStats, StoreStats } from '../types/api'
 import { formatCount, formatDecimal } from '../lib/formatStats'
 import { Card, CardContent } from '@/components/ui/card'
+import { useState } from 'react'
+import { NativeSelect } from './ui/native-select'
+import { Button } from './ui/button'
+import { Dialog } from './ui/dialog'
 
 const storeMetrics: { key: keyof StoreStats; label: string }[] = [
   { key: 'storeCount', label: '점포 수' },
@@ -17,6 +21,27 @@ const salesMetrics: { key: keyof SalesStats; label: string; unit: '원' | '건' 
 ]
 
 export function TrendResult({ trend }: { trend: AdminDongTrend }) {
+  const [metric, setMetric] = useState('transactionCount')
+  const [open, setOpen] = useState(false)
+  const store = storeMetrics.find(m => m.key === metric)
+  const sales = salesMetrics.find(m => m.key === metric)
+  return <section className="result" aria-label="분기 추세 요약">
+    <h2>2025년 4개 분기 추세</h2>
+    <label htmlFor="trend-metric" className="text-sm">추세 지표</label>
+    <NativeSelect id="trend-metric" value={metric} onChange={e => setMetric(e.target.value)}>
+      {[...storeMetrics, ...salesMetrics].map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+    </NativeSelect>
+    <dl className="mt-3 divide-y divide-border">{trend.quarters.map(q => <div key={q.quarter.code} className="py-3">
+      <dt className="text-sm text-muted-foreground">{q.quarter.label}</dt>
+      <dd className="mt-1 break-all font-semibold tabular-nums">{store ? q.storeStats ? formatCount(q.storeStats[store.key]) : '자료 없음'
+        : sales && q.salesStats ? formatDecimal(q.salesStats[sales.key], sales.unit) : '자료 없음'}</dd>
+    </div>)}</dl>
+    <Button type="button" variant="outline" onClick={() => setOpen(true)}>추세 자세히 보기</Button>
+    <Dialog open={open} onClose={() => setOpen(false)} labelledBy="trend-title" closeLabel="추세 닫기">{open && <WideTrendResult trend={trend} />}</Dialog>
+  </section>
+}
+
+function WideTrendResult({ trend }: { trend: AdminDongTrend }) {
   const { dong, industry, quarters } = trend
   const empty = quarters.every(item => item.storeStats === null && item.salesStats === null)
   return (

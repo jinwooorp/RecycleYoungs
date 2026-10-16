@@ -71,6 +71,22 @@ public class AdminDongRepository {
                            Integer closingStoreCount, Integer franchiseStoreCount) {}
     public record SalesRow(Long salesAmount, Long transactionCount, Long weekdaySalesAmount, Long weekendSalesAmount) {}
 
+    List<String> supportedDongs(String sourceCode) {
+        return jdbc.sql("""
+            SELECT dong_code FROM store_stats_dong WHERE source_industry_code = :source
+            UNION SELECT dong_code FROM sales_dong WHERE source_industry_code = :source
+            """).param("source", sourceCode).query(String.class).list();
+    }
+
+    List<ConsumptionScore.Row> consumptionRows(String sourceCode, String quarter) {
+        return jdbc.sql("""
+            SELECT dong_code, transaction_count FROM sales_dong
+            WHERE source_industry_code = :source AND quarter_code = :quarter AND dong_code ~ '^11[0-9]{6}$'
+            ORDER BY dong_code
+            """).param("source", sourceCode).param("quarter", Integer.parseInt(quarter))
+            .query((rs, n) -> new ConsumptionScore.Row(rs.getString("dong_code"), rs.getObject("transaction_count", Long.class))).list();
+    }
+
     public StoreRow store(String dong, String sourceCode, String quarter) {
         var rows = jdbc.sql("""
             SELECT store_count, similar_store_count, opening_store_count, closing_store_count, franchise_store_count

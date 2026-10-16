@@ -20,9 +20,9 @@ const buttonVariants = cva(
 )
 
 function Button({ className, variant, size = 'default', asChild = false, ...props }:
-  ComponentProps<'button'> & VariantProps<typeof buttonVariants> & { asChild?: boolean; size?: 'default' | 'sm' | 'nav' }) {
+  ComponentProps<'button'> & VariantProps<typeof buttonVariants> & { asChild?: boolean; size?: 'default' | 'sm' | 'nav' | 'icon' }) {
   const Comp = asChild ? Slot : 'button'
-  return <Comp data-slot="button" className={cn(buttonVariants({ variant }), 'min-h-11 py-2', size === 'nav' ? 'min-w-0 px-1 text-sm sm:px-3' : size === 'sm' ? 'px-3 text-sm' : 'px-5', className)} {...props} />
+  return <Comp data-slot="button" className={cn(buttonVariants({ variant }), 'min-h-11 py-2', size === 'icon' ? 'size-11 p-0' : size === 'nav' ? 'min-w-0 px-1 text-sm sm:px-3' : size === 'sm' ? 'px-3 text-sm' : 'px-5', className)} {...props} />
 }
 
 export { Button }

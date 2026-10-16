@@ -11,7 +11,9 @@ export interface KakaoMapInstance {
   setCenter?(position: KakaoLatLng): void
   addControl?(control: object, position: number): void
   removeControl?(control: object): void
+  setBounds?(bounds: KakaoBounds, top?: number, right?: number, bottom?: number, left?: number): void
 }
+export interface KakaoBounds { extend(position: KakaoLatLng): void }
 
 export interface KakaoCircle {
   setMap(map: KakaoMapInstance | null): void
@@ -35,6 +37,8 @@ export interface KakaoMapsSDK {
   Map: new (container: HTMLElement, options: { center: KakaoLatLng; level: number }) => KakaoMapInstance
   LatLng: new (lat: number, lng: number) => KakaoLatLng
   Marker: new (options: { position: KakaoLatLng; map: KakaoMapInstance }) => KakaoMarker
+  LatLngBounds?: new () => KakaoBounds
+  Polygon?: new (options: { map: KakaoMapInstance; path: KakaoLatLng[][]; strokeWeight: number; strokeColor: string; strokeOpacity: number; fillColor: string; fillOpacity: number; zIndex: number }) => KakaoOverlay
   Circle?: new (options: { map: KakaoMapInstance; center: KakaoLatLng; radius: number; strokeWeight: number; strokeColor: string; strokeOpacity: number; fillColor: string; fillOpacity: number }) => KakaoCircle
   CustomOverlay?: new (options: { map: KakaoMapInstance; position: KakaoLatLng; content: HTMLElement; clickable: boolean; yAnchor: number; zIndex: number }) => KakaoOverlay
   ZoomControl?: new () => object

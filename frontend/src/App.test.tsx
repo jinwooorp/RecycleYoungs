@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { normalTrend } from './test/trendFixture'
 import { createKakaoMapsMock } from './test/kakaoMapsMock'
+import { regionFixtureResponse, openStatisticsPanel, chooseRegion, showMap } from './test/regionFixture'
 
 const dongs = [
   { code: '11110515', name: '청운효자동' },
@@ -27,6 +28,7 @@ beforeEach(() => {
   statsResponse = async () => json(normal)
   trendResponse = async () => json(normalTrend)
   fetchMock.mockReset().mockImplementation(async (input) => {
+    const region = regionFixtureResponse(input); if (region) return region
     const path = String(input)
     if (path === '/api/admin-dongs') return json(dongs)
     if (path === '/api/industries') return json(industries)
@@ -40,21 +42,20 @@ beforeEach(() => {
 
 function render(ui: Parameters<typeof renderView>[0]) {
   const view = renderView(ui)
-  fireEvent.click(screen.getByRole('button', { name: '행정동 직접 조회' }))
+  openStatisticsPanel()
   return view
 }
 
 async function ready() {
-  await waitFor(() => expect(screen.getByLabelText('행정동')).toBeEnabled())
+  await waitFor(() => expect(screen.getByLabelText('자치구')).toBeEnabled())
 }
 function choose(dong = '11110515') {
-  fireEvent.change(screen.getByLabelText('행정동'), { target: { value: dong } })
-  fireEvent.change(screen.getByLabelText('분기'), { target: { value: '20251' } })
+  chooseRegion(dong)
 }
 async function search() {
   await ready()
   choose()
-  fireEvent.click(screen.getByRole('button', { name: '조회하기' }))
+  await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => String(u).startsWith('/api/admin-dong-stats?'))).toBe(true))
 }
 async function details(dong = '청운효자동') {
   return within(await screen.findByRole('region', { name: `${dong} · 카페` }))
@@ -76,13 +77,16 @@ describe('행정동 통계 화면', () => {
     render(<App />)
     await ready()
     await waitFor(() => expect(map.listeners.size).toBe(1))
-    expect(within(screen.getByRole('region', { name: '선택 위치 요약' })).getByText('지도에서 위치를 선택하세요')).toBeInTheDocument()
+    showMap()
+    expect(within(screen.getByRole('region', { name: '선택 지역 분석 요약' })).getByText('지도에서 지역이나 위치를 선택하세요')).toBeInTheDocument()
+    openStatisticsPanel()
     expect(map.markers).toHaveLength(0)
     await search()
     expect(await screen.findByRole('heading', { name: '청운효자동 · 카페' })).toBeInTheDocument()
     const calls = fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/admin-dong-')).length
+    showMap()
     act(() => map.click(37.57123456789, 126.98123456789))
-    fireEvent.click(screen.getByRole('button', { name: '지도 탐색' }))
+    showMap()
     const region = within(screen.getByRole('region', { name: '창업 후보 위치 선택' }))
     expect(region.queryByText('37.571235')).not.toBeInTheDocument()
     expect(region.queryByText('126.981235')).not.toBeInTheDocument()
@@ -99,22 +103,20 @@ describe('행정동 통계 화면', () => {
     render(<App />)
     expect(screen.getByText('조회 조건을 불러오는 중입니다.')).toBeInTheDocument()
     expect(screen.getByLabelText('행정동')).toBeDisabled()
-    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/admin-dongs', '/api/industries', '/api/quarters'])
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/admin-dongs', '/api/industries', '/api/quarters', '/api/regions'])
   })
 
-  it('카페를 고정하고 행정동·분기를 명시적으로 선택해야 조회할 수 있다', async () => {
+  it('카페와 지원 최신 분기를 사용하고 지역 검색을 확정해야 조회한다', async () => {
     render(<App />)
     await ready()
-    expect(screen.getByRole('option', { name: '청운효자동' })).toHaveValue('11110515')
+    fireEvent.change(screen.getByLabelText('자치구'), { target: { value: '11110' } })
+    expect(screen.getByRole('option', { name: '청운효자동', hidden: true })).toHaveValue('11110515')
     expect(screen.queryByRole('combobox', { name: '업종' })).not.toBeInTheDocument()
     expect(within(screen.getByRole('region', { name: '조회 조건' })).getByRole('option', { name: '2025년 1분기' })).toHaveValue('20251')
     expect(screen.getByLabelText('행정동')).toHaveValue('')
     expect(screen.getByRole('button', { name: '조회하기' })).toBeDisabled()
     choose()
-    expect(screen.getByRole('button', { name: '조회하기' })).toBeEnabled()
-    expect(fetchMock).toHaveBeenCalledTimes(3)
-    expect(screen.getByText('조회하기를 눌러 통계를 확인하세요.')).toBeInTheDocument()
-    expect(screen.queryByText('행정동과 분기를 선택한 후 조회하기를 눌러 주세요.')).not.toBeInTheDocument()
+    await screen.findByRole('heading', { name: '청운효자동 · 카페' })
   })
 
   it('code query로 조회하고 정상 값과 기준 조건을 표시한다', async () => {
@@ -221,7 +223,7 @@ describe('행정동 통계 화면', () => {
   })
 
   it('빈 lookup은 실패가 아니라 선택 가능한 조건이 없는 상태다', async () => {
-    fetchMock.mockImplementation(async () => json([]))
+    fetchMock.mockImplementation(async input => regionFixtureResponse(input) ?? json([]))
     render(<App />)
     expect(await screen.findByText('현재 조회 가능한 조건이 없습니다.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '조회하기' })).toBeDisabled()
@@ -231,9 +233,9 @@ describe('행정동 통계 화면', () => {
   it('lookup 오류는 조건 선택을 막고 다시 시도할 수 있다', async () => {
     fetchMock.mockRejectedValueOnce(new TypeError('offline'))
     render(<App />)
-    expect(await screen.findByRole('alert')).toHaveTextContent('조회 조건을 불러오지 못했습니다.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('분석 조건 목록을 불러오지 못했습니다.')
     expect(screen.getByLabelText('행정동')).toBeDisabled()
-    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+    fireEvent.click(screen.getByRole('button', { name: '조회 조건 다시 시도' }))
     await ready()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
@@ -259,16 +261,15 @@ describe('행정동 통계 화면', () => {
     await search()
     const oldSignal = signalFor('stats')
     const oldTrendSignal = signalFor('trends')
-    fireEvent.change(screen.getByLabelText('행정동'), { target: { value: '11260550' } })
-    expect(oldSignal?.aborted).toBe(true)
-    expect(oldTrendSignal?.aborted).toBe(true)
-    expect(oldTrendSignal).toBe(oldSignal)
     statsResponse = async () => json({ ...normal, dong: dongs[1], storeStats: { ...normal.storeStats, storeCount: 17 } })
     const nextTrend = structuredClone(normalTrend)
     nextTrend.dong = dongs[1]
     nextTrend.quarters.forEach((row, i) => { row.storeStats!.storeCount = [17, 16, 16, 15][i] })
     trendResponse = async () => json(nextTrend)
-    fireEvent.click(screen.getByRole('button', { name: '조회하기' }))
+    choose('11260550')
+    expect(oldSignal?.aborted).toBe(true)
+    expect(oldTrendSignal?.aborted).toBe(true)
+    expect(oldTrendSignal).toBe(oldSignal)
     await details('면목5동')
     await act(async () => { old.resolve(json(normal)); oldTrend.resolve(json(normalTrend)); await Promise.all([old.promise, oldTrend.promise]) })
     expect((await details('면목5동')).getByText('17개')).toBeInTheDocument()
@@ -290,8 +291,9 @@ describe('행정동 통계 화면', () => {
 })
 
 describe('선택 분기 상세와 고정 4분기 추세', () => {
-  const storeTable = () => screen.getByRole('table', { name: '청운효자동 카페 2025년 점포 추세' })
-  const salesTable = () => screen.getByRole('table', { name: '청운효자동 카페 2025년 추정매출 추세' })
+  const openTrend = () => { if (!screen.queryByRole('button', { name: '추세 닫기' })) fireEvent.click(screen.getByRole('button', { name: '추세 자세히 보기' })) }
+  const storeTable = () => { openTrend(); return screen.getByRole('table', { name: '청운효자동 카페 2025년 점포 추세' }) }
+  const salesTable = () => { openTrend(); return screen.getByRole('table', { name: '청운효자동 카페 2025년 추정매출 추세' }) }
 
   it('검색 한 번에서 두 요청을 병렬 시작하고 상세 분기와 고정 축을 구분한다', async () => {
     const pending = deferred<Response>()
@@ -373,7 +375,9 @@ describe('선택 분기 상세와 고정 4분기 추세', () => {
     body.quarters.forEach(row => { row.storeStats = null; row.salesStats = null; row.missingReasons = { storeStats: 'NO_ROW', salesStats: 'NO_ROW' } })
     trendResponse = async () => json(body)
     render(<App />); await search()
-    expect(await screen.findByText('2025년 네 분기 모두 점포 및 추정매출 자료가 없습니다.')).toBeInTheDocument()
+    await screen.findByRole('button', { name: '추세 자세히 보기' })
+    openTrend()
+    expect(screen.getByText('2025년 네 분기 모두 점포 및 추정매출 자료가 없습니다.')).toBeInTheDocument()
     expect(within(storeTable()).getAllByRole('columnheader')).toHaveLength(5)
     expect(within(salesTable()).getAllByRole('columnheader')).toHaveLength(5)
     expect(within(storeTable()).getAllByRole('cell').every(cell => cell.textContent === '자료 없음')).toBe(true)
@@ -411,7 +415,7 @@ describe('선택 분기 상세와 고정 4분기 추세', () => {
     render(<App />); await search()
     await details()
     expect(screen.getByRole('button', { name: '조회 중...' })).toBeDisabled()
-    fireEvent.submit(screen.getByRole('button', { name: '조회 중...' }).closest('form')!)
+    fireEvent.click(screen.getByRole('button', { name: '조회 중...' }))
     expect(fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/admin-dong-stats?'))).toHaveLength(1)
     expect(fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/admin-dong-trends?'))).toHaveLength(1)
     await act(async () => { pending.resolve(json(normalTrend)); await pending.promise })

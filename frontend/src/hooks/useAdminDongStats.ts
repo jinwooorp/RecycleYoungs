@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { ApiFailure, getAdminDongs, getAdminDongStats, getAdminDongTrend, getIndustries, getQuarters } from '../api/adminDongApi'
 import type { AdminDongStats, AdminDongTrend, Lookups, StatsQuery } from '../types/api'
 
@@ -8,14 +8,16 @@ function failure(error: unknown): ApiFailure {
   })
 }
 
-export function useAdminDongStats(locationDongCode?: string) {
+export function useAdminDongStats(locationDongCode?: string, automatic = false) {
   const [lookups, setLookups] = useState<Lookups | null>(null)
   const [lookupLoading, setLookupLoading] = useState(true)
   const [lookupError, setLookupError] = useState<ApiFailure | null>(null)
   const [lookupAttempt, setLookupAttempt] = useState(0)
   const [manualSelection, setSelection] = useState<StatsQuery>({ dongCode: '', industryCode: 'CAFE', quarterCode: '' })
+  const [quarterTouched, setQuarterTouched] = useState(false)
+  const [selectionRevision, setSelectionRevision] = useState(0)
   // Derived selection also handles a location resolving before lookup loading/retry finishes.
-  const selection = { ...manualSelection, dongCode: locationDongCode === undefined ? manualSelection.dongCode
+  const selection = { ...manualSelection, quarterCode: automatic && !quarterTouched ? lookups?.quarters.at(-1)?.code ?? '' : manualSelection.quarterCode, dongCode: locationDongCode === undefined ? manualSelection.dongCode
     : lookups?.adminDongs.some(dong => dong.code === locationDongCode) ? locationDongCode : '' }
   const [stats, setStats] = useState<AdminDongStats | null>(null)
   const [statsLoading, setStatsLoading] = useState(false)
@@ -53,6 +55,8 @@ export function useAdminDongStats(locationDongCode?: string) {
 
   function changeSelection(field: keyof StatsQuery, value: string) {
     if (field === 'industryCode') return
+    if (field === 'quarterCode') setQuarterTouched(true)
+    setSelectionRevision(n => n + 1)
     searchRequest.current?.abort()
     searchRequest.current = null
     setSelection(current => ({ ...current, [field]: value, industryCode: 'CAFE' }))
@@ -91,6 +95,14 @@ export function useAdminDongStats(locationDongCode?: string) {
     await Promise.allSettled([statsTask, trendTask])
     if (current()) searchRequest.current = null
   }
+
+  const automaticSearch = useEffectEvent(() => { void search() })
+  useEffect(() => {
+    let cancelled = false
+    // Coalesce a region/quarter change into one request after React commits it.
+    if (automatic) queueMicrotask(() => { if (!cancelled) automaticSearch() })
+    return () => { cancelled = true }
+  }, [automatic, selection.dongCode, selection.quarterCode, selectionRevision, lookups])
 
   return { lookups, lookupLoading, lookupError, retryLookups, selection, changeSelection, search,
     stats, statsLoading, statsError, trend, trendLoading, trendError, searchLoading: statsLoading || trendLoading }

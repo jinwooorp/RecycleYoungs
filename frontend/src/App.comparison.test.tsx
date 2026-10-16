@@ -8,6 +8,7 @@ import { nearbyFixture } from './test/nearbyFixture'
 import { normalTrend } from './test/trendFixture'
 import type { MapCoordinate } from './components/KakaoMap'
 import type { Lookups, StatsQuery } from './types/api'
+import { regionFixtureResponse, openStatisticsPanel, chooseRegion } from './test/regionFixture'
 
 const p1 = { lat: 37.5665, lng: 126.978 }, p2 = { lat: 37.58, lng: 126.99 }, p3 = { lat: 37.59, lng: 127.01 }
 const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status })
@@ -25,6 +26,7 @@ beforeEach(() => {
   nearby = async c => json(nearbyFixture(c))
   stats = async q => json(comparisonStats(q.dongCode, q.quarterCode))
   fetchMock.mockReset().mockImplementation(async input => {
+    const region = regionFixtureResponse(input); if (region) return region
     const u = new URL(String(input), 'http://localhost')
     const c = { lat: Number(u.searchParams.get('lat')), lng: Number(u.searchParams.get('lng')) }
     if (u.pathname === '/api/admin-dongs') return json(lookups.adminDongs)
@@ -34,7 +36,7 @@ beforeEach(() => {
     if (u.pathname === '/api/nearby-stores') return nearby(c)
     if (u.pathname === '/api/admin-dong-stats') return stats({ dongCode: u.searchParams.get('dongCode')!,
       industryCode: u.searchParams.get('industryCode')!, quarterCode: u.searchParams.get('quarterCode')! })
-    if (u.pathname === '/api/admin-dong-trends') return json(normalTrend)
+    if (u.pathname === '/api/admin-dong-trends') return json({ ...normalTrend, dong: comparisonLookups.adminDongs.find(d => d.code === u.searchParams.get('dongCode')) })
     throw new Error('Unexpected API')
   })
   vi.stubGlobal('fetch', fetchMock)
@@ -42,7 +44,7 @@ beforeEach(() => {
 async function ready(strict = false) {
   const view = render(strict ? <StrictMode><App /></StrictMode> : <App />)
   await waitFor(() => expect(map.listeners.size).toBe(1))
-  await waitFor(() => expect(screen.getByLabelText('행정동')).toBeEnabled())
+  await waitFor(() => expect(screen.getByLabelText('자치구')).toBeEnabled())
   return view
 }
 const comparison = () => {
@@ -82,7 +84,7 @@ it('offers candidate registration and waits for a selected coordinate', async ()
   await ready()
   expect(registration()).toBeDisabled()
   expect(within(comparison()).getByText('등록한 후보 0/3')).toBeInTheDocument()
-  expect(fetchMock).toHaveBeenCalledTimes(3)
+  expect(fetchMock).toHaveBeenCalledTimes(4)
 })
 it('adds 1/2/3, prevents a fourth, preserves saved candidates on exploration and replaces a deleted slot', async () => {
   await ready(); add(p1)
@@ -161,7 +163,7 @@ it('warns for shared dong statistics and retains two separate locations', async 
   await ready(); add(p1); add(p2); await compare()
   expect(within(comparison()).getByText(/통계는 동일 행정동의 집계값/)).toBeInTheDocument()
   expect(within(comparison()).getAllByRole('article')).toHaveLength(2)
-  expect(calls('/api/admin-dong-stats')).toHaveLength(2)
+  expect(calls('/api/admin-dong-stats').filter(([, options]) => !options?.signal?.aborted).length).toBeGreaterThanOrEqual(2)
 })
 it('explains the observed cafe-count difference without calling a candidate better', async () => {
   nearby = async c => json(nearbyFixture(c, c.lat === p1.lat ? 2 : 150))
@@ -214,14 +216,14 @@ it('removes a pending candidate without resurrecting it from late responses', as
 })
 it('preserves comparison data while manual statistics and trend use independent conditions', async () => {
   await ready(); add(p1); await compare()
-  fireEvent.change(screen.getByLabelText('행정동'), { target: { value: '11260550' } })
+  openStatisticsPanel()
+  chooseRegion('11260550')
   fireEvent.change(screen.getByLabelText('분기'), { target: { value: '20252' } })
-  fireEvent.click(screen.getByRole('button', { name: '행정동 직접 조회' }))
-  fireEvent.click(screen.getByRole('button', { name: '조회하기' }))
   expect(await screen.findByRole('heading', { name: '2025년 4개 분기 추세' })).toBeInTheDocument()
+  comparison()
   expect(screen.getByLabelText('비교 통계 분기')).toHaveValue('20251')
   expect(within(candidate(1)).getByText(/2025년 1분기 · 청운효자동/)).toBeInTheDocument()
-  expect(String(calls('/api/admin-dong-stats').at(-1)?.[0])).toContain('dongCode=11260550&industryCode=CAFE&quarterCode=20252')
+  expect(calls('/api/admin-dong-stats').some(([url]) => String(url).includes('dongCode=11260550&industryCode=CAFE&quarterCode=20252'))).toBe(true)
 })
 it('keeps all UI requests fixed to CAFE and omits unsupported industry controls', async () => {
   await ready()

@@ -10,7 +10,7 @@ export function useLocationAnalysis() {
   const nearby = useNearbyStores()
   const [mode, setMode] = useState<'manual' | 'location'>('manual')
   const resolvedCode = location.result?.adminDong.resolvedDong?.code ?? ''
-  const stats = useAdminDongStats(mode === 'location' ? resolvedCode : undefined)
+  const stats = useAdminDongStats(mode === 'location' ? resolvedCode : undefined, true)
 
   function selectCoordinate(coordinate: MapCoordinate) {
     setMode('location')
@@ -33,5 +33,10 @@ export function useLocationAnalysis() {
   function retryNearby() {
     if (location.coordinate) nearby.resolve(location.coordinate)
   }
-  return { ...stats, location, nearby, mode, selectCoordinate, changeSelection, retryLocation, retryNearby }
+  function selectRegion(code: string) {
+    location.clear(); nearby.clear(); setMode('manual')
+    if (!stats.selection.quarterCode) stats.changeSelection('quarterCode', stats.lookups?.quarters.at(-1)?.code ?? '')
+    stats.changeSelection('dongCode', code)
+  }
+  return { ...stats, location, nearby, mode, selectCoordinate, selectRegion, changeSelection, retryLocation, retryNearby }
 }

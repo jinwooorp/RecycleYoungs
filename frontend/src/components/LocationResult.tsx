@@ -40,7 +40,7 @@ export function LocationResult({ result, loading, error, lookupLoading, lookupEr
       <p className="text-sm">{quality(adminDong.resolvedDong)}{adminDong.resolvedDong.qualityDetail && ` · ${adminDong.resolvedDong.qualityDetail}`}</p>
       <p>{manual ? '통계 조회 조건은 직접 선택한 행정동을 사용합니다.' : lookupLoading ? '통계 조회 조건 목록을 확인하는 중입니다.'
         : lookupError ? '조회 조건 목록을 불러오지 못해 통계 연결을 확인할 수 없습니다.'
-          : linked ? '조회 조건에 해당 행정동이 반영됐습니다. 분기를 확인한 뒤 조회하기를 눌러 주세요.'
+          : linked ? '조회 조건에 해당 행정동이 반영됐습니다. 지원 분기의 통계를 자동으로 조회합니다.'
             : '판정된 행정동의 통계 연결 자료가 현재 조회 조건 목록에 없습니다. 다른 행정동으로 대체하지 않습니다.'}</p>
     </>}
     {adminDong.status === 'AMBIGUOUS_BOUNDARY' && <>

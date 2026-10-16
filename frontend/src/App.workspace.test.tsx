@@ -5,6 +5,7 @@ import { createKakaoMapsMock } from './test/kakaoMapsMock'
 import { comparisonLocation, comparisonLookups, comparisonStats } from './test/comparisonFixture'
 import { nearbyFixture } from './test/nearbyFixture'
 import { normalTrend } from './test/trendFixture'
+import { regionFixtureResponse, openStatisticsPanel, chooseRegion, showMap } from './test/regionFixture'
 
 let map: ReturnType<typeof createKakaoMapsMock>
 beforeEach(() => {
@@ -12,6 +13,7 @@ beforeEach(() => {
   vi.stubEnv('VITE_KAKAO_MAP_APP_KEY', 'test-key')
   vi.stubGlobal('kakao', { maps: map.sdk })
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const region = regionFixtureResponse(input); if (region) return region
     const u = new URL(String(input), 'http://localhost')
     const point = { lat: Number(u.searchParams.get('lat')), lng: Number(u.searchParams.get('lng')) }
     const data: Record<string, unknown> = {
@@ -29,13 +31,12 @@ beforeEach(() => {
 
 it('provides cafe-only manual requests even when the catalog contains other industries', async () => {
   render(<App />)
-  fireEvent.click(screen.getByRole('button', { name: '행정동 직접 조회' }))
-  await waitFor(() => expect(screen.getByLabelText('행정동')).toBeEnabled())
+  openStatisticsPanel()
+  await waitFor(() => expect(screen.getByLabelText('자치구')).toBeEnabled())
   expect(screen.queryByRole('combobox', { name: '업종' })).not.toBeInTheDocument()
   expect(screen.queryByRole('option', { name: '주점' })).not.toBeInTheDocument()
-  fireEvent.change(screen.getByLabelText('행정동'), { target: { value: '11110515' } })
+  chooseRegion()
   fireEvent.change(screen.getByLabelText('분기'), { target: { value: '20251' } })
-  fireEvent.click(screen.getByRole('button', { name: '조회하기' }))
   await screen.findByRole('heading', { name: '청운효자동 · 카페' })
   expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).includes('industryCode=CAFE'))).toBe(true)
   expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).includes('industryCode=PUB'))).toBe(false)
@@ -56,14 +57,13 @@ it('names saved candidates by their resolved region and shows unavailable scorin
   expect(within(dialog).getByRole('button', { name: '같은 분기로 후보 분석' })).toBeInTheDocument()
 })
 
-it('keeps the map and selected point alive across panel tabs and dialog close', async () => {
+it('keeps the map and selected point alive across detail navigation and dialog close', async () => {
   render(<App />)
   await waitFor(() => expect(map.listeners.size).toBe(1))
   act(() => map.click(37.5665, 126.978))
+  openStatisticsPanel()
   await screen.findByText('합성 카페 1')
-  fireEvent.click(screen.getByRole('tab', { name: '주변 카페' }))
-  fireEvent.click(screen.getByRole('tab', { name: '행정동 통계' }))
-  fireEvent.click(screen.getByRole('tab', { name: '위치 요약' }))
+  showMap()
   const trigger = screen.getByRole('button', { name: '후보 비교' })
   trigger.focus()
   fireEvent.click(trigger)
@@ -94,17 +94,19 @@ it('never substitutes another industry when CAFE is absent from the catalog', as
   vi.mocked(fetch).mockImplementation((input, options) => String(input) === '/api/industries'
     ? Promise.resolve(new Response(JSON.stringify([{ code: 'PUB', name: '주점' }]))) : original(input, options))
   render(<App />)
-  fireEvent.click(screen.getByRole('button', { name: '행정동 직접 조회' }))
+  openStatisticsPanel()
   await screen.findByText('현재 조회 가능한 조건이 없습니다.')
   expect(screen.getByRole('button', { name: '조회하기' })).toBeDisabled()
   expect(screen.queryByRole('option', { name: '주점' })).not.toBeInTheDocument()
   expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).startsWith('/api/admin-dong-stats'))).toBe(false)
 })
 
-it('opens a collapsed analysis panel when navigating to manual statistics', async () => {
+it('places the opening menu on the map only while the panel is collapsed', async () => {
   render(<App />)
-  fireEvent.click(screen.getByRole('button', { name: '접기' }))
-  fireEvent.click(screen.getByRole('button', { name: '행정동 직접 조회' }))
+  fireEvent.click(screen.getByRole('button', { name: '분석 패널 닫기' }))
+  expect(screen.queryByRole('button', { name: '분석 패널 닫기' })).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '분석 패널 열기' }))
   await waitFor(() => expect(screen.getByLabelText('행정동')).toBeVisible())
-  expect(screen.getByRole('button', { name: '접기' })).toHaveAttribute('aria-expanded', 'true')
+  expect(screen.getByRole('button', { name: '분석 패널 닫기' })).toHaveAttribute('aria-expanded', 'true')
+  expect(screen.queryByRole('button', { name: '분석 패널 열기' })).not.toBeInTheDocument()
 })

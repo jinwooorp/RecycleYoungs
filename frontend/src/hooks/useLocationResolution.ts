@@ -38,5 +38,9 @@ export function useLocationResolution() {
       .finally(() => { if (current()) { setLoading(false); request.current = null } })
   }
 
-  return { coordinate, result, loading, error, resolve }
+  function clear() {
+    request.current?.abort(); request.current = null; requestId.current++
+    setCoordinate(null); setResult(null); setLoading(false); setError(null)
+  }
+  return { coordinate, result, loading, error, resolve, clear }
 }

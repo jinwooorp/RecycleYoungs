@@ -14,7 +14,7 @@ export function StatsResult({ stats }: { stats: AdminDongStats }) {
         <p>{quarter.label} 기준 원본 보고값</p>
       </header>
       {empty ? <p className="notice" role="status">해당 조건의 점포 및 추정매출 자료가 없습니다.</p> : (
-        <div className="grid gap-5 min-[761px]:grid-cols-2">
+        <div className="stats-summary grid gap-4">
           <Card asChild className="min-w-0">
             <section className="stats-panel" aria-labelledby="store-title">
               <CardContent><h3 id="store-title">점포 현황</h3>

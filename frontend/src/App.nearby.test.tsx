@@ -7,6 +7,7 @@ import { resolvedLocation } from './test/locationFixture'
 import { nearbyFixture } from './test/nearbyFixture'
 import { normalTrend } from './test/trendFixture'
 import type { MapCoordinate } from './components/KakaoMap'
+import { regionFixtureResponse, openStatisticsPanel, showMap } from './test/regionFixture'
 
 const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status })
 const fetchMock = vi.fn<typeof fetch>()
@@ -20,6 +21,7 @@ beforeEach(() => {
   nearby = async c => json(nearbyFixture(c))
   location = async c => json({ ...resolvedLocation, coordinate: c })
   fetchMock.mockReset().mockImplementation(async input => {
+    const region = regionFixtureResponse(input); if (region) return region
     const u = new URL(String(input), 'http://localhost')
     const c = { lat: Number(u.searchParams.get('lat')), lng: Number(u.searchParams.get('lng')) }
     if (u.pathname === '/api/nearby-stores') return nearby(c)
@@ -36,10 +38,10 @@ beforeEach(() => {
 async function ready(strict = false) {
   const view = render(strict ? <StrictMode><App /></StrictMode> : <App />)
   await waitFor(() => expect(map.listeners.size).toBe(1))
-  await waitFor(() => expect(screen.getByLabelText('행정동')).toBeEnabled())
+  await waitFor(() => expect(screen.getByLabelText('자치구')).toBeEnabled())
   return view
 }
-const click = (lat = 37.5665, lng = 126.978) => act(() => map.click(lat, lng))
+const click = (lat = 37.5665, lng = 126.978) => { showMap(); act(() => map.click(lat, lng)); openStatisticsPanel() }
 const calls = () => fetchMock.mock.calls.filter(([u]) => String(u).startsWith('/api/nearby-stores?'))
 function deferred<T>() {
   let resolve!: (v: T) => void; let reject!: (r: unknown) => void
@@ -133,7 +135,7 @@ it('preserves manual statistics after cafe data failure', async () => {
   await ready(); click(); await screen.findByText(/카페가 0개라는 뜻이 아닙니다/)
   fireEvent.change(screen.getByLabelText('행정동'), { target: { value: normalTrend.dong.code } })
   fireEvent.change(screen.getByLabelText('분기'), { target: { value: '20251' } })
-  fireEvent.click(screen.getByRole('button', { name: '행정동 직접 조회' }))
+  openStatisticsPanel()
   fireEvent.click(screen.getByRole('button', { name: '조회하기' }))
   await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => String(u).startsWith('/api/admin-dong-stats?'))).toBe(true))
   expect(await screen.findByRole('heading', { name: '2025년 4개 분기 추세' })).toBeInTheDocument()

@@ -5,6 +5,7 @@ import { createKakaoMapsMock } from './test/kakaoMapsMock'
 import { comparisonLocation, comparisonLookups, comparisonStats } from './test/comparisonFixture'
 import { nearbyFixture } from './test/nearbyFixture'
 import { normalTrend } from './test/trendFixture'
+import { regionFixtureResponse, openStatisticsPanel, showMap } from './test/regionFixture'
 
 let map: ReturnType<typeof createKakaoMapsMock>
 beforeEach(() => {
@@ -12,6 +13,7 @@ beforeEach(() => {
   vi.stubEnv('VITE_KAKAO_MAP_APP_KEY', 'test-key')
   vi.stubGlobal('kakao', { maps: map.sdk })
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const region = regionFixtureResponse(input); if (region) return region
     const u = new URL(String(input), 'http://localhost')
     const coordinate = { lat: Number(u.searchParams.get('lat')), lng: Number(u.searchParams.get('lng')) }
     let body: unknown
@@ -33,8 +35,8 @@ it('keeps registration next to the selected location, and preserves candidates a
   expect(screen.getByRole('button', { name: '지도 탐색' })).toHaveAttribute('aria-current', 'page')
   expect(screen.queryByRole('button', { name: '조회하기' })).not.toBeInTheDocument()
   act(() => map.click(37.5665, 126.978))
-  await screen.findByText('합성 카페 1')
-  const panel = screen.getByRole('region', { name: '선택 위치 요약' })
+  await screen.findByRole('heading', { name: '청운효자동' })
+  const panel = screen.getByRole('region', { name: '선택 지역 분석 요약' })
   fireEvent.click(within(panel).getByRole('button', { name: '후보지에 추가' }))
   fireEvent.click(screen.getByRole('button', { name: '후보 비교' }))
   await waitFor(() => expect(screen.getByLabelText('비교 통계 분기')).toBeEnabled())
@@ -42,9 +44,9 @@ it('keeps registration next to the selected location, and preserves candidates a
   fireEvent.click(screen.getByRole('button', { name: '같은 분기로 후보 분석' }))
   const table = screen.getByRole('table', { name: '후보별 동일 지표 비교' })
   await waitFor(() => expect(within(table).getByText('114개')).toBeInTheDocument())
-  fireEvent.click(screen.getByRole('button', { name: '행정동 직접 조회' }))
-  fireEvent.click(screen.getByRole('button', { name: '지도 탐색' }))
+  openStatisticsPanel()
   expect(screen.getByText('합성 카페 1')).toBeInTheDocument()
+  showMap()
   expect(screen.getByRole('button', { name: '후보지에 추가' })).toBeDisabled()
   fireEvent.click(screen.getByRole('button', { name: '후보 비교' }))
   expect(screen.getByLabelText('비교 통계 분기')).toHaveValue('20251')
@@ -54,21 +56,21 @@ it('keeps registration next to the selected location, and preserves candidates a
 it('offers manual statistics even when the map key is unavailable', async () => {
   vi.stubEnv('VITE_KAKAO_MAP_APP_KEY', '')
   render(<App />)
-  fireEvent.click(screen.getByRole('button', { name: '행정동 직접 조회' }))
-  await waitFor(() => expect(screen.getByLabelText('행정동')).toBeEnabled())
+  openStatisticsPanel()
+  await waitFor(() => expect(screen.getByLabelText('자치구')).toBeEnabled())
   expect(screen.getByRole('button', { name: '조회하기' })).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: '행정동 직접 조회' })).toHaveAttribute('aria-current', 'page')
+  expect(screen.queryByRole('button', { name: '행정동 직접 조회' })).not.toBeInTheDocument()
 })
 
-it('moves keyboard focus to the statistics tab after an in-panel action', async () => {
+it('moves keyboard focus to the detail heading after opening analysis', async () => {
   render(<App />)
   await waitFor(() => expect(map.listeners.size).toBe(1))
   act(() => map.click(37.5665, 126.978))
-  const openStatistics = screen.getByRole('button', { name: '행정동 통계 확인' })
+  const openStatistics = screen.getByRole('button', { name: '상세 분석 보기' })
   openStatistics.focus()
   fireEvent.click(openStatistics)
-  expect(screen.getByRole('tab', { name: '행정동 통계' })).toHaveFocus()
-  expect(screen.getByRole('heading', { name: '행정동 통계 직접 조회' })).toBeVisible()
+  await waitFor(() => expect(document.getElementById('detail-title')).toHaveFocus())
+  expect(screen.getByRole('heading', { name: '행정동 카페 통계' })).toBeVisible()
 })
 
 it('does not claim a map dong was applied when it is outside the supported lookup', async () => {
@@ -82,9 +84,9 @@ it('does not claim a map dong was applied when it is outside the supported looku
   render(<App />)
   await waitFor(() => expect(map.listeners.size).toBe(1))
   act(() => map.click(37.5665, 126.978))
+  openStatisticsPanel()
   await screen.findByText(/통계 연결 자료가 현재 조회 조건 목록에 없습니다/)
-  fireEvent.click(screen.getByRole('button', { name: '행정동 직접 조회' }))
   expect(screen.getByLabelText('행정동')).toHaveValue('')
   expect(screen.queryByText(/이 반영됐습니다/)).not.toBeInTheDocument()
-  expect(screen.getByText(/지도 위치의 행정동 통계를 연결할 수 없습니다/)).toBeInTheDocument()
+  expect(screen.getByText(/지도 상단에서 지역을 선택하거나/)).toBeInTheDocument()
 })

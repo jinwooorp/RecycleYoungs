@@ -29,9 +29,10 @@ function Metric({ label, value }: { label: string; value: string }) {
 const nullableCount = (v: number | null) => v === null ? '값 없음(NULL)' : formatCount(v)
 const nullableDecimal = (v: string | null, unit: '원' | '건') => v === null ? '값 없음(NULL)' : formatDecimal(v, unit)
 
-export function CandidateCard({ candidate: c, quarter, block, onRemove, onLocation, onNearby, onStats }: {
+export function CandidateCard({ candidate: c, quarter, block, onRemove, onLocation, onNearby, onStats, onMap }: {
   candidate: Candidate; quarter: string; block: StatsBlockReason | null
   onRemove: () => void; onLocation: () => void; onNearby: () => void; onStats: () => void
+  onMap?: () => void
 }) {
   const title = `후보 ${c.number}`, location = c.location.result, nearby = c.nearby.result
   const stats = !block && c.statsQuarter === quarter ? c.stats.result : null
@@ -40,6 +41,7 @@ export function CandidateCard({ candidate: c, quarter, block, onRemove, onLocati
     <header className="flex flex-wrap items-center justify-between gap-2">
       <h3 id={`${c.id}-title`} className="font-semibold">{candidateTitle(c)}</h3><Button type="button" variant="outline" onClick={onRemove} aria-label={`${title} 삭제`}>삭제</Button>
     </header>
+    {onMap && <Button type="button" variant="outline" onClick={onMap} aria-label={`${title} 지도에서 보기`}>지도에서 보기</Button>}
     <p className="text-sm text-muted-foreground">{location?.commercialArea.memberships.map(a => a.name).join(' · ') || '소속 상권 미확인'}</p>
     {location?.commercialArea.memberships.some(area => area.sourceAttributeStatus === 'CONFLICT_OBSERVED') && <Alert variant="warning" role="status">
       <AlertDescription>상권 원본 지역 속성 충돌이 있습니다. 상세 근거를 확인해 주세요.</AlertDescription>

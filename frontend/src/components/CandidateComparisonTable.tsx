@@ -3,6 +3,7 @@ import type { AdminDongStats, StoreStats, SalesStats } from '../types/api'
 import { formatCount, formatDecimal } from '../lib/formatStats'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption } from './ui/table'
 import { candidateTitle } from '../lib/candidatePresentation'
+import type { ChangeScores, ConsumptionScores } from '../types/regions'
 
 const storeMetrics: { key: keyof StoreStats; label: string }[] = [
   { key: 'storeCount', label: '행정동 점포 수' }, { key: 'similarStoreCount', label: '유사 업종 점포 수' },
@@ -14,8 +15,10 @@ const salesMetrics: { key: keyof SalesStats; label: string; unit: '원' | '건' 
   { key: 'weekdayEstimatedSalesAmount', label: '평일 추정매출', unit: '원' }, { key: 'weekendEstimatedSalesAmount', label: '주말 추정매출', unit: '원' },
 ]
 
-export function CandidateComparisonTable({ candidates, quarter, blockReason }: {
+export function CandidateComparisonTable({ candidates, quarter, blockReason, consumption, scoreLoading, scoreError, change, changeLoading, changeError }: {
   candidates: Candidate[]; quarter: string; blockReason: (candidate: Candidate) => StatsBlockReason | null
+  consumption?: ConsumptionScores | null; scoreLoading?: boolean; scoreError?: string | null
+  change?: ChangeScores | null; changeLoading?: boolean; changeError?: string | null
 }) {
   const stats = (c: Candidate) => !blockReason(c) && c.statsQuarter === quarter ? c.stats.result : null
   const metric = (c: Candidate, value: (s: AdminDongStats) => string) => {
@@ -30,6 +33,20 @@ export function CandidateComparisonTable({ candidates, quarter, blockReason }: {
         <span className="font-semibold text-foreground">{candidateTitle(c)}</span>
       </TableHead>)}</TableRow></TableHeader>
       <TableBody>
+        <TableRow><TableHead scope="row">카페 소비증감 점수 (100점)</TableHead>{candidates.map(c => <TableCell key={c.id}>{(() => {
+          if (blockReason(c)) return '조회 조건 확인 필요'
+          if (changeLoading) return '조회 중'
+          if (changeError) return '점수 조회 실패'
+          const value = change?.quarter.code === quarter ? change.items.find(i => i.dong.code === c.location.result?.adminDong.resolvedDong?.code) : null
+          return value ? value.score === null ? '산정 불가' : `${value.score}/100점 · ${value.direction === 'INCREASE' ? '+' : ''}${value.changeRate}%` : '미조회'
+        })()}</TableCell>)}</TableRow>
+        <TableRow><TableHead scope="row">카페 소비규모 점수 (100점)</TableHead>{candidates.map(c => <TableCell key={c.id}>{(() => {
+          if (blockReason(c)) return '조회 조건 확인 필요'
+          if (scoreLoading) return '조회 중'
+          if (scoreError) return '점수 조회 실패'
+          const value = consumption?.items.find(i => i.dong.code === c.location.result?.adminDong.resolvedDong?.code)
+          return value ? value.score === null ? '산정 불가' : `${value.score}/100점` : '미조회'
+        })()}</TableCell>)}</TableRow>
         <TableRow><TableHead scope="row">지역 판정</TableHead>{candidates.map(c => <TableCell key={c.id}>
           {c.location.loading ? '판정 중' : c.location.error ? '지역 판정 실패' : c.location.result?.adminDong.status === 'AMBIGUOUS_BOUNDARY' ? '경계 모호성 — 통계 연결 불가'
             : c.location.result?.adminDong.resolvedDong?.name ?? '확정 행정동 없음'}
