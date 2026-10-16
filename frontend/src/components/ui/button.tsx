@@ -11,16 +11,18 @@ const buttonVariants = cva(
       variant: {
         default: 'bg-primary text-primary-foreground enabled:hover:bg-primary/90',
         outline: 'border-input bg-background enabled:hover:bg-accent enabled:hover:text-accent-foreground',
+        secondary: 'bg-secondary text-secondary-foreground enabled:hover:bg-secondary/80',
+        ghost: 'bg-transparent text-muted-foreground enabled:hover:bg-accent enabled:hover:text-foreground',
       },
     },
     defaultVariants: { variant: 'default' },
   },
 )
 
-function Button({ className, variant, asChild = false, ...props }:
-  ComponentProps<'button'> & VariantProps<typeof buttonVariants> & { asChild?: boolean }) {
+function Button({ className, variant, size = 'default', asChild = false, ...props }:
+  ComponentProps<'button'> & VariantProps<typeof buttonVariants> & { asChild?: boolean; size?: 'default' | 'sm' | 'nav' }) {
   const Comp = asChild ? Slot : 'button'
-  return <Comp data-slot="button" className={cn(buttonVariants({ variant }), 'min-h-11 px-5 py-2', className)} {...props} />
+  return <Comp data-slot="button" className={cn(buttonVariants({ variant }), 'min-h-11 py-2', size === 'nav' ? 'min-w-0 px-1 text-sm sm:px-3' : size === 'sm' ? 'px-3 text-sm' : 'px-5', className)} {...props} />
 }
 
 export { Button }

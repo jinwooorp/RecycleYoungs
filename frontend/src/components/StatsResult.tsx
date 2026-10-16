@@ -1,5 +1,5 @@
 import type { AdminDongStats } from '../types/api'
-import { Card } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { formatCount as count, formatDecimal as decimal } from '../lib/formatStats'
 
 export function StatsResult({ stats }: { stats: AdminDongStats }) {
@@ -15,9 +15,9 @@ export function StatsResult({ stats }: { stats: AdminDongStats }) {
       </header>
       {empty ? <p className="notice" role="status">해당 조건의 점포 및 추정매출 자료가 없습니다.</p> : (
         <div className="grid gap-5 min-[761px]:grid-cols-2">
-          <Card asChild className="min-w-0 gap-0 rounded-lg p-5 min-[761px]:p-6">
+          <Card asChild className="min-w-0">
             <section className="stats-panel" aria-labelledby="store-title">
-              <h3 id="store-title">점포 현황</h3>
+              <CardContent><h3 id="store-title">점포 현황</h3>
               {storeStats === null ? <p className="empty-message">해당 조건의 점포 자료가 없습니다.</p> : (
                 <table>
                   <caption className="visually-hidden">점포 통계, 단위 개</caption>
@@ -30,11 +30,11 @@ export function StatsResult({ stats }: { stats: AdminDongStats }) {
                   </tbody>
                 </table>
               )}
-            </section>
+            </CardContent></section>
           </Card>
-          <Card asChild className="min-w-0 gap-0 rounded-lg p-5 min-[761px]:p-6">
+          <Card asChild className="min-w-0">
             <section className="stats-panel" aria-labelledby="sales-title">
-              <h3 id="sales-title">추정매출 현황</h3>
+              <CardContent><h3 id="sales-title">추정매출 현황</h3>
               {salesStats === null ? <p className="empty-message">해당 조건의 추정매출 자료가 없습니다.</p> : (
                 <table>
                   <caption className="visually-hidden">추정매출 통계, 금액 단위 원, 건수 단위 건</caption>
@@ -46,7 +46,7 @@ export function StatsResult({ stats }: { stats: AdminDongStats }) {
                   </tbody>
                 </table>
               )}
-            </section>
+            </CardContent></section>
           </Card>
         </div>
       )}

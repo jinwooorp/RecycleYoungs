@@ -3,6 +3,7 @@ import type { KakaoLatLng, KakaoMapInstance, KakaoMapMouseEvent, KakaoMapsSDK } 
 
 export function createKakaoMapsMock() {
   const listeners = new Map<KakaoMapInstance, (event: KakaoMapMouseEvent) => void>()
+  const centerListeners = new Map<KakaoMapInstance, (event: KakaoMapMouseEvent) => void>()
   const maps: KakaoMapInstance[] = []
   const markers: { position: KakaoLatLng; map: KakaoMapInstance | null; setMap: ReturnType<typeof vi.fn>; setPosition: ReturnType<typeof vi.fn> }[] = []
   const sdk: KakaoMapsSDK = {
@@ -30,14 +31,15 @@ export function createKakaoMapsMock() {
       return marker
     }),
     event: {
-      addListener: vi.fn((map, _type, handler) => { listeners.set(map, handler) }),
-      removeListener: vi.fn((map, _type, handler) => {
-        if (listeners.get(map) === handler) listeners.delete(map)
+      addListener: vi.fn((map, type, handler) => { (type === 'click' ? listeners : centerListeners).set(map, handler) }),
+      removeListener: vi.fn((map, type, handler) => {
+        const registry = type === 'click' ? listeners : centerListeners
+        if (registry.get(map) === handler) registry.delete(map)
       }),
     },
   }
   return {
-    sdk, maps, markers, listeners,
+    sdk, maps, markers, listeners, centerListeners,
     click(lat: number, lng: number) {
       for (const handler of listeners.values()) handler({ latLng: new sdk.LatLng(lat, lng) })
     },

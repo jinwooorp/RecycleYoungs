@@ -13,7 +13,7 @@ export function useAdminDongStats(locationDongCode?: string) {
   const [lookupLoading, setLookupLoading] = useState(true)
   const [lookupError, setLookupError] = useState<ApiFailure | null>(null)
   const [lookupAttempt, setLookupAttempt] = useState(0)
-  const [manualSelection, setSelection] = useState<StatsQuery>({ dongCode: '', industryCode: '', quarterCode: '' })
+  const [manualSelection, setSelection] = useState<StatsQuery>({ dongCode: '', industryCode: 'CAFE', quarterCode: '' })
   // Derived selection also handles a location resolving before lookup loading/retry finishes.
   const selection = { ...manualSelection, dongCode: locationDongCode === undefined ? manualSelection.dongCode
     : lookups?.adminDongs.some(dong => dong.code === locationDongCode) ? locationDongCode : '' }
@@ -52,9 +52,10 @@ export function useAdminDongStats(locationDongCode?: string) {
   }
 
   function changeSelection(field: keyof StatsQuery, value: string) {
+    if (field === 'industryCode') return
     searchRequest.current?.abort()
     searchRequest.current = null
-    setSelection(current => ({ ...current, [field]: value }))
+    setSelection(current => ({ ...current, [field]: value, industryCode: 'CAFE' }))
     setStats(null)
     setStatsError(null)
     setStatsLoading(false)

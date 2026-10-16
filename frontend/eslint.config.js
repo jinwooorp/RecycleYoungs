@@ -17,8 +17,18 @@ export default defineConfig([
       reactRefresh.configs.vite,
     ],
     plugins: { shadcn },
+    rules: {
+      'shadcn/no-raw-colors': 'error',
+      'shadcn/no-inline-styles': 'error',
+      'shadcn/require-static-classes': 'error',
+      'shadcn/no-restyle': ['error', { allow: ['layout'] }],
+    },
     languageOptions: {
       globals: globals.browser,
     },
+  },
+  {
+    files: ['src/components/ui/**/*.tsx'],
+    rules: { 'shadcn/no-restyle': 'off' },
   },
 ])

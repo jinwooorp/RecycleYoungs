@@ -2,6 +2,8 @@ import type { Candidate, StatsBlockReason } from '../types/comparison'
 import type { BoundaryMatch, SpatialDataset } from '../types/location'
 import { formatCount, formatDecimal } from '../lib/formatStats'
 import { Button } from './ui/button'
+import { Alert, AlertDescription } from './ui/alert'
+import { candidateTitle } from '../lib/candidatePresentation'
 
 const blocked: Record<StatsBlockReason, string> = {
   LOOKUP_LOADING: '통계 조회 조건을 확인하는 중입니다.', LOOKUP_ERROR: '조회 조건을 확인하지 못해 통계를 연결할 수 없습니다.',
@@ -36,9 +38,13 @@ export function CandidateCard({ candidate: c, quarter, block, onRemove, onLocati
   const noRow = '조회 행 없음(NO_ROW)'
   return <article aria-labelledby={`${c.id}-title`} className="min-w-0 rounded-lg border bg-background p-4 flex flex-col gap-4">
     <header className="flex flex-wrap items-center justify-between gap-2">
-      <h3 id={`${c.id}-title`}>{title}</h3><Button type="button" variant="outline" onClick={onRemove} aria-label={`${title} 삭제`}>삭제</Button>
+      <h3 id={`${c.id}-title`} className="font-semibold">{candidateTitle(c)}</h3><Button type="button" variant="outline" onClick={onRemove} aria-label={`${title} 삭제`}>삭제</Button>
     </header>
-    <p className="text-sm break-all">위도 {c.coordinate.lat} / 경도 {c.coordinate.lng}</p>
+    <p className="text-sm text-muted-foreground">{location?.commercialArea.memberships.map(a => a.name).join(' · ') || '소속 상권 미확인'}</p>
+    {location?.commercialArea.memberships.some(area => area.sourceAttributeStatus === 'CONFLICT_OBSERVED') && <Alert variant="warning" role="status">
+      <AlertDescription>상권 원본 지역 속성 충돌이 있습니다. 상세 근거를 확인해 주세요.</AlertDescription>
+    </Alert>}
+    <details className="source-details"><summary>상세 근거와 개별 재조회</summary><div className="mt-4 flex flex-col gap-4">
     <section className="flex flex-col gap-2" aria-label={`${title} 지역 판정`}>
       <h4>행정동·상권</h4>
       {c.location.loading ? <p role="status">지역 판정 중</p> : c.location.error ? <p role="alert">지역 판정 실패: {c.location.error.message}</p>
@@ -79,7 +85,7 @@ export function CandidateCard({ candidate: c, quarter, block, onRemove, onLocati
       {block ? <p className="text-sm">{blocked[block]}</p>
         : c.stats.loading ? <p role="status">선택 분기 통계 조회 중</p>
           : c.stats.error ? <p role="alert">통계 조회 실패: {c.stats.error.message}</p>
-            : !stats ? <p className="text-sm">비교 통계 조회를 눌러 선택 분기 통계를 확인하세요.</p> : <>
+            : !stats ? <p className="text-sm">같은 분기로 후보 분석을 눌러 선택 분기 통계를 확인하세요.</p> : <>
               <p className="text-sm">{stats.quarter.label} · {stats.dong.name} ({stats.dong.code})</p>
               <dl>
                 <Metric label="점포 수" value={stats.storeStats === null ? noRow : nullableCount(stats.storeStats.storeCount)} />
@@ -95,5 +101,6 @@ export function CandidateCard({ candidate: c, quarter, block, onRemove, onLocati
             </>}
       <Button type="button" variant="outline" disabled={!!block || c.stats.loading} onClick={onStats} aria-label={`${title} 통계 다시 조회`}>통계 다시 조회</Button>
     </section>
+    </div></details>
   </article>
 }

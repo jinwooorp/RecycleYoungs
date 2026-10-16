@@ -18,6 +18,8 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -27,23 +29,25 @@
 @layer base {
   :root {
     color-scheme: light;
-    --background: #f5f7f6;
-    --foreground: #20312f;
+    --background: #f7f7f2;
+    --foreground: #263b33;
     --card: #fff;
-    --card-foreground: #20312f;
-    --primary: #256452;
+    --card-foreground: #263b33;
+    --primary: #245b4b;
     --primary-foreground: #fff;
-    --secondary: #edf2ef;
-    --secondary-foreground: #20312f;
-    --muted: #e5ebe8;
-    --muted-foreground: #52655f;
-    --accent: #edf2ef;
-    --accent-foreground: #20312f;
+    --secondary: #e8f0ea;
+    --secondary-foreground: #245b4b;
+    --muted: #edf0e9;
+    --muted-foreground: #56665e;
+    --accent: #e8f0ea;
+    --accent-foreground: #263b33;
     --destructive: #843d2d;
-    --border: #d8e1dd;
+    --border: #dce3db;
     --input: #8a9d95;
     --ring: #3e8275;
-    --radius: 0.5rem;
+    --warning: #a36b16;
+    --warning-foreground: #71470c;
+    --radius: 0.75rem;
     font-synthesis: none;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
@@ -62,9 +66,14 @@
   button { cursor: pointer; }
   button:disabled, select:disabled { cursor: not-allowed; }
   :focus-visible { outline: 3px solid var(--ring); outline-offset: 3px; }
+  [hidden] { display: none !important; }
+  summary { cursor: pointer; }
+  details > summary { font-weight: 500; }
 }
 
 @layer utilities {
+  .skip-link { position: absolute; top: 8px; left: 8px; z-index: 50; padding: 12px 16px; background: var(--primary); color: var(--primary-foreground); border-radius: 6px; transform: translateY(-180%); }
+  .skip-link:focus { transform: translateY(0); }
   .visually-hidden {
     position: absolute;
     width: 1px;

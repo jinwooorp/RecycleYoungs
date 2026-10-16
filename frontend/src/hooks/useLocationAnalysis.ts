@@ -17,16 +17,11 @@ export function useLocationAnalysis() {
     // Clear both old results and the previous dong in the same click event.
     stats.changeSelection('dongCode', '')
     location.resolve(coordinate)
-    if (!stats.selection.industryCode || stats.selection.industryCode === 'CAFE') nearby.resolve(coordinate)
-    else nearby.clear()
+    nearby.resolve(coordinate)
   }
   function changeSelection(field: keyof StatsQuery, value: string) {
     if (field === 'dongCode') setMode('manual')
     stats.changeSelection(field, value)
-    if (field === 'industryCode') {
-      nearby.clear()
-      if ((!value || value === 'CAFE') && location.coordinate) nearby.resolve(location.coordinate)
-    }
   }
   function retryLocation() {
     if (location.coordinate) {
@@ -36,7 +31,7 @@ export function useLocationAnalysis() {
     }
   }
   function retryNearby() {
-    if (location.coordinate && (!stats.selection.industryCode || stats.selection.industryCode === 'CAFE')) nearby.resolve(location.coordinate)
+    if (location.coordinate) nearby.resolve(location.coordinate)
   }
   return { ...stats, location, nearby, mode, selectCoordinate, changeSelection, retryLocation, retryNearby }
 }

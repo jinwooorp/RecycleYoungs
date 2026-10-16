@@ -1,12 +1,76 @@
 /* Keep native controls, table readability and page typography in components.
    Tailwind utilities can override this layer without specificity workarounds. */
 @layer components {
+  .app-shell { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100dvh; overflow: hidden; }
+  .app-shell > main { min-width: 0; min-height: 0; }
+  .app-navigation { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 64px; padding: 8px 24px; background: var(--card); border-bottom: 1px solid var(--border); }
+  .brand { color: var(--primary); font-size: 18px; font-weight: 750; white-space: nowrap; }
+  .brand span { margin-left: 16px; font-size: 12px; font-weight: 400; color: var(--muted-foreground); }
+  .navigation-items { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: center; gap: 4px; }
+  .explore-workspace { display: grid; grid-template-columns: 360px minmax(0, 1fr); height: 100%; min-height: 0; overflow: hidden; }
+  .analysis-dock { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--card); border-right: 1px solid var(--border); }
+  .dock-toolbar { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 16px; background: var(--background); border-bottom: 1px solid var(--border); }
+  .analysis-content { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+  .selection-header { flex: none; padding: 16px; }
+  .panel-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); flex: none; padding: 0 8px 8px; border-bottom: 1px solid var(--border); }
+  .panel-scroll { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 16px; scrollbar-gutter: stable; }
+  .candidate-tray { display: flex; flex-direction: column; gap: 8px; flex: none; max-height: 32%; overflow-y: auto; padding: 10px 16px; border-top: 1px solid var(--border); background: var(--background); }
+  .map-workspace { min-width: 0; min-height: 0; position: relative; }
+  .map-shell { display: grid; grid-template-rows: minmax(0, 1fr) auto; height: 100%; min-height: 0; background: var(--secondary); }
+  .map-canvas { height: 100%; min-height: 0; position: relative; }
+  .map-actionbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px 12px; border-top: 1px solid var(--border); background: var(--card); }
+  .map-status { padding: 8px 12px; background: var(--card); font-size: 14px; }
+  .map-candidate-pin, .map-store-pin { display: grid; place-items: center; border-radius: 50%; border: 3px solid var(--card); box-shadow: 0 2px 8px color-mix(in srgb, var(--foreground) 25%, transparent); color: var(--primary-foreground); background: var(--primary); font-weight: 700; min-height: 32px; width: 32px; }
+  .map-candidate-pin { border-radius: 10px 10px 10px 0; min-height: 40px; width: 40px; }
+  .map-store-pin { min-height: 24px; width: 24px; font-size: 12px; background: var(--card); color: var(--primary); border-color: var(--primary); }
+  .map-store-pin[aria-pressed="true"] { background: var(--primary); color: var(--primary-foreground); outline: 3px solid var(--ring); }
+  .panel-collapsed { grid-template-columns: 72px minmax(0, 1fr); }
+  .panel-collapsed .dock-toolbar { flex-direction: column; padding: 8px; }
+  .panel-collapsed .dock-toolbar > div { display: none; }
+  .panel-collapsed .dock-toolbar button { white-space: normal; }
+  .workspace-dialog { position: fixed; inset: 0; width: min(1200px, calc(100% - 48px)); max-width: none; max-height: calc(100dvh - 48px); margin: auto; padding: 0; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--border); border-radius: 16px; background: var(--card); color: var(--foreground); box-shadow: 0 20px 80px color-mix(in srgb, var(--foreground) 25%, transparent); }
+  .workspace-dialog::backdrop { background: color-mix(in srgb, var(--foreground) 45%, transparent); }
+  .dialog-toolbar { position: sticky; top: 0; display: flex; justify-content: flex-end; padding: 10px 20px; background: var(--card); border-bottom: 1px solid var(--border); }
+  .dialog-content { padding: 24px; }
+  @media (max-width: 1023px) {
+    .app-navigation { flex-wrap: wrap; gap: 4px; padding: 8px 12px; }
+    .brand { font-size: 16px; }
+    .brand span { font-size: 11px; margin-left: 8px; }
+    .app-navigation nav { width: 100%; }
+    .app-navigation nav button { flex: 1; padding-inline: 8px; font-size: 12px; }
+    .explore-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 44fr) minmax(0, 56fr); }
+    .analysis-dock { grid-row: 2; border-right: 0; border-top: 1px solid var(--border); }
+    .map-workspace { grid-row: 1; }
+    .dock-toolbar { padding: 6px 12px; }
+    .selection-header { padding: 10px 12px; }
+    .selection-header > section { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+    .selection-header > section > div:first-child { display: none; }
+    .selection-header > section > p { font-size: 16px; margin-top: 4px; }
+    .selection-header > section > div { margin-top: 4px; }
+    .selection-header > section > p[role="status"] { display: none; }
+    .panel-scroll { padding: 12px; }
+    .candidate-tray { max-height: 88px; padding: 6px 12px; }
+    .panel-collapsed { grid-template-rows: minmax(180px, 1fr) 66px; }
+    .panel-collapsed .dock-toolbar { flex-direction: row; padding: 8px 12px; }
+    .panel-collapsed .dock-toolbar > div { display: block; }
+    .workspace-dialog { width: calc(100% - 16px); max-height: calc(100dvh - 16px); border-radius: 12px; }
+    .dialog-toolbar { padding: 8px 12px; }
+    .dialog-content { padding: 16px; }
+    .map-actionbar { padding: 4px 8px; }
+  }
+  /* A short viewport cannot fit usable map controls and the dock at once.
+     Allow document scrolling instead of clipping interactive panel content. */
+  @media (max-width: 1023px) and (max-height: 600px) {
+    .app-shell { display: block; height: auto; min-height: 100dvh; overflow: visible; }
+    .explore-workspace { height: 660px; grid-template-rows: 260px minmax(0, 1fr); }
+    .panel-collapsed { height: 326px; grid-template-rows: 260px 66px; }
+  }
   .page-header { margin-bottom: 32px; }
   .eyebrow { color: var(--primary); font-size: .875rem; font-weight: 700; margin-bottom: 8px; }
   .page-header h1 { font-size: clamp(1.65rem, 4vw, 2.25rem); font-weight: 700; line-height: 1.35; margin-bottom: 16px; }
   .page-header h1, .result-header h2 { word-break: keep-all; text-wrap: balance; }
   .page-header > p:last-child, .result-header > p:not(.eyebrow), .data-note { word-break: keep-all; text-wrap: pretty; }
-  main h2 { font-size: 1.35rem; font-weight: 700; margin-bottom: 20px; }
+  main h2:not([data-slot]) { font-size: 1.35rem; font-weight: 700; margin-bottom: 20px; }
   .stats-panel h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 16px; }
   .page-header > p:last-child, .result-header > p:last-child { color: var(--muted-foreground); }
   .form-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
@@ -17,13 +81,13 @@
   .form-field select:disabled { background: var(--accent); color: var(--muted-foreground); }
   .notice, .initial-message { padding: 16px; color: var(--muted-foreground); background: var(--accent); border-radius: 4px; margin: 20px 0 0; }
   .initial-message { text-align: center; background: transparent; }
-  .error-message { padding: 16px; background: #fff3ee; border: 1px solid #cc7963; border-radius: 4px; color: var(--destructive); margin-top: 20px; }
+  .error-message { padding: 16px; background: color-mix(in srgb, var(--destructive) 5%, var(--card)); border: 1px solid color-mix(in srgb, var(--destructive) 30%, var(--border)); border-radius: 8px; color: var(--destructive); margin-top: 20px; }
   .error-message button { margin-top: 12px; }
   .result { margin-top: 32px; }
   .result-header { margin-bottom: 24px; }
   .result-header h2 { margin-bottom: 8px; }
   .stats-panel table { width: 100%; border-collapse: collapse; }
-  .stats-panel th, .stats-panel td { border-top: 1px solid #e3e9e6; padding: 14px 0; vertical-align: top; }
+  .stats-panel th, .stats-panel td { border-top: 1px solid var(--border); padding: 14px 0; vertical-align: top; }
   .stats-panel th { text-align: left; font-weight: 500; padding-right: 12px; }
   .stats-panel td { text-align: right; font-variant-numeric: tabular-nums; font-weight: 650; overflow-wrap: anywhere; }
   .empty-message { color: var(--muted-foreground); padding: 24px 0; }
@@ -33,6 +97,12 @@
   .stats-panel .trend-table th, .stats-panel .trend-table td { padding: 14px 12px; white-space: nowrap; }
   .stats-panel .trend-table td { overflow-wrap: normal; }
   .stats-panel .trend-table th:first-child { min-width: 168px; }
+  .source-details { border-top: 1px solid var(--border); padding-top: 12px; font-size: .875rem; }
+  .source-details summary { color: var(--primary); min-height: 44px; padding: 8px 0; }
+  table[data-slot="table"] { table-layout: fixed; min-width: 640px; }
+  table[data-slot="table"] th { width: auto; }
+  table[data-slot="table"] td { overflow-wrap: anywhere; }
+  table[data-slot="table"] caption { padding: 0 16px 16px; text-align: left; }
 
   @media (max-width: 760px) {
     .stats-panel th, .stats-panel td { font-size: .9375rem; }

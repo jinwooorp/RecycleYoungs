@@ -36,7 +36,7 @@ beforeEach(() => {
 async function ready(strict = false) {
   const view = render(strict ? <StrictMode><App /></StrictMode> : <App />)
   await waitFor(() => expect(map.listeners.size).toBe(1))
-  await waitFor(() => expect(screen.getByLabelText('업종')).toBeEnabled())
+  await waitFor(() => expect(screen.getByLabelText('행정동')).toBeEnabled())
   return view
 }
 const click = (lat = 37.5665, lng = 126.978) => act(() => map.click(lat, lng))
@@ -66,7 +66,7 @@ it('shows total count and truncated list separately', async () => {
   nearby = async c => json(nearbyFixture(c, 150))
   await ready(); click()
   expect(await screen.findByText('150개', { selector: 'strong' })).toBeInTheDocument()
-  expect(screen.getByText(/가까운 100개 표시/)).toBeInTheDocument()
+  expect(screen.getByText(/가까운 100개 수신/)).toBeInTheDocument()
   expect(screen.queryByText('합성 카페 101')).not.toBeInTheDocument()
 })
 it('shows 503 and retries the latest point without redoing region or statistics', async () => {
@@ -112,19 +112,13 @@ it('aborts pending request on unmount under StrictMode', async () => {
   view.unmount(); expect(calls()[0][1]?.signal?.aborted).toBe(true)
   await act(async () => d.resolve(json(nearbyFixture())))
 })
-it('cancels and hides cafe results for another selected industry', async () => {
-  const d = deferred<Response>(); nearby = () => d.promise
+it('offers no unsupported industry filter and preserves nearby results during manual condition changes', async () => {
   await ready(); click()
-  fireEvent.change(screen.getByLabelText('업종'), { target: { value: 'PUB' } })
-  expect(calls()[0][1]?.signal?.aborted).toBe(true)
-  expect(screen.getByText(/현재 선택한 통계 업종의 경쟁 점포 분석은 지원하지/)).toBeInTheDocument()
-  await act(async () => d.resolve(json(nearbyFixture())))
-  expect(screen.queryByText('합성 카페 1')).not.toBeInTheDocument()
-  click(37.58, 126.99); expect(calls()).toHaveLength(1)
-  nearby = async c => json(nearbyFixture(c))
-  fireEvent.change(screen.getByLabelText('업종'), { target: { value: 'CAFE' } })
-  expect(await screen.findByText('합성 카페 1')).toBeInTheDocument()
-  expect(String(calls().at(-1)?.[0])).toContain('lat=37.58&lng=126.99')
+  await screen.findByText('합성 카페 1')
+  expect(screen.queryByRole('combobox', { name: '업종' })).not.toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText('행정동'), { target: { value: '11260550' } })
+  expect(screen.getByText('합성 카페 1')).toBeInTheDocument()
+  expect(calls()).toHaveLength(1)
 })
 it.each(['ambiguous', 'failure'])('keeps competition independent from region %s', async kind => {
   location = async c => kind === 'failure' ? json({ code: 'BOUNDARY_DATA_UNAVAILABLE', message: '미준비', field: null }, 503)
@@ -138,8 +132,8 @@ it('preserves manual statistics after cafe data failure', async () => {
   nearby = async () => json({ code: 'CAFE_DATA_UNAVAILABLE', message: '미준비', field: null }, 503)
   await ready(); click(); await screen.findByText(/카페가 0개라는 뜻이 아닙니다/)
   fireEvent.change(screen.getByLabelText('행정동'), { target: { value: normalTrend.dong.code } })
-  fireEvent.change(screen.getByLabelText('업종'), { target: { value: 'CAFE' } })
   fireEvent.change(screen.getByLabelText('분기'), { target: { value: '20251' } })
+  fireEvent.click(screen.getByRole('button', { name: '행정동 직접 조회' }))
   fireEvent.click(screen.getByRole('button', { name: '조회하기' }))
   await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => String(u).startsWith('/api/admin-dong-stats?'))).toBe(true))
   expect(await screen.findByRole('heading', { name: '2025년 4개 분기 추세' })).toBeInTheDocument()

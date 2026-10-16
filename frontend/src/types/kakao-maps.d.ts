@@ -5,8 +5,20 @@ export interface KakaoLatLng {
 
 export interface KakaoMapInstance {
   relayout(): void
+  getCenter?(): KakaoLatLng
+  panBy?(x: number, y: number): void
+  panTo?(position: KakaoLatLng): void
+  setCenter?(position: KakaoLatLng): void
   addControl?(control: object, position: number): void
   removeControl?(control: object): void
+}
+
+export interface KakaoCircle {
+  setMap(map: KakaoMapInstance | null): void
+  setPosition(position: KakaoLatLng): void
+}
+export interface KakaoOverlay {
+  setMap(map: KakaoMapInstance | null): void
 }
 
 export interface KakaoMarker {
@@ -23,11 +35,13 @@ export interface KakaoMapsSDK {
   Map: new (container: HTMLElement, options: { center: KakaoLatLng; level: number }) => KakaoMapInstance
   LatLng: new (lat: number, lng: number) => KakaoLatLng
   Marker: new (options: { position: KakaoLatLng; map: KakaoMapInstance }) => KakaoMarker
+  Circle?: new (options: { map: KakaoMapInstance; center: KakaoLatLng; radius: number; strokeWeight: number; strokeColor: string; strokeOpacity: number; fillColor: string; fillOpacity: number }) => KakaoCircle
+  CustomOverlay?: new (options: { map: KakaoMapInstance; position: KakaoLatLng; content: HTMLElement; clickable: boolean; yAnchor: number; zIndex: number }) => KakaoOverlay
   ZoomControl?: new () => object
   ControlPosition?: { RIGHT: number }
   event: {
-    addListener(map: KakaoMapInstance, type: 'click', handler: (event: KakaoMapMouseEvent) => void): void
-    removeListener(map: KakaoMapInstance, type: 'click', handler: (event: KakaoMapMouseEvent) => void): void
+    addListener(map: KakaoMapInstance, type: 'click' | 'center_changed', handler: (event: KakaoMapMouseEvent) => void): void
+    removeListener(map: KakaoMapInstance, type: 'click' | 'center_changed', handler: (event: KakaoMapMouseEvent) => void): void
   }
 }
 

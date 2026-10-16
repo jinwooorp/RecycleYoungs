@@ -5,6 +5,9 @@ import { KakaoMap, type MapCoordinate } from './KakaoMap'
 import { loadKakaoMaps } from '../lib/loadKakaoMaps'
 import { createKakaoMapsMock } from '../test/kakaoMapsMock'
 import type { KakaoMapsSDK } from '../types/kakao-maps'
+import { comparisonLocation } from '../test/comparisonFixture'
+import type { Candidate } from '../types/comparison'
+import { nearbyFixture } from '../test/nearbyFixture'
 
 vi.mock('../lib/loadKakaoMaps', async (importOriginal) => ({
   ...await importOriginal<typeof import('../lib/loadKakaoMaps')>(), loadKakaoMaps: vi.fn(),
@@ -23,6 +26,81 @@ function Selection() {
 async function ready() { await waitFor(() => expect(mock.listeners.size).toBe(1)) }
 
 describe('지도 위치 선택', () => {
+  it('preserves the last user center when relayout changes the SDK viewport geometry', async () => {
+    vi.stubGlobal('ResizeObserver', undefined)
+    const userCenter = new mock.sdk.LatLng(37.58, 127.01)
+    let center = userCenter
+    const setCenter = vi.fn((value) => { center = value })
+    const instance = { relayout: vi.fn(() => { center = new mock.sdk.LatLng(37.6, 127.2) }), getCenter: () => center, setCenter }
+    vi.mocked(mock.sdk.Map).mockImplementationOnce(function () { return instance })
+    render(<KakaoMap selectedCoordinate={null} onCoordinateChange={vi.fn()} />)
+    await ready()
+    const listener = vi.mocked(mock.sdk.event.addListener).mock.calls.find(call => String(call[1]) === 'center_changed')?.[2]
+    expect(listener).toBeTypeOf('function')
+    act(() => listener?.({ latLng: userCenter }))
+    fireEvent(window, new Event('resize'))
+    expect(setCenter).toHaveBeenCalledWith(userCenter)
+  })
+  it('links numbered candidate and nearby overlays, removes listeners on replacement and clears all layers on unmount', async () => {
+    const overlays: { content: HTMLElement; setMap: ReturnType<typeof vi.fn> }[] = []
+    const CustomOverlay = vi.fn(function (options: { content: HTMLElement }) {
+      document.body.append(options.content)
+      const overlay = { content: options.content, setMap: vi.fn((map) => { if (map === null) options.content.remove() }) }
+      overlays.push(overlay)
+      return overlay
+    })
+    vi.mocked(loadKakaoMaps).mockResolvedValue({ ...mock.sdk, CustomOverlay })
+    const point = { lat: 37.56, lng: 126.97 }
+    const candidate: Candidate = { id: 'one', number: 1, order: 1, coordinate: point, statsQuarter: null,
+      location: { loading: false, error: null, result: comparisonLocation(point) },
+      nearby: { loading: false, error: null, result: null }, stats: { loading: false, error: null, result: null } }
+    const selectCandidate = vi.fn(), selectStore = vi.fn()
+    const props = { selectedCoordinate: point, onCoordinateChange: vi.fn(), candidates: [candidate],
+      stores: nearbyFixture(point).stores, onCandidateSelect: selectCandidate, onStoreSelect: selectStore }
+    const view = render(<KakaoMap {...props} />)
+    await ready()
+    expect(overlays).toHaveLength(3)
+    expect(overlays[0].content).toHaveAccessibleName('지도 · 후보 1 · 청운효자동')
+    fireEvent.click(overlays[0].content)
+    fireEvent.click(overlays[1].content)
+    expect(selectCandidate).toHaveBeenCalledWith(candidate)
+    expect(selectStore).toHaveBeenCalledWith(props.stores[0].sourceStoreId)
+    overlays[1].content.focus()
+    view.rerender(<KakaoMap {...props} activeStoreId={props.stores[0].sourceStoreId} />)
+    expect(overlays[1].content).toHaveFocus()
+    expect(overlays).toHaveLength(3)
+    view.rerender(<KakaoMap {...props} candidates={[]} stores={[]} />)
+    expect(overlays.every(overlay => overlay.setMap.mock.calls.some(([map]) => map === null))).toBe(true)
+    fireEvent.click(overlays[0].content)
+    expect(selectCandidate).toHaveBeenCalledTimes(1)
+    expect(mock.maps).toHaveLength(1)
+    view.unmount()
+    expect(mock.markers[0].map).toBeNull()
+  })
+  it('shows a 500m circle, selects the keyboard-moved center only on confirmation and releases the circle', async () => {
+    const change = vi.fn()
+    const setMap = vi.fn(), setPosition = vi.fn()
+    const Circle = vi.fn(function () { return { setMap, setPosition } })
+    const center = new mock.sdk.LatLng(37.58, 127.01)
+    const panBy = vi.fn(), getCenter = vi.fn(() => center)
+    vi.mocked(mock.sdk.Map).mockImplementationOnce(function () {
+      const instance = { relayout: vi.fn(), panBy, getCenter }
+      mock.maps.push(instance)
+      return instance
+    })
+    vi.mocked(loadKakaoMaps).mockResolvedValue({ ...mock.sdk, Circle })
+    const view = render(<KakaoMap selectedCoordinate={null} onCoordinateChange={change} />)
+    await ready()
+    fireEvent.keyDown(screen.getByRole('button', { name: '방향키로 지도 이동' }), { key: 'ArrowRight' })
+    expect(panBy).toHaveBeenCalled()
+    expect(change).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '지도 중심 선택' }))
+    expect(change).toHaveBeenCalledWith({ lat: 37.58, lng: 127.01 })
+    view.rerender(<KakaoMap selectedCoordinate={{ lat: 37.58, lng: 127.01 }} onCoordinateChange={change} />)
+    expect(Circle).toHaveBeenCalledWith(expect.objectContaining({ radius: 500 }))
+    view.unmount()
+    expect(setMap).toHaveBeenCalledWith(null)
+  })
   it('줌 컨트롤 등록 중 예외도 정리하고 재시도에서 중복 없이 복구한다', async () => {
     const controls: object[] = []
     const addControl = vi.fn().mockImplementationOnce(() => { throw new Error('partial registration') })
@@ -144,7 +222,7 @@ describe('지도 위치 선택', () => {
     render(<StrictMode><Selection /></StrictMode>)
     await ready()
     expect(mock.maps).toHaveLength(1)
-    expect(mock.sdk.event.addListener).toHaveBeenCalledTimes(1)
+    expect(mock.sdk.event.addListener).toHaveBeenCalledTimes(2)
     act(() => mock.click(37.57, 127))
     expect(mock.markers).toHaveLength(1)
   })

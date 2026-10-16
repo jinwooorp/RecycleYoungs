@@ -1,6 +1,6 @@
 import type { AdminDongTrend, SalesStats, StoreStats } from '../types/api'
 import { formatCount, formatDecimal } from '../lib/formatStats'
-import { Card } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 
 const storeMetrics: { key: keyof StoreStats; label: string }[] = [
   { key: 'storeCount', label: '점포 수' },
@@ -29,9 +29,9 @@ export function TrendResult({ trend }: { trend: AdminDongTrend }) {
       </header>
       {empty && <p className="notice" role="status">2025년 네 분기 모두 점포 및 추정매출 자료가 없습니다.</p>}
       <div className="grid min-w-0 gap-5">
-        <Card asChild className="min-w-0 gap-0 rounded-lg p-5 min-[761px]:p-6">
+        <Card asChild className="min-w-0">
           <section className="stats-panel" aria-labelledby="trend-store-title">
-            <h3 id="trend-store-title">점포 추세</h3>
+            <CardContent><h3 id="trend-store-title">점포 추세</h3>
             <div className="trend-table-scroll" tabIndex={0} role="region" aria-label="점포 추세 표 가로 스크롤">
               <table className="trend-table">
                 <caption className="visually-hidden">{dong.name} {industry.name} 2025년 점포 추세</caption>
@@ -44,11 +44,11 @@ export function TrendResult({ trend }: { trend: AdminDongTrend }) {
                 ))}</tbody>
               </table>
             </div>
-          </section>
+          </CardContent></section>
         </Card>
-        <Card asChild className="min-w-0 gap-0 rounded-lg p-5 min-[761px]:p-6">
+        <Card asChild className="min-w-0">
           <section className="stats-panel" aria-labelledby="trend-sales-title">
-            <h3 id="trend-sales-title">추정매출 추세</h3>
+            <CardContent><h3 id="trend-sales-title">추정매출 추세</h3>
             <div className="trend-table-scroll" tabIndex={0} role="region" aria-label="추정매출 추세 표 가로 스크롤">
               <table className="trend-table">
                 <caption className="visually-hidden">{dong.name} {industry.name} 2025년 추정매출 추세</caption>
@@ -61,7 +61,7 @@ export function TrendResult({ trend }: { trend: AdminDongTrend }) {
                 ))}</tbody>
               </table>
             </div>
-          </section>
+          </CardContent></section>
         </Card>
       </div>
       <p className="data-note">추정매출은 실제 매출이나 이익을 뜻하지 않습니다. 개업·폐업 점포 수는 성공률·실패율이 아닙니다. ‘자료 없음’은 행 부재 또는 원본 값의 결측이며 실제 0과 구분합니다.</p>

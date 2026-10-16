@@ -45,16 +45,31 @@ async function ready(strict = false) {
   await waitFor(() => expect(screen.getByLabelText('행정동')).toBeEnabled())
   return view
 }
-const comparison = () => screen.getByRole('region', { name: '창업 후보지 비교' })
-const candidate = (n: number) => within(comparison()).getByRole('article', { name: `후보 ${n}` })
+const comparison = () => {
+  fireEvent.click(screen.getByRole('button', { name: '후보 비교' }))
+  return screen.getByRole('region', { name: '창업 후보지 비교' })
+}
+const candidate = (n: number) => {
+  const card = within(comparison()).getByRole('article', { name: new RegExp(`^후보 ${n} ·`) })
+  const details = card.querySelector('details')!
+  if (!details.open) fireEvent.click(within(card).getByText('상세 근거와 개별 재조회'))
+  return card
+}
 const click = (c: MapCoordinate) => act(() => map.click(c.lat, c.lng))
-const add = (c: MapCoordinate) => { click(c); fireEvent.click(screen.getByRole('button', { name: '후보지에 추가' })) }
+const registration = () => {
+  fireEvent.click(screen.getByRole('button', { name: '지도 탐색' }))
+  return screen.getByRole('button', { name: '후보지에 추가' })
+}
+const add = (c: MapCoordinate) => { click(c); fireEvent.click(registration()) }
 const calls = (path: string) => fetchMock.mock.calls.filter(([u]) => String(u).startsWith(path))
-const selectQuarter = (q = '20251') => fireEvent.change(screen.getByLabelText('비교 통계 분기'), { target: { value: q } })
+const selectQuarter = (q = '20251') => {
+  comparison()
+  fireEvent.change(screen.getByLabelText('비교 통계 분기'), { target: { value: q } })
+}
 async function compare() {
   selectQuarter()
-  await waitFor(() => expect(screen.getByRole('button', { name: '비교 통계 조회' })).toBeEnabled())
-  fireEvent.click(screen.getByRole('button', { name: '비교 통계 조회' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: '같은 분기로 후보 분석' })).toBeEnabled())
+  fireEvent.click(screen.getByRole('button', { name: '같은 분기로 후보 분석' }))
   await waitFor(() => expect(within(candidate(1)).getByText(/2025년 1분기 ·/)).toBeInTheDocument())
 }
 function deferred<T>() {
@@ -65,7 +80,7 @@ function deferred<T>() {
 
 it('offers candidate registration and waits for a selected coordinate', async () => {
   await ready()
-  expect(screen.getByRole('button', { name: '후보지에 추가' })).toBeDisabled()
+  expect(registration()).toBeDisabled()
   expect(within(comparison()).getByText('등록한 후보 0/3')).toBeInTheDocument()
   expect(fetchMock).toHaveBeenCalledTimes(3)
 })
@@ -74,24 +89,24 @@ it('adds 1/2/3, prevents a fourth, preserves saved candidates on exploration and
   expect(within(comparison()).getByText('등록한 후보 1/3')).toBeInTheDocument()
   add(p2); expect(within(comparison()).getByText('등록한 후보 2/3')).toBeInTheDocument()
   add(p3); expect(within(comparison()).getByText('등록한 후보 3/3')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: '후보지에 추가' })).toBeDisabled()
+  expect(registration()).toBeDisabled()
   click({ lat: 37.6, lng: 127.1 })
-  expect(within(candidate(1)).getByText('위도 37.5665 / 경도 126.978')).toBeInTheDocument()
+  expect(within(candidate(1)).queryByText(/위도|경도/)).not.toBeInTheDocument()
   expect(within(comparison()).getAllByRole('article')).toHaveLength(3)
   fireEvent.click(screen.getByRole('button', { name: '후보 2 삭제' }))
-  expect(screen.getByRole('button', { name: '후보지에 추가' })).toBeEnabled()
-  fireEvent.click(screen.getByRole('button', { name: '후보지에 추가' }))
-  expect(within(candidate(2)).getByText('위도 37.6 / 경도 127.1')).toBeInTheDocument()
-  expect(within(candidate(3)).getByText('위도 37.59 / 경도 127.01')).toBeInTheDocument()
+  expect(registration()).toBeEnabled()
+  fireEvent.click(registration())
+  expect(within(candidate(2)).queryByText(/위도|경도/)).not.toBeInTheDocument()
+  expect(within(candidate(3)).queryByText(/위도|경도/)).not.toBeInTheDocument()
   await waitFor(() => expect(within(candidate(2)).getByText(/조회 자료의 경쟁 카페/)).toBeInTheDocument())
 })
 it('disables exact duplicates but allows nearby distinct full-precision coordinates', async () => {
   await ready(); add(p1)
-  expect(screen.getByRole('button', { name: '후보지에 추가' })).toBeDisabled()
-  expect(within(comparison()).getByText(/선택한 정확한 좌표가 이미/)).toBeInTheDocument()
+  expect(registration()).toBeDisabled()
+  expect(screen.getByText(/선택한 위치가 이미/)).toBeInTheDocument()
   add({ ...p1, lat: p1.lat + 1e-12 })
   expect(within(comparison()).getAllByRole('article')).toHaveLength(2)
-  expect(within(candidate(2)).getByText(`위도 ${p1.lat + 1e-12} / 경도 ${p1.lng}`)).toBeInTheDocument()
+  expect(within(candidate(2)).queryByText(/위도|경도/)).not.toBeInTheDocument()
   await waitFor(() => expect(within(candidate(2)).getByText(/조회 자료의 경쟁 카페/)).toBeInTheDocument())
 })
 it('shows totalCount rather than list length, zero separately from 503 and preserves partial success', async () => {
@@ -122,6 +137,12 @@ it('compares all nine statistics, retaining BIGINT, NULL, NO_ROW and zero semant
   expect(first.getAllByText('값 없음(NULL)')).toHaveLength(2)
   await waitFor(() => expect(within(candidate(2)).getAllByText('조회 행 없음(NO_ROW)')).toHaveLength(9))
   expect(first.getAllByRole('definition')).toHaveLength(9)
+  const table = within(screen.getByRole('table', { name: '후보별 동일 지표 비교' }))
+  expect(table.getByText('9,007,199,254,740,993원')).toBeInTheDocument()
+  expect(table.getAllByText('조회 행 없음(NO_ROW)')).toHaveLength(9)
+  expect(table.getAllByText('값 없음(NULL)')).toHaveLength(2)
+  expect(table.getByText('0개')).toBeInTheDocument()
+  expect(table.getByText('0건')).toBeInTheDocument()
 })
 it('invalidates all old-quarter metrics immediately and keeps region/cafe results', async () => {
   await ready(); add(p1); add(p2); await compare()
@@ -131,7 +152,7 @@ it('invalidates all old-quarter metrics immediately and keeps region/cafe result
   expect(within(candidate(1)).getByText(/조회 자료의 경쟁 카페/)).toBeInTheDocument()
   const count = calls('/api/admin-dong-stats').length
   expect(calls('/api/admin-dong-stats')).toHaveLength(count)
-  fireEvent.click(screen.getByRole('button', { name: '비교 통계 조회' }))
+  fireEvent.click(screen.getByRole('button', { name: '같은 분기로 후보 분석' }))
   expect(await within(candidate(1)).findByText(/2025년 2분기 ·/)).toBeInTheDocument()
   expect(await within(candidate(2)).findByText(/2025년 2분기 ·/)).toBeInTheDocument()
 })
@@ -141,6 +162,12 @@ it('warns for shared dong statistics and retains two separate locations', async 
   expect(within(comparison()).getByText(/통계는 동일 행정동의 집계값/)).toBeInTheDocument()
   expect(within(comparison()).getAllByRole('article')).toHaveLength(2)
   expect(calls('/api/admin-dong-stats')).toHaveLength(2)
+})
+it('explains the observed cafe-count difference without calling a candidate better', async () => {
+  nearby = async c => json(nearbyFixture(c, c.lat === p1.lat ? 2 : 150))
+  await ready(); add(p1); add(p2)
+  expect(await within(comparison()).findByText(/조회 자료상 후보 간 반경 500m 카페 수 차이는 148개/)).toBeInTheDocument()
+  expect(within(comparison()).queryByText(/추천 후보|창업 적합/)).not.toBeInTheDocument()
 })
 it('displays independent dataset versions, qualities and unverified snapshot limitations', async () => {
   location = async c => json(comparisonLocation(c, '11110515', c.lat === p1.lat ? '1' : '3', c.lat === p1.lat ? '2' : '4'))
@@ -161,7 +188,7 @@ it.each(['ambiguous', 'missing lookup'])('keeps cafe comparison but blocks stati
   }
   await ready(); add(p1); selectQuarter()
   expect(await within(candidate(1)).findByText('2개', { selector: 'strong' })).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: '비교 통계 조회' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: '같은 분기로 후보 분석' })).toBeDisabled()
   expect(calls('/api/admin-dong-stats')).toHaveLength(0)
   expect(within(candidate(1)).getByText(kind === 'ambiguous' ? /행정동이 모호해 통계를 연결하지/ : /다른 동으로 대체하지/)).toBeInTheDocument()
 })
@@ -178,6 +205,7 @@ it('removes a pending candidate without resurrecting it from late responses', as
   const region = deferred<Response>(), cafes = deferred<Response>()
   location = () => region.promise; nearby = () => cafes.promise
   await ready(); add(p1)
+  comparison()
   fireEvent.click(screen.getByRole('button', { name: '후보 1 삭제' }))
   expect(within(comparison()).queryByRole('article')).not.toBeInTheDocument()
   await act(async () => { region.resolve(json(comparisonLocation(p1))); cafes.resolve(json(nearbyFixture(p1))) })
@@ -187,28 +215,41 @@ it('removes a pending candidate without resurrecting it from late responses', as
 it('preserves comparison data while manual statistics and trend use independent conditions', async () => {
   await ready(); add(p1); await compare()
   fireEvent.change(screen.getByLabelText('행정동'), { target: { value: '11260550' } })
-  fireEvent.change(screen.getByLabelText('업종'), { target: { value: 'CAFE' } })
   fireEvent.change(screen.getByLabelText('분기'), { target: { value: '20252' } })
+  fireEvent.click(screen.getByRole('button', { name: '행정동 직접 조회' }))
   fireEvent.click(screen.getByRole('button', { name: '조회하기' }))
   expect(await screen.findByRole('heading', { name: '2025년 4개 분기 추세' })).toBeInTheDocument()
   expect(screen.getByLabelText('비교 통계 분기')).toHaveValue('20251')
   expect(within(candidate(1)).getByText(/2025년 1분기 · 청운효자동/)).toBeInTheDocument()
   expect(String(calls('/api/admin-dong-stats').at(-1)?.[0])).toContain('dongCode=11260550&industryCode=CAFE&quarterCode=20252')
 })
-it('keeps comparison fixed to CAFE when single-location industry is PUB', async () => {
+it('keeps all UI requests fixed to CAFE and omits unsupported industry controls', async () => {
   await ready()
-  fireEvent.change(screen.getByLabelText('업종'), { target: { value: 'PUB' } })
   add(p1)
   expect(await within(candidate(1)).findByText('2개', { selector: 'strong' })).toBeInTheDocument()
-  expect(calls('/api/nearby-stores')).toHaveLength(1)
+  expect(calls('/api/nearby-stores')).toHaveLength(2)
   await compare(); expect(String(calls('/api/admin-dong-stats')[0][0])).toContain('industryCode=CAFE')
-  expect(screen.getByLabelText('업종')).toHaveValue('PUB')
+  expect(screen.queryByRole('combobox', { name: '업종' })).not.toBeInTheDocument()
 })
 it('renders StrictMode, supports named keyboard controls and leaves the single marker intact', async () => {
   await ready(true); add(p1); add(p2)
   expect(map.markers).toHaveLength(1)
+  comparison()
   expect(screen.getByRole('button', { name: '후보 1 삭제' })).toHaveAttribute('type', 'button')
   expect(screen.getByLabelText('비교 통계 분기')).toHaveAttribute('id', 'comparison-quarter')
   expect(within(comparison()).getAllByRole('article')).toHaveLength(2)
   await waitFor(() => expect(within(candidate(2)).getByText('2개', { selector: 'strong' })).toBeInTheDocument())
+})
+
+it('keeps source-attribute conflicts visible while candidate details are collapsed', async () => {
+  location = async c => {
+    const body = comparisonLocation(c)
+    body.commercialArea.memberships[0] = { ...body.commercialArea.memberships[0],
+      sourceAttributeStatus: 'CONFLICT_OBSERVED', sourceAttributeDetail: 'H5 fixture conflict' }
+    return json(body)
+  }
+  await ready(); add(p1); comparison()
+  const warning = await screen.findByText('상권 원본 지역 속성 충돌이 있습니다. 상세 근거를 확인해 주세요.')
+  expect(warning).toBeVisible()
+  expect(within(comparison()).getByRole('article', { name: /^후보 1 ·/ }).querySelector('details')).not.toHaveAttribute('open')
 })

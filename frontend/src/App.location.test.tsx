@@ -50,8 +50,11 @@ async function ready(strict = false) {
 function click(lat = 37.5665, lng = 126.978) { act(() => map.click(lat, lng)) }
 const locationCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/locations/resolve'))
 const statCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/admin-dong-'))
+function manualSearchButton() {
+  fireEvent.click(screen.getByRole('button', { name: '행정동 직접 조회' }))
+  return screen.getByRole('button', { name: '조회하기' })
+}
 function chooseOtherConditions() {
-  fireEvent.change(screen.getByLabelText('업종'), { target: { value: 'CAFE' } })
   fireEvent.change(screen.getByLabelText('분기'), { target: { value: '20251' } })
 }
 
@@ -61,7 +64,7 @@ it('calls the API from an actual map click, displays loading and preserves full 
   await ready(); click(37.57123456789, 126.98123456789)
   expect(screen.getByText('선택 위치의 행정동·상권을 판정하는 중입니다.')).toBeInTheDocument()
   expect(locationCalls()[0][0]).toBe('/api/locations/resolve?lat=37.57123456789&lng=126.98123456789')
-  expect(screen.getByText('37.571235')).toBeInTheDocument()
+  expect(screen.queryByText('37.571235')).not.toBeInTheDocument()
   expect(screen.getByLabelText('행정동')).toHaveValue('')
   expect(statCalls()).toHaveLength(0)
 })
@@ -79,7 +82,8 @@ it('links one supported dong, keeps multiple memberships and waits for manual su
   expect(screen.getByText(/테스트 상권 B/)).toBeInTheDocument()
   expect(screen.getByText(/H5 fixture conflict/)).toBeInTheDocument()
   expect(statCalls()).toHaveLength(0)
-  fireEvent.click(screen.getByRole('button', { name: '조회하기' }))
+  fireEvent.click(screen.getByRole('button', { name: '행정동 직접 조회' }))
+  fireEvent.click(manualSearchButton())
   expect(await screen.findByRole('heading', { name: '청운효자동 · 카페' })).toBeInTheDocument()
   expect(statCalls()).toHaveLength(2)
 })
@@ -119,14 +123,14 @@ it('a resolved dong absent from lookup cannot submit stats or add an invented op
   expect(await screen.findByText(/통계 연결 자료가 현재 조회 조건 목록에 없습니다/)).toBeInTheDocument()
   expect(screen.getByLabelText('행정동')).toHaveValue('')
   expect(screen.queryByRole('option', { name: '청운효자동' })).not.toBeInTheDocument()
-  fireEvent.submit(screen.getByRole('button', { name: '조회하기' }).closest('form')!)
+  fireEvent.submit(manualSearchButton().closest('form')!)
   expect(statCalls()).toHaveLength(0)
 })
 
 it('clears old stats/trends on the next click even when resolving to the same dong', async () => {
   await ready(); click()
   await waitFor(() => expect(screen.getByLabelText('행정동')).toHaveValue('11110515'))
-  chooseOtherConditions(); fireEvent.click(screen.getByRole('button', { name: '조회하기' }))
+  chooseOtherConditions(); fireEvent.click(manualSearchButton())
   await screen.findByRole('heading', { name: '청운효자동 · 카페' })
   await screen.findByRole('heading', { name: '2025년 4개 분기 추세' })
   locationResponse = () => deferred<Response>().promise
@@ -175,9 +179,10 @@ it.each(['network', '503', 'invalid'] as const)('shows %s failure with useful re
   expect(alert).toHaveTextContent(mode === '503' ? '경계 데이터가 준비되지 않았습니다' : mode === 'network' ? '서버에 연결할 수 없습니다' : '서버 응답을 확인할 수 없습니다')
   expect(alert).not.toHaveTextContent('private error')
   fireEvent.change(screen.getByLabelText('행정동'), { target: { value: '11110515' } })
-  chooseOtherConditions(); fireEvent.click(screen.getByRole('button', { name: '조회하기' }))
+  chooseOtherConditions(); fireEvent.click(manualSearchButton())
   await screen.findByRole('heading', { name: '청운효자동 · 카페' })
   locationResponse = async coordinate => json({ ...resolvedLocation, coordinate })
+  fireEvent.click(screen.getByRole('button', { name: '지도 탐색' }))
   fireEvent.click(screen.getByRole('button', { name: '위치 판정 다시 시도' }))
   await screen.findByRole('heading', { name: '선택 위치의 지역 판정' })
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -210,9 +215,9 @@ it('connects after delayed lookup completion without a new location or stats req
 it('does not invent unsupported industry or quarter defaults', async () => {
   await ready(); click()
   await waitFor(() => expect(screen.getByLabelText('행정동')).toHaveValue('11110515'))
-  expect(screen.getByLabelText('업종')).toHaveValue('')
+  expect(screen.queryByRole('combobox', { name: '업종' })).not.toBeInTheDocument()
   expect(screen.getByLabelText('분기')).toHaveValue('')
-  expect(screen.getByRole('button', { name: '조회하기' })).toBeDisabled()
+  expect(manualSearchButton()).toBeDisabled()
 })
 
 it('a location click aborts both pending stats requests and ignores their late success/error', async () => {
@@ -225,9 +230,10 @@ it('a location click aborts both pending stats requests and ignores their late s
   })
   await ready()
   fireEvent.change(screen.getByLabelText('행정동'), { target: { value: '11110515' } })
-  chooseOtherConditions(); fireEvent.click(screen.getByRole('button', { name: '조회하기' }))
+  chooseOtherConditions(); fireEvent.click(manualSearchButton())
   const signals = statCalls().map(([, options]) => options?.signal)
   expect(signals).toHaveLength(2)
+  fireEvent.click(screen.getByRole('button', { name: '지도 탐색' }))
   click()
   expect(signals.every(signal => signal?.aborted)).toBe(true)
   await screen.findByRole('heading', { name: '선택 위치의 지역 판정' })
@@ -243,6 +249,7 @@ it('a lookup retry links the already resolved dong without rerunning location re
   await waitFor(() => expect(map.listeners.size).toBe(1)); click()
   await screen.findByText('조회 조건 목록을 불러오지 못해 통계 연결을 확인할 수 없습니다.')
   dongResponse = async () => json(dongs)
+  fireEvent.click(screen.getByRole('button', { name: '행정동 직접 조회' }))
   fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
   await waitFor(() => expect(screen.getByLabelText('행정동')).toHaveValue('11110515'))
   expect(locationCalls()).toHaveLength(1)

@@ -40,7 +40,7 @@ export function LocationResult({ result, loading, error, lookupLoading, lookupEr
       <p className="text-sm">{quality(adminDong.resolvedDong)}{adminDong.resolvedDong.qualityDetail && ` · ${adminDong.resolvedDong.qualityDetail}`}</p>
       <p>{manual ? '통계 조회 조건은 직접 선택한 행정동을 사용합니다.' : lookupLoading ? '통계 조회 조건 목록을 확인하는 중입니다.'
         : lookupError ? '조회 조건 목록을 불러오지 못해 통계 연결을 확인할 수 없습니다.'
-          : linked ? '조회 조건에 해당 행정동이 반영됐습니다. 업종·분기를 확인한 뒤 조회하기를 눌러 주세요.'
+          : linked ? '조회 조건에 해당 행정동이 반영됐습니다. 분기를 확인한 뒤 조회하기를 눌러 주세요.'
             : '판정된 행정동의 통계 연결 자료가 현재 조회 조건 목록에 없습니다. 다른 행정동으로 대체하지 않습니다.'}</p>
     </>}
     {adminDong.status === 'AMBIGUOUS_BOUNDARY' && <>
@@ -61,8 +61,11 @@ export function LocationResult({ result, loading, error, lookupLoading, lookupEr
         </li>)}</ul>}
       <p className="text-sm text-muted-foreground">상권은 여러 곳에 포함될 수 있으며 매출을 자동 합산하지 않습니다. 원본 지역 속성은 행정동 연결 근거로 사용하지 않습니다.</p>
     </div>
-    <DatasetInfo dataset={adminDong.dataset} label="행정동 경계 자료" />
-    <DatasetInfo dataset={commercialArea.dataset} label="상권 경계 자료" />
+    <p className="text-sm text-muted-foreground">과거 통계 경계와의 호환성은 미검증입니다.</p>
+    <details className="source-details"><summary>경계 자료의 출처와 품질</summary><div className="mt-3 flex flex-col gap-3">
+      <DatasetInfo dataset={adminDong.dataset} label="행정동 경계 자료" />
+      <DatasetInfo dataset={commercialArea.dataset} label="상권 경계 자료" />
+    </div></details>
     <p className="text-sm text-muted-foreground">좌표·경계 자료의 오차로 경계 부근 소속을 보장하지 않습니다. 창업 성공이나 수익을 예측하는 결과가 아닙니다.</p>
   </section>
 }
