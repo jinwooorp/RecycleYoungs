@@ -42,7 +42,8 @@ it('keeps registration next to the selected location, and preserves candidates a
   await waitFor(() => expect(screen.getByLabelText('비교 통계 분기')).toBeEnabled())
   fireEvent.change(screen.getByLabelText('비교 통계 분기'), { target: { value: '20251' } })
   fireEvent.click(screen.getByRole('button', { name: '같은 분기로 후보 분석' }))
-  const table = screen.getByRole('table', { name: '후보별 동일 지표 비교' })
+  fireEvent.click(screen.getByText('전체 통계 비교'))
+  const table = screen.getByRole('table', { name: '후보별 전체 통계 비교' })
   await waitFor(() => expect(within(table).getByText('114개')).toBeInTheDocument())
   openStatisticsPanel()
   expect(screen.getByText('합성 카페 1')).toBeInTheDocument()
@@ -50,7 +51,7 @@ it('keeps registration next to the selected location, and preserves candidates a
   expect(screen.getByRole('button', { name: '후보지에 추가' })).toBeDisabled()
   fireEvent.click(screen.getByRole('button', { name: '후보 비교' }))
   expect(screen.getByLabelText('비교 통계 분기')).toHaveValue('20251')
-  expect(within(screen.getByRole('table', { name: '후보별 동일 지표 비교' })).getByText('114개')).toBeInTheDocument()
+  expect(within(screen.getByRole('table', { name: '후보별 전체 통계 비교' })).getByText('114개')).toBeInTheDocument()
 })
 
 it('offers manual statistics even when the map key is unavailable', async () => {

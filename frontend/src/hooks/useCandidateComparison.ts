@@ -18,6 +18,7 @@ const failure = (reason: unknown) => reason instanceof ApiFailure ? reason : inv
 export function useCandidateComparison(lookups: Lookups | null, lookupLoading: boolean, lookupError: boolean) {
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [quarter, setQuarter] = useState('')
+  const [comparisonRevision, setComparisonRevision] = useState(0)
   const registry = useRef(new Map<string, Entry>())
   const nextOrder = useRef(1)
   const quarterRef = useRef('')
@@ -65,6 +66,7 @@ export function useCandidateComparison(lookups: Lookups | null, lookupLoading: b
   function retryLocation(id: string) {
     const entry = registry.current.get(id)
     if (!entry || entry.value.location.loading) return
+    setComparisonRevision(n => n + 1)
     invalidateStats(entry)
     const c = entry.value.coordinate
     run(entry, 'location', async signal => {
@@ -94,13 +96,14 @@ export function useCandidateComparison(lookups: Lookups | null, lookupLoading: b
   function remove(id: string) {
     const entry = registry.current.get(id)
     if (!entry) return
+    setComparisonRevision(n => n + 1)
     for (const kind of ['location', 'nearby', 'stats'] as const) cancel(entry, kind)
     registry.current.delete(id); emit()
   }
   function changeQuarter(code: string) {
     const next = lookups?.quarters.some(q => q.code === code && /^2025[1-4]$/.test(code)) ? code : ''
     if (quarterRef.current === next) return
-    quarterRef.current = next; setQuarter(next)
+    quarterRef.current = next; setQuarter(next); setComparisonRevision(n => n + 1)
     for (const entry of registry.current.values()) invalidateStats(entry)
     emit()
   }
@@ -132,5 +135,5 @@ export function useCandidateComparison(lookups: Lookups | null, lookupLoading: b
     if ([...registry.current.values()].some(e => e.value.stats.loading)) return
     for (const id of registry.current.keys()) retryStats(id)
   }
-  return { candidates, quarter, add, remove, changeQuarter, retryLocation, retryNearby, retryStats, queryStats, statsBlockReason }
+  return { candidates, quarter, comparisonRevision, add, remove, changeQuarter, retryLocation, retryNearby, retryStats, queryStats, statsBlockReason }
 }

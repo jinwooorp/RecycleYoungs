@@ -1,6 +1,6 @@
 import { Button } from './ui/button'
 
-export type AppView = 'explore' | 'compare' | 'statistics' | 'guide'
+export type AppView = 'explore' | 'compare' | 'guide'
 const views: { value: AppView; label: string; short: string }[] = [
   { value: 'explore', label: '지도 탐색', short: '지도 탐색' },
   { value: 'compare', label: '후보 비교', short: '후보 비교' },

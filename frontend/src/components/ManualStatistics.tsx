@@ -1,6 +1,6 @@
 import type { useLocationAnalysis } from '../hooks/useLocationAnalysis'
 import type { ReactNode } from 'react'
-import { StatsResult } from './StatsResult'
+import { AnalysisCharts } from './AnalysisCharts'
 import { TrendResult } from './TrendResult'
 import { Button } from './ui/button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from './ui/card'
@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from './ui/alert'
 import { NativeSelect } from './ui/native-select'
 import { Field, FieldLabel } from './ui/field'
 
-export function ManualStatistics({ state, visualization }: { state: ReturnType<typeof useLocationAnalysis>; visualization?: ReactNode }) {
+export function ManualStatistics({ state, scores, review }: { state: ReturnType<typeof useLocationAnalysis>; scores?: ReactNode; review?: ReactNode }) {
   const { lookups, lookupLoading, lookupError, stats, statsLoading, statsError, trend, trendLoading, trendError } = state
   const noLookups = lookups && (!lookups.adminDongs.length || !lookups.industries.some(i => i.code === 'CAFE') || !lookups.quarters.length)
   const resolvedDong = state.location.result?.adminDong.resolvedDong
@@ -29,7 +29,7 @@ export function ManualStatistics({ state, visualization }: { state: ReturnType<t
           disabled={lookupLoading || !!lookupError || !!noLookups} onChange={event => state.changeSelection('quarterCode', event.target.value)}>
           <option value="">분기를 선택하세요</option>{lookups?.quarters.map(q => <option key={q.code} value={q.code}>{q.label}</option>)}
         </NativeSelect></Field>
-        <p className="mt-2 text-sm text-muted-foreground">분석 업종: 카페 · 지역은 지도 상단에서 선택합니다.</p>
+        <p className="mt-2 text-sm text-muted-foreground">분석 업종: 카페 · 지역을 바꾸려면 지도로 돌아가세요.</p>
         <Button type="button" variant="outline" className="mt-3" disabled={lookupLoading || !!lookupError || !!noLookups || !state.selection.dongCode || !state.selection.quarterCode || state.searchLoading}
           onClick={() => { void state.search() }}>{state.searchLoading ? '조회 중...' : '통계 다시 불러오기'}</Button>
         {lookupLoading && <p className="notice" role="status">조회 조건을 불러오는 중입니다.</p>}
@@ -38,13 +38,14 @@ export function ManualStatistics({ state, visualization }: { state: ReturnType<t
         {noLookups && <p className="notice" role="status">현재 조회 가능한 조건이 없습니다.</p>}
       </CardContent>
     </section></Card>
-    {visualization}
+    {review}
+    {scores}
     <div aria-live="polite" aria-atomic="true">
       {statsLoading && <p className="notice" role="status">통계를 조회하는 중입니다.</p>}
       {!statsLoading && stats && <span className="visually-hidden">선택 분기 통계 조회가 완료되었습니다.</span>}
     </div>
     {statsError && <Alert variant="destructive"><AlertDescription>선택한 분기 통계를 조회하지 못했습니다. {statsError.message}</AlertDescription></Alert>}
-    {stats && <StatsResult stats={stats} />}
+    {(stats || trend) && <AnalysisCharts stats={stats} trend={trend} dongCode={state.selection.dongCode} quarter={state.selection.quarterCode} />}
     <div aria-live="polite" aria-atomic="true">
       {trendLoading && <p className="notice" role="status">4개 분기 추세를 조회하는 중입니다.</p>}
       {!trendLoading && trend && <span className="visually-hidden">추세 조회가 완료되었습니다.</span>}

@@ -3,6 +3,15 @@ import { expect, it, vi } from 'vitest'
 import { useChangeScores } from './useChangeScores'
 import { regionFixtureResponse } from '../test/regionFixture'
 
+it('does not reactivate a cached result while a quarter round trip is requesting fresh data', async () => {
+  let blocked = false
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => blocked ? new Promise<Response>(() => {}) : Promise.resolve(regionFixtureResponse(input)!)))
+  const { result, rerender } = renderHook(({ quarter }) => useChangeScores(['11110515'], quarter), { initialProps: { quarter: '20254' } })
+  await waitFor(() => expect(result.current.result).not.toBeNull())
+  blocked = true; rerender({ quarter: '20253' }); rerender({ quarter: '20254' })
+  expect(result.current.loading).toBe(true); expect(result.current.result).toBeNull()
+})
+
 it('rejects mismatched previous quarter and retries without keeping a stale score', async () => {
   const value = await regionFixtureResponse('/api/cafe-change-scores?dongCodes=11110515&quarterCode=20254')!.json()
   value.previousQuarterCode = '20252'

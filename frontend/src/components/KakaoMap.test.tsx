@@ -62,6 +62,23 @@ describe('지도 위치 선택', () => {
     fireEvent(window, new Event('resize'))
     expect(setCenter).toHaveBeenCalledWith(userCenter)
   })
+  it('ignores SDK center changes caused by an unprocessed viewport resize', async () => {
+    let width = 800, resize = () => {}
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => width)
+    vi.stubGlobal('ResizeObserver', class { constructor(callback: () => void) { resize = callback }; observe() {}; disconnect() {} })
+    const original = new mock.sdk.LatLng(37.58, 127.01)
+    let center = original
+    const setCenter = vi.fn(value => { center = value })
+    vi.mocked(mock.sdk.Map).mockImplementationOnce(function () { return { relayout: vi.fn(), getCenter: () => center, setCenter } })
+    render(<KakaoMap selectedCoordinate={null} onCoordinateChange={vi.fn()} />)
+    await ready()
+    const remember = vi.mocked(mock.sdk.event.addListener).mock.calls.find(call => String(call[1]) === 'center_changed')![2]
+    width = 320
+    center = new mock.sdk.LatLng(37.6, 126.9)
+    act(() => remember({ latLng: center }))
+    act(() => resize())
+    expect(setCenter).toHaveBeenLastCalledWith(original)
+  })
   it('links numbered candidate and nearby overlays, removes listeners on replacement and clears all layers on unmount', async () => {
     const overlays: { content: HTMLElement; setMap: ReturnType<typeof vi.fn> }[] = []
     const CustomOverlay = vi.fn(function (options: { content: HTMLElement }) {

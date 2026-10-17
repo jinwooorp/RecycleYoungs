@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { getConsumptionScores } from '../api/regionApi'
 import type { ConsumptionScores } from '../types/regions'
+import { useScoreRequestKey } from './useScoreRequestKey'
 
 export function useConsumptionScores(codes: string[], quarter: string) {
   const key = [...new Set(codes)].sort().join(',')
-  const [attempt, setAttempt] = useState(0)
+  const { requestKey, retry } = useScoreRequestKey(`${key}:${quarter}`)
   const [state, setState] = useState<{ key: string; value: ConsumptionScores | null; error: string | null } | null>(null)
-  const requestKey = `${key}:${quarter}:${attempt}`
   useEffect(() => {
     if (!key || !quarter) return
     const controller = new AbortController()
@@ -24,5 +24,5 @@ export function useConsumptionScores(codes: string[], quarter: string) {
   }, [key, quarter, requestKey])
   const current = state?.key === requestKey ? state : null
   return { result: current?.value ?? null, error: current?.error ?? null,
-    loading: !!key && !!quarter && !current, retry: () => setAttempt(n => n + 1) }
+    loading: !!key && !!quarter && !current, retry }
 }

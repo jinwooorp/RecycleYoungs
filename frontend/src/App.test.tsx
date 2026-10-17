@@ -4,6 +4,7 @@ import App from './App'
 import { normalTrend } from './test/trendFixture'
 import { createKakaoMapsMock } from './test/kakaoMapsMock'
 import { regionFixtureResponse, openStatisticsPanel, chooseRegion, showMap } from './test/regionFixture'
+import type { AdminDongStats } from './types/api'
 
 const dongs = [
   { code: '11110515', name: '청운효자동' },
@@ -58,7 +59,18 @@ async function search() {
   await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => String(u).startsWith('/api/admin-dong-stats?'))).toBe(true))
 }
 async function details(dong = '청운효자동') {
-  return within(await screen.findByRole('region', { name: `${dong} · 카페` }))
+  const region = within(await screen.findByRole('region', { name: `${dong} · 카페` }))
+  for (const summary of region.queryAllByText('선택 분기 세부지표')) {
+    if (!summary.closest('details')?.open) fireEvent.click(summary)
+  }
+  return region
+}
+function currentStatistics(body: AdminDongStats) {
+  statsResponse = async () => json(body)
+  const trend = structuredClone(normalTrend)
+  const row = trend.quarters.find(q => q.quarter.code === body.quarter.code)!
+  Object.assign(row, { storeStats: body.storeStats, salesStats: body.salesStats, missingReasons: body.missingReasons })
+  trendResponse = async () => json(trend)
 }
 function signalFor(endpoint: 'stats' | 'trends') {
   return fetchMock.mock.calls.find(([url]) => String(url).startsWith(`/api/admin-dong-${endpoint}?`))?.[1]?.signal
@@ -131,43 +143,44 @@ describe('행정동 통계 화면', () => {
   })
 
   it('BIGINT는 Number 안전 범위 위에서도 정확한 문자열로 표시한다', async () => {
-    statsResponse = async () => json({ ...normal, salesStats: { ...normal.salesStats, estimatedSalesAmount: '9007199254740993' } })
+    currentStatistics({ ...normal, salesStats: { ...normal.salesStats, estimatedSalesAmount: '9007199254740993' } })
     render(<App />)
     await search()
-    expect(await screen.findByText('9,007,199,254,740,993원')).toBeInTheDocument()
+    expect((await details()).getByText('9,007,199,254,740,993원')).toBeInTheDocument()
   })
 
   it('metric NULL과 실제 0을 구분하고 행을 NO_ROW로 바꾸지 않는다', async () => {
-    statsResponse = async () => json({ ...normal,
+    currentStatistics({ ...normal,
       storeStats: { ...normal.storeStats, storeCount: null, similarStoreCount: 0 },
       salesStats: { ...normal.salesStats, estimatedSalesAmount: null, transactionCount: '0', weekdayEstimatedSalesAmount: '0' },
     })
     render(<App />)
     await search()
     expect(await screen.findByText('0건')).toBeInTheDocument()
-    const store = within(screen.getByRole('region', { name: '점포 현황' }))
-    const sales = within(screen.getByRole('region', { name: '추정매출 현황' }))
-    expect(store.getByText('자료 없음')).toBeInTheDocument()
+    await details()
+    const store = within(screen.getByRole('region', { name: '카페 점포 흐름' }))
+    const sales = within(screen.getByRole('region', { name: '카페 소비 흐름' }))
+    expect(store.getByText('값이 제공되지 않음')).toBeInTheDocument()
     expect(store.getByText('0개')).toBeInTheDocument()
-    expect(sales.getByText('자료 없음')).toBeInTheDocument()
+    expect(sales.getByText('값이 제공되지 않음')).toBeInTheDocument()
     expect(sales.getByText('0원')).toBeInTheDocument()
     expect(screen.queryByText('해당 조건의 추정매출 자료가 없습니다.')).not.toBeInTheDocument()
   })
 
   it('부분 NO_ROW에서는 남은 통계 영역을 유지한다', async () => {
-    statsResponse = async () => json({ ...normal, salesStats: null, missingReasons: { storeStats: null, salesStats: 'NO_ROW' } })
+    currentStatistics({ ...normal, salesStats: null, missingReasons: { storeStats: null, salesStats: 'NO_ROW' } })
     render(<App />)
     await search()
-    expect(await screen.findByText('해당 조건의 추정매출 자료가 없습니다.')).toBeInTheDocument()
+    expect(await within(await screen.findByRole('region', { name: '카페 소비 흐름' })).findByText('집계 자료 없음')).toBeInTheDocument()
     expect((await details()).getByText('114개')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('전체 NO_ROW는 기준 조건을 유지한 정상 empty 결과다', async () => {
-    statsResponse = async () => json({ ...normal, storeStats: null, salesStats: null, missingReasons: { storeStats: 'NO_ROW', salesStats: 'NO_ROW' } })
+    currentStatistics({ ...normal, storeStats: null, salesStats: null, missingReasons: { storeStats: 'NO_ROW', salesStats: 'NO_ROW' } })
     render(<App />)
     await search()
-    expect(await screen.findByText('해당 조건의 점포 및 추정매출 자료가 없습니다.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getAllByText('집계 자료 없음')).toHaveLength(2))
     expect(screen.getByRole('heading', { name: '청운효자동 · 카페' })).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
@@ -209,10 +222,10 @@ describe('행정동 통계 화면', () => {
     ['9223372036854775807', '9,223,372,036,854,775,807원'],
     ['-9223372036854775808', '-9,223,372,036,854,775,808원'],
   ])('signed BIGINT 경계 %s는 정확하게 표시한다', async (value, display) => {
-    statsResponse = async () => json({ ...normal, salesStats: { ...normal.salesStats, estimatedSalesAmount: value } })
+    currentStatistics({ ...normal, salesStats: { ...normal.salesStats, estimatedSalesAmount: value } })
     render(<App />)
     await search()
-    expect(await screen.findByText(display)).toBeInTheDocument()
+    expect((await details()).getByText(display)).toBeInTheDocument()
   })
 
   it('행 없음과 missingReasons가 일치하지 않는 응답은 거부한다', async () => {
@@ -305,7 +318,7 @@ describe('선택 분기 상세와 고정 4분기 추세', () => {
     const trendUrl = fetchMock.mock.calls.find(([url]) => String(url).startsWith('/api/admin-dong-trends?'))?.[0]
     expect(trendUrl).toBe('/api/admin-dong-trends?dongCode=11110515&industryCode=CAFE')
     expect(screen.getByRole('button', { name: '조회 중...' })).toBeDisabled()
-    expect(screen.queryByRole('region', { name: '청운효자동 · 카페' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '청운효자동 · 카페' })).toBeVisible()
     await act(async () => { pending.resolve(json(normal)); await pending.promise })
     expect((await details()).getByText('114개')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: '통계 다시 불러오기' })).toBeEnabled())

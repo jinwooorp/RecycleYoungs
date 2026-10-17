@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { getChangeScores } from '../api/regionApi'
 import type { ChangeScores } from '../types/regions'
+import { useScoreRequestKey } from './useScoreRequestKey'
 
 export function useChangeScores(codes: string[], quarter: string) {
   const key = [...new Set(codes)].sort().join(',')
-  const [attempt, setAttempt] = useState(0)
+  const { requestKey, retry } = useScoreRequestKey(`${key}:${quarter}`)
   const [state, setState] = useState<{ key: string; value: ChangeScores | null; error: string | null } | null>(null)
-  const requestKey = `${key}:${quarter}:${attempt}`
   useEffect(() => {
     if (!key || !quarter) return
     const controller = new AbortController(), requested = key.split(',')
@@ -24,5 +24,5 @@ export function useChangeScores(codes: string[], quarter: string) {
     return () => controller.abort()
   }, [key, quarter, requestKey])
   const current = state?.key === requestKey ? state : null
-  return { result: current?.value ?? null, error: current?.error ?? null, loading: !!key && !!quarter && !current, retry: () => setAttempt(n => n + 1) }
+  return { result: current?.value ?? null, error: current?.error ?? null, loading: !!key && !!quarter && !current, retry }
 }

@@ -29,6 +29,30 @@ beforeEach(() => {
   }))
 })
 
+it('shows nearby stores directly on the map workspace without changing the analysis route', async () => {
+  render(<App />)
+  await waitFor(() => expect(map.listeners.size).toBe(1))
+  act(() => map.click(37.5665, 126.978))
+  expect(await screen.findByText('합성 카페 1')).toBeVisible()
+  expect(screen.getByLabelText('카페 종류')).toBeEnabled()
+  expect(screen.getByRole('region', { name: '창업 검토 요약' })).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: '합성 카페 1 지도에서 보기' }))
+  expect(window.location.pathname).toBe('/')
+  expect(screen.getByRole('button', { name: '합성 카페 1 지도에서 보기' })).toHaveAttribute('aria-pressed', 'true')
+})
+
+it('keeps navigation focus at the detail heading and map trigger after selecting a cafe', async () => {
+  render(<App />)
+  await waitFor(() => expect(map.listeners.size).toBe(1))
+  act(() => map.click(37.5665, 126.978))
+  fireEvent.click(await screen.findByRole('button', { name: '합성 카페 1 지도에서 보기' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: '합성 카페 1 지도에서 보기' })).toHaveFocus())
+  openStatisticsPanel()
+  await waitFor(() => expect(document.getElementById('detail-title')).toHaveFocus())
+  showMap()
+  await waitFor(() => expect(screen.getByRole('button', { name: '상세 분석 보기' })).toHaveFocus())
+})
+
 it('provides cafe-only manual requests even when the catalog contains other industries', async () => {
   render(<App />)
   openStatisticsPanel()
@@ -51,8 +75,8 @@ it('names saved candidates by their resolved region and shows unavailable scorin
   const dialog = screen.getByRole('dialog', { name: '창업 후보지 비교' })
   const card = await within(dialog).findByRole('article', { name: '후보 1 · 청운효자동' })
   expect(within(card).queryByText(/위도|경도/)).not.toBeInTheDocument()
-  expect(within(dialog).getByText('종합 평가는 아직 제공하지 않습니다')).toBeInTheDocument()
-  expect(within(dialog).getByText('수요 35점 기준')).toBeInTheDocument()
+  expect(within(dialog).getByRole('row', { name: /^검토 요약/ })).toBeInTheDocument()
+  expect(within(dialog).queryByText('수요 35점 기준')).not.toBeInTheDocument()
   expect(within(dialog).queryByText(/\d+\s*\/\s*100점/)).not.toBeInTheDocument()
   expect(within(dialog).getByRole('button', { name: '같은 분기로 후보 분석' })).toBeInTheDocument()
 })
@@ -71,7 +95,7 @@ it('keeps the map and selected point alive across detail navigation and dialog c
   await waitFor(() => expect(trigger).toHaveFocus())
   expect(map.maps).toHaveLength(1)
   expect(map.markers[0].position.getLat()).toBe(37.5665)
-  expect(screen.getByRole('region', { name: '창업 후보 위치 선택' })).toBeVisible()
+  await waitFor(() => expect(screen.getByRole('region', { name: '창업 후보 위치 선택' })).toBeVisible())
 })
 
 it('updates a candidate title when delayed region evidence arrives after saving', async () => {
@@ -99,6 +123,8 @@ it('never substitutes another industry when CAFE is absent from the catalog', as
   expect(screen.getByRole('button', { name: '통계 다시 불러오기' })).toBeDisabled()
   expect(screen.queryByRole('option', { name: '주점' })).not.toBeInTheDocument()
   expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).startsWith('/api/admin-dong-stats'))).toBe(false)
+  showMap()
+  expect(screen.getAllByText('카페 분석을 지원하는 조회 조건이 없습니다.')).toHaveLength(3)
 })
 
 it('places the opening menu on the map only while the panel is collapsed', async () => {

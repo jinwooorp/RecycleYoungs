@@ -3,6 +3,7 @@ import { Button } from './ui/button'
 import { formatDecimal } from '../lib/formatStats'
 import { formatChangeRate } from '../lib/readableNumbers'
 import { DataIdentifiers } from './DataProvenance'
+import { ScoreCardFrame } from './ScoreCardFrame'
 
 const reasons: Record<string, string> = {
   NO_ROW_CURRENT: '선택 분기의 거래 집계 자료가 없습니다.', NO_ROW_PREVIOUS: '지난 분기의 거래 집계 자료가 없습니다.',
@@ -11,16 +12,15 @@ const reasons: Record<string, string> = {
   ZERO_PREVIOUS: '지난 분기 거래가 0건이어서 변화율을 계산할 수 없습니다.', PREVIOUS_QUARTER_UNAVAILABLE: '비교할 지난 분기 자료를 아직 제공하지 않습니다.',
   INSUFFICIENT_COHORT: '비교할 수 있는 동네가 부족해 점수를 계산하지 않습니다.',
 }
-export function ChangeScoreCard({ result, dongCode, loading, error, onRetry, compact = false }: {
-  result: ChangeScores | null; dongCode: string; loading: boolean; error: string | null; onRetry: () => void; compact?: boolean
+export function ChangeScoreCard({ result, dongCode, loading, error, onRetry, compact = false, emptyMessage }: {
+  result: ChangeScores | null; dongCode: string; loading: boolean; error: string | null; onRetry: () => void; compact?: boolean; emptyMessage?: string
 }) {
   const item = result?.items.find(i => i.dong.code === dongCode)
-  const Title = compact ? 'h3' : 'h2'
-  return <section className="score-card" aria-label="카페 소비증감 점수"><Title className="text-sm font-semibold text-primary">카페 소비증감 점수</Title>
+  return <ScoreCardFrame title="카페 소비증감 점수" compact={compact}>
     {loading ? <p role="status" className="mt-3">점수를 계산하는 중입니다.</p> : error ? <div role="alert"><p>{error}</p><Button variant="outline" onClick={onRetry}>소비증감 점수 다시 조회</Button></div>
       : item ? <><p className="score-value">{item.score === null ? '산정 불가' : <>{item.score}<span>/100점</span></>}</p>
-        {item.changeRate !== null && <p className="text-sm">지난 분기 대비 {formatChangeRate(item.changeRate, item.direction)}</p>}
-        {item.reason && <p className="mt-2 text-sm">{reasons[item.reason] ?? '자료 확인이 필요합니다.'}</p>}</> : <p className="mt-3 text-sm">지역과 분기를 선택해 보세요.</p>}
+        {item.changeRate !== null && <p className={compact ? 'score-subtitle' : 'text-sm'} aria-label={`지난 분기 대비 ${formatChangeRate(item.changeRate, item.direction)}`}>{!compact && '지난 분기 대비 '}{formatChangeRate(item.changeRate, item.direction)}</p>}
+        {item.reason && <p className="mt-2 text-sm">{reasons[item.reason] ?? '자료 확인이 필요합니다.'}</p>}</> : <p className="mt-3 text-sm">{emptyMessage ?? '지역과 분기를 선택해 보세요.'}</p>}
     {!compact && result && <><p className="mt-3 text-sm">{result.previousQuarterCode.slice(0, 4)}년 {result.previousQuarterCode[4]}분기 → {result.quarter.label} · 비교한 동네 {result.cohortSize}개</p>
       {item && <p className="text-sm">거래 {formatDecimal(item.previousCount, '건')} → {formatDecimal(item.currentCount, '건')}</p>}
       <p className="mt-3 text-sm text-muted-foreground">지난 분기보다 카페 거래가 얼마나 달라졌는지, 서울의 다른 동네와 비교합니다.</p>
@@ -33,5 +33,5 @@ export function ChangeScoreCard({ result, dongCode, loading, error, onRetry, com
         <a className="underline" href={result.sourceUrl} target="_blank" rel="noreferrer">서울시 추정매출·행정동 자료 보기</a>
         <DataIdentifiers>{item?.changeRate !== null && item?.changeRate !== undefined && <p>정밀 표시 증감률: {item.changeRate}% (소수 넷째 자리까지 반올림)</p>}<p>변화율 = (이번 거래 − 지난 거래) ÷ 지난 거래 × 100. 점수는 변화율의 중간 순위를 0~100점으로 환산합니다.</p><p>계산 방식: {result.modelVersion} · 원자료 확인 상태: UNVERIFIED</p><p className="break-all">이번 조회 자료 구분 코드: {result.baselineId}</p></DataIdentifiers>
       </div></details></>}
-  </section>
+  </ScoreCardFrame>
 }

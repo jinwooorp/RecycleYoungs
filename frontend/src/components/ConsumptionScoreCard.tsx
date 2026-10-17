@@ -2,21 +2,21 @@ import type { ConsumptionScores } from '../types/regions'
 import { formatDecimal } from '../lib/formatStats'
 import { Button } from './ui/button'
 import { DataIdentifiers } from './DataProvenance'
+import { ScoreCardFrame } from './ScoreCardFrame'
 
 const reasons: Record<string, string> = { NO_ROW: '해당 분기의 거래 집계 자료가 없습니다.', NULL_VALUE: '집계 자료에 거래 건수 값이 제공되지 않았습니다.', INVALID_VALUE: '거래 건수가 올바른 값인지 확인이 필요합니다.', INSUFFICIENT_COHORT: '비교할 수 있는 동네가 부족해 점수를 계산하지 않습니다.' }
-export function ConsumptionScoreCard({ result, dongCode, loading, error, onRetry, compact = false }: {
-  result: ConsumptionScores | null; dongCode: string; loading: boolean; error: string | null; onRetry: () => void; compact?: boolean
+export function ConsumptionScoreCard({ result, dongCode, loading, error, onRetry, compact = false, emptyMessage }: {
+  result: ConsumptionScores | null; dongCode: string; loading: boolean; error: string | null; onRetry: () => void; compact?: boolean; emptyMessage?: string
 }) {
   const item = result?.items.find(i => i.dong.code === dongCode)
-  const Title = compact ? 'h3' : 'h2'
-  return <section className="score-card" aria-label="카페 소비규모 점수">
-    <Title className="text-sm font-semibold text-primary">카페 소비규모 점수</Title>
+  return <ScoreCardFrame title="카페 소비규모 점수" compact={compact}>
     {loading ? <p role="status" className="mt-3">점수를 계산하는 중입니다.</p> : error ? <div role="alert"><p>{error}</p><Button variant="outline" onClick={onRetry}>점수 다시 조회</Button></div>
       : item ? <><p className="score-value">{item.score === null ? '산정 불가' : <>{item.score}<span>/100점</span></>}</p>
+        {compact && <p className="score-subtitle">서울 동별 거래 순위</p>}
         {!compact && <><p className="text-sm">{item.dong.name} · {result!.quarter.label}</p>
           <p className="text-sm text-muted-foreground">거래 {formatDecimal(item.transactionCount, '건')} · 비교한 동네 {result!.cohortSize}개</p></>}
         {item.reason && <p className="mt-2 text-sm">{reasons[item.reason] ?? '자료 확인이 필요합니다.'}</p>}</>
-        : <p className="mt-3 text-sm">지역과 분기를 선택해 보세요.</p>}
+        : <p className="mt-3 text-sm">{emptyMessage ?? '지역과 분기를 선택해 보세요.'}</p>}
     {!compact && <p className="mt-3 text-sm text-muted-foreground">이 동네의 카페 거래가 서울의 다른 동네보다 얼마나 많은 편인지 보여줍니다.</p>}
     {!compact && result && <details className="source-details mt-3"><summary>이 점수는 어떻게 계산하나요?</summary><div className="explanation">
       <ol className="list-decimal space-y-2 pl-5"><li>선택한 분기의 <strong>행정동 전체 카페 거래 건수</strong>를 다른 서울 동네와 비교합니다. 점수가 높을수록 거래가 많은 쪽에 가깝습니다.</li>
@@ -28,5 +28,5 @@ export function ConsumptionScoreCard({ result, dongCode, loading, error, onRetry
       <a href={result.sourceUrl} target="_blank" rel="noreferrer" className="underline">서울시 추정매출·행정동 자료 보기</a>
       <DataIdentifiers><p>계산 방식: {result.modelVersion} · 원자료 확인 상태: UNVERIFIED</p><p>정확한 산식: 거래 건수의 중간 순위를 0~100점으로 환산하고 정수로 반올림합니다. 동점은 해당 순위의 중간값을 사용합니다.</p><p className="break-all">이번 조회 자료 구분 코드: {result.baselineId}</p></DataIdentifiers>
     </div></details>}
-  </section>
+  </ScoreCardFrame>
 }

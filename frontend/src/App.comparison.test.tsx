@@ -68,12 +68,44 @@ const selectQuarter = (q = '20251') => {
   comparison()
   fireEvent.change(screen.getByLabelText('비교 통계 분기'), { target: { value: q } })
 }
+it('waits for comparison submission before requesting both scores for a new quarter', async () => {
+  await ready(); add(p1)
+  await waitFor(() => expect(screen.getByRole('heading', { name: '청운효자동' })).toBeInTheDocument())
+  selectQuarter('20252')
+  const requested = () => fetchMock.mock.calls.filter(([u]) => /cafe-(consumption|change)-scores/.test(String(u)) && String(u).includes('quarterCode=20252'))
+  expect(requested()).toHaveLength(0)
+  fireEvent.click(screen.getByRole('button', { name: '같은 분기로 후보 분석' }))
+  await waitFor(() => expect(requested()).toHaveLength(2))
+  fireEvent.change(screen.getByLabelText('비교 통계 분기'), { target: { value: '20251' } })
+  fireEvent.change(screen.getByLabelText('비교 통계 분기'), { target: { value: '20252' } })
+  expect(requested()).toHaveLength(2)
+})
 async function compare() {
   selectQuarter()
   await waitFor(() => expect(screen.getByRole('button', { name: '같은 분기로 후보 분석' })).toBeEnabled())
   fireEvent.click(screen.getByRole('button', { name: '같은 분기로 후보 분석' }))
   await waitFor(() => expect(within(candidate(1)).getByText(/2025년 1분기 ·/)).toBeInTheDocument())
 }
+it('shows loading rather than the old score when resubmitting after a quarter round trip', async () => {
+  await ready(); add(p1); selectQuarter('20252')
+  await waitFor(() => expect(screen.getByRole('button', { name: '같은 분기로 후보 분석' })).toBeEnabled())
+  fireEvent.click(screen.getByRole('button', { name: '같은 분기로 후보 분석' }))
+  const primary = () => within(screen.getByRole('table', { name: '후보별 동일 지표 비교' }))
+  await waitFor(() => expect(primary().getByRole('row', { name: /^카페 소비규모/ })).toHaveTextContent('75/100점'))
+  const consumption = deferred<Response>(), change = deferred<Response>(), original = fetchMock.getMockImplementation()!
+  fetchMock.mockImplementation((input, options) => String(input).startsWith('/api/cafe-consumption-scores') ? consumption.promise
+    : String(input).startsWith('/api/cafe-change-scores') ? change.promise : original(input, options))
+  selectQuarter('20251'); selectQuarter('20252')
+  fireEvent.click(screen.getByRole('button', { name: '같은 분기로 후보 분석' }))
+  expect(primary().getByRole('row', { name: /^카페 소비규모/ })).toHaveTextContent('조회 중')
+  expect(primary().getByRole('row', { name: /^검토 요약/ })).toHaveTextContent('검토 자료를 확인하는 중입니다')
+  await act(async () => {
+    consumption.resolve(regionFixtureResponse('/api/cafe-consumption-scores?dongCodes=11110515&quarterCode=20252')!)
+    change.resolve(regionFixtureResponse('/api/cafe-change-scores?dongCodes=11110515&quarterCode=20252')!)
+    await Promise.all([consumption.promise, change.promise])
+  })
+  await waitFor(() => expect(primary().getByRole('row', { name: /^카페 소비규모/ })).toHaveTextContent('75/100점'))
+})
 function deferred<T>() {
   let resolve!: (v: T) => void; let reject!: (reason: unknown) => void
   const promise = new Promise<T>((ok, bad) => { resolve = ok; reject = bad })
@@ -125,6 +157,16 @@ it('shows totalCount rather than list length, zero separately from 503 and prese
   expect(await within(candidate(3)).findByText('2개', { selector: 'strong' })).toBeInTheDocument()
   expect(within(candidate(1)).getByText('150개', { selector: 'strong' })).toBeInTheDocument()
 })
+it('leads with review signals and shared regional evidence while keeping full statistics available separately', async () => {
+  location = async c => json(comparisonLocation(c))
+  await ready(); add(p1); add(p2); await compare()
+  const table = within(screen.getByRole('table', { name: '후보별 동일 지표 비교' }))
+  expect(table.getByRole('row', { name: /^검토 요약/ })).toBeInTheDocument()
+  expect(table.getByRole('row', { name: /^다음 확인사항/ })).toBeInTheDocument()
+  expect(table.queryByText('행정동 추정매출')).not.toBeInTheDocument()
+  expect(table.getAllByText(/같은 지역 근거: 후보 1 · 청운효자동/).length).toBeGreaterThan(0)
+  expect(screen.getByText('전체 통계 비교')).toBeInTheDocument()
+})
 it('compares all nine statistics, retaining BIGINT, NULL, NO_ROW and zero semantics', async () => {
   stats = async q => {
     const body = comparisonStats(q.dongCode, q.quarterCode)
@@ -139,7 +181,8 @@ it('compares all nine statistics, retaining BIGINT, NULL, NO_ROW and zero semant
   expect(first.getAllByText('값이 제공되지 않음')).toHaveLength(2)
   await waitFor(() => expect(within(candidate(2)).getAllByText('집계 자료 없음')).toHaveLength(9))
   expect(first.getAllByRole('definition')).toHaveLength(9)
-  const table = within(screen.getByRole('table', { name: '후보별 동일 지표 비교' }))
+  fireEvent.click(screen.getByText('전체 통계 비교'))
+  const table = within(screen.getByRole('table', { name: '후보별 전체 통계 비교' }))
   expect(table.getByText('9,007,199,254,740,993원')).toBeInTheDocument()
   expect(table.getAllByText('집계 자료 없음')).toHaveLength(9)
   expect(table.getAllByText('값이 제공되지 않음')).toHaveLength(2)

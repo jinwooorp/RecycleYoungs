@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import App from './App'
 import { comparisonLocation, comparisonLookups, comparisonStats } from './test/comparisonFixture'
@@ -25,6 +25,7 @@ it('opens a region URL directly with scores and charts without inventing a nearb
   render(<App />)
   expect(await screen.findByRole('heading', { name: '청운효자동 · 카페' })).toBeInTheDocument()
   expect(await screen.findByRole('group', { name: '거래 건수 선 그래프' })).toBeInTheDocument()
+  fireEvent.click(within(screen.getByRole('region', { name: '카페 소비 흐름' })).getByText('정확한 값 보기'))
   expect(screen.getByRole('table', { name: '거래 건수 정확한 값' })).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: '후보지에 추가' })).not.toBeInTheDocument()
   expect(vi.mocked(fetch).mock.calls.some(([u]) => /locations\/resolve|nearby-stores/.test(String(u)))).toBe(false)

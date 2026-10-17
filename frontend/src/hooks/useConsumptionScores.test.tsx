@@ -3,6 +3,15 @@ import { expect, it, vi } from 'vitest'
 import { useConsumptionScores } from './useConsumptionScores'
 import { scoreFixture } from '../test/regionFixture'
 
+it('does not reactivate a cached result while a quarter round trip is requesting fresh data', async () => {
+  let blocked = false
+  vi.stubGlobal('fetch', vi.fn(() => blocked ? new Promise<Response>(() => {}) : Promise.resolve(new Response(JSON.stringify(scoreFixture(['11110515']))))))
+  const { result, rerender } = renderHook(({ quarter }) => useConsumptionScores(['11110515'], quarter), { initialProps: { quarter: '20254' } })
+  await waitFor(() => expect(result.current.result).not.toBeNull())
+  blocked = true; rerender({ quarter: '20253' }); rerender({ quarter: '20254' })
+  expect(result.current.loading).toBe(true); expect(result.current.result).toBeNull()
+})
+
 it('clears the previous region score immediately and ignores late responses even without fetch abort support', async () => {
   let old!: (r: Response) => void
   vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => String(input).includes('11110515')
