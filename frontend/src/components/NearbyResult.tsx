@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from './ui/
 import { Alert, AlertDescription } from './ui/alert'
 import type { NearbyStore } from '../types/nearby'
 import { DataIdentifiers } from './DataProvenance'
+import { PublicationInfo } from './PublicationInfo'
 import { NativeSelect } from './ui/native-select'
 import { allCafes, cafeBrands, cafeDistance, classifyCafe, filterCafes, type CafeFilter } from '../lib/cafeBrands'
 
@@ -104,7 +105,8 @@ export function NearbyResult({ result, loading, error, unsupported, selected, on
               <p className="text-sm text-muted-foreground">수집해 둔 자료에서 확인한 카페 수입니다. 자료가 언제 기준이며 모든 카페가 포함됐는지는 아직 확인하지 못했습니다.</p>
               <details className="source-details"><summary>주변 카페 자료는 어디에서 왔나요?</summary><div className="explanation">
               <p>소상공인시장진흥공단의 점포 목록을 사용합니다. 현재 영업 중인 모든 카페가 빠짐없이 들어 있다고 보장하지 않습니다. 가게가 있어도 분류나 위치 정보가 부족하면 이 목록에서 빠질 수 있습니다.</p>
-              <p>2025년 행정동 통계와 점포 목록은 작성 시기와 지역 범위가 다릅니다. 행정동 전체 매출을 이 반경의 예상 매출로 나누어 계산하지 않습니다.</p>
+              <p>선택 분기의 행정동 통계와 점포 목록은 작성 시기와 지역 범위가 다릅니다. 행정동 전체 매출을 이 반경의 예상 매출로 나누어 계산하지 않습니다.</p>
+              {result.data.metadata && <PublicationInfo metadata={result.data.metadata} />}
               <DataIdentifiers><p>자료: 소상공인시장진흥공단(SEMAS) · 분류 I21201 · 원본 기준일·적재 시점 미확인 · snapshot 완전성 미검증(UNVERIFIED)</p>
               <p className="text-sm text-muted-foreground">전역 카페 자료 {number(result.data.quality.cafeSourceCount)}개 중 조회 가능한 분류·좌표 {number(result.data.quality.usableCafeCount)}개.
                 {' '}미분류 {number(result.data.quality.unclassifiedCafeCount)}개, 위치 누락 {number(result.data.quality.missingLocationCafeCount)}개,

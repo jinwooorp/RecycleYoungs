@@ -21,6 +21,12 @@ public class ApiExceptionHandler {
             new ApiResponses.Error("DATA_INTEGRITY_ERROR", "데이터 무결성 오류입니다.", null));
     }
 
+    @ExceptionHandler(DataVersionChangedException.class)
+    ResponseEntity<ApiResponses.Error> versionChanged(DataVersionChangedException ex) {
+        return ResponseEntity.status(409).body(new ApiResponses.Error("DATA_VERSION_CHANGED",
+            "자료 버전이 변경됐습니다. 조회 목록을 새로 불러온 뒤 다시 조회해 주세요.", null));
+    }
+
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiResponses.Error> unexpected(Exception ex) {
         LOG.error("행정동 API 내부 오류", ex);

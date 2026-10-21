@@ -5,6 +5,7 @@ import { getNearbyStores } from '../api/nearbyApi'
 import type { MapCoordinate } from '../components/KakaoMap'
 import type { Lookups } from '../types/api'
 import type { Candidate, CandidateRequest, CandidateValues, StatsBlockReason } from '../types/comparison'
+import { validQuarterCode } from '../lib/publication'
 
 type Kind = keyof CandidateValues
 interface Control { generation: number; controller: AbortController | null }
@@ -101,7 +102,7 @@ export function useCandidateComparison(lookups: Lookups | null, lookupLoading: b
     registry.current.delete(id); emit()
   }
   function changeQuarter(code: string) {
-    const next = lookups?.quarters.some(q => q.code === code && /^2025[1-4]$/.test(code)) ? code : ''
+    const next = lookups?.quarters.some(q => q.code === code && validQuarterCode(code)) ? code : ''
     if (quarterRef.current === next) return
     quarterRef.current = next; setQuarter(next); setComparisonRevision(n => n + 1)
     for (const entry of registry.current.values()) invalidateStats(entry)
@@ -111,7 +112,7 @@ export function useCandidateComparison(lookups: Lookups | null, lookupLoading: b
     if (lookupLoading) return 'LOOKUP_LOADING'
     if (lookupError || !lookups) return 'LOOKUP_ERROR'
     if (!lookups.industries.some(i => i.code === 'CAFE')) return 'NO_CAFE'
-    if (!lookups.quarters.some(q => q.code === selectedQuarter && /^2025[1-4]$/.test(selectedQuarter))) return 'NO_QUARTER'
+    if (!lookups.quarters.some(q => q.code === selectedQuarter && validQuarterCode(selectedQuarter))) return 'NO_QUARTER'
     if (candidate.location.loading) return 'LOCATION_LOADING'
     const result = candidate.location.result
     if (!result) return 'LOCATION_ERROR'
@@ -126,7 +127,9 @@ export function useCandidateComparison(lookups: Lookups | null, lookupLoading: b
     const dongCode = entry.value.location.result!.adminDong.resolvedDong!.code, requestedQuarter = quarterRef.current
     entry.value = { ...entry.value, statsQuarter: requestedQuarter }
     run(entry, 'stats', async signal => {
-      const result = await getAdminDongStats({ dongCode, industryCode: 'CAFE', quarterCode: requestedQuarter }, signal)
+      const dataVersion = lookups?.quarters.find(q => q.code === requestedQuarter)?.metadata?.dataVersion
+      const result = await getAdminDongStats({ dongCode, industryCode: 'CAFE', quarterCode: requestedQuarter,
+        ...(dataVersion ? { dataVersion } : {}) }, signal)
       if (result.dong.code !== dongCode || result.industry.code !== 'CAFE' || result.quarter.code !== requestedQuarter) throw invalidResponse()
       return result
     })

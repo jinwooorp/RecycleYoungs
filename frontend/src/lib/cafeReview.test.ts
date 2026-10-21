@@ -9,6 +9,17 @@ function input() {
   const change: ChangeScores = { ...result, previousQuarterCode: '20253', items: [{ dong: result.items[0].dong, status: 'AVAILABLE', score: 95, currentCount: '900', previousCount: '1000', changeRate: '-10.0000', direction: 'DECREASE', reason: null }] }
   return { dongCode: '11110515', quarterCode: '20254', consumption: { result, loading: false, error: null }, change: { result: change, loading: false, error: null } }
 }
+it('withholds combined scores and nearby evidence from different publication versions', () => {
+  const value=input()
+  const metadata={dataVersion:'a'.repeat(64),collectedAt:'2026-10-21T08:00:00Z',storeReferenceMonth:'202606',storeScope:'I21201' as const,sourceSnapshotStatus:'UNVERIFIED' as const}
+  value.consumption.result.metadata=metadata
+  value.change.result.metadata={...metadata,dataVersion:'b'.repeat(64)}
+  expect(buildCafeReview(value).state).toBe('UNAVAILABLE')
+  value.change.result.metadata=metadata
+  const point={lat:37.57,lng:126.98}, nearby=nearbyFixture(point)
+  nearby.data.metadata={...metadata,dataVersion:'b'.repeat(64)}
+  expect(buildCafeReview({...value,point,nearby}).evidence.join(' ')).not.toContain('카페 ')
+})
 it('prioritizes actual decline over high relative scores without inventing a composite score or recommendation', () => {
   const review = buildCafeReview(input())
   expect(review.state).toBe('READY'); expect(review.headline).toBe('소비 감소 확인 필요')

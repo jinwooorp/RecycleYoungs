@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { ApiFailure, getAdminDongs, getAdminDongStats, getAdminDongTrend, getIndustries, getQuarters } from '../api/adminDongApi'
 import type { AdminDongStats, AdminDongTrend, Lookups, StatsQuery } from '../types/api'
+import { samePublication } from '../lib/publication'
 
 function failure(error: unknown): ApiFailure {
   return error instanceof ApiFailure ? error : new ApiFailure('response', {
@@ -17,7 +18,9 @@ export function useAdminDongStats(locationDongCode?: string, automatic = false) 
   const [quarterTouched, setQuarterTouched] = useState(false)
   const [selectionRevision, setSelectionRevision] = useState(0)
   // Derived selection also handles a location resolving before lookup loading/retry finishes.
-  const selection = { ...manualSelection, quarterCode: automatic && !quarterTouched ? lookups?.quarters.at(-1)?.code ?? '' : manualSelection.quarterCode, dongCode: locationDongCode === undefined ? manualSelection.dongCode
+  const quarterCode = automatic && !quarterTouched ? lookups?.quarters.at(-1)?.code ?? '' : manualSelection.quarterCode
+  const version = lookups?.quarters.find(q => q.code === quarterCode)?.metadata?.dataVersion
+  const selection = { ...manualSelection, quarterCode, ...(version ? { dataVersion: version } : {}), dongCode: locationDongCode === undefined ? manualSelection.dongCode
     : lookups?.adminDongs.some(dong => dong.code === locationDongCode) ? locationDongCode : '' }
   const [stats, setStats] = useState<AdminDongStats | null>(null)
   const [statsLoading, setStatsLoading] = useState(false)
@@ -26,6 +29,7 @@ export function useAdminDongStats(locationDongCode?: string, automatic = false) 
   const [trendLoading, setTrendLoading] = useState(false)
   const [trendError, setTrendError] = useState<ApiFailure | null>(null)
   const searchRequest = useRef<AbortController | null>(null)
+  const searchScope = useRef('')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -69,14 +73,16 @@ export function useAdminDongStats(locationDongCode?: string, automatic = false) 
   }
 
   async function search() {
+    const scope = `${selection.dongCode}:${selection.industryCode}:${selection.quarterCode}:${selection.dataVersion ?? ''}`
     if (!lookups || !selection.dongCode || !selection.industryCode || !selection.quarterCode
       || !lookups.adminDongs.some(dong => dong.code === selection.dongCode)
       || !lookups.industries.some(industry => industry.code === selection.industryCode)
       || !lookups.quarters.some(quarter => quarter.code === selection.quarterCode)
-      || (searchRequest.current && !searchRequest.current.signal.aborted)) return
+      || (searchRequest.current && !searchRequest.current.signal.aborted && searchScope.current === scope)) return
     searchRequest.current?.abort()
     const controller = new AbortController()
     searchRequest.current = controller
+    searchScope.current = scope
     const current = () => !controller.signal.aborted && searchRequest.current === controller
     setStats(null)
     setStatsError(null)
@@ -102,8 +108,11 @@ export function useAdminDongStats(locationDongCode?: string, automatic = false) 
     // Coalesce a region/quarter change into one request after React commits it.
     if (automatic) queueMicrotask(() => { if (!cancelled) automaticSearch() })
     return () => { cancelled = true }
-  }, [automatic, selection.dongCode, selection.quarterCode, selectionRevision, lookups])
+  }, [automatic, selection.dongCode, selection.quarterCode, selection.dataVersion, selectionRevision, lookups])
 
+  const metadata = lookups?.quarters.find(q => q.code === selection.quarterCode)?.metadata
   return { lookups, lookupLoading, lookupError, retryLookups, selection, changeSelection, search,
-    stats, statsLoading, statsError, trend, trendLoading, trendError, searchLoading: statsLoading || trendLoading }
+    stats: stats && samePublication(stats.metadata, metadata) ? stats : null, statsLoading, statsError,
+    trend: trend && samePublication(trend.metadata, metadata) ? trend : null, trendLoading, trendError,
+    searchLoading: statsLoading || trendLoading }
 }

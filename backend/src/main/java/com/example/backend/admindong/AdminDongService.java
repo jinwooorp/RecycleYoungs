@@ -8,7 +8,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
 public class AdminDongService {
-    private static final List<String> TREND_QUARTERS = List.of("20251", "20252", "20253", "20254");
     private final AdminDongRepository repository;
     public AdminDongService(AdminDongRepository repository) { this.repository = repository; }
 
@@ -24,25 +23,38 @@ public class AdminDongService {
         var industry = industry(lookup, query.industryCode());
         var quarter = lookup.quarters().stream().filter(q -> q.code().equals(query.quarterCode())).findFirst()
             .orElseThrow(() -> new InvalidQueryException("UNSUPPORTED_QUARTER", "지원하지 않는 분기입니다.", "quarterCode"));
+        var metadata=query.dataVersion()==null?quarter.metadata():repository.requireVersion(query.dataVersion());
         var store = repository.store(query.dongCode(), industry.sourceCode(), query.quarterCode());
         var sales = repository.sales(query.dongCode(), industry.sourceCode(), query.quarterCode());
         return new ApiResponses.Stats(dong, new ApiResponses.NamedCode(industry.code(), industry.name()), quarter,
-            storeStats(store), salesStats(sales), missingReasons(store, sales));
+            storeStats(store), salesStats(sales), missingReasons(store, sales),metadata);
     }
 
     public ApiResponses.Trend trends(QueryValidator.TrendQuery query) {
         var lookup = repository.lookup();
         var dong = dong(lookup, query.dongCode());
         var industry = industry(lookup, query.industryCode());
-        var stores = repository.stores(query.dongCode(), industry.sourceCode(), TREND_QUARTERS);
-        var sales = repository.salesByQuarter(query.dongCode(), industry.sourceCode(), TREND_QUARTERS);
-        var quarters = TREND_QUARTERS.stream().map(code -> {
+        var metadata=query.dataVersion()==null?(lookup.quarters().isEmpty()?null:lookup.quarters().getFirst().metadata()):repository.requireVersion(query.dataVersion());
+        var axis=timeline(lookup.quarters());
+        var stores = axis.isEmpty()?java.util.Map.<String,AdminDongRepository.StoreRow>of():repository.stores(query.dongCode(), industry.sourceCode(), axis);
+        var sales = axis.isEmpty()?java.util.Map.<String,AdminDongRepository.SalesRow>of():repository.salesByQuarter(query.dongCode(), industry.sourceCode(), axis);
+        var quarters = axis.stream().map(code -> {
             var store = stores.get(code);
             var sale = sales.get(code);
             var quarter = new ApiResponses.Quarter(code, code.substring(0, 4) + "년 " + code.charAt(4) + "분기");
             return new ApiResponses.TrendQuarter(quarter, storeStats(store), salesStats(sale), missingReasons(store, sale));
         }).toList();
-        return new ApiResponses.Trend(dong, new ApiResponses.NamedCode(industry.code(), industry.name()), quarters);
+        return new ApiResponses.Trend(dong, new ApiResponses.NamedCode(industry.code(), industry.name()), quarters,metadata);
+    }
+
+    private static List<String> timeline(List<ApiResponses.Quarter> supported) {
+        var sorted=supported.stream().map(ApiResponses.Quarter::code).distinct().sorted().toList();
+        if (sorted.isEmpty()) return List.of();
+        if (sorted.stream().anyMatch(v->!v.matches("[1-9][0-9]{3}[1-4]"))) throw new DataIntegrityException();
+        int first=Integer.parseInt(sorted.getFirst().substring(0,4))*4+sorted.getFirst().charAt(4)-'1';
+        int last=Integer.parseInt(sorted.getLast().substring(0,4))*4+sorted.getLast().charAt(4)-'1';
+        if (last-first>400) throw new DataIntegrityException();
+        return java.util.stream.IntStream.rangeClosed(first,last).mapToObj(n->""+(n/4)+(n%4+1)).toList();
     }
 
     private static ApiResponses.NamedCode dong(AdminDongRepository.Lookup lookup, String code) {

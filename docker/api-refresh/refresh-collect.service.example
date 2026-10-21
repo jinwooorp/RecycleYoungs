@@ -1,0 +1,22 @@
+# 과거 수집 전용 초안입니다. 현행 예약 실행은 docker-compose.api.yml의 api-scheduler입니다.
+# 중복 수집을 피하도록 이 systemd 예시는 설치·활성화하지 않습니다.
+# 대상 서버·서비스 사용자·경로·호출 한도·실제 지원 분기를 확정한 뒤 사용합니다.
+# 이전 전체 run 목록(프로젝트 밖 JSON 배열)과 output 부모는 0700/0600으로 준비해야 합니다.
+# 이 단계는 수집·검증만 합니다. DB 적재·공개나 다음 run 목록 교체를 자동 수행하지 않습니다.
+[Unit]
+Description=RecycleYoungs API refresh collection (unpublished)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=recycleyoungs
+WorkingDirectory=/srv/recycleyoungs/etl
+UMask=0077
+NoNewPrivileges=true
+TimeoutStartSec=45min
+# 20262는 검증한 분기 예시입니다. 새 분기의 API 제공 여부를 확인한 뒤 명시적으로 바꿉니다.
+# 서울 HTTP는 기존 사용자 선택을 명시합니다. 자동 HTTPS→HTTP fallback은 없습니다.
+ExecStart=/srv/recycleyoungs/etl/.venv/bin/python -m app.api_refresh_job --env-file /srv/recycleyoungs/etl/api.env --output-parent /var/lib/recycleyoungs/api-runs --previous-run-list /var/lib/recycleyoungs/api-runs/previous-runs.json --quarter 20262 --allow-seoul-http
+# 실패한 전체 작업을 자동 재실행하지 않습니다. 실패 증거와 기존 공개 자료를 보존합니다.
+Restart=no

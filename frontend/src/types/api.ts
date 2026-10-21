@@ -1,6 +1,13 @@
 export interface AdminDong { code: string; name: string }
 export interface Industry { code: string; name: string }
-export interface Quarter { code: string; label: string }
+export interface PublicationMetadata {
+  dataVersion: string
+  collectedAt: string
+  storeReferenceMonth: string
+  storeScope: 'I21201' | 'ALL_SOURCE_INDUSTRIES'
+  sourceSnapshotStatus: 'UNVERIFIED'
+}
+export interface Quarter { code: string; label: string; metadata?: PublicationMetadata }
 export interface StoreStats {
   storeCount: number | null
   similarStoreCount: number | null
@@ -19,6 +26,7 @@ export interface MissingReasons {
   salesStats: 'NO_ROW' | null
 }
 export interface AdminDongStats {
+  metadata?: PublicationMetadata
   dong: AdminDong
   industry: Industry
   quarter: Quarter
@@ -27,8 +35,8 @@ export interface AdminDongStats {
   missingReasons: MissingReasons
 }
 export interface ApiError { code: string; message: string; field: string | null }
-export interface StatsQuery { dongCode: string; industryCode: string; quarterCode: string }
-export interface TrendQuery { dongCode: string; industryCode: string }
+export interface StatsQuery { dongCode: string; industryCode: string; quarterCode: string; dataVersion?: string }
+export interface TrendQuery { dongCode: string; industryCode: string; dataVersion?: string }
 export interface TrendQuarter {
   quarter: Quarter
   storeStats: StoreStats | null
@@ -36,6 +44,7 @@ export interface TrendQuarter {
   missingReasons: MissingReasons
 }
 export interface AdminDongTrend {
+  metadata?: PublicationMetadata
   dong: AdminDong
   industry: Industry
   quarters: TrendQuarter[]

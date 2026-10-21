@@ -21,9 +21,19 @@ public class ConsumptionScoreService {
         @Schema(types = {"string", "null"}, pattern = "^-?[0-9]+$") String transactionCount,
         @Schema(types = {"string", "null"}) String reason) {}
     public record Response(ApiResponses.Quarter quarter, String modelVersion, String baselineId, int cohortSize,
-        int minimumCohortSize, String sourceUrl, String sourceSnapshotStatus, List<Item> items) {}
+        int minimumCohortSize, String sourceUrl, String sourceSnapshotStatus, List<Item> items,
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) DataPublication.Metadata metadata) {
+        public Response(ApiResponses.Quarter quarter,String modelVersion,String baselineId,int cohortSize,int minimumCohortSize,
+                        String sourceUrl,String sourceSnapshotStatus,List<Item> items) {
+            this(quarter,modelVersion,baselineId,cohortSize,minimumCohortSize,sourceUrl,sourceSnapshotStatus,items,null);
+        }
+    }
 
     public Response scores(List<String> codes, String quarter) {
+        return scores(codes,quarter,null);
+    }
+    public Response scores(List<String> codes, String quarter, String dataVersion) {
+        var metadata=repository.requireVersion(dataVersion);
         var lookup = repository.lookup(); // Preserve mapping/duplicate/name integrity validation.
         var q = lookup.quarters().stream().filter(v -> v.code().equals(quarter)).findFirst()
             .orElseThrow(() -> new InvalidQueryException("UNSUPPORTED_QUARTER", "지원하지 않는 분기입니다.", "quarterCode"));
@@ -42,7 +52,7 @@ public class ConsumptionScoreService {
         String canonical = quarter + ":" + industry.sourceCode() + ":" + industry.id() + "\n"
             + rows.stream().map(r -> r.dongCode() + ":" + r.transactions()).collect(java.util.stream.Collectors.joining("\n"));
         return new Response(q, ConsumptionScore.MODEL, digest(canonical), size, ConsumptionScore.MIN_COHORT,
-            "https://data.seoul.go.kr/dataList/OA-22175/S/1/datasetView.do", "UNVERIFIED", results);
+            "https://data.seoul.go.kr/dataList/OA-22175/S/1/datasetView.do", "UNVERIFIED", results,metadata);
     }
     private static String digest(String text) {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8))); }

@@ -1,4 +1,5 @@
 import type { AdminDong, AdminDongStats, AdminDongTrend, ApiError, Industry, Quarter, StatsQuery, TrendQuery } from '../types/api'
+import { matchesPublication, samePublication, validPublication, validQuarterCode, quarterIndex } from '../lib/publication'
 
 export class ApiFailure extends Error {
   readonly kind: 'http' | 'network' | 'response'
@@ -21,9 +22,11 @@ const record = (value: unknown): value is Record<string, unknown> =>
 const namedCode = (value: unknown): value is AdminDong =>
   record(value) && typeof value.code === 'string' && typeof value.name === 'string'
 const quarter = (value: unknown): value is Quarter =>
-  record(value) && typeof value.code === 'string' && typeof value.label === 'string'
+  record(value) && typeof value.code === 'string' && validQuarterCode(value.code)
+  && value.label === `${value.code.slice(0, 4)}년 ${value.code[4]}분기` && validPublication(value.metadata)
 const namedCodes = (value: unknown): value is AdminDong[] => Array.isArray(value) && value.every(namedCode)
 const quarters = (value: unknown): value is Quarter[] => Array.isArray(value) && value.every(quarter)
+  && value.every((q, i) => i === 0 || q.code > value[i - 1].code && samePublication(q.metadata, value[0].metadata))
 const integer = (value: unknown) => value === null || (typeof value === 'number'
   && Number.isInteger(value) && value >= -2147483648 && value <= 2147483647)
 function decimal(value: unknown) {
@@ -48,21 +51,22 @@ function statSections(value: Record<string, unknown>) {
 
 function stats(value: unknown): value is AdminDongStats {
   return record(value) && namedCode(value.dong) && namedCode(value.industry) && quarter(value.quarter) && statSections(value)
+    && validPublication(value.metadata) && (!value.quarter.metadata || samePublication(value.quarter.metadata, value.metadata))
 }
 
-const trendCodes = ['20251', '20252', '20253', '20254']
 function trend(value: unknown): value is AdminDongTrend {
   return record(value) && namedCode(value.dong) && namedCode(value.industry)
-    && Array.isArray(value.quarters) && value.quarters.length === 4
-    && value.quarters.every((item, index) => record(item) && quarter(item.quarter)
-      && item.quarter.code === trendCodes[index] && item.quarter.label === `2025년 ${index + 1}분기`
-      && statSections(item))
+    && validPublication(value.metadata) && Array.isArray(value.quarters) && value.quarters.length <= 401
+    && value.quarters.every((item, index, axis) => record(item) && quarter(item.quarter)
+      && (index === 0 || quarterIndex(item.quarter.code) === quarterIndex(axis[index - 1].quarter.code) + 1)
+      && (!item.quarter.metadata || matchesPublication(value.metadata, item.quarter.metadata.dataVersion)) && statSections(item))
 }
 
 const errorCodes = new Set([
   'INVALID_PARAMETER', 'INVALID_DONG_CODE', 'UNKNOWN_DONG', 'INVALID_INDUSTRY_CODE',
   'UNKNOWN_INDUSTRY', 'UNSUPPORTED_INDUSTRY', 'INVALID_QUARTER', 'UNSUPPORTED_QUARTER',
   'DATA_INTEGRITY_ERROR', 'INTERNAL_ERROR',
+  'DATA_VERSION_CHANGED',
   'INVALID_COORDINATE', 'BOUNDARY_DATA_UNAVAILABLE',
   'BOUNDARY_VERSION_CHANGED',
   'UNSUPPORTED_RADIUS', 'CAFE_MAPPING_UNAVAILABLE', 'STORES_DATA_UNAVAILABLE', 'CAFE_DATA_UNAVAILABLE',
@@ -109,9 +113,13 @@ export const getIndustries = (signal?: AbortSignal) => get<Industry[]>('/api/ind
 export const getQuarters = (signal?: AbortSignal) => get<Quarter[]>('/api/quarters', quarters, signal)
 export const getAdminDongStats = (query: StatsQuery, signal?: AbortSignal) => {
   const parameters = new URLSearchParams({ dongCode: query.dongCode, industryCode: query.industryCode, quarterCode: query.quarterCode })
-  return get<AdminDongStats>(`/api/admin-dong-stats?${parameters}`, stats, signal)
+  if (query.dataVersion) parameters.set('dataVersion', query.dataVersion)
+  return get<AdminDongStats>(`/api/admin-dong-stats?${parameters}`,
+    (body): body is AdminDongStats => stats(body) && matchesPublication(body.metadata, query.dataVersion), signal)
 }
 export const getAdminDongTrend = (query: TrendQuery, signal?: AbortSignal) => {
   const parameters = new URLSearchParams({ dongCode: query.dongCode, industryCode: query.industryCode })
-  return get<AdminDongTrend>(`/api/admin-dong-trends?${parameters}`, trend, signal)
+  if (query.dataVersion) parameters.set('dataVersion', query.dataVersion)
+  return get<AdminDongTrend>(`/api/admin-dong-trends?${parameters}`,
+    (body): body is AdminDongTrend => trend(body) && matchesPublication(body.metadata, query.dataVersion), signal)
 }

@@ -20,7 +20,12 @@ public final class NearbyResponses {
         @Schema(allowableValues = {"AVAILABLE_RECORDS"}) String availability,
         @Schema(allowableValues = {"UNVERIFIED"}) String snapshotStatus,
         @Schema(types = {"string", "null"}, description = "현재 null: 원천 기준일 미검증") String referenceDate,
-        @Schema(types = {"string", "null"}, description = "현재 null: snapshot 적재 catalog 없음") String loadedAt, Quality quality) {}
+        @Schema(types = {"string", "null"}, description = "기존 적재 시각 미확인") String loadedAt, Quality quality,
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) com.example.backend.admindong.DataPublication.Metadata metadata) {
+        public Data(String source,String category,String availability,String status,String referenceDate,String loadedAt,Quality quality) {
+            this(source,category,availability,status,referenceDate,loadedAt,quality,null);
+        }
+    }
     @Schema(name = "NearbyStoresResult", description = "가용 자료에서 0개이면 totalCount=문자열 0/stores=[]. 미준비는 503. 최대 100개 목록과 전체 건수를 구분.")
     public record Result(Coordinate coordinate,
         @Schema(allowableValues = {"CAFE"}) String industryCode,

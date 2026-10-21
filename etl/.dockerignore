@@ -3,3 +3,4 @@ __pycache__/
 .venv/
 tests/
 data/
+api.env

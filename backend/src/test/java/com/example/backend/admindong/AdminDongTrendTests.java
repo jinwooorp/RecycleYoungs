@@ -47,13 +47,14 @@ class AdminDongTrendTests {
         repository = spy(new AdminDongRepository(jdbc));
         doReturn(new AdminDongRepository.Lookup(List.of(new ApiResponses.NamedCode("11110515", "최신 이름")),
             List.of(new AdminDongRepository.Industry(1, "CAFE", "카페", "CS100010", true)),
-            List.of(new ApiResponses.Quarter("20261", "2026년 1분기")))).when(repository).lookup();
+            List.of(new ApiResponses.Quarter("20251", "2025년 1분기"),new ApiResponses.Quarter("20252", "2025년 2분기"),
+                    new ApiResponses.Quarter("20253", "2025년 3분기"),new ApiResponses.Quarter("20254", "2025년 4분기")))).when(repository).lookup();
         mvc = MockMvcBuilders.standaloneSetup(new AdminDongController(new AdminDongService(repository)))
             .setControllerAdvice(new ApiExceptionHandler()).build();
     }
 
     @Test
-    void fixedAxisIsOrderedDespiteUnorderedRowsAndFutureLookup() throws Exception {
+    void supportedAxisIsOrderedDespiteUnorderedRows() throws Exception {
         var row = new AdminDongRepository.StoreRow(10, 11, 0, 1, 2);
         stores = List.of(Map.entry("20254", row), Map.entry("20251", row));
         sales = List.of(Map.entry("20252", new AdminDongRepository.SalesRow(123L, 0L, null, -123L)));

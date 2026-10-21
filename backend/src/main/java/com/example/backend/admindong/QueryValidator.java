@@ -11,19 +11,23 @@ final class QueryValidator {
     private static final List<String> CODES = List.of("INVALID_DONG_CODE", "INVALID_INDUSTRY_CODE", "INVALID_QUARTER");
     private QueryValidator() {}
 
-    record StatsQuery(String dongCode, String industryCode, String quarterCode) {}
-    record TrendQuery(String dongCode, String industryCode) {}
+    record StatsQuery(String dongCode, String industryCode, String quarterCode, String dataVersion) {
+        StatsQuery(String dongCode,String industryCode,String quarterCode) { this(dongCode,industryCode,quarterCode,null); }
+    }
+    record TrendQuery(String dongCode, String industryCode, String dataVersion) {
+        TrendQuery(String dongCode,String industryCode) { this(dongCode,industryCode,null); }
+    }
 
     static void noQuery(MultiValueMap<String, String> query) { rejectUnknown(query, List.of()); }
 
     static StatsQuery stats(MultiValueMap<String, String> query) {
         validate(query, FIELDS);
-        return new StatsQuery(query.getFirst("dongCode"), query.getFirst("industryCode"), query.getFirst("quarterCode"));
+        return new StatsQuery(query.getFirst("dongCode"), query.getFirst("industryCode"), query.getFirst("quarterCode"),version(query));
     }
 
     static TrendQuery trends(MultiValueMap<String, String> query) {
         validate(query, FIELDS.subList(0, 2));
-        return new TrendQuery(query.getFirst("dongCode"), query.getFirst("industryCode"));
+        return new TrendQuery(query.getFirst("dongCode"), query.getFirst("industryCode"),version(query));
     }
 
     private static void validate(MultiValueMap<String, String> query, List<String> fields) {
@@ -32,7 +36,8 @@ final class QueryValidator {
                 throw invalid("요청 파라미터는 정확히 한 번 전달해야 합니다.", field);
             }
         }
-        rejectUnknown(query, fields);
+        var allowed=new java.util.ArrayList<>(fields); allowed.add("dataVersion");
+        rejectUnknown(query, allowed);
         for (var field : fields) {
             if (query.getFirst(field) == null || query.getFirst(field).isEmpty()) {
                 throw invalid("필수 요청 파라미터가 없거나 비어 있습니다.", field);
@@ -43,6 +48,14 @@ final class QueryValidator {
                 throw new InvalidQueryException(CODES.get(i), "요청 파라미터 형식이 올바르지 않습니다.", fields.get(i));
             }
         }
+    }
+
+    private static String version(MultiValueMap<String,String> query) {
+        if (!query.containsKey("dataVersion")) return null;
+        var values=query.get("dataVersion");
+        if (values.size()!=1 || values.getFirst()==null || !values.getFirst().matches("[0-9a-f]{64}|legacy-unversioned"))
+            throw invalid("자료 버전 형식이 올바르지 않습니다.","dataVersion");
+        return values.getFirst();
     }
 
     private static void rejectUnknown(MultiValueMap<String, String> query, List<String> allowed) {

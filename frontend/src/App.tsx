@@ -50,8 +50,9 @@ function App() {
   const scoreQuarter = route.detail && route.quarterSpecified ? route.quarter : state.selection.quarterCode
   const scoreCodes = !route.error && state.lookups?.industries.some(i => i.code === 'CAFE') && state.lookups.quarters.some(q => q.code === scoreQuarter)
     && (regions.result?.districts.some(d => d.dongs.some(a => a.code === scoreCode)) || state.lookups.adminDongs.some(d => d.code === scoreCode)) ? [scoreCode] : []
-  const consumption = useConsumptionScores(scoreCodes, scoreQuarter)
-  const change = useChangeScores(scoreCodes, scoreQuarter)
+  const scoreVersion = state.lookups?.quarters.find(q => q.code === scoreQuarter)?.metadata?.dataVersion
+  const consumption = useConsumptionScores(scoreCodes, scoreQuarter, scoreVersion)
+  const change = useChangeScores(scoreCodes, scoreQuarter, scoreVersion)
   const comparison = useCandidateComparison(state.lookups, state.lookupLoading, !!state.lookupError)
   const visibleStores = useMemo(() => filterCafes(state.nearby.result?.stores ?? [], cafeFilter), [state.nearby.result, cafeFilter])
   const region = state.location.loading ? '지역 확인 중' : state.location.error ? '지역 확인 실패'
@@ -175,7 +176,7 @@ function App() {
     <Dialog open={view === 'guide'} onClose={() => setView('explore')} labelledBy="data-guide-title" closeLabel="안내 닫기">
       <div className="flex flex-col gap-5"><h2 id="data-guide-title" className="text-2xl font-semibold">데이터 안내</h2>
         <p>서울시 행정동 통계와 소상공인시장진흥공단 점포 자료로 카페 창업 환경을 비교합니다.</p>
-        <p className="text-sm text-muted-foreground">주변 카페는 선택한 지점에서 500m 안의 수집된 점포 목록입니다. 점수와 매출은 2025년 행정동 전체 통계입니다. 두 자료는 작성 시기와 지역 범위가 다릅니다. 자료의 기준일과 빠진 점포가 없는지, 지도와 과거 통계의 지역 구분이 같은지는 확인 전입니다.</p>
+        <p className="text-sm text-muted-foreground">주변 카페는 선택한 지점에서 500m 안의 수집된 점포 목록입니다. 점수와 매출은 선택한 분기의 행정동 전체 통계입니다. 두 자료는 작성 시기와 지역 범위가 다릅니다. 자료의 기준일과 빠진 점포가 없는지, 지도와 과거 통계의 지역 구분이 같은지는 확인 전입니다.</p>
         <section className="flex flex-col gap-2 text-sm"><h3 className="font-semibold">현재 제공하는 점수</h3><p>소비규모는 거래가 얼마나 많은 편인지, 소비증감은 지난 분기와 비교한 변화가 어느 정도인지 보여줍니다. 높은 점수가 창업 성공이나 수익을 보장하지 않습니다.</p></section>
         <section aria-labelledby="keyboard-guide"><h3 id="keyboard-guide" className="font-semibold">지도 사용법·키보드 조작</h3><p className="mt-2 text-sm">Tab으로 지도에 초점을 맞춘 뒤 방향키로 지도를 이동하고, Enter로 지도 중심을 후보 위치로 선택하세요. 지도 클릭으로도 선택할 수 있습니다. 선택 위치로 이동 버튼은 이미 선택한 지점으로 돌아갑니다. 지도 위 지역 선택기로 자치구와 행정동을 찾을 수 있습니다.</p></section>
         <details className="source-details"><summary>자료 출처</summary><div className="mt-2 flex flex-col gap-2 text-sm">

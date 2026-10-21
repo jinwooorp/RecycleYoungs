@@ -21,33 +21,42 @@ const salesMetrics: { key: keyof SalesStats; label: string; unit: '원' | '건' 
 
 export function TrendResult({ trend }: { trend: AdminDongTrend }) {
   const [open, setOpen] = useState(false)
-  return <section className="result flex flex-col gap-3" aria-label="2025년 전체 원자료">
-    <h2 className="text-lg font-semibold">2025년 4개 분기 추세</h2>
-    <p className="text-sm text-muted-foreground">위 그래프는 선택한 분기까지 보여줍니다. 한 해의 모든 지표는 아래 전체 표에서 확인할 수 있습니다. 선택한 분기 이후의 자료도 포함합니다.</p>
-    <Button type="button" variant="outline" onClick={() => setOpen(true)}>2025년 전체 자료 보기</Button>
+  const { title, year } = period(trend)
+  return <section className="result flex flex-col gap-3" aria-label={`${year ? year + '년' : '전체 기간'} 전체 원자료`}>
+    <h2 className="text-lg font-semibold">{title}</h2>
+    <p className="text-sm text-muted-foreground">위 그래프는 선택한 분기까지 보여줍니다. 공개된 전체 기간의 지표는 아래 표에서 확인할 수 있습니다. 선택한 분기 이후의 자료도 포함합니다.</p>
+    <Button type="button" variant="outline" onClick={() => setOpen(true)}>{year ? `${year}년 전체 자료 보기` : '전체 기간 자료 보기'}</Button>
     <Dialog open={open} onClose={() => setOpen(false)} labelledBy="trend-title" closeLabel="추세 닫기">{open && <WideTrendResult trend={trend} />}</Dialog>
   </section>
 }
 
+function period(trend: AdminDongTrend) {
+  const first = trend.quarters[0]?.quarter, last = trend.quarters.at(-1)?.quarter
+  const year = first && first.code.slice(0, 4) === last?.code.slice(0, 4) ? first.code.slice(0, 4) : null
+  return { year, title: year ? `${year}년 ${trend.quarters.length}개 분기 추세`
+    : first && last ? `${first.label}~${last.label} 추세` : '지원 분기 추세' }
+}
+
 function WideTrendResult({ trend }: { trend: AdminDongTrend }) {
   const { dong, industry, quarters } = trend
+  const { title, year } = period(trend)
   const empty = quarters.every(item => item.storeStats === null && item.salesStats === null)
   return (
     <section className="result" aria-labelledby="trend-title">
       <header className="result-header">
         <p className="eyebrow">같은 조건의 추세</p>
-        <h2 id="trend-title">2025년 4개 분기 추세</h2>
+        <h2 id="trend-title">{title}</h2>
         <p>{dong.name} · {industry.name}</p>
-        <p>선택한 상세 분기와 별개로 같은 행정동·업종의 2025년 1~4분기를 함께 보여줍니다.</p>
+        <p>선택한 상세 분기와 별개로 같은 행정동·업종의 공개 지원 기간을 함께 보여줍니다. 중간에 자료가 없는 분기도 표시합니다.</p>
       </header>
-      {empty && <p className="notice" role="status">2025년 네 분기 모두 점포 및 추정매출 자료가 없습니다.</p>}
+      {empty && <p className="notice" role="status">{year ? `${year}년 ${quarters.length === 4 ? '네' : quarters.length} 분기` : '표시한 기간'} 모두 점포 및 추정매출 자료가 없습니다.</p>}
       <div className="grid min-w-0 gap-5">
         <Card asChild className="min-w-0">
           <section className="stats-panel" aria-labelledby="trend-store-title">
             <CardContent><h3 id="trend-store-title">점포 추세</h3>
             <div className="trend-table-scroll" tabIndex={0} role="region" aria-label="점포 추세 표 가로 스크롤">
               <table className="trend-table">
-                <caption className="visually-hidden">{dong.name} {industry.name} 2025년 점포 추세</caption>
+                <caption className="visually-hidden">{dong.name} {industry.name} {year && `${year}년 `}점포 추세</caption>
                 <thead><tr><th scope="col">지표</th>{quarters.map(item => <th scope="col" key={item.quarter.code}>{item.quarter.label}</th>)}</tr></thead>
                 <tbody>{storeMetrics.map(metric => (
                   <tr key={metric.key}>
@@ -64,7 +73,7 @@ function WideTrendResult({ trend }: { trend: AdminDongTrend }) {
             <CardContent><h3 id="trend-sales-title">추정매출 추세</h3>
             <div className="trend-table-scroll" tabIndex={0} role="region" aria-label="추정매출 추세 표 가로 스크롤">
               <table className="trend-table">
-                <caption className="visually-hidden">{dong.name} {industry.name} 2025년 추정매출 추세</caption>
+                <caption className="visually-hidden">{dong.name} {industry.name} {year && `${year}년 `}추정매출 추세</caption>
                 <thead><tr><th scope="col">지표</th>{quarters.map(item => <th scope="col" key={item.quarter.code}>{item.quarter.label}</th>)}</tr></thead>
                 <tbody>{salesMetrics.map(metric => (
                   <tr key={metric.key}>

@@ -22,20 +22,24 @@ public class ChangeScoreController {
     private final ChangeScoreService service;
     public ChangeScoreController(ChangeScoreService service) { this.service = service; }
     @GetMapping("/api/cafe-change-scores")
+    @ApiResponse(responseCode="409",description="DATA_VERSION_CHANGED: 공개 자료 버전 변경",content=@Content(mediaType="application/json",schema=@Schema(implementation=ApiResponses.Error.class)))
     @ApiResponse(responseCode = "200", description = "소비증감 상대 점수와 전분기 원자료·산정 불가 사유")
     @Operation(summary = "행정동 카페 소비증감 상대 점수", description = "직전 분기 대비 거래 건수 증감률의 중간 순위 백분위. 두 분기 유효 서울 카페 행정동 최소 30개. 전분기 0·NULL·누락은 제외. 상대 점수가 높아도 소비가 감소할 수 있음. 성공률이 아님. 원본 snapshot UNVERIFIED.", parameters = {
         @Parameter(name = "dongCodes", in = ParameterIn.QUERY, required = true, schema = @Schema(type = "string", pattern = "^[0-9]{8}(,[0-9]{8}){0,2}$")),
-        @Parameter(name = "quarterCode", in = ParameterIn.QUERY, required = true, schema = @Schema(type = "string", pattern = "^[1-9][0-9]{3}[1-4]$"))
+        @Parameter(name = "quarterCode", in = ParameterIn.QUERY, required = true, schema = @Schema(type = "string", pattern = "^[1-9][0-9]{3}[1-4]$")),
+        @Parameter(name="dataVersion",in=ParameterIn.QUERY,description="선택한 분기의 공개 버전. 불일치 시 409.",schema=@Schema(type="string",pattern="^[0-9a-f]{64}$|^legacy-unversioned$"))
     })
     public ChangeScoreService.Response scores(@Parameter(hidden = true) @RequestParam MultiValueMap<String, String> query) {
-        if (query.size() != 2 || !query.containsKey("dongCodes") || !query.containsKey("quarterCode") || query.values().stream().anyMatch(v -> v.size() != 1)) throw invalid();
+        if (query.size() != (query.containsKey("dataVersion")?3:2) || !query.containsKey("dongCodes") || !query.containsKey("quarterCode") || query.values().stream().anyMatch(v -> v.size() != 1)) throw invalid();
         String raw = query.getFirst("dongCodes");
         if (raw == null || !raw.matches("[0-9]{8}(,[0-9]{8}){0,2}")) throw invalid();
         var codes = List.of(raw.split(","));
         if (codes.stream().distinct().count() != codes.size()) throw invalid();
         var stats = new LinkedMultiValueMap<String, String>();
         stats.add("dongCode", codes.getFirst()); stats.add("industryCode", "CAFE"); stats.add("quarterCode", query.getFirst("quarterCode"));
-        return service.scores(codes, QueryValidator.stats(stats).quarterCode());
+        if (query.containsKey("dataVersion")) stats.add("dataVersion",query.getFirst("dataVersion"));
+        var valid=QueryValidator.stats(stats);
+        return valid.dataVersion()==null?service.scores(codes,valid.quarterCode()):service.scores(codes,valid.quarterCode(),valid.dataVersion());
     }
     private static InvalidQueryException invalid() {
         return new InvalidQueryException("INVALID_PARAMETER", "중복 없는 행정동 1~3개와 분기를 정확히 한 번 전달해 주세요.", "dongCodes");

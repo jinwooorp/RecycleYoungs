@@ -37,7 +37,7 @@ describe('API 응답 경계', () => {
   })
 })
 
-describe('고정 2025년 추세 API 경계', () => {
+describe('공개 기간 추세 API 경계', () => {
   it('네 분기를 보존하고 URL에는 행정동과 업종만 전달한다', async () => {
     const controller = new AbortController()
     const fetchMock = vi.fn().mockResolvedValue(json(normalTrend))
@@ -65,7 +65,6 @@ describe('고정 2025년 추세 API 경계', () => {
 
   const q = normalTrend.quarters
   it.each([
-    ['3개', q.slice(0, 3)],
     ['5개', [...q, q[0]]],
     ['중복', [q[0], q[0], q[2], q[3]]],
     ['20252 시작', [q[1], q[2], q[3], q[0]]],

@@ -1,11 +1,22 @@
 .DEFAULT_GOAL := help
 PYTHON ?= python3
 ETL_ARGS ?=
+API_PYTHON ?= $(CURDIR)/etl/.venv/bin/python
+API_HOME ?= $(HOME)/.config/recycleyoungs/api-dev
+API_INIT_ARGS ?=
 
 .PHONY: help db db-stop db-migrate db-baseline db-info etl-validate etl backend frontend check-frontend check-etl check-db
 
 help:
 	@printf '%s\n' \
+	  'make api-status      Read the separate persistent API environment status' \
+	  'make api-init        Initialize a NEW API environment (API_INIT_ARGS required)' \
+	  'make api-up          Build/start the API backend and weekly scheduler' \
+	  'make frontend-api    Start Vite against the API backend on port 18090' \
+	  'make api-refresh     Collect, validate and publish an API refresh now' \
+	  'make api-reconcile   Validate current artifacts and unblock future scheduling' \
+	  'make api-backup      Snapshot DB backup, independent restore and full comparison' \
+	  'make api-restart-check Restart only the owned API DB and verify persistence' \
 	  'make db              Prepare the guarded team development pipeline' \
 	  'make db-stop         Stop team-postgres, retaining its volume' \
 	  'make db-migrate      Refused: use the guarded Compose pipeline' \
@@ -57,3 +68,30 @@ check-etl:
 
 check-db:
 	$(PYTHON) etl/team_dev.py status
+
+.PHONY: api-init api-up api-status api-refresh api-reconcile api-backup api-restart-check frontend-api
+
+api-init:
+	$(API_PYTHON) etl/api_dev.py --home "$(API_HOME)" init $(API_INIT_ARGS)
+
+api-up:
+	cd backend && ./gradlew bootJar
+	$(API_PYTHON) etl/api_dev.py --home "$(API_HOME)" up
+
+api-status:
+	$(API_PYTHON) etl/api_dev.py --home "$(API_HOME)" status
+
+api-refresh:
+	$(API_PYTHON) etl/api_dev.py --home "$(API_HOME)" refresh
+
+api-reconcile:
+	$(API_PYTHON) etl/api_dev.py --home "$(API_HOME)" reconcile
+
+api-backup:
+	$(API_PYTHON) etl/api_backup.py "$(API_HOME)"
+
+api-restart-check:
+	$(API_PYTHON) etl/api_dev.py --home "$(API_HOME)" restart-check
+
+frontend-api:
+	RECYCLEYOUNGS_DEMO_API_PROXY=http://127.0.0.1:18090 npm --prefix frontend run dev

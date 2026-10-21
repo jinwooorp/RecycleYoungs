@@ -68,6 +68,21 @@ const selectQuarter = (q = '20251') => {
   comparison()
   fireEvent.change(screen.getByLabelText('비교 통계 분기'), { target: { value: q } })
 }
+it('does not compare nearby count differences across publication versions', async () => {
+  nearby=async c=>{
+    const body=nearbyFixture(c)
+    body.data.metadata={dataVersion:(c.lat<37.58?'a':'b').repeat(64),collectedAt:'2026-10-21T08:00:00Z',
+      storeReferenceMonth:'202606',storeScope:'I21201',sourceSnapshotStatus:'UNVERIFIED'}
+    return json(body)
+  }
+  await ready();add(p1)
+  await waitFor(()=>expect(calls('/api/nearby-stores')).toHaveLength(2))
+  add(p2)
+  await waitFor(()=>expect(calls('/api/nearby-stores')).toHaveLength(4))
+  comparison()
+  await waitFor(()=>expect(screen.getAllByRole('article',{name:/^후보 /})).toHaveLength(2))
+  expect(within(comparison()).queryByText(/조회 자료상 후보 간 반경 500m 카페 수 차이는/)).not.toBeInTheDocument()
+})
 it('waits for comparison submission before requesting both scores for a new quarter', async () => {
   await ready(); add(p1)
   await waitFor(() => expect(screen.getByRole('heading', { name: '청운효자동' })).toBeInTheDocument())

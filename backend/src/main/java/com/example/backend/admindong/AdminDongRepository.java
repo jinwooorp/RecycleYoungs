@@ -26,15 +26,21 @@ public class AdminDongRepository {
         """;
 
     private final JdbcClient jdbc;
+    private final DataPublication publication;
 
-    public AdminDongRepository(JdbcClient jdbc) { this.jdbc = jdbc; }
+    public AdminDongRepository(JdbcClient jdbc) { this(jdbc,new DataPublication(jdbc,false)); }
+    @org.springframework.beans.factory.annotation.Autowired
+    public AdminDongRepository(JdbcClient jdbc, DataPublication publication) { this.jdbc = jdbc; this.publication=publication; }
+    private JdbcClient.StatementSpec statement(String sql) { return jdbc.sql(publication.sql(sql)); }
+    public DataPublication.Metadata requireVersion(String expected) { return publication.requireVersion(expected); }
 
     public record Industry(long id, String code, String name, String sourceCode, boolean available) {}
     public record Lookup(List<ApiResponses.NamedCode> dongs, List<Industry> industries,
                          List<ApiResponses.Quarter> quarters) {}
 
     public Lookup lookup() {
-        var industries = jdbc.sql("""
+        var metadata=publication.metadata();
+        var industries = statement("""
             SELECT i.id, i.code, i.name, im.source_code,
                 (EXISTS (SELECT 1 FROM store_stats_dong t WHERE t.source_industry_code = im.source_code)
                  OR EXISTS (SELECT 1 FROM sales_dong t WHERE t.source_industry_code = im.source_code)) AS available
@@ -45,7 +51,7 @@ public class AdminDongRepository {
         if (industries.stream().map(Industry::code).distinct().count() != industries.size()) {
             throw new DataIntegrityException();
         }
-        boolean invalid = jdbc.sql(MAPPED_ROWS + """
+        boolean invalid = statement(MAPPED_ROWS + """
             SELECT EXISTS (SELECT 1 FROM mapped_rows WHERE industry_id IS DISTINCT FROM mapped_industry_id)
                 OR EXISTS (SELECT 1 FROM mapped_rows GROUP BY kind, quarter_code, dong_code, source_industry_code
                            HAVING count(*) > 1)
@@ -54,16 +60,16 @@ public class AdminDongRepository {
             """).query(Boolean.class).single();
         if (invalid) throw new DataIntegrityException();
 
-        var dongs = jdbc.sql(MAPPED_ROWS + """
+        var dongs = statement(MAPPED_ROWS + """
             SELECT DISTINCT ON (dong_code) dong_code, dong_name
             FROM mapped_rows
             ORDER BY dong_code, quarter_code DESC, CASE kind WHEN 'store' THEN 0 ELSE 1 END
             """).query((rs, n) -> new ApiResponses.NamedCode(rs.getString("dong_code"), rs.getString("dong_name"))).list();
-        var quarters = jdbc.sql(MAPPED_ROWS + "SELECT DISTINCT quarter_code FROM mapped_rows ORDER BY quarter_code")
+        var quarters = statement(MAPPED_ROWS + "SELECT quarter_code FROM mapped_rows GROUP BY quarter_code HAVING count(DISTINCT kind)=2 ORDER BY quarter_code")
             .query(Integer.class).list().stream().map(code -> {
                 String value = code.toString();
                 if (!value.matches("[1-9][0-9]{3}[1-4]")) throw new DataIntegrityException();
-                return new ApiResponses.Quarter(value, value.substring(0, 4) + "년 " + value.charAt(4) + "분기");
+                return new ApiResponses.Quarter(value, value.substring(0, 4) + "년 " + value.charAt(4) + "분기",metadata);
             }).toList();
         return new Lookup(dongs, industries, quarters);
     }
@@ -72,14 +78,14 @@ public class AdminDongRepository {
     public record SalesRow(Long salesAmount, Long transactionCount, Long weekdaySalesAmount, Long weekendSalesAmount) {}
 
     List<String> supportedDongs(String sourceCode) {
-        return jdbc.sql("""
+        return statement("""
             SELECT dong_code FROM store_stats_dong WHERE source_industry_code = :source
             UNION SELECT dong_code FROM sales_dong WHERE source_industry_code = :source
             """).param("source", sourceCode).query(String.class).list();
     }
 
     List<ConsumptionScore.Row> consumptionRows(String sourceCode, String quarter) {
-        return jdbc.sql("""
+        return statement("""
             SELECT dong_code, transaction_count FROM sales_dong
             WHERE source_industry_code = :source AND quarter_code = :quarter AND dong_code ~ '^11[0-9]{6}$'
             ORDER BY dong_code
@@ -88,7 +94,7 @@ public class AdminDongRepository {
     }
 
     public StoreRow store(String dong, String sourceCode, String quarter) {
-        var rows = jdbc.sql("""
+        var rows = statement("""
             SELECT store_count, similar_store_count, opening_store_count, closing_store_count, franchise_store_count
             FROM store_stats_dong
             WHERE dong_code = :dong AND source_industry_code = :source AND quarter_code = :quarter
@@ -98,7 +104,7 @@ public class AdminDongRepository {
     }
 
     public SalesRow sales(String dong, String sourceCode, String quarter) {
-        var rows = jdbc.sql("""
+        var rows = statement("""
             SELECT sales_amount, transaction_count, weekday_sales_amount, weekend_sales_amount
             FROM sales_dong
             WHERE dong_code = :dong AND source_industry_code = :source AND quarter_code = :quarter
@@ -108,7 +114,7 @@ public class AdminDongRepository {
     }
 
     public Map<String, StoreRow> stores(String dong, String sourceCode, List<String> quarters) {
-        var rows = jdbc.sql("""
+        var rows = statement("""
             SELECT quarter_code, store_count, similar_store_count, opening_store_count, closing_store_count, franchise_store_count
             FROM store_stats_dong
             WHERE dong_code = :dong AND source_industry_code = :source AND quarter_code IN (:quarters)
@@ -120,7 +126,7 @@ public class AdminDongRepository {
     }
 
     public Map<String, SalesRow> salesByQuarter(String dong, String sourceCode, List<String> quarters) {
-        var rows = jdbc.sql("""
+        var rows = statement("""
             SELECT quarter_code, sales_amount, transaction_count, weekday_sales_amount, weekend_sales_amount
             FROM sales_dong
             WHERE dong_code = :dong AND source_industry_code = :source AND quarter_code IN (:quarters)

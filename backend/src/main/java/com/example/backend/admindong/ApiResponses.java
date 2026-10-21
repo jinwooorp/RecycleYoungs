@@ -7,7 +7,10 @@ public final class ApiResponses {
 
     @Schema(description = "lookup의 문자열 코드 및 이름. 내부 DB id를 외부 코드로 사용하지 않음.")
     public record NamedCode(String code, String name) {}
-    public record Quarter(@Schema(description = "YYYYQ 분기 코드", example = "20251") String code, String label) {}
+    public record Quarter(@Schema(description = "YYYYQ 분기 코드", example = "20251") String code, String label,
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) DataPublication.Metadata metadata) {
+        public Quarter(String code, String label) { this(code,label,null); }
+    }
     @Schema(description = "점포 건수는 JSON 정수. 개별 NULL은 null, 실제 0은 0.")
     public record StoreStats(
         @Schema(types = {"integer", "null"}, format = "int32") Integer storeCount,
@@ -28,12 +31,20 @@ public final class ApiResponses {
     public record Stats(NamedCode dong, NamedCode industry, Quarter quarter,
         @Schema(types = {"object", "null"}, description = "행 부재 시 null/NO_ROW") StoreStats storeStats,
         @Schema(types = {"object", "null"}, description = "행 부재 시 null/NO_ROW") SalesStats salesStats,
-        MissingReasons missingReasons) {}
+        MissingReasons missingReasons,
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) DataPublication.Metadata metadata) {
+        public Stats(NamedCode dong, NamedCode industry, Quarter quarter, StoreStats storeStats, SalesStats salesStats, MissingReasons reasons) {
+            this(dong,industry,quarter,storeStats,salesStats,reasons,null);
+        }
+    }
     public record TrendQuarter(Quarter quarter,
         @Schema(types = {"object", "null"}) StoreStats storeStats,
         @Schema(types = {"object", "null"}) SalesStats salesStats, MissingReasons missingReasons) {}
-    @Schema(description = "20251~20254 고정 4개 분기 오름차순. 누락 분기를 제거하지 않음.")
-    public record Trend(NamedCode dong, NamedCode industry, java.util.List<TrendQuarter> quarters) {}
+    @Schema(description = "공개 지원 기간의 분기 오름차순. 중간 누락 분기는 NO_ROW로 보존.")
+    public record Trend(NamedCode dong, NamedCode industry, java.util.List<TrendQuarter> quarters,
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) DataPublication.Metadata metadata) {
+        public Trend(NamedCode dong, NamedCode industry, java.util.List<TrendQuarter> quarters) { this(dong,industry,quarters,null); }
+    }
     @Schema(name = "ApiError", description = "공통 오류 {code,message,field}. 400은 오류 query 이름, 500/503은 field=null. 내부 SQL/접속정보를 노출하지 않음.")
     public record Error(String code, String message, @Schema(types = {"string", "null"}) String field) {}
 }

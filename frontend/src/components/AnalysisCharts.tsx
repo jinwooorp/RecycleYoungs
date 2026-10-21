@@ -59,6 +59,8 @@ function MetricChart({ trend, stats, quarter, kind }: { trend: AdminDongTrend | 
   </section>
 }
 export function AnalysisCharts({ trend = null, stats = null, quarter, dongCode }: { trend?: AdminDongTrend | null; stats?: AdminDongStats | null; quarter: string; dongCode?: string }) {
+  if (stats && trend && stats.metadata?.dataVersion !== trend.metadata?.dataVersion)
+    return <p role="alert">자료 버전이 달라 통계와 추세를 함께 표시할 수 없습니다. 조회 조건을 다시 불러와 주세요.</p>
   const code = dongCode ?? stats?.dong.code ?? trend?.dong.code
   const validStats = stats && stats.dong.code === code && stats.industry.code === 'CAFE' && stats.quarter.code === quarter ? stats : null
   const validTrend = trend && trend.dong.code === code && trend.industry.code === 'CAFE' ? trend : null

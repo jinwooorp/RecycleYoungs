@@ -1,8 +1,10 @@
 # 기술 명세와 개발 안내
 
-처음 참여한 개발자가 서비스 흐름을 이해하고, 필요한 구현 계약을 찾기 위한 문서입니다. 현재 기능과 우선순위는 [프로젝트 현황](project.md), DB 변경·복구 조건은 [DB 안전 정책](db-safety.md)에 둡니다.
+> **에이전트용 문서:** 작업 기준·구현 계약·검증 기록을 관리합니다. 사람이 읽을 문서는 [문서 안내](../README.md)에서 확인하며, 이 문서는 일반 독자의 필수 읽기 대상이 아닙니다.
 
-문서·관련 구현 대조 기준일은 **2026-10-18**입니다. 문서 정합성은 코드·설정과 대조했고, 화면 미리보기는 기존 localhost 앱에서 캡처했습니다. DB 직접 접속·서버 재기동은 하지 않았습니다. 각 검증의 대상과 범위는 뒤의 [날짜별 기록](#검증-이력)에서 구분합니다.
+에이전트가 구현 계약과 개발·검증 기준을 확인하는 참고 문서입니다. 현재 기능과 우선순위는 [프로젝트 현황](project.md), DB 변경·복구 조건은 [DB 안전 정책](db-safety.md)에 둡니다.
+
+문서·구현 대조 기준일은 **2026-10-21**입니다. 공식 API 전수 수집·CSV 대조, 격리 검증에 이어 [영속 API 환경](#영속-api-개발-환경과-예약-갱신)의 실제 DB·예약 갱신·백업/복원·HTTP·테스트 지도 화면을 확인했습니다. 기존 팀 환경·Releases는 보존했습니다. 아래 전환 준비 절의 과거 단계와 현재 영속 계약을 구분하며, nginx·일반 CI/CD·새 PC/서버 이미지 준비·Frontend 구조 정리는 [다음 작업](project.md#다음-작업)입니다.
 
 ## 목차
 
@@ -14,6 +16,8 @@
 - [개발 환경과 안전한 시작](#개발-환경과-안전한-시작)
 - [팀 공통 실자료 개발 환경](#팀-공통-실자료-개발-환경)
 - [데이터 출처와 의미](#데이터-출처와-의미)
+- [공공 API 전환 준비](#공공-api-전환-준비)
+- [영속 API 개발 환경과 예약 갱신](#영속-api-개발-환경과-예약-갱신)
 - [DB schema와 Flyway](#db-schema와-flyway)
 - [CSV ETL](#csv-etl)
 - [Polygon ETL과 공간 한계](#polygon-etl과-공간-한계)
@@ -25,7 +29,7 @@
 
 ## 시스템과 기술 선택
 
-프로그램은 데이터를 준비하는 흐름과 사용자가 조회하는 흐름으로 나뉩니다. Python ETL은 파일을 검사·변환해 DB에 저장합니다. React는 사용자의 요청을 Spring API에 보내고 결과를 표시합니다.
+프로그램은 데이터를 준비하는 흐름과 사용자가 조회하는 흐름으로 나뉩니다. Python ETL은 API·파일 자료를 검사·변환해 버전별로 DB에 저장합니다. React는 사용자의 요청을 Spring API에 보내고 결과를 표시합니다.
 
 ```mermaid
 flowchart LR
@@ -57,10 +61,10 @@ flowchart LR
 | 카페 | `industryCode=CAFE` |
 | 2025년 1분기 | `quarterCode=20251` |
 
-1. [RegionSelector](../frontend/src/components/RegionSelector.tsx)에서 구·행정동을 선택하고 ‘지역 보기’로 확정합니다. 화면은 지원 목록과 공식 지역 목록을 읽고 CAFE 제공 여부를 확인합니다. 분기는 실제 지원 최신값에서 시작하며 패널에서 변경할 수 있습니다.
-2. 지역·분기가 확정되면 [API client](../frontend/src/api/adminDongApi.ts)가 단일 분기와 추세를 병렬 요청합니다. 소비규모·소비증감 점수와 표시 경계는 별도 읽기 전용 API로 조회합니다.
-3. [Service](../backend/src/main/java/com/example/backend/admindong/AdminDongService.java)가 형식·지원 조건을 확인합니다.
-4. [Repository](../backend/src/main/java/com/example/backend/admindong/AdminDongRepository.java)가 점포 통계와 매출을 따로 조회합니다.
+1. [RegionSelector](../../frontend/src/components/RegionSelector.tsx)에서 구·행정동을 선택하고 ‘지역 보기’로 확정합니다. 화면은 지원 목록과 공식 지역 목록을 읽고 CAFE 제공 여부를 확인합니다. 분기는 실제 지원 최신값에서 시작하며 패널에서 변경할 수 있습니다.
+2. 지역·분기가 확정되면 [API client](../../frontend/src/api/adminDongApi.ts)가 단일 분기와 추세를 병렬 요청합니다. 소비규모·소비증감 점수와 표시 경계는 별도 읽기 전용 API로 조회합니다.
+3. [Service](../../backend/src/main/java/com/example/backend/admindong/AdminDongService.java)가 형식·지원 조건을 확인합니다.
+4. [Repository](../../backend/src/main/java/com/example/backend/admindong/AdminDongRepository.java)가 점포 통계와 매출을 따로 조회합니다.
 5. 화면은 통계·추세의 로딩·오류를 각각 처리하고, 선택 분기 값과 그래프를 함께 표시합니다. 두 점수는 같은 동·분기의 응답인지 확인한 뒤 검토 요약과 상세 근거에 사용하며, 자료가 부족하거나 일치하지 않으면 해석을 보류합니다.
 
 ```text
@@ -106,15 +110,15 @@ GET /api/admin-dong-trends?dongCode=11110515&industryCode=CAFE
 
 | 작업 | 시작할 위치 |
 | --- | --- |
-| 화면 입력·통계 | [ManualStatistics](../frontend/src/components/ManualStatistics.tsx), [통계 hook](../frontend/src/hooks/useAdminDongStats.ts) |
-| 지도·위치 분석 | [KakaoMap](../frontend/src/components/KakaoMap.tsx), [분석 hook](../frontend/src/hooks/useLocationAnalysis.ts) |
-| 후보 비교 | [비교 hook](../frontend/src/hooks/useCandidateComparison.ts), [컴포넌트](../frontend/src/components/) |
-| 통계·추세 API | [admindong](../backend/src/main/java/com/example/backend/admindong/) |
-| 위치·카페 API | [location](../backend/src/main/java/com/example/backend/location/), [nearby](../backend/src/main/java/com/example/backend/nearby/) |
-| 스키마 | [Flyway migration](../backend/src/main/resources/db/migration/) |
-| 파일 처리 | [etl/app](../etl/app/) |
-| 개발 환경 | [Compose](../docker-compose.yml), [호스트 검사](../etl/team_dev.py), [DB 초기화](../etl/team_db.py) |
-| 테스트 | [Backend](../backend/src/test/), [Frontend](../frontend/src/), [ETL](../etl/tests/) |
+| 화면 입력·통계 | [ManualStatistics](../../frontend/src/components/ManualStatistics.tsx), [통계 hook](../../frontend/src/hooks/useAdminDongStats.ts) |
+| 지도·위치 분석 | [KakaoMap](../../frontend/src/components/KakaoMap.tsx), [분석 hook](../../frontend/src/hooks/useLocationAnalysis.ts) |
+| 후보 비교 | [비교 hook](../../frontend/src/hooks/useCandidateComparison.ts), [컴포넌트](../../frontend/src/components) |
+| 통계·추세 API | [admindong](../../backend/src/main/java/com/example/backend/admindong) |
+| 위치·카페 API | [location](../../backend/src/main/java/com/example/backend/location), [nearby](../../backend/src/main/java/com/example/backend/nearby) |
+| 스키마 | [Flyway migration](../../backend/src/main/resources/db/migration) |
+| 파일 처리 | [etl/app](../../etl/app) |
+| 개발 환경 | [Compose](../../docker-compose.yml), [호스트 검사](../../etl/team_dev.py), [DB 초기화](../../etl/team_db.py) |
+| 테스트 | [Backend](../../backend/src/test), [Frontend](../../frontend/src), [ETL](../../etl/tests) |
 
 Frontend는 API client·types·hooks·components를 분리합니다. Backend는 Controller → Service → Repository 구조와 JdbcClient를 유지합니다.
 
@@ -132,13 +136,13 @@ Frontend는 API client·types·hooks·components를 분리합니다. Backend는 
 | 경계 처리 | pyshp, Shapely, pyproj | 파일 구조·도형 품질·좌표 변환 |
 | 명세·테스트 | Springdoc 3.1.1, JUnit, Vitest, unittest | API 명세와 계층별 회귀 검사 |
 
-정확한 버전은 [Gradle](../backend/build.gradle), [npm 선언](../frontend/package.json)·[lockfile](../frontend/package-lock.json), [Python requirements](../etl/requirements.txt)를 기준으로 합니다. 선언 범위와 실제 설치 버전은 구분합니다.
+정확한 버전은 [Gradle](../../backend/build.gradle), [npm 선언](../../frontend/package.json)·[lockfile](../../frontend/package-lock.json), [Python requirements](../../etl/requirements.txt)를 기준으로 합니다. 선언 범위와 실제 설치 버전은 구분합니다.
 
 JPA로 전환하거나 새로운 상태 관리 라이브러리를 도입한 구조가 아닙니다. SQL·화면 계약을 유지하며 필요한 범위만 변경합니다.
 
 ## 개발 환경과 안전한 시작
 
-기본 실행 순서는 [루트 README](../README.md#실행-방법)에 있습니다. Compose는 DB·데이터를 준비하고, Backend와 Frontend는 호스트에서 실행합니다.
+권장 API 실행 순서는 [루트 README](../../README.md#실행-방법)와 [영속 API 계약](#영속-api-개발-환경과-예약-갱신)에 있습니다. 새 API Compose는 DB·Backend·예약 worker를 실행하고 Frontend는 호스트에서 실행합니다. 아래 준비·호스트 서버·팀 환경 절은 보존한 고정 자료 팀 경로를 설명합니다. 기존 명령의 대상을 바꾸지 않았습니다.
 
 ### 준비와 정상 실행
 
@@ -217,9 +221,9 @@ docker compose logs --tail=30 inspect-proxy preflight data-init db-identity db-m
 
 ### 패키지와 재실행
 
-다운로드 설정의 기준은 [release.json](../data/release.json)입니다. 태그·asset·URL·크기·해시를 고정하며 임의 URL이나 `latest`를 받지 않습니다.
+다운로드 설정의 기준은 [release.json](../../data/release.json)입니다. 태그·asset·URL·크기·해시를 고정하며 임의 URL이나 `latest`를 받지 않습니다.
 
-[team_dataset.py](../etl/team_dataset.py)는 HTTP 응답과 redirect host를 검사합니다. 안전한 ZIP 경로, 구성 파일 10개, 내부 해시, CSV·경계 리포트, 출처 고지도 확인합니다.
+[team_dataset.py](../../etl/team_dataset.py)는 HTTP 응답과 redirect host를 검사합니다. 안전한 ZIP 경로, 구성 파일 10개, 내부 해시, CSV·경계 리포트, 출처 고지도 확인합니다.
 
 cache 작성자는 하나로 제한됩니다. 검증 후에만 최종 cache를 공개하며, 실패한 중간 파일과 손상 cache는 자동 삭제·교체하지 않습니다.
 
@@ -262,11 +266,11 @@ socket의 `:ro`는 Docker API 권한을 제한하지 않습니다. proxy가 침�
 
 파일에 점포가 없다는 이유만으로 폐업을 판정하지 않습니다. 행정동 매출·서울 전체 인구를 반경 면적 비율로 배분하지 않습니다.
 
-공식 출처와 이용조건은 [README 고지](../README.md#원본-이용조건과-공개-고지)에 있습니다. 추가 자료는 [상권 매출 OA-15572](https://data.seoul.go.kr/dataList/OA-15572/S/1/datasetView.do), [SEMAS 분류표](https://bigdata.sbiz.or.kr/#/notice/267352041576902656)를 참고합니다.
+공식 출처와 이용조건은 [README 고지](../../README.md#원본-이용조건과-공개-고지)에 있습니다. 추가 자료는 [상권 매출 OA-15572](https://data.seoul.go.kr/dataList/OA-15572/S/1/datasetView.do), [SEMAS 분류표](https://bigdata.sbiz.or.kr/#/notice/267352041576902656)를 참고합니다.
 
 ### Manifest와 후속 검증의 범위
 
-[manifest](../data/manifest.json)는 원본 파일 목록·형식·크기·해시·기간의 조사 기록입니다. 기록된 행 수는 현재 DB의 행 수가 아닙니다.
+[manifest](../../data/manifest.json)는 원본 파일 목록·형식·크기·해시·기간의 조사 기록입니다. 기록된 행 수는 현재 DB의 행 수가 아닙니다.
 
 초기 조사에서 영역-상권 CSV 좌표계는 미확인이었습니다. 후속 공식 조사로 EPSG:5181 정책을 정했으므로 초기 metadata와 최종 정책을 구분합니다.
 
@@ -290,9 +294,368 @@ socket의 `:ro`는 Docker API 권한을 제한하지 않습니다. proxy가 침�
 
 CAFE 경쟁군은 I21201의 통합 범주 전체입니다. 커피전문점 외 주스·다방·일부 테마 카페가 포함될 수 있습니다. 다른 소분류의 빵·빙수·편의점·스터디카페 등을 상호명이나 KSIC로 다시 분류하지 않습니다.
 
+## 공공 API 전환 준비
+
+### 검토 범위와 확인 수준
+
+**수집 준비 단계**에서 DB 없는 수집·정규화·키 설정·CSV 대조 CLI를 구현하고 README 개선 항목을 검토했습니다. 사용자 선택에 따라 서울시는 공식 HTTP, SEMAS는 HTTPS로 인증 전체 수집을 수행했습니다. 서울시 2025년 전체 키·정규화 필드는 CSV와 일치하며 SEMAS는 명칭 구두점 차이를 보존했습니다. 이후 API 버전 적재/공개·앱 기간 확장·실제 격리 검증과 [영속 서비스/예약 갱신](#영속-api-개발-환경과-예약-갱신)까지 연결했습니다. 키 값·요청 URL은 출력하지 않으며 원문은 프로젝트 밖 private 실행 위치에 보존합니다. 기존 팀 DB·기존 raw는 변경하지 않았습니다.
+
+| 원천 | 확인한 계약 | 아직 확인할 사항 |
+| --- | --- | --- |
+| [점포-행정동 OA-22172](https://data.seoul.go.kr/dataList/OA-22172/S/1/datasetView.do?tab=A) | `VwsmAdstrdStorW`, 12개 응답 필드, 20251~20262 전체 paging·정규화, 2025년 CSV 전수 일치 | 다른 기간·향후 원천 정정 영향·역사적 경계 |
+| [추정매출-행정동 OA-22175](https://data.seoul.go.kr/dataList/OA-22175/S/1/datasetView.do?tab=A) | `VwsmAdstrdSelngW`, 53개 응답 필드, 위 범위 전체 paging와 NULL·정밀 값 대조 | 다른 기간·향후 원천 정정 영향 |
+| [SEMAS 상가업소정보 API](https://www.data.go.kr/data/15012005/openapi.do) | `/storeListInDong` HTTPS·root `header/body`·기준년월, 서울 CAFE 22,739개 ID·코드·좌표 대조와 API 구두점 표기 보존 | 다른 업종·snapshot 안정성·정확한 영업 관측일·운영 호출 한도 |
+| 행정동·상권 경계 | 기존 Polygon 자료와 공간 계약 유지 | 통계의 과거·개정 집계 경계와 호환성. 통계·점포 API가 경계 ZIP까지 대체하지 않음 |
+
+초기 조사에서 서울시 두 서비스에 `.../sample/json/{서비스}/1/1/{분기}`를 호출해 아래 응답을 관찰했습니다. 이 표는 **sample 응답의 `list_total_count`이며 전체 다운로드·DB 행 수가 아닙니다.** 각 정상 응답에서 실제 1행의 분기 코드도 요청값과 일치했습니다. 이후 수행한 인증 전체 수집은 아래 전수 실행 결과와 구분합니다.
+
+| 조회 분기 | 점포 통계 선언 건수 | 매출 통계 선언 건수 |
+| --- | --- | --- |
+| 20201 | `INFO-200` | `INFO-200` |
+| 20211 | 35,105 | 17,536 |
+| 20244 | 35,197 | 16,871 |
+| 20251 | 35,281 | 16,770 |
+| 20252 | 35,294 | 16,794 |
+| 20253 | 35,326 | 16,831 |
+| 20254 | 35,317 | 16,718 |
+| 20261 | 35,313 | 16,659 |
+| 20262 | 35,301 | 16,659 |
+| 20263·20264 | `INFO-200` | `INFO-200` |
+
+조회한 분기 중 최신 정상 응답은 **2026년 2분기**입니다. 전 기간의 제공·완전성을 확인한 결과는 아닙니다. 2025년 선언 건수 합계는 점포 141,218행·매출 67,113행으로 [기존 manifest](../../data/manifest.json)의 조사 건수와 같습니다. sample의 건수 일치와 이후 전수 대조에서 확인한 키·정규화 필드 일치를 구분하며, 어느 쪽도 역사적 경계의 호환성을 증명하지 않습니다.
+
+서울시 안내에는 2026-07-03 기준 공간 기반 변경에 따른 추정치 개편과 2021년 이후 제공 방침이 있습니다. 동일 분기의 재수집도 과거 파일과 달라질 수 있으므로 원천 공지·수집 버전·변경 내역을 기록합니다. 아직 조회하지 않은 2021~2024년 모든 분기까지 제공된다고 확정하지 않습니다. `INFO-200`은 해당 조회의 자료 없음으로 기록하며 최신 분기나 완전한 0건 자료로 공개하지 않습니다.
+
+### README 개선 항목별 대응
+
+| 개선 항목 | 검토 결과와 구현 방향 | 10/31 우선 범위 |
+| --- | --- | --- |
+| 지원 지역·업종 | 서울시 통계는 기존 업종 매핑을 유지할 수 있고 SEMAS는 전국 조회 계약이 있음. 다른 지역의 동등한 매출·경계·비교 기준은 별도 확보 필요 | 서울·CAFE 유지. 일반 통계 API의 기존 업종 보존 |
+| 판단 근거: 시간대·고객 구성 | 매출 API에 요일·6개 시간대·성별·연령대별 금액과 건수가 있음. 기존 `sales_dong`에도 대응 컬럼이 있으나 화면·응답 확장은 별도 작업 | 전체 필드 수집·보존, 현재 소비 지표 우선. 후속 상세 화면 후보 |
+| 판단 근거: 인구·임대료·운영비·계절성 | [길단위인구-행정동 OA-22178](https://data.seoul.go.kr/dataList/OA-22178/S/1/datasetView.do?tab=A)은 후속 원천 후보이며 실제 필드·기간·집계 기준 검증 필요. 현재 서울 전체 22행으로 대체하지 않음. 개별 임대료·운영비는 위 통계·점포 API에 없음. 전년 동분기 비교도 충분한 과거 분기와 기준 일치가 전제 | 새 종합점수 제외. 자료 부족 안내 유지 |
+| 분석 공간 세분화 | [추정매출-상권 OA-15572](https://data.seoul.go.kr/dataList/OA-15572/S/1/datasetView.do)는 후속 후보. 행정동·상권 통계를 500m나 개별 가게에 면적 배분할 수 없음 | 행정동 통계·500m 점포 단위 구분 유지 |
+| 주변 목록·필터 | 원천 교체보다 Backend의 반경 전체 집계·서버 필터·페이지 계약과 Frontend 변경이 핵심. 기존 최대 100개에 대한 필터 결과는 전체 구성으로 표시할 수 없음 | 현행 제한 표시. 후속 서버 조회 확장 분리 |
+| 점포 운영 형태 | SEMAS 명세에는 상호·분류·주소·ID가 있으나 가맹·직영·독립 확정 필드는 없음. 통계의 가맹점 수는 개별 점포 판정 근거가 아님 | 브랜드 추정 표시 유지. 점포별 공식 근거 확보는 후속 |
+| 시점·품질 | API의 분기·SEMAS `stdrYm`·수집 시각을 구분하고 범위·중복·누락·경계 호환성을 검증. 최근 수집만으로 완전성 보장 불가 | provenance·공개 버전·품질 상태 설계·검증 |
+| 자동 갱신 | 전체 수집 완료 → 검증 → 새 데이터 버전 → 검증 후 공개. 새 분기와 과거 정정을 별도 기록 | 수동 실행 가능한 수집·검증·격리 연결 우선. 정기 실행은 같은 성공·실패 계약 이후 |
+| 다년도 분석 | ETL·추세 API·Frontend의 2025 고정을 함께 제거해야 함. 과거 버전·분기 보존 필요 | 2025년과 새 지원 분기 연결, Q1 전분기 계산을 위한 20244 검증 |
+| 운영·사용성 | nginx·CI/CD·부하·기기·접근성은 데이터 API로 해결되지 않음 | 데이터 작업과 병행할 별도 배포·회귀 작업 |
+
+시간대 매출은 해당 시간의 추정 소비이며 유동인구·방문자 수와 같지 않습니다. 거래 건수도 고유 고객 수가 아닙니다. 성별·연령대 합계를 새 고객 수나 점포 이익으로 바꾸지 않습니다.
+
+### 원천 필드와 정규화 계약
+
+서울시 요청은 공식 문서의 `http://openapi.seoul.go.kr:8088/{KEY}/json/{SERVICE}/{START}/{END}/{STDR_YYQU_CD}` 형식입니다. [공통 안내](https://data.seoul.go.kr/together/guide/useGuide.do)는 요청당 최대 1,000행·sample 최초 5행 제한을 명시합니다. 두 서비스에서 확인한 추가 검색 조건은 분기이며, 동·업종 필터를 임의 URL 인자로 붙이지 않습니다. 분기 전체 수집 후 내부 업종을 연결합니다. HTTP sample 응답은 확인했으나 이번 환경의 HTTPS 두 후보 주소는 연결에 실패했습니다. 실제 인증키 사용 전 공식 지원 전송 경로를 확인하고, HTTPS 실패를 이유로 실제 키를 HTTP로 자동 전송하지 않습니다.
+
+| 점포 API 필드 | 정규화 필드 |
+| --- | --- |
+| `STDR_YYQU_CD`, `ADSTRD_CD`, `ADSTRD_CD_NM` | `quarter_code`, `dong_code`, `dong_name` |
+| `SVC_INDUTY_CD`, `SVC_INDUTY_CD_NM` | `source_industry_code`, `source_industry_name` → 기존 SEOUL 업종 매핑 |
+| `STOR_CO` | `store_count` |
+| `SIMILR_INDUTY_STOR_CO` | `similar_store_count` |
+| `OPBIZ_RT`, `OPBIZ_STOR_CO` | `opening_rate`, `opening_store_count` |
+| `CLSBIZ_RT`, `CLSBIZ_STOR_CO` | `closing_rate`, `closing_store_count` |
+| `FRC_STOR_CO` | `franchise_store_count` |
+
+현재 API 설명은 `STOR_CO`를 일반 점포 수, `SIMILR_INDUTY_STOR_CO`를 전체 점포 수로 구분합니다. 기존 CSV의 ‘점포 수·유사 업종 점포 수’와 이름만 보고 의미가 같다고 처리하지 않습니다. 위 매핑은 대조 대상이며 정의·값 검증을 통과한 뒤 확정합니다. 개·폐업률도 임의 분모로 재계산하지 않습니다.
+
+| 매출 API 필드군 | 기존 `sales_dong` 정규화 대상 |
+| --- | --- |
+| 공통 분기·동·업종 5필드 | 점포 통계와 같은 원천 코드 보존·업종 연결 |
+| `THSMON_SELNG_AMT`, `THSMON_SELNG_CO` | `sales_amount`, `transaction_count` |
+| `MDWK`, `WKEND`의 `_SELNG_AMT`·`_SELNG_CO` | `weekday_sales_amount`·`weekend_sales_amount`, `weekday_transactions`·`weekend_transactions` |
+| `MON`, `TUES`, `WED`, `THUR`, `FRI`, `SAT`, `SUN`의 같은 suffix | `mon`~`sun`의 `_sales_amount`·`_transactions` |
+| `TMZON_00_06`, `06_11`, `11_14`, `14_17`, `17_21`, `21_24`의 같은 suffix | `time_00_06`~`time_21_24`의 `_sales`·`_transactions` |
+| `ML`, `FML`의 같은 suffix | `male_sales`·`female_sales`, `male_transactions`·`female_transactions` |
+| `AGRDE_10`, `20`, `30`, `40`, `50`, `60_ABOVE`의 같은 suffix | `age_10`~`age_60_plus`의 `_sales`·`_transactions` |
+
+53필드는 공통 키 5개와 금액·건수 각각 24개입니다. 기존 CSV 건수 컬럼의 특이한 시간대 표기를 새 API 이름으로 문자열 치환하지 않고 명시적 매핑을 사용합니다. sample 숫자는 소수점 표기를 포함하므로 `json`의 정수·`Decimal`로 읽고, 정수 대상은 유한한 정수인지·BIGINT 범위인지 검사합니다. `float`를 거쳐 큰 금액을 반올림하지 않습니다. 누락·빈 값·NULL·실제 0·행 없음과 외부 응답의 BIGINT 문자열 계약을 보존합니다.
+
+SEMAS는 `https://apis.data.go.kr/B553077/api/open/sdsc2/storeListInDong`의 GET으로 시작합니다. `ServiceKey`, `pageNo`, `numOfRows`, `divId`, `key`가 필수이며 `type=json`을 지정합니다. 서울 전체 후보 조건은 `divId=ctprvnCd&key=11`, 카페만 수집하는 후보는 여기에 `indsSclsCd=I21201`입니다. 처음에는 소량 인증 응답으로 envelope·필터 적용·총건수·페이지 크기·코드를 검증하며, `storeListInDong`의 최대 페이지 크기를 다른 endpoint의 제한으로 추정하지 않습니다.
+
+| SEMAS 필드 | 기존 점포 정규화 대상 |
+| --- | --- |
+| `bizesId`, `bizesNm`, `brchNm` | `source_store_id`, `name`, `branch_name` |
+| `indsLclsCd/Nm`, `indsMclsCd/Nm`, `indsSclsCd/Nm` | 대·중·소분류 코드/명 → 기존 SEMAS 업종 매핑 |
+| `ksicCd/Nm` | 표준산업분류 코드/명 |
+| `signguCd/Nm`, `adongCd/Nm`, `ldongCd/Nm` | 시군구·행정동·법정동 코드/명 |
+| `lnoAdr`, `rdnmAdr`, `lon`, `lat` | 지번·도로명 주소, 경도·위도 → 기존 공간 정책에 따른 `location` |
+| `header.stdrYm` | 실제 인증 응답의 원천 기준년월 metadata → 각 정규화 행의 `source_reference_month`. 원문 행에 임의 필드를 넣지 않으며 수집 시각·정확한 영업 관측일과 구분 |
+
+원천 ID는 문자열로 보존하고 내부 surrogate ID를 수집 때마다 재발급하는 정책은 별도 검토합니다. SEMAS 행정동 코드와 서울시 통계 코드의 체계를 실제로 대조하기 전에는 단순 절단·이름 조인하지 않습니다. 명세의 `lon`·`lat` 설명에는 둘 다 위도라고 적혀 있으므로 실제 값·축 순서·공간 범위를 검증하며 자동 교환하지 않습니다. 결측 좌표의 기존 NULL 정책과 원본 값 보존을 유지합니다.
+
+`/storeListByDate`는 날짜 `key=YYYYMMDD` 기준 변경 목록과 `chgGb=C/U/D`, `chgDt`를 명세에 제공합니다. 다만 전체 baseline 확보, 변경 이력 제공 기간·ID 안정성·누락·삭제 의미 검증 전에는 증분 갱신에 사용하지 않습니다. API의 `D`나 snapshot 누락을 실제 폐업으로 단정하지 않습니다. 수집은 읽기 endpoint만 허용하며, 같은 Swagger에 있는 `/reqStoreModify` 같은 수정 요청은 호출하지 않습니다.
+
+### 수집 결과와 공개 조건
+
+구현할 수집기·검증기는 기본적으로 DB에 연결하지 않습니다. 원문과 정규화 결과, 검증 리포트·manifest를 분리하고 저장 위치를 명시하게 합니다. 실제 원문·private evidence는 승인된 Git 밖 위치에 보관하며 secret·키가 들어간 URL·응답을 로그나 Git에 남기지 않습니다. 테스트 fixture는 합성 자료를 사용합니다.
+
+- **수집 manifest:** 원천·서비스·분기 또는 snapshot 범위·지역/업종 필터·수집 시작/종료·원천 기준 시점·원천 공지·schema 버전·선언/수신/고유 키 건수·page 수·내용 hash·검증 결과·완전성 한계를 기록합니다. 토큰·인증 URL은 제외합니다.
+- **통계 키:** `(quarter_code, dong_code, source_industry_code)`를 검사합니다. page 누락·중복 키·요청과 다른 분기·필수 필드 누락·알 수 없는 오류 응답·건수 불일치는 공개를 막습니다. 새 업종 코드를 임의 CAFE로 바꾸지 않습니다.
+- **점포 범위:** 서울 전체와 서울 CAFE만 수집한 결과를 구분합니다. CAFE 부분 수집으로 기존 서울 전체 점포를 교체하거나 다른 업종을 삭제하지 않습니다. paging 중 총건수·기준년월 변화나 중복을 검사하고, 일치해도 원천이 동일 시점 snapshot을 보장하는지는 별도로 기록합니다.
+- **오류·재실행:** timeout·일시적 서버 오류·호출 제한은 횟수가 제한된 재시도 대상으로 설계합니다. 인증·schema·의미 검증 실패는 중단하고 불완전한 실행은 공개 대상에서 제외합니다. 같은 입력·정규화 버전의 재실행은 같은 결과를 내고 새 정정은 이전 자료를 덮어쓰지 않는 버전으로 식별합니다.
+- **최신값:** 수집 시각이나 달력에서 계산하지 않습니다. 점포 통계·매출의 지원 분기 교집합과 검증 완료 버전에서 선택합니다. 두 자료·점수·비교 응답이 같은 공개 버전을 가리키도록 metadata·전환 계약을 함께 설계합니다.
+- **변경 대조:** 인증 전체 수집 후 승인된 기존 원천과 키 집합·필드별 NULL/0·정수·비율·업종·동 코드를 비교합니다. 차이는 원천 개편·정정·변환 오류로 분류하고, 원인을 설명하지 못한 차이는 통과시키지 않습니다. API 전환 전에 기존 자료·원본·검증 이력을 보존합니다.
+
+현재 `etl_store_stats.py`·`etl_sales.py`에는 2025년 삭제 후 적재, `etl_stores.py`에는 `TRUNCATE ... RESTART IDENTITY`가 있습니다. 이 경로를 새 분기 갱신용으로 호출하지 않습니다. 현재 team-dev의 고정 fingerprint도 우회하지 않습니다. 새 버전의 검증 후 공개·이전 버전 보존·원자적 전환·실패 시 기존 공개 버전 유지를 위한 별도 설계가 필요합니다. DB schema 변경·격리 자원 생성·실제 적재는 [DB 안전 정책](db-safety.md)의 대상·범위 검증과 명시적 승인 이후입니다.
+
+### 2번 구현의 작업 순서와 완료 조건
+
+아래는 전체 전환 순서입니다. 1~3의 DB 없는 수집기·정규화·합성 검증을 구현하고 아래 범위의 실제 인증 전체 수집·CSV 대조를 수행했습니다. 명칭 차이 처리·적재·정기 갱신 완료를 뜻하지 않습니다. 새 dependency·스케줄러 없이 Python 표준 라이브러리를 사용합니다. 기존 `source_*`는 DB 감사·보호 도구이므로 공공 API 수집기와 혼용하지 않습니다.
+
+| 순서 | 구현 단위·변경 대상 | 검증·완료 조건 |
+| --- | --- | --- |
+| 1 | `etl/app/api_http.py` 공통 GET·오류/키 마스킹, `seoul_api.py` 점포 page 수집·정규화, `collect_main.py` 수집/검증 전용 진입점 | DB·raw opt-in 없이 합성 응답 테스트. 정상/빈 결과/오류 HTTP 200/인증 실패/제한/timeout/깨진 JSON/누락·중복 page/분기 불일치/정밀 숫자 검사. 인증키와 전송 경로 확인 후 실제 한 분기 전체 수집 |
+| 2 | `seoul_api.py` 매출 53필드 확장, `etl/tests/`의 매핑·대조 테스트 | 모든 매출·건수 필드 보존. 2025년 4분기 전체 비교 리포트와 차이 원인 기록. 20244·20261·20262 제공·품질 검증. 건수 일치만으로 CSV 경로 제거 금지 |
+| 3 | `etl/app/semas_api.py` 점포 baseline 수집·정규화 | 인증 응답 envelope·필터·코드/ID·축·기준년월·paging 안정성 확인. 수집 범위 명시·좌표 NULL 보존. 증분 API는 별도 후속 |
+| 4 | 데이터 버전·publication·metadata 설계와 적재 모듈 분리, 필요 migration 설계 | 대상·권한·이전 버전 보존·실패 처리·공개 전환 방법 검토 후 승인된 격리 환경에서 중복 실행·부분 실패·정정·rollback 검증. 기존 DB 미변경 |
+| 5 | `etl/app/main.py`의 `QUARTERS_2025`, `AdminDongService`의 `TREND_QUARTERS`, `frontend/src/api/adminDongApi.ts`·`hooks/useCandidateComparison.ts` 등의 2025 검사·추세 화면 확장 | 실제 지원 분기 기반 조회·그래프. 연도 경계의 전분기·전년 동분기·행 없음·혼합 버전 응답 검사. 기존 2025년·일반 업종·BIGINT·취소·결측 계약 회귀 |
+| 6 | API 자료의 Backend 조회·Frontend 통합, 이후 정기 수집 연결 | 격리 환경에서 수집 → 검증 → 공개 → 지도/상세/동일 분기 3후보 비교. 실패 시 이전 공개 자료 유지. nginx·일반 CI·CD는 별도 작업으로 연결 |
+
+1~3의 검증 결과와 미검증 범위는 아래에 기록합니다. 20244 전체 수집·다른 업종의 SEMAS 대조·증분 갱신은 이번 실행 범위에 포함하지 않았습니다. 실제 적재에는 별도의 격리 대상·변경 범위 확정이 필요하며 기존 CSV 경로와 데이터 패키지는 보존합니다.
+
+#### 2026-10-21 수집기 구현 계획
+
+사용자가 두 키 발급 완료 후 로컬 설정·DB 없는 수집기 구현을 요청했습니다. 위 설계를 기준으로 현재 main과 기존 변경을 보존하며 직접 구현합니다. 새 문서·dependency·DB 연결·스케줄러·commit은 추가하지 않습니다.
+
+- [x] `api_config.py`·`api_http.py`: 키 파일의 신규 생성·명시적 로딩, 환경변수 두 개, 제한된 GET·재시도·정밀 JSON·오류 마스킹을 구현했습니다. 사용자 요청으로 키 파일은 `etl/api.env`로 옮겼으며 해당 경로만 프로젝트 내부에서 허용합니다. 실제 키 값을 에이전트가 열람하지 않았습니다.
+- [x] `api_records.py`·`seoul_api.py`·`semas_api.py`: 명시적 필드 매핑과 streaming page 수집을 구현했습니다. 중복·건수 변화·누락·기간·범위·좌표·NULL·큰 정수·API 오류를 합성 응답으로 검증했습니다.
+- [x] `collect_main.py`·`api_artifacts.py`·`etl/api.env.example`: `init-config`, `check-config`, `probe`, `collect`를 제공합니다. 명시한 프로젝트 밖 새 실행 디렉터리에 원문 page·정규화 JSONL·hash·미공개 manifest를 보존합니다. 기존 경로는 덮어쓰지 않고 실패 산출물은 미완료 상태로 남깁니다.
+- [x] 전용 테스트·기존 `make check-etl`·공개 sample 확인을 실행했습니다. 아래 검증 결과에서 환경 부족·인증 미검증과 PASS를 구분합니다.
+
+사용자는 서울시 공식 HTTP 경로 사용을 선택했습니다. 서울시 실행 명령에는 `--allow-seoul-http`를 명시하며, SEMAS는 HTTPS로 고정합니다. 브라우저에 원천 키를 넣거나 요청 URL을 로그에 남기지 않습니다. HTTPS 실패 후 자동 HTTP fallback은 하지 않습니다. `probe`는 전체 수집과 구분하며 어떤 성공 결과도 DB 적재·공개 승인을 뜻하지 않습니다.
+
+후속 공개 sample 진단에서 `https://openapi.seoul.go.kr:8088`은 `SSL: WRONG_VERSION_NUMBER`, 기본 HTTPS 443은 이번 환경에서 timeout, 공식 `http://openapi.seoul.go.kr:8088`은 HTTP 200·`INFO-000`을 반환했습니다. 공식 HTTP 포트에 HTTPS로 연결한 프로토콜 불일치가 원인으로 확인됐으며 키 인증 이전에 실패합니다. 인증서 검증 해제·TLS 버전 강제로 해결할 문제가 아닙니다. 사용자에게 전송 특성을 설명한 뒤 HTTP 사용 선택을 받았고 아래 실행 명령에 명시했습니다. 전 구간 암호화가 필요하면 제공기관의 공식 HTTPS 주소를 확인해야 합니다. 자체 nginx의 HTTPS 설정은 서울시까지의 HTTP 구간을 암호화하지 않습니다.
+
+#### 로컬 키 설정과 수집 실행
+
+다음 명령은 프로젝트 루트에서 시작합니다. 수집기 자체는 Python 3.12 이상 표준 라이브러리만 사용하며 별도 패키지 설치·DB·Docker가 필요하지 않습니다. 일반 ETL 전체 검증에는 기존 `requirements.txt`의 준비된 환경이 필요합니다.
+
+```sh
+cd etl
+python3 -m app.collect_main init-config --env-file api.env
+```
+
+신규 파일만 생성합니다. 실제 키 파일은 **`etl/api.env`**이며 Git과 루트·ETL Docker build context에서 제외합니다. 파일 권한은 0600이고 symlink·다른 소유자·공개 권한의 키 파일은 거부합니다. 프로젝트 내부에서는 이 정확한 경로만 허용하며, 다른 외부 private 키 파일을 명시할 경우 부모 0700·파일 0600과 Git 밖 경로 조건을 적용합니다. 기존 파일이나 권한을 자동 변경하지 않습니다. `api.env`를 로컬 편집기로 열어 `SEOUL_OPENAPI_KEY=`와 `SEMAS_SERVICE_KEY=` 뒤에 실제 키를 입력합니다. 공공데이터포털은 **Decoding 키**를 사용하며 collector가 URL encoding을 한 번 적용합니다. 따옴표·shell 표현식 없이 입력하며 앱의 `VITE_*` 설정에 넣지 않습니다.
+
+```sh
+python3 -m app.collect_main check-config --env-file api.env
+python3 -m app.collect_main --help
+```
+
+`check-config`는 네트워크 없이 각 키의 `SET/MISSING`만 출력합니다. 두 키가 모두 있어야 종료 코드 0이며 누락/설정 오류는 2입니다. `--env-file`을 지정하면 그 파일만 사용하고, 생략하면 프로세스의 두 환경변수만 사용합니다. 프로젝트 `.env`나 DB 설정은 자동 탐색·로딩하지 않습니다.
+
+처음에는 각 원천의 한 page·최대 5행만 확인합니다. `--output`은 기존에 없는 절대 경로이며 private 0700 부모 디렉터리 아래여야 합니다. 아래 명령의 경로가 이미 있으면 새로운 실행 번호를 사용합니다. 실패 디렉터리도 자동 삭제·재사용하지 않습니다.
+
+```sh
+python3 -m app.collect_main probe seoul-stores --quarter 20251 --allow-seoul-http --env-file api.env --output "$HOME/.config/recycleyoungs/probe-seoul-stores-001"
+python3 -m app.collect_main probe seoul-sales --quarter 20251 --allow-seoul-http --env-file api.env --output "$HOME/.config/recycleyoungs/probe-seoul-sales-001"
+python3 -m app.collect_main probe semas-stores --industry I21201 --env-file api.env --output "$HOME/.config/recycleyoungs/probe-semas-cafe-001"
+```
+
+서울시 실행은 위 명령처럼 `--allow-seoul-http`로 공식 HTTP 주소를 명시적으로 선택합니다. 인증키는 서울시까지 HTTP URL에 포함되어 전송되므로 원천 키는 ETL에서만 사용하고 요청 URL을 로그에 남기지 않습니다. 실행마다 **새 output 경로**를 사용합니다. 옵션을 생략하면 HTTPS를 시도하며 현재 확인된 공식 HTTP endpoint와 맞지 않아 실패합니다. 자동 fallback은 없습니다. `sample` 키는 `probe`·5행 이하로만 허용하며 인증 전체 수집 근거로 사용하지 않습니다.
+
+소량 응답·권한·할당량·전송 경로 확인 후 분기나 점포 범위를 명시해 전체 수집합니다. 서울시는 모든 원천 업종을 받아 기존 매핑을 보존합니다. SEMAS의 `--industry I21201`은 서울 카페만, 생략은 서울 전체 업종입니다. 이 둘은 교체 가능한 같은 snapshot이 아닙니다.
+
+```sh
+python3 -m app.collect_main collect seoul-stores --quarter 20251 --page-size 1000 --allow-seoul-http --env-file api.env --output "$HOME/.config/recycleyoungs/collect-seoul-stores-20251-001"
+python3 -m app.collect_main collect seoul-sales --quarter 20251 --page-size 1000 --allow-seoul-http --env-file api.env --output "$HOME/.config/recycleyoungs/collect-seoul-sales-20251-001"
+python3 -m app.collect_main collect semas-stores --industry I21201 --env-file api.env --output "$HOME/.config/recycleyoungs/collect-semas-cafe-001"
+```
+
+원천별 `pages/*.json`, 정규화 `normalized.jsonl`, `manifest.json`을 저장합니다. 정규화 정수·비율·좌표는 정확한 문자열, 누락은 JSON null입니다. 명시적 키·필드·분기·범위·page 길이/순서·총건수·기준년월 검사를 통과해야 하며, SEMAS 코드는 절단하거나 이름으로 조인하지 않습니다. HTTP 요청은 20초 timeout·최대 3회·1/2초 간격 재시도, page당 응답 상한 16MiB이며 redirect를 따라가지 않습니다. 전체 수집 상한은 10,000 page이고 `probe`에는 전체 건수에 따른 page 상한을 적용하지 않습니다. 새 dependency와 DB 모듈 import는 없습니다.
+
+| manifest 상태 | 의미 |
+| --- | --- |
+| `IN_PROGRESS` 또는 manifest 없음 | 실행 중이거나 중단된 불완전 산출물. 적재·공개 불가 |
+| `FAILED` | 실패 이전의 검증 page만 남김. 기존 run·공개 데이터에 영향 없음 |
+| `PROBE_ONLY` | 소량 응답 확인. `complete=false`, 전체 수집 아님 |
+| `EMPTY_UNPUBLISHED` | 해당 조회의 자료 없음. `complete=false`, 실제 0·최신 분기로 승격하지 않음 |
+| `COLLECTED_UNPUBLISHED` | 선언 건수·고유 키·필드 검증을 통과한 비어 있지 않은 수집 결과. 원천 snapshot 보장·기존 자료 대조·경계 호환성·적재·공개는 별도 |
+
+모든 결과는 `published=false`입니다. 실패·중단 시 원문·정규화 파일의 일부가 남을 수 있으므로 성공 manifest와 hash 없이 재사용하지 않습니다. 수집 raw와 manifest는 기본적으로 private이며 공개 전 별도 검토 대상입니다. CLI 실패는 값·URL을 포함하지 않는 오류 코드로 보고합니다. 실제 API의 새로운 envelope·필드·코드 체계는 추측해서 통과시키지 않고 검증 오류로 남깁니다.
+
+#### 인증 전체 수집과 CSV 대조
+
+2026-10-21 사용자가 Python 환경 준비·인증 전체 수집·기존 원천 대조를 승인했습니다. 기존 `requirements.txt` 그대로 Python 3.12.13의 `etl/.venv`를 준비했으며 dependency 선언은 추가하지 않았습니다. 키는 `etl/api.env`에서 명시적으로 읽고 값·요청 URL을 출력하지 않았습니다. 서울시는 승인된 공식 HTTP, SEMAS는 HTTPS를 사용했습니다. DB·Docker·앱 서버에는 접속하지 않았습니다.
+
+| 분기 | 서울시 점포 통계 | 서울시 매출 | page 수(점포/매출) |
+| --- | ---: | ---: | ---: |
+| 20251 | 35,281 | 16,770 | 36 / 17 |
+| 20252 | 35,294 | 16,794 | 36 / 17 |
+| 20253 | 35,326 | 16,831 | 36 / 17 |
+| 20254 | 35,317 | 16,718 | 36 / 17 |
+| 20261 | 35,313 | 16,659 | 36 / 17 |
+| 20262 | 35,301 | 16,659 | 36 / 17 |
+
+SEMAS는 서울(`11`)·CAFE(`I21201`) 22,739행·228page를 수집했고 모든 page의 헤더 기준년월은 `202606`입니다. 원래 13개 범위는 총 335,002행·546page이며 각 범위에서 선언 건수=수신 건수=고유 키 건수, `complete=true`, `COLLECTED_UNPUBLISHED`, `published=false`를 확인했습니다. 이 수치는 서로 다른 분기·자료 유형의 행을 합친 것으로 고유 점포 수가 아닙니다. 조회한 서울시 분기 중 최신은 20262이며 원천의 전체 지원 기간이나 SEMAS의 실제 관측일·동일 시점 완전성을 보장하지 않습니다.
+
+비교 기준은 고정 공개 릴리스 `real-data-v2`입니다. 기존 검증기로 ZIP SHA-256(`6b11901f46d1a207c5b36353483e209f00a10fb401edcc5fd036a3025238ff0b`)·패키지 계약·개별 파일 hash를 확인한 뒤 프로젝트 밖 private 실행 디렉터리에 CSV 3개만 준비했습니다. 기존 프로젝트 raw·DB를 교체하지 않았습니다.
+
+- **서울시 2025년 MATCH:** 점포 통계 141,218행·매출 67,113행, 합계 208,331행의 분기/동/원천 업종 키 집합과 정규화 전체 필드가 일치합니다. 추가·누락·변경 행은 0이며 NULL/실제 0·큰 정수·비율을 구분해 비교했습니다. 기존 패키지에 없는 20261·20262는 수집·품질 검사만 수행했고 CSV 일치로 보고하지 않습니다.
+- **SEMAS 엄격 대조 DIFFERENT:** 비교 범위 22,739개 점포 ID가 모두 일치하고 추가·누락은 없습니다. 기존 CSV의 전체 554,092행 중 서울 CAFE만 대조했으며 나머지 업종은 검증하지 않았습니다. 기준월 비교는 API 헤더와 기존 CSV 파일명 `202606` 사이의 일치이며 정확한 관측일의 일치가 아닙니다.
+- **외곽 공백 정규화:** 처음 수집한 v1에서는 API 중분류명 전체의 끝 공백과 상호 1건의 외곽 공백 차이가 있었습니다. 기존 CSV ETL의 `clean_text`처럼 외곽 공백만 제거하고 빈 문자열을 NULL로 만드는 `normalizer_version=2`를 적용했습니다. ID의 선행 0·내부 공백·구두점은 유지하며 지역/업종 검사·파생 업종도 정규화한 코드로 판정합니다. 원래 run·raw·대조 리포트를 보존하고 저장된 raw의 hash를 확인해 별도 v2 run으로 offline 재정규화했습니다.
+- **남은 표기 차이:** v2에서 상호 110건·표준산업분류명 64건, 겹치는 1개를 포함한 173개 점포가 다릅니다. 모두 API의 쉼표가 CSV에서 세미콜론으로 표시된 차이이며, 그 외 비교 필드(분류 코드·주소·좌표·NULL 포함)는 일치합니다. 구두점을 자동 치환하거나 실제 상호 변경·폐업·원천 정정으로 추론하지 않습니다. 원천 표기 보존과 화면 표시 정책을 정하기 전 `MATCH`로 승격하지 않습니다.
+- **무결성 PASS:** 원래 13개 run과 SEMAS v2 replay 1개, 총 14개 run의 완료 상태·건수·774개 raw page hash·정규화 hash/행 수를 재검사했습니다. replay는 새 API 호출이나 새로운 시점의 snapshot이 아닙니다. 최종 코드로 재정규화한 결과도 저장된 v2 hash와 일치합니다.
+
+`etl/app/api_compare.py`는 DB 모듈을 import하지 않고 SHA로 고정한 CSV와 완료·미공개 run을 대조합니다. 기존 ETL의 literal 필드 매핑을 읽어 비교하고 값 대신 집계 리포트를 저장합니다. 파생 geometry `location`은 직접 필드 비교에서 제외하며 좌표는 비교합니다. SEMAS의 `source_reference_month`는 필드 대조와 구분해 manifest 기준월과 명시한 CSV 기준월로 확인합니다. 이 대조는 공간 포함 판정·역사적 경계·원천 최신성 검증이 아닙니다.
+
+```sh
+cd etl
+.venv/bin/python -m app.api_compare --run /absolute/private/run --csv /absolute/private/stats.csv --csv-sha256 REPLACE_WITH_VERIFIED_SHA256 --report /absolute/private/new-comparison.json
+# SEMAS는 추가로 --baseline-reference-month 202606을 명시합니다.
+```
+
+위 `REPLACE_WITH_VERIFIED_SHA256`은 검증된 파일 hash로 대체합니다. 실제 실행에는 기존에 없는 report 경로와 Git 밖 private 부모가 필요하며 덮어쓰지 않습니다. 종료 코드는 MATCH 0, DIFFERENT 3, 오류 2입니다. 원문·CSV·개별 값·실제 private 경로는 Git 문서에 넣지 않고 승인된 private 실행 위치에 보존합니다. 다음 단계는 명칭 정책과 데이터 버전·검증 후 공개·이전 버전 보존 설계를 확정하는 것이며, 이 실행은 실제 DB 적재·공개 승인이 아닙니다.
+
+#### 수집기 검증 결과
+
+- **수집기 단계의 회귀 PASS:** 버전 적재 코드 추가 전 `make check-etl PYTHON=/absolute/project/etl/.venv/bin/python`에서 405개 중 390개 PASS·15개 SKIP, 실패·오류 0을 확인했습니다. Python 3.12.13·기존 requirements를 사용하고 DB/raw opt-in과 키를 전달하지 않았습니다. 이후 419개와 최신 430개 실행은 아래 버전 적재·격리 통합 검증 절에 구분합니다.
+- **기존 수집·대조 API 회귀:** 위 수집기 단계 실행에는 API 전용 39개가 포함됩니다. SHA 변경·중복 키·미완료 probe·NULL/0·정밀 정수·구두점 차이 보존과 공백 정규화 후 업종 판정을 검사했습니다. 추가 회귀 RED→GREEN과 독립 코드 리뷰 후 재검토를 수행했습니다.
+
+다음은 전체 수집 이전의 단계별 확인 기록입니다. 과거 환경 오류는 위 준비된 환경에서 해소했습니다.
+
+- **PASS:** `cd etl && python3 -m unittest discover -s tests -p 'test_api_*.py' -v` — 합성 테스트 28개. 최초 모듈 부재 RED, 구현 GREEN, 대규모 source의 probe·잘린 HTTP 응답 재시도·프로젝트 내 키 파일 경로·SEMAS 헤더 기준년월 회귀를 포함합니다. 실제 DB 결과가 아닙니다.
+- **PASS:** 공개 `sample`·HTTP 명시 선택으로 20251 점포/매출 각 1행을 메모리에서 수집·정규화했습니다. 정규화 필드는 각각 13·54개이며 선언 총건수 35,281·16,770을 확인했습니다. 실제 인증키나 수집 원문 파일은 사용·저장하지 않았습니다.
+- **PASS:** 처음 생성한 외부 키 파일은 사용자 요청으로 `etl/api.env`에 이동했습니다. 값은 읽지 않고 파일 자체를 이동했으며 주석을 현재 위치에 맞췄습니다. 실제 키 값은 입력·열람하지 않았습니다.
+- **PASS:** 사용자의 키 입력 후 `check-config`는 두 키 모두 `SET`을 반환했습니다. SEMAS는 HTTPS로 서울·I21201 최대 5행을 메모리에서 인증 조회·정규화했으며 기준년월 `202606`, 선언 총건수 22,739, 정규화 24필드를 확인했습니다. 전체 수집·동일 시점 완전성·실제 영업일의 검증은 아닙니다.
+- **PASS:** 사용자가 HTTP 사용을 선택한 뒤 서울시 점포·매출을 `allow_http=True`·20262·최대 5행으로 메모리에서 실제 키 인증 조회·정규화했습니다. 점포는 5행·선언 총건수 35,301·정규화 13필드, 매출은 5행·선언 총건수 16,659·정규화 54필드입니다. 키·원문은 출력·저장하지 않았으며 DB 접속·적재는 하지 않았습니다. 선언 총건수는 전체 수집 성공의 증거가 아닙니다.
+- **호환성 수정:** 최초 SEMAS 인증 응답에서 `stdrYm`이 행에 없어 `SCHEMA_MISMATCH`가 났습니다. 실제 위치인 `header.stdrYm`을 검사하고 정규화에 전달하도록 수정했습니다. page 간 기준년월 변경·행/헤더 충돌·잘못된 월은 실패하며, 빈 결과도 헤더 metadata를 보존합니다. 합성 회귀 RED→GREEN과 실제 5행 재조회로 확인했습니다.
+- **과거 환경 오류·현재 해소:** 최초 `make check-etl PYTHON=python3`는 341개 실행 중 기존 requirements의 의존성 누락·연쇄 import 오류 15개로 실패했습니다. 이후 기존 requirements에 맞는 환경을 준비해 위 전체 회귀를 통과했습니다.
+- **현재 미실행:** 실제 DB·UI·배포·정기 갱신. 이 작업에서 기존 DB·원본을 변경하지 않았습니다.
+
+### API 버전 적재와 기간 확장 — 코드 구현·DB 미실행
+
+2026-10-21 최초 승인한 네 작업(반영 기준·버전 적재 경로·연도 고정 제거·테스트/문서)의 코드 구현 기록입니다. 이 최초 단계에서는 DB·Docker를 실행하지 않았습니다. 이후 별도 승인한 실제 격리 실행은 [API 격리 통합 검증](#api-격리-통합-검증과-전환-준비)에 구분합니다. 기존 CSV loader·V1/V2/V3·고정 패키지 contract·키 파일은 변경하지 않았습니다.
+
+| 변경 대상 | 책임·계약 |
+| --- | --- |
+| `etl/app/api_release.py` | `prepare_release(paths)`로 완료 run 검증·내용 기반 공개 ID 생성. `stage_release(conn, release, verify_identity=...)`와 `publish_release(conn, version, expected_current=..., verify_identity=...)`는 승인된 adapter가 제공할 동일 연결을 사용 |
+| [선택적 V4 SQL](../../backend/src/main/resources/db/api-migration/V4__api_release_publication.sql) | `api_releases`·자료별 `api_*` 테이블·단일 `api_current_release`·`published_*` 조회 view. 기존 CSV 테이블 보존 |
+| `DataPublication`·통계/점수/주변 Repository·Service | 명시한 reader 모드·공개 metadata·동일 버전 검사와 읽기 전용 REPEATABLE_READ. 기본 모드는 legacy |
+| Frontend API·hooks·추세/비교/자료 안내 | 연도 고정 검사 제거, 공개 버전 pin·늦은 응답 취소·버전 혼합 차단, 기준년월·수집 시각·미검증 상태 표시 |
+
+**원천 표기:** `SOURCE_TEXT_OUTER_STRIP_ONLY`를 사용합니다. 외곽 공백·빈 문자열만 기존 규칙대로 처리하고 API의 쉼표를 CSV의 세미콜론으로 바꾸지 않습니다. 앞서 확인한 SEMAS 173개 점포의 차이는 그대로 보존하며 엄격 CSV 대조 결과 `DIFFERENT`를 `MATCH`로 바꾸지 않습니다. 이 정책은 값 보존 기준이며 실제 공개 승인이 아닙니다.
+
+**공개 묶음:** 포함한 모든 분기에 서울시 점포 통계·매출 한 쌍과 서울 SEMAS snapshot 하나가 필요합니다. 각 run의 완료·미공개 상태, 정확한 원천/지역/업종/기간, page 순서·raw hash·정규화 hash/건수·중복·필드·NULL·정밀도·업종 코드·정규화 규칙을 검사합니다. API 점포 건수는 기존 DB INTEGER 범위도 확인합니다. 같은 원천·분기·동의 이름 충돌은 거부하고, 통계와 매출 사이의 이름 차이는 기존 계약대로 보존합니다. SHA만 다시 계산한 불완전한 묶음도 구조 검사에서 거부합니다.
+
+`release_id`는 경로를 제외한 원천 정보·정규화 행·hash·정책·수집 시각의 canonical JSON SHA-256입니다. 입력 run 순서를 바꿔도 같습니다. `collectedAt`은 묶음 내 원래 수집 종료 시각의 최댓값이며 개별 점포 자료의 수집일이 아닙니다. offline replay의 수집 시각은 raw page 목록·hash·기간이 일치하는 원래 수집 manifest에서 가져오며 replay 종료 시각으로 최신성을 표시하지 않습니다. 데이터·원문·개별 명칭·private 경로를 Git에 보관하지 않습니다.
+
+**적재·공개 분리:** stage는 idle/autocommit 연결의 단일 transaction에서 identity verifier를 먼저 실행하고 새 버전의 행을 COPY한 뒤 건수를 확인해 READY로 봉인합니다. 같은 READY 내용의 stage 재실행은 no-op입니다. 부분 COPY·mapping·건수·identity 실패는 예외를 전파하고 transaction을 벗어나며 현재 공개 pointer는 변경하지 않습니다. 공개는 READY 확인·기대 현재 버전 비교·pointer 잠금을 거쳐 별도 짧은 transaction으로 전환합니다. 성공 응답 유실 후 같은 버전으로 재시도하면 no-op, 다른 공개 버전으로 진행됐다면 충돌입니다. 이미 공개한 분기를 누락하거나 전체 업종에서 카페로 범위를 축소하는 전환은 거부합니다. 이전 행·버전은 삭제하지 않으며 임의의 과거 버전 복원·보존 기간 정리는 별도 설계·승인 대상입니다.
+
+V4는 READY 데이터/metadata의 UPDATE·DELETE와 TRUNCATE를 거부하고, PREPARING 시작·READY 건수/기간·점포 범위를 검사하는 trigger를 포함합니다. 카페 전용 snapshot은 서울 카페 범위만 교체하고 다른 범위의 기존 CSV 행을 유지합니다. 다른 업종까지 최신 API로 전환된 자료로 표시하지 않습니다. API 전체 업종 snapshot에서 카페 전용으로 좁힐 때 이전 API 비카페 자료를 CSV로 되돌리지 않도록 공개 단계에서 차단합니다. snapshot 누락은 폐업 증거가 아닙니다.
+
+**실행 경계:** CLI는 다음처럼 private release JSON을 준비할 뿐 DB connection·stage·publish를 호출하지 않습니다. 실제 실행에는 포함할 모든 분기의 run을 반복 지정합니다.
+
+```sh
+cd etl
+.venv/bin/python -m app.api_release --run /absolute/private/stats-run --run /absolute/private/sales-run --run /absolute/private/stores-run --output /absolute/private/new-release.json
+```
+
+프로젝트 밖 0700 부모·신규 0600 output 규칙을 따릅니다. 최초 단계에는 실제 adapter가 없었으며, 후속 단계에서 격리 전용 adapter를 추가했습니다. 영속 환경 adapter·권한·복구 검증은 남아 있습니다. callback이나 READY를 사람 승인으로 취급하지 않고 기존 DB guard를 우회하지 않습니다.
+
+V4를 기본 `db/migration`에 넣으면 현재 고정 데이터 패키지가 추가 migration을 거부하므로 별도 `db/api-migration` 위치로 분리했습니다. 기존 검증을 완화하지 않았고 기본 Flyway 경로도 변경하지 않았습니다. 후속 승인된 격리 검증에서만 V1/V2/V3와 이 위치를 명시적으로 선택합니다. Backend의 `app.data.api-release-enabled`는 기본 false이며, schema·권한·공개 검증 후 별도 승인으로 true를 설정해야 합니다. API 모드의 실패·누락 pointer를 legacy 자료로 자동 fallback하지 않습니다.
+
+**일반 검증:** Backend 274개 PASS(실패·SKIP 0), Frontend 34개 파일·337개 PASS, `make check-frontend`의 TypeScript/Vite·ESLint/shadcn lint PASS, ETL 419개 중 404개 PASS·15개 SKIP입니다. DB/raw opt-in·키를 테스트 환경에 전달하지 않았습니다. ETL SKIP은 공간 DB 8개·고정 raw ZIP 2개·점포 DB 4개·실제 점포 DB 1개입니다. 새 회귀의 RED→GREEN과 독립 코드 리뷰 후 재검토를 수행했습니다. 이름 충돌·범위 축소·버전 혼합·동일 공개 요청 재시도 지적을 수정했습니다. COPY·commit/rollback·trigger·잠금·권한·geometry의 실제 DB 결과를 mock으로 증명하지 않습니다.
+
+**실자료 offline 준비 검사:** 기존 수집본 13개(서울시 20251~20262 쌍·SEMAS v2 replay) 335,002행을 새 `prepare_release`에 넣어 `VALIDATED_UNPUBLISHED`를 확인했습니다. 공개 후보 ID는 `3f3311b71f2f6839cfb959b989704cff366ad11aa7952ddfdb389b3c61b3652e`, 점포 기준년월은 202606·범위는 I21201입니다. 메모리 검사만 수행했고 새 bundle 파일·DB 행·공개 pointer는 만들지 않았습니다. 이 성공은 실제 DB 적재·공개·동일 시점 완전성의 증거가 아닙니다.
+
+이 최초 코드 단계는 기존 서비스의 데이터를 갱신한 결과가 아닙니다. 실제 격리 검증과 그 이후 남은 운영 전환 범위는 다음 절을 따릅니다.
+
+### API 격리 통합 검증과 전환 준비
+
+후속 사용자 승인 범위는 **새 격리 DB의 실제 검증·격리 서비스의 API 모드·갱신 경로 준비·기존 구성 전환 목록 정리**입니다. 기존 팀 DB·Compose 자원·볼륨·원격 Releases·Git index는 변경하지 않았습니다. 아래의 공개는 격리 DB의 reader pointer이며 인터넷 데이터 배포를 뜻하지 않습니다.
+
+**실행 경로:** [controller](../../etl/api_integration.py)는 새 nonce·internal network·고정 PostGIS 이미지·data/init tmpfs·DB host port/기존 mount 없음 조건을 적용합니다. 기존 `control.check_target`·`flyway_init_sql`을 재사용하며 실제 full ID·network·label·SID를 대조합니다. Flyway는 선택적 V4 위치를 명시해 새 DB에만 V1~V4를 적용합니다. 기본 팀 Compose·Flyway 위치·고정 데이터 guard는 그대로입니다. 비밀번호는 메모리·stdin/명시한 환경으로 전달하고 명령 인자·공개 출력에 넣지 않습니다. API 키 파일이나 프로젝트 전체를 컨테이너에 bind mount하지 않습니다.
+
+[격리 adapter](../../etl/api_isolation.py)는 이름·actor·image·SID·경로·port를 제한하고 ambient DB 설정을 거부합니다. Python 연결과 Java reader는 사용할 같은 연결에서 database/current_user/session_user/SID/PGDATA/port/timeout/READ ONLY를 검사합니다. `api_writer`는 API append·status 봉인·pointer 전환과 전용 sequence 권한을, `api_reader`는 SELECT와 READ ONLY를 사용합니다. 이 역할을 영속 환경에 그대로 만들 수 있다는 승인이나 운영 권한 검증은 아닙니다.
+
+**실제 검증:** [opt-in worker](../../etl/tests/integration_api.py)는 일반 unittest 자동 검색에서 실행되지 않습니다. 실수집본 13개·335,002행과 승인된 고정 경계 bytes(행정동 425·상권 1,650)를 사용했습니다. 실자료 공개 ID는 `3f3311b71f2f6839cfb959b989704cff366ad11aa7952ddfdb389b3c61b3652e`, 통계 분기는 20251~20262, 점포 기준년월은 202606입니다.
+
+| 실제 검사 | 결과·한계 |
+| --- | --- |
+| V1~V4 migration·COPY·READY·공개 | 새 격리 DB에서 실행. 정규화 원본의 전체 컬럼 값·NULL·수치 형식과 모든 점포 좌표 전수 대조 |
+| NULL·실제 0·큰 정수 | 별도 합성 fixture로 NULL/0 구별과 `9007199254740993` 정확성 확인 |
+| 부분 COPY 실패 | 앞선 원천 적재 후 trigger 실패를 주입해 해당 release·행 rollback 및 기존 pointer 유지 확인 |
+| 재실행·불변성 | 동일 READY stage·응답 유실 후 같은 공개 재시도 no-op, UPDATE/DELETE/TRUNCATE 거부 |
+| 공개 충돌·복구 | 동시 기대 버전 공개에서 한 요청만 성공, 기간 누락 거부, 보존한 전체 release 재공개 |
+| 카페 scope·기존 자료 | 서울 카페만 교체하고 다른 범위의 합성 legacy 행을 유지. 기존 팀 DB 전수 보존·백업/복원 증명이 아님 |
+| 역할·sequence | 읽기 전용 reader와 쓰기 권한 부재 확인. 비 API sequence 값 보존은 격리 합성 상태로 한정 |
+
+**서비스·화면:** [격리 Java 진입점](../../backend/src/locationIntegration/java/com/example/backend/location/ApiIntegrationApplication.java)은 Flyway를 끄고 `app.data.api-release-enabled=true`와 검증한 reader만 사용합니다. [서비스 controller](../../etl/api_integration_service.py)는 DB host port 없이 내부 API를 loopback HTTP로 전달합니다. 기존 `make backend`/team-dev 진입점은 바뀌지 않습니다. `prepareLocationIntegration --offline`로 이 opt-in harness를 준비하며 일반 test/bootRun이 실행하지 않습니다.
+
+실제 HTTP에서 여섯 분기 통계·BIGINT 문자열·연도 경계 추세·점수 metadata와 잘못된 버전 pin의 HTTP409를 확인했습니다. Chrome/Playwright로 최신 지원 기본 분기 20262, 점포 기준년월/수집 종료 표시, 2025~2026 전체 표, 명동·서교동·성수2가3동 세 후보 비교와 1440×1000·390×844 화면을 확인했습니다. API·DB는 실제 격리 대상, 지도 SDK는 테스트 대역입니다. 실제 Kakao 타일·키·도메인 인증 및 모든 모바일/접근성 흐름은 미검증입니다. Vite 오류 overlay·JS 예외·API 오류는 없었고 브라우저의 자동 `favicon.ico` 요청 404는 별도로 관찰했습니다. 시각 증거·원본·실행 상세는 프로젝트 밖 private 위치에 보존합니다.
+
+**갱신 준비:** [api_refresh](../../etl/app/api_refresh.py)는 명시한 최대 40개 분기를 다시 수집하고, 이전 완전한 run 목록에서 나머지 분기를 보존한 뒤 서울 카페 snapshot 하나와 검증한 release를 만듭니다. 비어 있거나 실패한 원천·불완전 이력·점포월 후퇴·전체 업종에서 카페로의 범위 축소는 공개 후보를 만들지 않습니다. 달력만 보고 최신 분기를 추정하거나 빈 응답을 성공으로 건너뛰지 않습니다. 각 실행의 신규 0700 디렉터리·0600 파일을 사용하고 원본/실패 증거를 덮어쓰거나 삭제하지 않습니다.
+
+`refresh_release(conn, release, expected_current=..., verify_identity=...)`는 실제 current ID·점포 기준월도 같은 검증 연결에서 확인합니다. stale 이전 run 목록으로 현재보다 오래된 점포월을 준비해도 자동 공개하지 않습니다. 이후 경쟁은 기존 publish CAS가 거부합니다. 승인된 이전 버전 복원은 별도 `publish_release` 경로로 구분합니다.
+
+```sh
+# DB 없는 수집·검증 준비 예시. 이전 묶음의 모든 run을 반복 지정합니다.
+cd etl
+.venv/bin/python -m app.api_refresh --env-file api.env --output /absolute/private/new-run --quarter 20262 --previous-run /absolute/private/old-stats-run --previous-run /absolute/private/old-sales-run --previous-run /absolute/private/old-stores-run --allow-seoul-http
+```
+
+[job entry point](../../etl/app/api_refresh_job.py)는 private 전체 run 경로 목록과 output 부모를 받고 새 실행 디렉터리를 만듭니다. OS 파일 잠금으로 동시 실행을 거부하며 실패한 전체 작업을 자동 재실행하지 않습니다. [service 예시](../../docker/api-refresh/refresh-collect.service.example)·[timer 예시](../../docker/api-refresh/refresh-collect.timer.example)는 **설치·활성화하지 않은 수집 전용 초안**입니다. 월요일 04:30 한국 시간/최대 10분 지연·45분 상한은 제안값입니다. 영속 writer·배포 환경·주기/호출 한도·이전 run 목록 승계·실패 알림을 확정한 뒤 수집→검증→적재→공개를 연결해야 합니다. 현재 job은 `PREPARED_UNPUBLISHED`만 만들며 자동 DB 공개·새 분기 탐색·오래된 증거 정리를 수행하지 않습니다.
+
+최초 격리 실행은 initdb 임시 Unix 서버를 준비 완료로 오인해 migration 전에 중단됐습니다. 원인을 검토해 최종 TCP 서버 준비를 확인하도록 바꾸고 새 실행 ID에서 통과했습니다. 중단된 자원·private 증거는 보존했으며 실패한 target을 자동 재실행하거나 기존 환경을 복구/초기화하지 않았습니다.
+
+**최종 검증:** Backend `./gradlew test --offline` 274개 PASS(실패/SKIP 0), Frontend `npm run test` 337개 PASS, `make check-frontend` build/lint PASS, `make check-etl` 430개 중 415개 PASS·기존 DB/raw 조건 15개 SKIP입니다. 일반 테스트에는 DB/raw opt-in·실제 키를 전달하지 않았습니다. 별도 실제 격리 실행은 35개 검사를 통과했고 실자료 bundle도 신규 private 0600 파일에 보존했습니다. Java harness는 `prepareLocationIntegration --offline`로 컴파일했습니다. systemd 예시는 대상 Linux에서 설치·기동 검증하지 않았습니다.
+
+독립 리뷰가 실제 current와 stale 이전 목록 사이의 점포 기준월 후퇴를 지적해 회귀 RED→GREEN으로 수정했습니다. 새 격리 실행에서 합성 202607 공개 뒤 202606 자동 갱신 거부·별도 명시적 복원을 확인했고 재검토에서 추가 결함은 없었습니다. 이 합성 7월 자료를 실제 원천 최신 데이터로 표시하지 않으며 최종 pointer는 전수 검증한 실제 202606 release로 복구했습니다. 기존 팀 DB의 현재 상태는 조회하지 않았습니다.
+
+### Compose·실행 명령·문서·Releases 전환 목록
+
+다음 표는 영속 구현 전의 조사 결과와 전환 목록입니다. 후속 승인으로 별도 API Compose·영속 역할·reader·Make 진입점·주간 공개를 구현했으며 현행 동작은 [다음 절](#영속-api-개발-환경과-예약-갱신)이 기준입니다. 기존 팀 구성·원격 Releases 삭제를 실행한 기록이 아닙니다.
+
+| 대상 | 이번 결정 | 실제 전환 때 필요한 작업 |
+| --- | --- | --- |
+| `docker-compose.yml`, `docker/team-dev/`, team DB/control/cache 볼륨 | 현행 고정 데이터 환경 보존 | 새 API용 project·영속 volume·역할·identity/READY 계약을 별도 준비. 기존 볼륨 채택/재생성 금지 |
+| `data-init`·`etl-init`·`team_dataset`·`team_db`·고정 fingerprint | 현재 재현/보존 경로 유지 | API 갱신으로 fingerprint를 다시 찍어 기존 guard를 통과시키지 않음. 초기 공간 자료와 API 통계/점포 갱신 책임 분리 |
+| V1~V3·선택적 V4·Backend reader | 기존 기본값 legacy 유지 | 승인된 영속 대상에 migration·권한·공개 검증 후 전용 API reader profile/실행 경로로 전환 |
+| `Makefile`의 `db`·`etl`·`backend`, `bootRun` | 기존 팀 실행 의미 유지 | API 초기 준비·수집·검증·stage·publish·status를 구분하는 명령 추가. 기존 명령을 다른 대상으로 조용히 변경하지 않음 |
+| 수집 job·systemd 예시 | 미활성 수집 초안 준비 | 영속 adapter·CAS/current 확인·주기/한도·오류 알림·이전 run 승계·용량/보존·복구 정책 확정 후 연결 |
+| `data/release.json`·`public-data-v2.json`·GitHub `real-data-v2` | 유지 | 현재 Compose가 다운로드하며 경계 원본·검증 자료도 포함. API용 경계 배포·과거 재현 대체 경로를 마련하기 전 삭제 금지 |
+| GitHub Releases | 메타데이터 읽기만 수행 | 2026-10-21 조회 결과 공개 tag 1개 `real-data-v2`, ZIP 87,870,777 bytes, SHA `6b11901f46d1a207c5b36353483e209f00a10fb401edcc5fd036a3025238ff0b`. 전환 후 과거 고정 버전으로 표시/보존 권고. 삭제는 별도 범위 |
+| `.github/workflows/v2-clean-clone-e2e.yml` | 과거 제한 E2E로 보존 | 특정 branch/before/run_number guard를 일반 CI로 오해하지 않음. 일반 test/build CI와 승인된 migration/데이터 갱신/앱 CD를 분리 설계 |
+| 루트 README·사람용 실행/데이터/배포 문서 | 전환 뒤 기본 실행 설명 갱신 대상으로 지정 | 새 경로를 실제 기본값으로 적용한 뒤 명령·기간·키·상태·복구 안내를 함께 변경. 현재 격리 성공을 기본 팀 환경 전환으로 적지 않음 |
+| CSV loader·과거 파일·release asset | 즉시 삭제하지 않음 | 새 초기 준비/과거 분기/경계/검증 재현과 복구 경로 확보, 호출처 조사 및 승인 후 단계적으로 퇴역 |
+
+위 조사 후 영속 대상·역할·별도 실행·자동 공개까지 연결했습니다. 외부 알림·전체 worker 복구·배포 이미지·과거 구성 퇴역 판단은 남아 있습니다. nginx·일반 CI/CD·Frontend 책임 재정리는 별도 작업입니다. 기존 DB를 변경한다면 [DB 안전 정책](db-safety.md)의 새 백업·독립 복원·전수 보존 비교를 먼저 수행해야 합니다.
+
+### 영속 API 개발 환경과 예약 갱신
+
+2026-10-21 사용자가 승인한 다섯 작업은 **별도 영속 환경·실자료/복원 검증·갱신 승계·Compose 주간 worker·실행 안내 전환**입니다. 기존 팀 DB·Compose·Releases·Git index는 보존했습니다. 이는 현재 PC에서 검증한 로컬 개발 경로이며 운영 배포나 새 PC 이미지 준비 완료를 뜻하지 않습니다.
+
+**진입점·대상:** [api_dev](../../etl/api_dev.py)와 [API Compose](../../docker-compose.api.yml)가 `recycleyoungs-api-dev` project, `recycleyoungs_api_dev` DB, `recycleyoungs-api-dev-db` 영속 볼륨을 관리합니다. `api-postgres:5432`는 Docker 내부에서만 접근하며 Backend HTTP는 `127.0.0.1:18090`입니다. [api_runtime](../../etl/api_runtime.py)은 daemon·full container/network ID·내부 network·이미지·owner label·볼륨 생성 정보·mount·port와 실제 연결의 DB/current_user/session_user/SID/PGDATA/timeout/읽기 전용·DB owner nonce를 확인합니다. ambient DB/Compose override를 거부하며 다른 DB를 채택하지 않습니다.
+
+**스키마·권한:** 최초 신규 DB에만 고정 V1~V3와 선택적 V4를 적용합니다. [runtime SQL](../../backend/src/main/resources/db/api-runtime/schema.sql)은 별도 `api_runtime`에 불변 artifact registry와 단일 작업 상태를 만듭니다. 기본 Flyway 위치·기존 fingerprint를 변경하지 않습니다. `ry_api_owner`는 최초 준비·snapshot 백업 전용, `api_writer`는 API 적재/공개·runtime 상태, `api_reader`는 SELECT/READ ONLY입니다. [api-dev profile](../../backend/src/main/resources/application-api-dev.yaml)과 [DataSource](../../backend/src/main/java/com/example/backend/apidev/ApiDataSourceConfiguration.java)는 Flyway를 끄고 실제 reader identity 및 READY+registry를 검사합니다. 기본 `bootRun`은 기존 팀 경로입니다.
+
+**파일 경계:** 기본 private home은 `$HOME/.config/recycleyoungs/api-dev`이며 0700 디렉터리·0600 파일을 사용합니다. 비밀번호·target/Compose 설정·수집본·경계·백업은 프로젝트 밖에 보존합니다. API 키는 사용자가 요청한 프로젝트 내 `etl/api.env`를 유지하며 Git/build에서 제외하고 worker의 개별 read-only 파일로만 mount합니다. 프로젝트 전체나 키가 포함된 디렉터리를 mount하지 않습니다. 초기 경계는 SHA가 고정된 `real-data-v2` 패키지를 검증한 뒤 경계 2개와 공개 리포트 3개만 사용합니다. 패키지의 통계 CSV를 새 API 조회 자료로 적재하지 않습니다.
+
+**갱신 계약:** [api_worker](../../etl/api_worker.py)는 DB advisory lock을 보유하고 실제 current release의 registry를 다음 입력으로 사용합니다. 최신 지원 분기를 전수 재수집하고, 마지막 지원 분기 이후 달력상 완료된 분기를 최대 4분기 탐색합니다. 점포·매출 probe 양쪽에 자료가 있을 때 순서대로 추가하며 첫 미제공 분기에서 멈춥니다. 요청 실패를 빈 자료로 간주하지 않습니다. 서울 카페 snapshot을 다시 수집하고 나머지 과거 분기 run은 보존합니다. 오래된 분기의 정정까지 자동 재수집하는 정책은 아닙니다. HTTP 허용 여부는 최초 `--allow-seoul-http` 선택을 `data/transport.json`에 저장해 후속 수집에도 적용합니다. 키와 URL 원문은 로그에 남기지 않습니다.
+
+registry 등록 → RUNNING candidate 기록 → 실제 current/점포월 검사·CAS 공개 → SUCCEEDED 순서입니다. 공개된 새 자료의 다음 입력 경로가 사라지는 틈을 만들지 않습니다. 실패하면 FAILED, 프로세스가 중단되면 RUNNING이 남아 자동 재시도를 차단합니다. `api-reconcile`은 같은 잠금에서 실제 current와 보존한 run을 검증해 향후 예약만 허용하며 이전 버전을 재공개하지 않습니다. 부분 적재 실패는 pointer를 바꾸지 않고, 공개 직후 중단된 경우에는 이미 공개한 새 current를 유지합니다.
+
+**예약·명령:** `make api-init`은 새 환경 생성/수집/DDL/DML, `api-up`은 Backend build 및 별도 서비스 시작, `api-status`는 readonly 조회, `api-refresh`는 즉시 실제 갱신, `api-reconcile`은 상태 변경, `api-restart-check`는 새 API DB 실제 restart입니다. 매주 월요일 04:30 KST를 `next_due_at`으로 저장하고 30초 간격으로 확인합니다. 실행 상한은 45분이며 동시·실패 작업을 자동 반복하지 않습니다. Docker/PC가 내려가 있으면 정시에 실행할 수 없고, 이미 due인 정상 상태는 다음 worker 기동 뒤 한 번 실행합니다. 수집 전용 systemd 예시는 미활성 과거 초안이며 이 Compose worker와 함께 설치하지 않습니다. 외부 알림은 연결하지 않았고 상태·고정 오류 코드·worker 로그를 제공합니다.
+
+**백업 경계:** [api_backup](../../etl/api_backup.py)은 같은 advisory lock과 READ ONLY 반복 가능 읽기 transaction에서 export한 snapshot으로 `pg_dump -Fc`를 실행합니다. 새 nonce·별도 internal network·tmpfs DB에 역할/권한을 유지해 복원하고 [snapshot 비교기](../../etl/api_snapshot.py)로 모든 테이블 컬럼·NULL·숫자·EWKB·이력·sequence 상태, catalog/ACL/역할을 대조합니다. 복원 DB에 실제 `api_reader`로 로그인해 READ ONLY·쓰기 권한 부재도 확인합니다. PostgreSQL dump/restore의 varchar literal 배열 cast deparse 차이만 값 보존 회귀로 검증한 좁은 정규화를 적용합니다. 새 backup·restore 자원은 보존하며 자동 삭제하지 않습니다.
+
+이 백업은 **DB-only**입니다. registry의 `/api-data` 경로가 가리키는 원본 run 파일·경계·제어 기록·secret은 dump에 들어가지 않습니다. 현재 원본은 private home에 별도 보존하며 다른 장비에서 원본/경로/권한/새 identity까지 복구하는 전체 worker 절차와 정기 백업·보존 정책은 남아 있습니다. 독립 DB 복원 성공을 전체 서비스 복구 성공으로 표시하지 않습니다.
+
+**실제 검증:** 최초 13 run·335,002행·20251~20262·점포 기준년월 202606을 적재했습니다. 실패 주입으로 FAILED+기존 공개 유지, 재시도 거부와 명시적 정합성 회복을 확인했습니다. 공개 후 중단에 해당하는 RUNNING을 주입해 자동 차단·current 보존도 확인했습니다. 다음 시각을 테스트용으로 당겨 실제 주간 worker의 공식 API 수집→검증→적재→공개→다음 주 예약을 실행했고 worker 재시작 후에도 유지됐습니다. 테스트 후 다음 시각은 **2026-10-26 04:30 KST**입니다.
+
+최초 공개 ID는 `3f3311b71f2f6839cfb959b989704cff366ad11aa7952ddfdb389b3c61b3652e`, 실제 갱신 후 ID는 `cd8df454e80415cad4ec03dc792f014390044017d1f43b7416cc5b2b9efb6633`입니다. DB 재시작 후 보존과 갱신 전·후의 독립 restore 전수 비교를 확인했습니다. 최종 비교는 **19테이블·680,601행 PASS**이며 source/restore reader와 catalog도 확인했습니다. 최초 비교에서 constraint의 표현 차이만 발견해 원인을 분리·좁은 회귀 수정 후 새 백업에서 통과했습니다. 중단·실패 증거도 보존합니다.
+
+새 Backend/HTTP와 Vite에서 최신 기본 분기 20262, 점포월·수집 종료 표시, 2025~2026 추세와 명동·서교동·성수2가3동 3후보 비교를 1440×1000·390×844로 확인했습니다. API 33요청의 오류·JS 예외는 없었고 자동 favicon 요청 404만 별도 관찰했습니다. 이전 버전을 고정한 유효 점수 요청은 HTTP409를 반환했습니다. 지도 SDK는 테스트 대역이므로 실제 Kakao 인증·타일 검증을 뜻하지 않습니다.
+
+**일반 회귀:** Backend `./gradlew test --offline --rerun-tasks` 276개 PASS·실패/SKIP 0, Frontend `npm run test` 337개 PASS, `make check-frontend` build/lint PASS, `make check-etl` 437개 중 422개 PASS·기존 DB/raw 조건 15개 SKIP입니다. 일반 검사에는 DB/raw opt-in이나 실제 API 키를 전달하지 않았습니다. 대상 거부·reader identity·분기 탐색·주간 시각·실패 차단·deadline·constraint literal 보존을 회귀에 추가했습니다. 독립 읽기 전용 코드 리뷰에서 Critical/Important 결함은 없었으며 과거 분기 재수집 범위와 DB-only 복구 경계를 문서에 명시했습니다.
+
+**남은 실행 범위:** 로컬에 검증한 세 이미지가 있어야 preflight가 통과합니다. 현재 controller는 이미지를 pull/build하지 않으며 새 PC·서버용 이미지 빌드/배포는 미구현입니다. nginx/HTTPS·일반 CI/CD·EC2·Kakao 배포 도메인·외부 알림·전체 worker 복구·용량/보존·과거 분기 정정 정책은 후속 작업입니다. 기존 팀 볼륨·고정 데이터 Releases·CSV 경로의 삭제/퇴역은 실행하지 않았습니다.
+
 ## DB schema와 Flyway
 
-정확한 DDL은 [migration SQL](../backend/src/main/resources/db/migration/)이 기준입니다. 아래의 V1~V3는 데이터 패키지 버전과 다릅니다.
+정확한 DDL은 [migration SQL](../../backend/src/main/resources/db/migration)이 기준입니다. 아래의 V1~V3는 데이터 패키지 버전과 다릅니다.
 
 ### ERD
 
@@ -481,17 +844,17 @@ V1은 분기 형식·지표 비음수·비율·좌표 범위를 모두 DB CHECK�
 
 ### 입력과 검사 순서
 
-독립 [CSV CLI](../etl/app/main.py)는 상권 목록·행정동 점포·행정동/상권 매출·개별 점포의 5개 작업을 지원합니다. 팀 Compose는 이 중 행정동 통계 2종과 개별 점포를 사용합니다.
+독립 [CSV CLI](../../etl/app/main.py)는 상권 목록·행정동 점포·행정동/상권 매출·개별 점포의 5개 작업을 지원합니다. 팀 Compose는 이 중 행정동 통계 2종과 개별 점포를 사용합니다.
 
 `--only`로 선택한 입력을 모두 검사한 뒤 적재합니다. `--validate-only`는 DB 연결 없이 끝납니다.
 
-[preflight](../etl/app/preflight.py)는 다음을 검사합니다.
+[preflight](../../etl/app/preflight.py)는 다음을 검사합니다.
 
 - 파일 탐색·엄격한 문자 해석·CSV 구조
 - 필수·중복 header, 열 수, 빈 키·필수 이름
 - 복합 키 중복, 예상 밖 분기, 네 분기 누락, 빈 입력
 
-일반 CSV 사전 검사는 manifest 해시를 자동 대조하지 않습니다. 입력 hash 검사는 [integration_check](../etl/tests/integration_check.py)와 팀 데이터 준비 경로에서 따로 수행합니다.
+일반 CSV 사전 검사는 manifest 해시를 자동 대조하지 않습니다. 입력 hash 검사는 [integration_check](../../etl/tests/integration_check.py)와 팀 데이터 준비 경로에서 따로 수행합니다.
 
 문자열 코드는 앞자리 0과 literal NA를 유지합니다. 정수는 int/Decimal로 처리해 큰 값의 정밀도를 보존합니다.
 
@@ -517,7 +880,7 @@ V1은 분기 형식·지표 비음수·비율·좌표 범위를 모두 DB CHECK�
 
 ### 고정 입력과 처리 profile
 
-[spatial_sources](../etl/app/spatial_sources.py)가 ZIP·구성 파일·리포트·예상 도형 수와 보정 대상을 고정합니다. 처리 profile은 입력과 도구 버전으로 계산한 재현 기준입니다.
+[spatial_sources](../../etl/app/spatial_sources.py)가 ZIP·구성 파일·리포트·예상 도형 수와 보정 대상을 고정합니다. 처리 profile은 입력과 도구 버전으로 계산한 재현 기준입니다.
 
 검사 순서는 다음과 같습니다.
 
@@ -570,17 +933,17 @@ DB는 네 상태를 표현하지만 현재 준비 코드는 예상 밖·미지�
 
 ### Standalone CLI와 guarded runner
 
-[Polygon CLI](../etl/app/spatial_main.py)는 기본적으로 검사만 수행합니다. 적재하려면 `--load`, 명시적 `--dsn`, 선택한 경계의 모든 고정 입력이 필요합니다.
+[Polygon CLI](../../etl/app/spatial_main.py)는 기본적으로 검사만 수행합니다. 적재하려면 `--load`, 명시적 `--dsn`, 선택한 경계의 모든 고정 입력이 필요합니다.
 
 단독 CLI의 기본 `psycopg.connect(dsn, autocommit=True)`에는 실제 연결 대상 검사가 없습니다. DSN을 명시했다는 이유만으로 기존 DB에 안전하게 적용할 수는 없습니다.
 
-격리 [control_worker](../etl/control_worker.py)는 연결 factory를 주입해 같은 반환 연결의 DB·사용자·시스템 식별자·timeout을 확인합니다. 팀 Compose의 publication 연결도 별도 검사를 거칩니다.
+격리 [control_worker](../../etl/control_worker.py)는 연결 factory를 주입해 같은 반환 연결의 DB·사용자·시스템 식별자·timeout을 확인합니다. 팀 Compose의 publication 연결도 별도 검사를 거칩니다.
 
 기존 DB를 위한 실행 경로와 승인은 [연결·권한 정책](db-safety.md#연결-identitywriter권한)을 따릅니다.
 
 ## 현재 GET API 계약
 
-현재 비즈니스 API는 GET 10개입니다. 기존 통계·위치·주변 카페 계약과 별도로 지역 검색·표시 경계·카페 소비규모 점수를 제공합니다. 성공률·종합 입지 추천 API는 없습니다.
+현재 비즈니스 API는 GET 11개입니다. 통계·추세·위치·주변 카페와 지역 검색·표시 경계·카페 소비규모/소비증감 점수를 제공합니다. 성공률·종합 입지 추천 API는 없습니다.
 
 | 경로 | 필수 query | 결과 |
 | --- | --- | --- |
@@ -588,12 +951,13 @@ DB는 네 상태를 표현하지만 현재 준비 코드는 예상 밖·미지�
 | `/api/industries` | 없음 | 통계 지원 업종 code·name 배열 |
 | `/api/quarters` | 없음 | 지원 분기 code·label 배열 |
 | `/api/admin-dong-stats` | dongCode, industryCode, quarterCode | 단일 분기 통계 |
-| `/api/admin-dong-trends` | dongCode, industryCode | 2025년 네 분기 추세 |
+| `/api/admin-dong-trends` | dongCode, industryCode | 공개 지원 기간의 분기 추세·중간 누락 분기 |
 | `/api/locations/resolve` | lat, lng | 행정동·상권과 경계 정보 |
 | `/api/nearby-stores` | lat, lng, radius, industryCode | 반경 500m 카페 |
 | `/api/regions` | 없음 | 공식 서울 구·행정동 계층, CAFE 통계·경계 지원 여부, 목록·경계 버전 |
 | `/api/regions/admin-dongs/{dongCode}/boundary` | 없음, 선택 query datasetVersion | 현재 operational geometry의 EPSG:4326 GeoJSON 및 품질·역사적 호환성 |
 | `/api/cafe-consumption-scores` | dongCodes, quarterCode | 1~3개 행정동의 카페 소비규모 점수와 산정 근거 |
+| `/api/cafe-change-scores` | dongCodes, quarterCode | 1~3개 행정동의 소비증감 상대 점수·실제 증감률·산정 근거 |
 
 ### 지역 목록과 표시 경계
 
@@ -613,7 +977,7 @@ DB는 네 상태를 표현하지만 현재 준비 코드는 예상 밖·미지�
 
 응답은 UTF-8 JSON·camelCase입니다. 목록은 배열, 통계는 객체를 직접 반환합니다. 별도 data wrapper나 pagination은 없습니다. 주변 카페 응답의 `data`는 자료 설명 필드입니다.
 
-lookup은 선택 가능한 코드 목록을 뜻합니다. 서울시 업종 매핑이 있고 두 통계 테이블 중 하나 이상에 자료가 있는 조합에서 목록을 만듭니다.
+lookup은 선택 가능한 코드 목록을 뜻합니다. 동·업종은 서울시 업종 매핑과 점포·매출 중 하나 이상의 자료를 기준으로 만듭니다. 지원 분기는 점포 통계·매출 양쪽에 존재하는 분기의 교집합입니다. API 모드의 분기 항목에는 동일한 공개 metadata가 포함됩니다.
 
 모든 동·업종·분기 조합에 점포·매출 행이 모두 있다는 뜻은 아닙니다. GYM은 내부 등록만 돼 있고 통계 매핑이 없어 미지원입니다.
 
@@ -621,7 +985,7 @@ lookup은 선택 가능한 코드 목록을 뜻합니다. 서울시 업종 매�
 
 ### 요청과 검증 순서
 
-허용된 query를 각각 정확히 한 번 전달해야 합니다. 목록 API에는 query를 허용하지 않습니다.
+필수 query를 각각 정확히 한 번 전달해야 합니다. 목록 API에는 query를 허용하지 않습니다. 통계·추세·두 점수는 선택 query `dataVersion`을 한 번 허용합니다. 64자리 소문자 SHA-256 또는 `legacy-unversioned`이며 중복·공백·빈 값은 거부합니다.
 
 공백 제거·대소문자 보정·기본값·최신 분기 자동 선택은 없습니다. 같은 값을 두 번 보내도 중복입니다.
 
@@ -688,7 +1052,7 @@ BIGINT는 부호가 있는 10진 정수 문자열입니다. 소수점·지수·�
 
 점포 수는 개, 금액은 원, 거래건수는 건입니다. 원본의 `당월` 열 이름을 근거 없이 월평균·분기 총액·연간액으로 재해석하지 않습니다.
 
-점포당 매출·증감률·성공률은 계산하지 않습니다. 개폐업률·연령대·시간대 상세는 현재 최소 응답에 없습니다.
+기본 통계·추세 API는 원지표를 반환하며 증감률을 계산하지 않습니다. 거래 건수의 직전 분기 대비 증감률과 상대 점수는 별도 [소비증감 API](#카페-소비증감-점수와-상세-분석)가 제공합니다. 점포당 매출·성공률은 계산하지 않으며 개폐업률·연령대·시간대 상세는 현재 최소 통계 응답에 없습니다.
 
 ### NULL·0·NO_ROW와 추세
 
@@ -703,9 +1067,9 @@ BIGINT는 부호가 있는 10진 정수 문자열입니다. 소수점·지수·�
 
 양쪽 행이 없어도 유효한 조회는 200입니다. 통신·DB 실패를 NO_ROW나 0으로 바꾸지 않습니다.
 
-추세 응답의 최상위는 `dong`, `industry`, `quarters`입니다. quarters는 항상 `20251, 20252, 20253, 20254` 순서의 네 항목입니다.
+추세 응답은 `dong`, `industry`, `quarters`이며 API 모드에서는 `metadata`가 추가됩니다. 공개 지원 분기의 최초~최종 사이를 오름차순으로 반환하고 중간 달력 분기를 유지합니다. 400분기 간격을 초과하는 비정상 축은 거부합니다.
 
-각 항목은 `quarter`, `storeStats`, `salesStats`, `missingReasons`를 가집니다. 자료가 없는 분기도 제거하지 않습니다. 현재 목록에 다른 연도 자료가 추가돼도 이 네 분기 계약은 유지합니다.
+각 항목은 `quarter`, `storeStats`, `salesStats`, `missingReasons`를 가집니다. 지원 분기가 20254·20262이면 축은 20254·20261·20262이며 중간 누락은 객체 null·NO_ROW입니다. 전분기 계산을 건너뛰지 않으며 최신 기본 선택은 공개 지원 목록의 마지막 분기입니다.
 
 분기별 역사 이름을 만들지 않고 최상위 동 이름 하나를 사용합니다. 무결성·DB 오류는 요청 전체 실패이며 오류 분기를 NO_ROW로 바꾸지 않습니다.
 
@@ -721,21 +1085,46 @@ BIGINT는 부호가 있는 10진 정수 문자열입니다. 소수점·지수·�
 | 400 | UNSUPPORTED_INDUSTRY | 등록됐지만 통계 미지원, 또는 카페 외 반경 조회 |
 | 400 | INVALID_QUARTER / UNSUPPORTED_QUARTER | 분기 형식 오류 / 미지원 분기 |
 | 400 | INVALID_COORDINATE / UNSUPPORTED_RADIUS | 좌표 오류 / 500 외 반경 |
-| 503 | BOUNDARY_DATA_UNAVAILABLE | 현재 경계 부재·미준비 |
+| 400 | BOUNDARY_DATA_UNAVAILABLE | 표시 경계 API: 해당 동의 경계 미제공, field=dongCode |
+| 400 | BOUNDARY_VERSION_CHANGED | 표시 경계 API: 요청 버전과 현재 버전 불일치, field=datasetVersion |
+| 409 | DATA_VERSION_CHANGED | 통계·추세·점수의 공개 버전 불일치. field=null, 조회 목록 갱신 필요 |
+| 503 | BOUNDARY_DATA_UNAVAILABLE | 위치 판정 API: 현재 경계 부재·미준비, field=null |
 | 503 | CAFE_MAPPING_UNAVAILABLE | 카페 매핑 부재·불일치 |
 | 503 | STORES_DATA_UNAVAILABLE | 전체 점포 자료 없음 |
 | 503 | CAFE_DATA_UNAVAILABLE | 조회 가능한 카페 자료 없음 |
 | 500 | DATA_INTEGRITY_ERROR / INTERNAL_ERROR | 무결성 오류 / 예상 밖 내부 오류 |
 
-400의 field는 해당 query 이름이며, 500·503은 null입니다. SQL·예외 세부·인증정보를 반환하지 않습니다.
+400의 field는 validator·Service가 지정한 요청 필드명이며 경로의 dongCode도 포함합니다. 500·503은 null입니다. 같은 BOUNDARY_DATA_UNAVAILABLE 코드라도 표시 경계 API는 400, 위치 판정 API는 503이므로 경로와 HTTP 상태를 함께 확인합니다. SQL·예외 세부·인증정보를 반환하지 않습니다.
 
 미존재 URL·미지원 HTTP method처럼 프레임워크가 처리하는 모든 오류에 이 형식을 일반화하지 않습니다.
 
 ### 단위와 metadata
 
-통계 기간은 quarter로 제공합니다. 통계·점포 원본의 기준일·완전성·적재 시점을 관리하는 catalog는 미구현입니다.
+통계 기간은 quarter로 제공합니다. 선택적 API 공개 catalog·읽기 모드를 새 격리 DB·서비스에서 검증했으며 기존 팀/영속 서비스는 전환하지 않았습니다. API 모드의 분기·통계·추세·두 점수와 주변 카페 `data`에는 `metadata`로 `dataVersion`, `collectedAt`, `storeReferenceMonth`, `storeScope`, `sourceSnapshotStatus=UNVERIFIED`를 제공합니다. 수집 종료·재정규화·DB 적재 시각·실제 영업 관측일은 구분하며 정확한 원천 관측일·완전성은 여전히 미검증입니다.
 
-공간 dataset의 출처·품질·버전은 제공하지만 통계·점포의 원본 버전을 대신하지 않습니다. 요청 중 CSV·manifest를 읽어 누락된 metadata를 임의 생성하지 않습니다.
+기본 legacy 모드는 catalog를 읽거나 metadata를 임의 생성하지 않습니다. 프론트는 기존 응답을 호환 처리하되 버전·수집 시각 미제공을 표시합니다. API 모드에서는 lookup의 공개 버전을 요청에 고정하고 읽기 전용 REPEATABLE_READ에서 동일 공개본을 조회합니다. 다른 요청 사이에 공개가 바뀌면 409로 차단하며 조회 조건 갱신·재조회를 제공합니다. 같은 공개 ID도 원천별 동일 관측 시점·같은 공간 경계를 보증하지 않습니다.
+
+공간 dataset의 출처·품질·버전은 통계·점포의 원본 버전을 대신하지 않습니다. 요청 중 CSV·manifest를 읽어 누락된 metadata를 임의 생성하지 않습니다.
+
+### 카페 소비규모 점수 — 실제 거래 집계 연동
+
+`ConsumptionScoreService`는 기존 업종 매핑·중복·이름 무결성 검사를 유지하고 동일 분기 CAFE 원천의 유효 서울 행정동 거래 건수를 한 읽기 전용 REPEATABLE_READ 트랜잭션에서 비교합니다. `N`은 비음수·비NULL 집단 수, `L`은 대상보다 작은 값 수, `E`는 동점 수이며 `round(100 × (L + (E-1)/2) / (N-1))`입니다. Java 정수 비교·BigDecimal 반올림을 사용합니다. 동점은 중간 순위, 모두 동점은 50점, 최소 N=30은 실험적 운영 기준입니다.
+
+`dongCodes`는 쉼표 구분 중복 없는 8자리 코드 1~3개, `quarterCode`는 지원 YYYYQ를 정확히 한 번 전달합니다. 잘못된 코드는 400이며 공식 목록의 정상 동에 집계가 없으면 200 `UNAVAILABLE/NO_ROW`입니다. NULL_VALUE·INVALID_VALUE·INSUFFICIENT_COHORT를 구분하고 실제 0은 유효 순위로 계산합니다. 원 거래 건수는 BIGINT 문자열입니다.
+
+응답은 분기·모델 `cafe-transactions-percentile-v1`·유효 집단 수·최소 집단·출처·UNVERIFIED 원본 snapshot 상태·지역별 점수/사유를 제공합니다. `baselineId`는 분기·CAFE 매핑·조회 행의 SHA-256으로 조회 당시 비교 기준을 식별하며 원본 CSV snapshot 검증값이 아닙니다. 매 요청 다시 계산하여 오래된 점수 캐시를 제공하지 않습니다.
+
+이 값은 추정매출 자료의 행정동 전체 거래 규모이며 큰 면적에 유리할 수 있습니다. 거래 밀도·점포당 매출·500m 점수·종합 환경·성공률이 아닙니다. 유동인구·경쟁·점포 유형·임대료·전년 변화는 반영하지 않습니다.
+
+### 카페 소비증감 점수와 상세 분석
+
+`GET /api/cafe-change-scores?dongCodes=11110515&quarterCode=20254`는 소비규모 API와 동일한 중복 없는 1~3개 코드·지원 분기 검증/공통 오류를 사용합니다. `ChangeScoreService`의 read-only REPEATABLE_READ 트랜잭션에서 현재와 정확한 직전 분기 CAFE 서울 거래 행을 조회합니다. 연도 경계 20251→20244를 처리하고 직전 분기 미지원 시 다른 분기로 대체하지 않습니다. migration·ETL은 없습니다.
+
+대상 증감률은 `(현재-직전)/직전`입니다. 두 비율 순서는 BigInteger 교차 곱으로 비교하고 소비규모와 같은 중간 순위 공식을 적용합니다. 최소 N=30, 모두 동점=50이며 증가·감소 방향은 점수와 별개입니다. 원 BIGINT 두 값은 문자열, API 증감률은 퍼센트 소수 넷째 자리 HALF_UP입니다. 현재 0/직전 양수는 -100%이며 전분기 0·NULL·행 없음·음수와 현재 NULL·행 없음·음수는 산정하지 않습니다.
+
+응답은 현재/직전 분기, 모델 `cafe-transactions-change-percentile-v1`, 유효 집단 수, 원 거래값·증감률·방향·점수 또는 사유, 출처·UNVERIFIED를 제공합니다. `baselineId`는 두 분기·CAFE 매핑·정렬한 조회 행·모델을 식별하며 원본 snapshot 검증 증거가 아닙니다. 계절성 미보정이며 성공·이익·종합 입지를 예측하지 않습니다.
+
+화면의 반올림·상세 경로·그래프 연결은 [점수 표시와 상세 분석](#점수-표시와-상세-분석)을 참고합니다.
 
 ### Swagger와 OpenAPI
 
@@ -858,7 +1247,7 @@ quality에는 다음 7개 건수가 있습니다.
 
 처음에는 lookup 세 개와 지역 목록을 요청합니다. 각 목록의 로딩·실패·빈 상태를 구분하고 재시도를 제공합니다. 지역 선택 초안은 검색 확정 전까지 현재 분석을 바꾸지 않으며 구 변경 시 동 초안을 비웁니다.
 
-화면 업종은 CAFE로 고정하며 일반 통계 API의 기존 업종 계약과 구분합니다. 확정 지역 또는 단일 판정 동과 지원 분기가 있으면 통계·추세를 자동 병렬 요청합니다. 상세의 분기 변경도 자동 조회하며 ‘통계 다시 불러오기’로 재조회할 수 있습니다. CAFE가 catalog에 없으면 다른 업종으로 대체하지 않습니다. 상세 조회 결과는 항목명과 값을 같은 행에 두고 정확한 BIGINT 전체를 표시합니다. 그래프는 선택 분기까지 최대 4분기를, ‘2025년 전체 자료 보기’는 2025년 네 분기의 원자료 표를 별도 창으로 제공합니다. 결과의 로딩·성공·오류는 독립적이며 진행 중 중복 조회를 막습니다.
+화면 업종은 CAFE로 고정하며 일반 통계 API의 기존 업종 계약과 구분합니다. 확정 지역 또는 단일 판정 동과 지원 분기가 있으면 통계·추세를 자동 병렬 요청합니다. 상세의 분기 변경도 자동 조회하며 ‘통계 다시 불러오기’로 재조회할 수 있습니다. CAFE가 catalog에 없으면 다른 업종으로 대체하지 않습니다. 상세 조회 결과는 항목명과 값을 같은 행에 두고 정확한 BIGINT 전체를 표시합니다. 그래프는 선택 분기까지 최대 4분기를, 전체 자료 표는 공개 지원 기간 전체를 별도 창으로 제공합니다. 제목·분기 선택·응답 검사는 연도에 고정하지 않습니다. 결과의 로딩·성공·오류는 독립적이며 같은 조건의 진행 중 중복 조회를 막습니다. lookup 버전이 바뀌면 이전 요청을 취소하고 새 버전으로 조회합니다.
 
 `AnalysisCharts`가 선택 분기 핵심 값·지표 선택·그래프를 통합합니다. 별도 중복 `StatsResult`는 제거했습니다. ‘정확한 값 보기’는 그래프의 정확한 분기 표, ‘선택 분기 세부지표’는 현재 선택 지표 외의 점포/매출 값을 제공합니다. 접힌 표는 펼칠 때만 생성합니다. 통계와 추세는 같은 동·CAFE·분기인지 확인하며, 선택 분기의 그룹 유무나 값이 서로 다르면 해당 그룹을 합치지 않고 불일치를 알립니다. 한 요청의 실패가 다른 유효 응답을 지우지 않으며 NULL·실제0·행 부재를 구분합니다.
 
@@ -886,7 +1275,7 @@ Kakao SDK는 `autoload=false`로 읽고 `kakao.maps.load` 완료 후 지도를 �
 
 새 지도 클릭은 저장 후보를 바꾸지 않습니다. 내부 ID는 삭제 후 재사용하지 않고 표시 번호의 빈자리만 재사용합니다. 새로고침 후 영속 저장은 지원하지 않습니다.
 
-비교 조건은 CAFE·500m·SEMAS I21201·지원되는 2025년 분기 하나·행정동 통계입니다.
+비교 조건은 CAFE·500m·SEMAS I21201·공개 목록이 지원하는 분기 하나·행정동 통계입니다. 통계·점수는 공개 버전을 요청에 고정하며 다른 버전의 응답은 통합 근거에서 제외합니다. 주변 점포 버전이 후보끼리 다르면 카페 수 차이를 계산하지 않습니다.
 
 기본 비교 표는 후보를 열로 두고 검토 요약·소비규모 점수·실제 전분기 증감·반경 카페 수·다음 확인사항의5개 행을 정렬합니다. `cafeReview`의 해석을 공유하며 같은 동의 소비 근거는 첫 후보를 참조합니다. 기존 점포·매출의9개 지표와 점수는 ‘전체 통계 비교’에 보존합니다. 카드·표·담은 후보·지도는 공통 `candidatePresentation`으로 지역명과 판정 상태를 표시하며 늦게 도착한 지역명도 갱신합니다. 값 없음(NULL)·조회 행 없음(NO_ROW)·실제0·미조회·실패를 구분합니다. 후보별 상세 근거와 개별 재조회는 접었다 펼칠 수 있습니다. 모호한 지역·판정 실패는 후보 보관 영역에서도 완료 상태와 구분해 표시합니다.
 
@@ -937,29 +1326,17 @@ Tailwind CSS 4의 의미 기반 토큰으로 딥 그린 `#245B4B`·아이보리 
 
 모의 산식 결과는 `DRAFT`, 영역별 점수, 모델 버전, 영역 가중치를 ±20% 조정·재정규화한 민감도 최소/최대를 반환합니다. 이 범위는 신뢰구간이 아닙니다. 실제 점수에는 인구·동일 유형 점포·전년 자료·면적/운영 점포 분모·서울 전체 기준 집단을 새로 확인해야 합니다. 같은 행정동의 지역 지수는 같으며 반경 500m 입지 점수로 환산하지 않습니다.
 
-이 종합지수의 후속 API는 미구현입니다. 행정동·분기·운영 시나리오, 산정 상태·결측 사유·항목 원본/단위·기준 집단·원천 검증·가중치 계약이 필요합니다. 아래 소비규모 점수 API와 구분하며 기존 통계 응답만으로 종합지수 입력이 충족됐다고 간주하지 않습니다.
+이 종합지수의 후속 API는 미구현입니다. 행정동·분기·운영 시나리오, 산정 상태·결측 사유·항목 원본/단위·기준 집단·원천 검증·가중치 계약이 필요합니다. [소비규모 점수 API](#카페-소비규모-점수--실제-거래-집계-연동)와 구분하며 기존 통계 응답만으로 종합지수 입력이 충족됐다고 간주하지 않습니다.
 
-### 카페 소비규모 점수 — 실제 거래 집계 연동
+### 점수 표시와 상세 분석
 
-`ConsumptionScoreService`는 기존 업종 매핑·중복·이름 무결성 검사를 유지하고 동일 분기 CAFE 원천의 유효 서울 행정동 거래 건수를 한 읽기 전용 REPEATABLE_READ 트랜잭션에서 비교합니다. `N`은 비음수·비NULL 집단 수, `L`은 대상보다 작은 값 수, `E`는 동점 수이며 `round(100 × (L + (E-1)/2) / (N-1))`입니다. Java 정수 비교·BigDecimal 반올림을 사용합니다. 동점은 중간 순위, 모두 동점은 50점, 최소 N=30은 실험적 운영 기준입니다.
+두 점수의 산식·응답 계약은 [소비규모 API](#카페-소비규모-점수--실제-거래-집계-연동)와 [소비증감 API](#카페-소비증감-점수와-상세-분석)에 둡니다. 패널은 숫자/100점 요약, 상세와 후보 비교는 원지표·산식도 표시합니다. 비교 후보의 중복 동은 한 batch에서 중복 제거합니다.
 
-`dongCodes`는 쉼표 구분 중복 없는 8자리 코드 1~3개, `quarterCode`는 지원 YYYYQ를 정확히 한 번 전달합니다. 잘못된 코드는 400이며 공식 목록의 정상 동에 집계가 없으면 200 `UNAVAILABLE/NO_ROW`입니다. NULL_VALUE·INVALID_VALUE·INSUFFICIENT_COHORT를 구분하고 실제 0은 유효 순위로 계산합니다. 원 거래 건수는 BIGINT 문자열입니다.
-
-응답은 분기·모델 `cafe-transactions-percentile-v1`·유효 집단 수·최소 집단·출처·UNVERIFIED 원본 snapshot 상태·지역별 점수/사유를 제공합니다. `baselineId`는 분기·CAFE 매핑·조회 행의 SHA-256으로 조회 당시 비교 기준을 식별하며 원본 CSV snapshot 검증값이 아닙니다. 매 요청 다시 계산하여 오래된 점수 캐시를 제공하지 않습니다.
-
-패널은 숫자/100점 요약, 상세와 후보 비교는 원지표·산식도 표시합니다. 비교 후보의 중복 동은 한 batch에서 중복 제거합니다. 이 값은 추정매출 자료의 행정동 전체 거래 규모이며 큰 면적에 유리할 수 있습니다. 거래 밀도·점포당 매출·500m 점수·종합 환경·성공률이 아닙니다. 유동인구·경쟁·점포 유형·임대료·전년 변화는 반영하지 않습니다.
-
-### 카페 소비증감 점수와 상세 분석
-
-`GET /api/cafe-change-scores?dongCodes=11110515&quarterCode=20254`는 소비규모 API와 동일한 중복 없는 1~3개 코드·지원 분기 검증/공통 오류를 사용합니다. `ChangeScoreService`의 read-only REPEATABLE_READ 트랜잭션에서 현재와 정확한 직전 분기 CAFE 서울 거래 행을 조회합니다. 연도 경계 20251→20244를 처리하고 직전 분기 미지원 시 다른 분기로 대체하지 않습니다. migration·ETL은 없습니다.
-
-대상 증감률은 `(현재-직전)/직전`입니다. 두 비율 순서는 BigInteger 교차 곱으로 비교하고 소비규모와 같은 중간 순위 공식을 적용합니다. 최소 N=30, 모두 동점=50이며 증가·감소 방향은 점수와 별개입니다. 원 BIGINT 두 값은 문자열, API 증감률은 퍼센트 소수 넷째 자리 HALF_UP입니다. 화면은 이 문자열을 BigInt로 반올림해 소수 한 자리와 방향을 표시하고, 0으로 반올림되는 변화는 ‘0.1% 미만 증가/감소’로 구분합니다. API의 소수 넷째 자리 값은 상세 카드의 ‘자료 식별 정보’에 보존하며 표시 반올림이 순위를 바꾸지 않습니다. 현재 0/직전 양수는 -100%이며 전분기 0·NULL·행 없음·음수와 현재 NULL·행 없음·음수는 산정하지 않습니다.
-
-응답은 현재/직전 분기, 모델 `cafe-transactions-change-percentile-v1`, 유효 집단 수, 원 거래값·증감률·방향·점수 또는 사유, 출처·UNVERIFIED를 제공합니다. `baselineId`는 두 분기·CAFE 매핑·정렬한 조회 행·모델을 식별하며 원본 snapshot 검증 증거가 아닙니다. 계절성 미보정이며 성공·이익·종합 입지를 예측하지 않습니다.
+화면은 API가 반환한 소비증감률 문자열을 BigInt로 반올림해 소수 한 자리와 방향을 표시하고, 0으로 반올림되는 변화는 ‘0.1% 미만 증가/감소’로 구분합니다. API의 소수 넷째 자리 값은 상세 카드의 ‘자료 식별 정보’에 보존하며 표시 반올림이 순위를 바꾸지 않습니다.
 
 `useAnalysisRoute`는 `/analysis`의 형식/중복 파라미터와 history 전환을 처리합니다. 과거·직접 URL의 통계는 `useAnalysisStatistics`로 지도 상태와 분리하고 응답 조건·AbortSignal·요청 key를 검증합니다. 일치하는 지도 분석은 재사용합니다. 상세 분기는 지도 분기와 독립이며 정확한 지점은 URL에 넣지 않습니다. 내부 history point key가 실제 선택과 맞을 때만 주변 결과를 연결하고 새로고침·지역 전용 링크로 점을 만들지 않습니다.
 
-소비는 거래/추정매출 선 그래프, 점포는 집계/개업/폐업 막대 그래프를 제공합니다. 선택 분기까지 최대 4개만 그리며 기존 원자료 추세는 2025년 고정 축임을 구분합니다. 세로축은 0부터 시작하고 건·원·개 단위와 눈금·격자선을 표시합니다. BigInt로 상한과 눈금을 정하고 같은 상한으로 선·막대 높이를 계산합니다. 눈금은 만·억 등으로 줄여 표시하되 정확한 원값 표와 초점/hover 안내를 유지합니다. NULL/행 부재는 비워 두고 음수는 그리지 않되 원 표에 남기며 실제 0은 구분합니다. 새 런타임 의존성은 없습니다. 지도는 처음 양수 크기를 확보하면 서울 전체에 한 번 맞추며 숨김 중 relayout하지 않습니다. 조작은 지도 자체의 방향키/Enter와 데이터 안내에 모았습니다.
+소비는 거래/추정매출 선 그래프, 점포는 집계/개업/폐업 막대 그래프를 제공합니다. 선택 분기까지 최대 4개만 그리며 전체 원자료 추세는 공개 지원 기간의 달력 축으로 제공하고 중간 누락을 유지합니다. 세로축은 0부터 시작하고 건·원·개 단위와 눈금·격자선을 표시합니다. BigInt로 상한과 눈금을 정하고 같은 상한으로 선·막대 높이를 계산합니다. 눈금은 만·억 등으로 줄여 표시하되 정확한 원값 표와 초점/hover 안내를 유지합니다. NULL/행 부재는 비워 두고 음수는 그리지 않되 원 표에 남기며 실제 0은 구분합니다. 새 런타임 의존성은 없습니다. 지도는 처음 양수 크기를 확보하면 서울 전체에 한 번 맞추며 숨김 중 relayout하지 않습니다. 조작은 지도 자체의 방향키/Enter와 데이터 안내에 모았습니다.
 
 이 구현과 대표 브라우저 검증은 포괄적인 WCAG·대비·screen reader 인증을 뜻하지 않습니다.
 
@@ -976,7 +1353,7 @@ make check-frontend
 (cd etl && python -m unittest discover -s tests -v)
 ```
 
-ETL 테스트는 [requirements](../etl/requirements.txt)에 맞는 Python 환경이 필요합니다. 명시적 interpreter를 쓰려면 `make check-etl PYTHON=/path/to/prepared/python`을 사용합니다.
+ETL 테스트는 [requirements](../../etl/requirements.txt)에 맞는 Python 환경이 필요합니다. 명시적 interpreter를 쓰려면 `make check-etl PYTHON=/path/to/prepared/python`을 사용합니다.
 
 | 검사 | 확인하는 것 | 한계 |
 | --- | --- | --- |
@@ -993,25 +1370,27 @@ ETL 테스트는 [requirements](../etl/requirements.txt)에 맞는 Python 환경
 
 `dbTest`는 실제 DB와 Flyway를 사용할 수 있습니다. 과거 V1 전용 기대값도 있으므로 현재 팀 DB 사전 점검에 사용하지 않습니다.
 
-[locationIntegration](../backend/src/locationIntegration/)과 [demo 도구](../etl/demo.py)는 새 격리 대상용입니다. 빌드 준비와 실제 runner 실행을 구분합니다. 실행·실패 주입·정리는 별도 범위로 검토합니다.
+[locationIntegration](../../backend/src/locationIntegration)과 [demo 도구](../../etl/demo.py)는 새 격리 대상용입니다. 빌드 준비와 실제 runner 실행을 구분합니다. 실행·실패 주입·정리는 별도 범위로 검토합니다.
 
 격리 fixture의 빠른 응답이나 인덱스 사용을 운영 부하 결과로 일반화하지 않습니다. 실제 4326 입력과 정확한 5181 경계 검사는 따로 확인해야 합니다.
 
 ### 실행 보호와 source 계약
 
-[control 도구](../etl/control.py)는 승인된 격리 실행을 제어합니다. 기존 DB 실행 모드는 없습니다.
+이 절의 source는 기존 DB 감사·보존 검증을 뜻합니다. 앞으로 만들 공공 API 수집기나 정기 데이터 갱신 작업과 구분합니다.
 
-[source_validation](../etl/source_validation.py)은 전달받은 전후 자료를 비교합니다. [source_audit](../etl/source_audit.py)는 출처 기록 형식을 검사합니다. [source_control](../etl/source_control.py)은 실제 실행을 거부하는 모의 단계 모델입니다.
+[control 도구](../../etl/control.py)는 승인된 격리 실행을 제어합니다. 기존 DB 실행 모드는 없습니다.
+
+[source_validation](../../etl/source_validation.py)은 전달받은 전후 자료를 비교합니다. [source_audit](../../etl/source_audit.py)는 출처 기록 형식을 검사합니다. [source_control](../../etl/source_control.py)은 실제 실행을 거부하는 모의 단계 모델입니다.
 
 이 모듈들의 성공은 실제 DB 자료 수집·적용·복구의 증거가 아닙니다. 실제 수집기·실행기·재시작 후 중단 상태 처리 기능은 미구현입니다.
 
-상세 계약은 [DB 정책](db-safety.md#실제-source-collector와-provenance-요구)에 둡니다.
+상세 계약은 [기존 DB 감사 수집기 요구사항](db-safety.md#기존-db-감사-수집기와-provenance-요구)에 둡니다.
 
 ## 검증 이력
 
 ### 2026-10-18 README 화면 미리보기 캡처
 
-기존 localhost:5173 앱과 8080 API를 통해 1440×1000 데스크톱 화면 4장을 캡처해 [이미지 폴더](images/)에 저장했습니다. 이화동 지역 검색·경계/점수 요약, 실제 지점의 주변 카페·브랜드 추정 필터, 상세 점수/소비·점포 그래프, 이화동·혜화동 2후보의 2025년 4분기 분석 완료 화면을 확인했습니다. 행정동만 선택한 첫 장과 실제 지점을 선택한 주변 탐색 장면을 구분합니다. 당시 주변 조회는 137개/100개 수신, 브랜드 추정 필터 일치 13개였고 비교의 두 번째 후보는 65개였으며, 이 수치는 해당 캡처의 사례입니다.
+기존 localhost:5173 앱과 8080 API를 통해 1440×1000 데스크톱 화면 4장을 캡처해 [이미지 폴더](../images)에 저장했습니다. 이화동 지역 검색·경계/점수 요약, 실제 지점의 주변 카페·브랜드 추정 필터, 상세 점수/소비·점포 그래프, 이화동·혜화동 2후보의 2025년 4분기 분석 완료 화면을 확인했습니다. 행정동만 선택한 첫 장과 실제 지점을 선택한 주변 탐색 장면을 구분합니다. 당시 주변 조회는 137개/100개 수신, 브랜드 추정 필터 일치 13개였고 비교의 두 번째 후보는 65개였으며, 이 수치는 해당 캡처의 사례입니다.
 
 브라우저 캡처 원본은 JPEG이므로 `.jpg`로 저장했으며 이미지 합성·수치/화면 내용 수정은 하지 않았습니다. 앱 화면만 담아 브라우저 주소창·개발 도구·다른 앱을 제외했고 지도 출처·자료 범위 안내를 유지했습니다. 마지막 console error/warn은 없었습니다. README에 2열 미리보기·원본 링크·대체 텍스트·한 줄 설명과 한계·개선 방향 안내를 추가했습니다. JPEG 형식·해상도, 이미지 4개(총 804,112바이트), 문서 내부 경로·앵커 134개와 이미지 참조, 표·코드블록 구조·diff-check를 확인했고 독립 리뷰의 지적은 없었습니다. 검증 탭을 닫고 viewport 설정을 복원했습니다. 실제 GitHub 게시 후 렌더링, 서버 재기동·DB 직접 접속·migration·ETL·제품 코드/의존성 변경·전체 테스트 재실행은 하지 않았습니다. 실제 기기·다른 브라우저·포괄적 접근성·데이터 정확성을 새로 검증한 결과는 아닙니다.
 
@@ -1095,7 +1474,7 @@ IAB에서 1440×1000과 390×844로 실제 Kakao 지도·팀 backend를 사용�
 
 ### 공개 데이터와 독립 Ubuntu E2E
 
-공개 패키지는 [고정 Release](https://github.com/jinwooorp/RecycleYoungs/releases/tag/real-data-v2)에 있습니다. 파일 크기·해시는 [release.json](../data/release.json), 자료 고지는 [공개 데이터 계약](../data/public-data-v2.json)이 기준입니다.
+공개 패키지는 [고정 Release](https://github.com/jinwooorp/RecycleYoungs/releases/tag/real-data-v2)에 있습니다. 파일 크기·해시는 [release.json](../../data/release.json), 자료 고지는 [공개 데이터 계약](../../data/public-data-v2.json)이 기준입니다.
 
 [run 4](https://github.com/jinwooorp/RecycleYoungs/actions/runs/38731532178)는 commit `794e78c7f60d41276018cca848ab66c78bee3cae`의 새 Ubuntu runner에서 실행됐습니다.
 

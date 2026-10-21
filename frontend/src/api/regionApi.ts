@@ -1,4 +1,5 @@
 import { get } from './adminDongApi'
+import { matchesPublication, validPublication } from '../lib/publication'
 import type { ChangeScores, ConsumptionScores, PolygonGeometry, RegionBoundary, Regions, Ring } from '../types/regions'
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const text = (v: unknown): v is string => typeof v === 'string'
@@ -25,7 +26,7 @@ function boundary(v: unknown): v is RegionBoundary {
 }
 const decimal = (v: unknown) => v === null || text(v) && /^-?(0|[1-9][0-9]*)$/.test(v)
 function scores(v: unknown): v is ConsumptionScores {
-  return object(v) && object(v.quarter) && text(v.quarter.code) && text(v.quarter.label) && text(v.modelVersion)
+  return object(v) && validPublication(v.metadata) && object(v.quarter) && text(v.quarter.code) && text(v.quarter.label) && text(v.modelVersion)
     && text(v.baselineId) && Number.isInteger(v.cohortSize) && (v.cohortSize as number) >= 0
     && Number.isInteger(v.minimumCohortSize) && text(v.sourceUrl) && v.sourceSnapshotStatus === 'UNVERIFIED'
     && Array.isArray(v.items) && v.items.every(i => object(i) && object(i.dong) && code(i.dong.code) && text(i.dong.name)
@@ -37,11 +38,12 @@ function scores(v: unknown): v is ConsumptionScores {
 export const getRegions = (signal?: AbortSignal) => get('/api/regions', regions, signal)
 export const getRegionBoundary = (code: string, version: string | null, signal?: AbortSignal) =>
   get(`/api/regions/admin-dongs/${code}/boundary${version ? '?datasetVersion=' + encodeURIComponent(version) : ''}`, boundary, signal)
-export const getConsumptionScores = (codes: string[], quarter: string, signal?: AbortSignal) =>
-  get('/api/cafe-consumption-scores?' + new URLSearchParams({ dongCodes: codes.join(','), quarterCode: quarter }), scores, signal)
+export const getConsumptionScores = (codes: string[], quarter: string, signal?: AbortSignal, dataVersion?: string) =>
+  get('/api/cafe-consumption-scores?' + new URLSearchParams({ dongCodes: codes.join(','), quarterCode: quarter,
+    ...(dataVersion ? { dataVersion } : {}) }), (v): v is ConsumptionScores => scores(v) && matchesPublication(v.metadata, dataVersion), signal)
 
 function changeScores(v: unknown): v is ChangeScores {
-  if (!object(v) || !object(v.quarter) || !text(v.quarter.code) || !text(v.quarter.label) || !text(v.previousQuarterCode)
+  if (!object(v) || !validPublication(v.metadata) || !object(v.quarter) || !text(v.quarter.code) || !text(v.quarter.label) || !text(v.previousQuarterCode)
     || !text(v.modelVersion) || !text(v.baselineId) || !Number.isInteger(v.cohortSize) || (v.cohortSize as number) < 0
     || !Number.isInteger(v.minimumCohortSize) || (v.minimumCohortSize as number) < 2 || !text(v.sourceUrl)
     || v.sourceSnapshotStatus !== 'UNVERIFIED' || !Array.isArray(v.items)) return false
@@ -54,5 +56,6 @@ function changeScores(v: unknown): v is ChangeScores {
       && (v.cohortSize as number) >= (v.minimumCohortSize as number)
       : i.status === 'UNAVAILABLE' && i.score === null && text(i.reason)))
 }
-export const getChangeScores = (codes: string[], quarter: string, signal?: AbortSignal) =>
-  get('/api/cafe-change-scores?' + new URLSearchParams({ dongCodes: codes.join(','), quarterCode: quarter }), changeScores, signal)
+export const getChangeScores = (codes: string[], quarter: string, signal?: AbortSignal, dataVersion?: string) =>
+  get('/api/cafe-change-scores?' + new URLSearchParams({ dongCodes: codes.join(','), quarterCode: quarter,
+    ...(dataVersion ? { dataVersion } : {}) }), (v): v is ChangeScores => changeScores(v) && matchesPublication(v.metadata, dataVersion), signal)

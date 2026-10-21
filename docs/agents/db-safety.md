@@ -1,24 +1,39 @@
 # DB 안전 정책
 
-DB에 접속하거나 데이터를 바꾸기 전에 확인할 조건을 정리합니다. 정상 개발 실행은 [README](../README.md#실행-방법), 구현 구조는 [기술 명세](technical.md)를 참고합니다.
+> **에이전트용 문서:** 작업 기준·구현 계약·검증 기록을 관리합니다. 사람이 읽을 문서는 [문서 안내](../README.md)에서 확인하며, 이 문서는 일반 독자의 필수 읽기 대상이 아닙니다.
 
-코드·문서 확인 기준일은 **2026-10-16**입니다. 이 개편에서는 DB·Docker에 접속하거나 자원을 변경하지 않았습니다. 아래의 과거 감사·백업 기록을 현재 상태나 실행 승인으로 사용하지 않습니다.
+DB에 접속하거나 데이터를 바꾸기 전에 확인할 조건을 정리합니다. 정상 개발 실행은 [README](../../README.md#실행-방법), 구현 구조는 [기술 명세](technical.md)를 참고합니다.
+
+문서 정리 기준일은 **2026-10-21**입니다. 기존 보호·승인 조건을 유지하며 후속 사용자 승인으로 새 영속 API 환경의 실제 준비·갱신·재시작·백업/독립 복원을 검증했습니다. 기존 팀·퇴역 DB는 이번 대상이 아닙니다. 아래의 실행 기록을 다른 대상의 현재 상태나 향후 실행 승인으로 사용하지 않습니다.
 
 ## 목차
 
 - [적용 범위와 보호 대상](#적용-범위와-보호-대상)
+- [별도 영속 API 개발 환경](#별도-영속-api-개발-환경)
 - [접속·변경·정리의 승인 범위](#접속변경정리의-승인-범위)
 - [연결 identity·writer·권한](#연결-identitywriter권한)
 - [V1 보존과 허용 변경](#v1-보존과-허용-변경)
 - [백업·독립 restore와 복구 가능성](#백업독립-restore와-복구-가능성)
 - [STOP·복구·Go/No-Go](#stop복구gono-go)
 - [실행·검증 계층과 결과 상태](#실행검증-계층과-결과-상태)
-- [실제 source collector와 provenance 요구](#실제-source-collector와-provenance-요구)
-- [향후 source 실행과 검증 gate](#향후-source-실행과-검증-gate)
+- [기존 DB 감사 수집기와 provenance 요구](#기존-db-감사-수집기와-provenance-요구)
+- [기존 DB 변경 실행기와 검증 gate](#기존-db-변경-실행기와-검증-gate)
 - [FINAL 검증의 분리](#final-검증의-분리)
 - [과거 검증과 Git 근거](#과거-검증과-git-근거)
 
 ## 적용 범위와 보호 대상
+
+| 읽는 목적 | 적용할 범위 |
+| --- | --- |
+| 현행 팀 환경 준비·조회·보존 | 아래의 팀 개발 환경과 [접속·변경 승인](#접속변경정리의-승인-범위), 구현 동작은 [기술 문서](technical.md#팀-공통-실자료-개발-환경) |
+| 별도 영속 API 환경 | [API 대상](#별도-영속-api-개발-환경)과 공통 승인·identity 정책, 구현은 [영속 실행 계약](technical.md#영속-api-개발-환경과-예약-갱신) |
+| 기존 DB 변경·복구 | 공통 identity·권한·백업·STOP 정책 |
+| 과거 V1에서 V2/V3·경계 적용 검토 | [V1 보존 계약](#v1-보존과-허용-변경), 현행 팀 환경의 초기 준비와 구분 |
+| 미구현 DB 감사·변경 도구 설계 | [감사 수집기](#기존-db-감사-수집기와-provenance-요구)와 [변경 실행 gate](#기존-db-변경-실행기와-검증-gate) |
+
+이 문서의 `source_*`는 기존 DB의 감사·보존 검증 계약입니다. 공공 API 수집기와 정기 갱신 경로를 뜻하지 않습니다. API 기반 버전·공개·보존 코드는 실제 운영·복구 검증을 마쳐야 하며 새 경로도 이 문서의 접속·변경 승인 조건을 따릅니다.
+
+API release/refresh/job의 수집 준비 CLI는 DB에 연결하지 않습니다. 격리 전용 `api_isolation`·`api_integration` 검증 이후, 후속 사용자 승인으로 별도 영속 `api_dev`·`api_worker`·Backend `api-dev` profile을 연결했습니다. 이 새 경로는 실제 DB 접속·적재·공개를 수행합니다. 선택적 V4는 `backend/src/main/resources/db/api-migration/`, runtime SQL은 별도 `db/api-runtime/`이며 기존 기본 Flyway·팀 reader는 유지합니다. 격리 성공·READY·callback이 다른 대상의 승인이나 고정 패키지 guard 우회를 뜻하지 않습니다.
 
 ### 현행 팀 개발 환경
 
@@ -35,6 +50,25 @@ Compose가 관리하는 대상은 다음과 같습니다. 이름은 코드상 �
 기존 DB·control·cache는 하나의 환경으로 보존합니다. 데이터 버전·계약·소유권이 다르면 기존 환경을 새 버전으로 자동 채택하거나 재적재하지 않습니다.
 
 과거 팀 DB의 v1 기록과 신규 기본 `real-data-v2`는 다른 데이터 계약입니다. 신규 기본값은 기존 DB의 업그레이드 승인이 아닙니다. 보존 여부를 판단하려고 개인 설정을 덮어쓰지 않습니다.
+
+### 별도 영속 API 개발 환경
+
+2026-10-21 승인된 새 개발 대상입니다. README 권장 실행은 이 환경이며 기존 팀 DB와 별개입니다. 이름만 같다고 승인된 자원으로 간주하지 않고 기록한 daemon·full container/network ID·image·owner label·볼륨 생성 정보·mount·port·실제 SID를 대조합니다.
+
+| 대상 | 식별자·제한 |
+| --- | --- |
+| Compose | `docker-compose.api.yml` / project `recycleyoungs-api-dev` |
+| DB·볼륨 | `recycleyoungs_api_dev` / `recycleyoungs-api-dev-db` |
+| DB 접속 | Docker 내부 `api-postgres:5432`, PGDATA `/var/lib/postgresql/data/api`, host DB port 없음 |
+| HTTP | loopback `127.0.0.1:18090` |
+| 역할 | 최초 준비/백업 `ry_api_owner`, API 갱신 `api_writer`, SELECT/READ ONLY `api_reader` |
+| 원본·제어·백업 | 프로젝트 밖 사용자 private home, 디렉터리 0700·파일 0600. 실제 값·원본은 문서 조사로 열람/인덱싱하지 않음 |
+
+`make api-init`은 신규 생성·migration·DDL/DML/GRANT, `api-up`은 Backend build와 서비스 시작, `api-refresh`는 실제 수집/적재/공개, `api-reconcile`은 검증 후 작업 상태 변경, `api-backup`은 DB backup과 새 독립 restore 자원 생성, `api-restart-check`는 API DB restart를 수행합니다. `api-status`도 실제 readonly DB 접속이므로 문서 검증 명령으로 쓰지 않습니다. 일반 Compose 명령으로 identity guard를 우회하거나 실패한 init을 자동 반복하지 않습니다.
+
+주간 worker의 실행은 승인된 새 대상에 한정합니다. FAILED·불확실한 RUNNING은 자동 재시도하지 않으며 실제 공개 버전과 registry를 확인한 명시적 reconciliation 이후 향후 예약을 허용합니다. source run registry는 공개 전에 불변 저장하며 수집 원본은 덮어쓰지 않습니다. 점포월 후퇴·기간 누락·공개 CAS 충돌을 거부합니다.
+
+snapshot-bound DB 백업·독립 복원에서 전체 값/EWKB/ID/이력/catalog/ACL/역할/sequence를 비교했습니다. dump는 원본 run·경계 파일·제어 기록·secret을 포함하지 않으므로 전체 worker 복구와 구분합니다. 새 백업/실패 증거/검증 restore 자원은 보존하며 삭제·정리 승인을 추정하지 않습니다. 이 기록은 기존 팀/퇴역 DB의 백업·복원이나 변경 승인이 아닙니다.
 
 ### 퇴역한 개발 DB와 백업
 
@@ -74,7 +108,7 @@ Compose가 관리하는 대상은 다음과 같습니다. 이름은 코드상 �
 
 팀 `bootRun`은 READY 확인 후 읽기 전용 계정을 쓰고 Flyway를 끕니다. 일반 애플리케이션 설정·`dbTest`에는 같은 보장을 적용할 수 없으므로 설정을 먼저 확인합니다.
 
-Git stage·commit·push도 별도 승인 범위를 따릅니다. 작업 규칙은 [AGENTS](../AGENTS.md)가 기준입니다.
+Git stage·commit·push도 별도 승인 범위를 따릅니다. 작업 규칙은 [AGENTS](../../AGENTS.md)가 기준입니다.
 
 ## 연결 identity·writer·권한
 
@@ -131,11 +165,11 @@ mixed=false
 
 격리 Polygon factory도 같은 반환 연결을 검사해 publication에 전달합니다. 단독 CLI에는 이 검사가 없으므로 명시적 DSN만으로 안전 경로가 되지 않습니다.
 
-[control](../etl/control.py)·[backend](../etl/control_backend.py)·[worker](../etl/control_worker.py)의 검사는 격리용입니다. 기존 DB에 재사용하려면 별도 구현·리뷰·실사용자 검증이 필요합니다.
+[control](../../etl/control.py)·[backend](../../etl/control_backend.py)·[worker](../../etl/control_worker.py)의 검사는 격리용입니다. 기존 DB에 재사용하려면 별도 구현·리뷰·실사용자 검증이 필요합니다.
 
 ## V1 보존과 허용 변경
 
-이 절의 V1~V3는 스키마 버전입니다. `real-data-v1/v2` 패키지와 구분합니다. 정확한 변경 정의는 [migration SQL](../backend/src/main/resources/db/migration/)이 기준입니다.
+아래 허용 변화는 과거 V1 BASELINE에 V2/V3·경계를 적용하는 보존 계약입니다. 현재 팀 DB의 전체 데이터 갱신 허용 범위를 정의하지 않습니다. V1~V3는 스키마 버전이며 `real-data-v1/v2` 패키지와 구분합니다. 정확한 변경 정의는 [migration SQL](../../backend/src/main/resources/db/migration)이 기준입니다.
 
 기존 V1 BASELINE의 NULL checksum과 history 원행을 유지합니다. SQL V1 checksum으로 바꾸거나 repair·rebaseline하지 않습니다. 기존 성공 migration의 checksum도 수정하지 않습니다.
 
@@ -233,7 +267,7 @@ Go 검토에는 최신 증거·실제 연결·복구 계획·독립 리뷰·예�
 | source_validation | 제공받은 전후 자료 비교 | 자료의 실제 출처·실행·복구 증명 아님 |
 | source_control | 가짜 자료로 단계 전환 검사 | 실제 실행 거부, SIMULATED_ONLY |
 | source_audit | 출처 기록의 형식·연결 검사 | CONTRACT_VALID_UNVERIFIED |
-| 실제 수집기·실행기 | 미구현 | 설정·flag로 활성화할 경로 없음 |
+| 기존 DB 감사 수집기·변경 실행기 | 미구현 | 설정·flag로 활성화할 경로 없음 |
 
 비교 결과는 PASS, UNEXPECTED_CHANGE, INSUFFICIENT_EVIDENCE, INDETERMINATE입니다. UNKNOWN·증거 누락·불명확한 sequence 변화는 PASS가 아닙니다.
 
@@ -245,9 +279,11 @@ source_control의 기본 검사는 `NOT_READY`, DB 상태는 `UNMEASURED`입니�
 
 과거 integration snapshot은 모든 catalog·ACL·sequence 정의·history 필드를 수집하지 않습니다. 신규 기존 DB 감사 자료로 그대로 사용하지 않습니다.
 
-## 실제 source collector와 provenance 요구
+<a id="실제-source-collector와-provenance-요구"></a>
 
-이 절은 **향후 기존 DB 감사 자료 수집기의 요구사항**입니다. 원본 파일 수집이나 팀 환경 초기화 도구와 구분합니다.
+## 기존 DB 감사 수집기와 provenance 요구
+
+이 절은 **미구현인 기존 DB 감사 자료 수집기의 요구사항**입니다. 공공 API 응답 수집·원본 파일 다운로드·팀 환경 초기화 도구와 구분합니다.
 
 먼저 가짜 연결로 질문·응답 조립·실패·timeout 처리를 검사합니다. 그 다음에만 별도 승인된 DB에서 실제 수집을 검토합니다.
 
@@ -270,7 +306,7 @@ source_control의 기본 검사는 `NOT_READY`, DB 상태는 `UNMEASURED`입니�
 
 물리 값, industry_id를 제외한 원천 값, 논리 분류의 해시를 분리합니다. 승인된 V3 변화만 허용하며 ID·POINT·NULL·sequence·구조·history도 따로 전수 검사합니다.
 
-정확한 직렬화 기준은 [source_audit](../etl/source_audit.py)의 고정 계약을 따릅니다.
+정확한 직렬화 기준은 [source_audit](../../etl/source_audit.py)의 고정 계약을 따릅니다.
 
 ### 출처 기록과 실행 연결
 
@@ -282,9 +318,11 @@ NULL snapshot ID에 descriptor·local transaction ID를 기록해도 실제 Post
 
 전체 근거에는 collector·validator·adapter 의존 코드와 V2 참조 기준도 포함합니다. 공개 로그에는 고정 오류 category/field만 남기며 행·SQL·접속값·private 경로를 노출하지 않습니다.
 
-## 향후 source 실행과 검증 gate
+<a id="향후-source-실행과-검증-gate"></a>
 
-아래는 **미구현 실행 경로의 검토 기준**입니다. 퇴역 DB의 복원 계획이나 실행 안내가 아닙니다.
+## 기존 DB 변경 실행기와 검증 gate
+
+아래는 **미구현인 기존 DB 변경 실행기의 검토 기준**입니다. 과거 V1 보존 계약의 V2/V3·경계 적용 순서이며 공공 API 갱신 배치의 단계 정의가 아닙니다. 퇴역 DB의 복원 계획이나 실행 안내로 사용하지 않습니다.
 
 | 단계 | 통과 조건 |
 | --- | --- |
@@ -314,7 +352,7 @@ HMAC는 변조 탐지 수단입니다. 사람 승인이나 코드·설정·secre
 
 ## FINAL 검증의 분리
 
-현재 [격리 runner의 final](../etl/control_worker.py)은 경계 publication을 다시 호출해 재실행 동등성을 검사합니다. 승인된 격리 대상의 **쓰기 재시도 검사**입니다.
+현재 [격리 runner의 final](../../etl/control_worker.py)은 경계 publication을 다시 호출해 재실행 동등성을 검사합니다. 승인된 격리 대상의 **쓰기 재시도 검사**입니다.
 
 향후 기존 DB의 FINAL은 **읽기 전용 전수 감사**여야 합니다. load·retry publication·DDL/DML·ANALYZE를 실행하지 않습니다.
 

@@ -4,6 +4,13 @@ import { AnalysisCharts } from './AnalysisCharts'
 import { normalTrend } from '../test/trendFixture'
 import { comparisonStats } from '../test/comparisonFixture'
 
+it('does not combine responses from different public releases even when numeric values agree', () => {
+  const metadata = { dataVersion: 'a'.repeat(64), collectedAt: '2026-10-21T08:00:00Z', storeReferenceMonth: '202606', storeScope: 'I21201' as const, sourceSnapshotStatus: 'UNVERIFIED' as const }
+  render(<AnalysisCharts trend={{ ...normalTrend, metadata }} stats={{ ...comparisonStats('11110515','20254'), metadata: { ...metadata, dataVersion: 'b'.repeat(64) } }} quarter="20254" />)
+  expect(screen.getByRole('alert')).toHaveTextContent('자료 버전이 달라')
+  expect(screen.queryByRole('group', { name: '거래 건수 선 그래프' })).not.toBeInTheDocument()
+})
+
 it('integrates the current value with the chart and reveals exact values only on request', () => {
   render(<AnalysisCharts trend={normalTrend} stats={comparisonStats('11110515', '20254')} quarter="20254" />)
   const sales = screen.getByRole('region', { name: '카페 소비 흐름' })

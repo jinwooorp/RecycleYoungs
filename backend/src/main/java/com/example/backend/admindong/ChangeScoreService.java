@@ -24,8 +24,13 @@ public class ChangeScoreService {
         @Schema(types = {"string", "null"}) String direction,
         @Schema(types = {"string", "null"}) String reason) {}
     public record Response(ApiResponses.Quarter quarter, String previousQuarterCode, String modelVersion, String baselineId,
-        int cohortSize, int minimumCohortSize, String sourceUrl, String sourceSnapshotStatus, List<Item> items) {}
+        int cohortSize, int minimumCohortSize, String sourceUrl, String sourceSnapshotStatus, List<Item> items,
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) DataPublication.Metadata metadata) {}
     public Response scores(List<String> codes, String quarter) {
+        return scores(codes,quarter,null);
+    }
+    public Response scores(List<String> codes, String quarter, String dataVersion) {
+        var metadata=repository.requireVersion(dataVersion);
         var lookup = repository.lookup();
         var q = lookup.quarters().stream().filter(v -> v.code().equals(quarter)).findFirst()
             .orElseThrow(() -> new InvalidQueryException("UNSUPPORTED_QUARTER", "지원하지 않는 분기입니다.", "quarterCode"));
@@ -50,7 +55,7 @@ public class ChangeScoreService {
         try {
             String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(canonical.getBytes(StandardCharsets.UTF_8)));
             return new Response(q, previous, ChangeScore.MODEL, hash, size, ChangeScore.MIN_COHORT,
-                "https://data.seoul.go.kr/dataList/OA-22175/S/1/datasetView.do", "UNVERIFIED", items);
+                "https://data.seoul.go.kr/dataList/OA-22175/S/1/datasetView.do", "UNVERIFIED", items,metadata);
         } catch (NoSuchAlgorithmException ex) { throw new IllegalStateException(ex); }
     }
 }

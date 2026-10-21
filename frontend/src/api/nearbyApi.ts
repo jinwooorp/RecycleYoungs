@@ -1,4 +1,5 @@
 import { get } from './adminDongApi'
+import { validPublication } from '../lib/publication'
 import type { MapCoordinate } from '../components/KakaoMap'
 import type { NearbyResult, NearbyStore } from '../types/nearby'
 
@@ -24,7 +25,7 @@ function valid(v: unknown, requested: MapCoordinate): v is NearbyResult {
     || v.listComplete !== (BigInt(v.totalCount) === BigInt(v.stores.length))
     || new Set(v.stores.map(s => s.sourceStoreId)).size !== v.stores.length
     || !ordered(v.stores)
-    || !record(v.data) || v.data.source !== 'SEMAS' || v.data.sourceCategoryCode !== 'I21201'
+    || !record(v.data) || !validPublication(v.data.metadata) || v.data.source !== 'SEMAS' || v.data.sourceCategoryCode !== 'I21201'
     || v.data.availability !== 'AVAILABLE_RECORDS' || v.data.snapshotStatus !== 'UNVERIFIED'
     || v.data.referenceDate !== null || v.data.loadedAt !== null || !record(v.data.quality)) return false
   const q = v.data.quality

@@ -1,0 +1,16 @@
+spring:
+  flyway:
+    enabled: false
+  sql:
+    init:
+      mode: never
+app:
+  data:
+    api-release-enabled: true
+server:
+  port: 8080
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true

@@ -20,3 +20,4 @@
 !backend/src/main/resources/db/
 !backend/src/main/resources/db/migration/
 !backend/src/main/resources/db/migration/**
+etl/api.env

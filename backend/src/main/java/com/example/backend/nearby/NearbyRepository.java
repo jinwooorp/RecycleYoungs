@@ -55,7 +55,11 @@ public class NearbyRepository {
     public record Row(Inventory inventory, long totalCount, NearbyResponses.Store store) {}
     public record Bounds(double minLng, double minLat, double maxLng, double maxLat) {}
     private final JdbcClient jdbc;
-    public NearbyRepository(JdbcClient jdbc) { this.jdbc = jdbc; }
+    private final com.example.backend.admindong.DataPublication publication;
+    public NearbyRepository(JdbcClient jdbc) { this(jdbc,new com.example.backend.admindong.DataPublication(jdbc,false)); }
+    @org.springframework.beans.factory.annotation.Autowired
+    public NearbyRepository(JdbcClient jdbc, com.example.backend.admindong.DataPublication publication) { this.jdbc=jdbc; this.publication=publication; }
+    public com.example.backend.admindong.DataPublication.Metadata metadata() { return publication.metadata(); }
 
     public static Bounds bounds(NearbyResponses.Query query) {
         var c = query.coordinate();
@@ -70,7 +74,7 @@ public class NearbyRepository {
 
     public List<Row> find(NearbyResponses.Query query) {
         var b = bounds(query);
-        return jdbc.sql(SQL).param("lng", query.coordinate().lng()).param("lat", query.coordinate().lat())
+        return jdbc.sql(publication.sql(SQL)).param("lng", query.coordinate().lng()).param("lat", query.coordinate().lat())
             // ST_DWithin is an intentionally wider candidate filter. ST_Distance <= radius is final.
             // This avoids dropping a measured 500.00000000m point through predicate rounding differences.
             .param("radius", query.radius()).param("candidateRadius", query.radius() + 1).param("listLimit", LIST_LIMIT)

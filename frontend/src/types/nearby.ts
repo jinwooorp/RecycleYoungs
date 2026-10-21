@@ -1,4 +1,5 @@
 import type { MapCoordinate } from '../components/KakaoMap'
+import type { PublicationMetadata } from './api'
 
 export interface NearbyStore {
   sourceStoreId: string
@@ -16,6 +17,7 @@ export interface NearbyResult {
   listComplete: boolean
   stores: NearbyStore[]
   data: {
+    metadata?: PublicationMetadata
     source: 'SEMAS'
     sourceCategoryCode: 'I21201'
     availability: 'AVAILABLE_RECORDS'

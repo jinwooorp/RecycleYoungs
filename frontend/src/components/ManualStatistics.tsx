@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from './ui/
 import { Alert, AlertDescription } from './ui/alert'
 import { NativeSelect } from './ui/native-select'
 import { Field, FieldLabel } from './ui/field'
+import { PublicationInfo } from './PublicationInfo'
 
 export function ManualStatistics({ state, scores, review }: { state: ReturnType<typeof useLocationAnalysis>; scores?: ReactNode; review?: ReactNode }) {
   const { lookups, lookupLoading, lookupError, stats, statsLoading, statsError, trend, trendLoading, trendError } = state
@@ -36,9 +37,11 @@ export function ManualStatistics({ state, scores, review }: { state: ReturnType<
         {lookupError && <Alert variant="destructive" className="mt-4"><AlertDescription><p>조회 조건을 불러오지 못했습니다. {lookupError.message}</p>
           <Button type="button" onClick={state.retryLookups}>다시 시도</Button></AlertDescription></Alert>}
         {noLookups && <p className="notice" role="status">현재 조회 가능한 조건이 없습니다.</p>}
+        <Button type="button" variant="outline" className="mt-3" disabled={lookupLoading} onClick={state.retryLookups}>조회 조건 새로 불러오기</Button>
       </CardContent>
     </section></Card>
     {review}
+    {(stats || trend) && <PublicationInfo metadata={stats?.metadata ?? trend?.metadata} />}
     {scores}
     <div aria-live="polite" aria-atomic="true">
       {statsLoading && <p className="notice" role="status">통계를 조회하는 중입니다.</p>}

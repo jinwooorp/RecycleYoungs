@@ -100,7 +100,9 @@ class OpenApiTests {
         for (var path : names(document.path("paths"))) {
             var responses = operation(path).path("responses");
             assertThat(names(responses)).containsExactlyInAnyOrderElementsOf(path.equals("/api/locations/resolve")
-                || path.equals("/api/nearby-stores") ? Set.of("200", "400", "500", "503") : Set.of("200", "400", "500"));
+                || path.equals("/api/nearby-stores") ? Set.of("200", "400", "500", "503")
+                : Set.of("/api/admin-dong-stats","/api/admin-dong-trends","/api/cafe-consumption-scores","/api/cafe-change-scores").contains(path)
+                    ? Set.of("200","400","409","500") : Set.of("200", "400", "500"));
             for (var code : new String[]{"400", "500"}) assertThat(responseSchema(path, code).path("$ref").asText())
                 .isEqualTo("#/components/schemas/ApiError");
         }
@@ -222,11 +224,24 @@ class OpenApiTests {
     private void assertQueries(String path, String... expected) {
         var actual = new HashSet<String>();
         for (var parameter : operation(path).path("parameters")) {
+            if (parameter.path("name").asText().equals("dataVersion")) {
+                assertThat(parameter.path("required").asBoolean()).isFalse();
+                assertThat(parameter.path("in").asText()).isEqualTo("query");
+                assertThat(path).isIn("/api/admin-dong-stats","/api/admin-dong-trends","/api/cafe-consumption-scores","/api/cafe-change-scores");
+                continue;
+            }
             actual.add(parameter.path("name").asText());
             assertThat(parameter.path("in").asText()).isEqualTo("query");
             assertThat(parameter.path("required").asBoolean()).isTrue();
         }
         assertThat(actual).containsExactlyInAnyOrder(expected);
+    }
+
+    @Test void documentsOptionalPublicationPinAndConflictResponse() {
+        for (String path : java.util.List.of("/api/admin-dong-stats","/api/admin-dong-trends","/api/cafe-consumption-scores","/api/cafe-change-scores")) {
+            assertThat(parameter(path,"dataVersion").path("pattern").asText()).contains("[0-9a-f]{64}");
+            assertThat(operation(path).path("responses").has("409")).isTrue();
+        }
     }
     private static Set<String> names(JsonNode object) {
         var names = new HashSet<String>(); object.properties().forEach(entry -> names.add(entry.getKey())); return names;

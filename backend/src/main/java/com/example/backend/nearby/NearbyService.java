@@ -5,6 +5,7 @@ import java.util.HashSet;
 import org.springframework.stereotype.Service;
 
 @Service
+@org.springframework.transaction.annotation.Transactional(readOnly=true, isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
 public class NearbyService {
     private final NearbyRepository repository;
     public NearbyService(NearbyRepository repository) { this.repository = repository; }
@@ -48,6 +49,6 @@ public class NearbyService {
             Long.toString(i.invalidLocation()), Long.toString(i.incompleteSourceCoordinates()));
         return new NearbyResponses.Result(query.coordinate(), query.industryCode(), query.radius(), Long.toString(count),
             stores.size(), NearbyRepository.LIST_LIMIT, count == stores.size(), stores,
-            new NearbyResponses.Data("SEMAS", "I21201", "AVAILABLE_RECORDS", "UNVERIFIED", null, null, quality));
+            new NearbyResponses.Data("SEMAS", "I21201", "AVAILABLE_RECORDS", "UNVERIFIED", null, null, quality,repository.metadata()));
     }
 }
