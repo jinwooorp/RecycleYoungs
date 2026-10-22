@@ -23,7 +23,7 @@ public class TeamDevDataSourceConfiguration {
     static String required(String key, String pattern) {
         String value = System.getenv("TEAM_DEV_" + key);
         if (value == null || !value.matches(pattern)) {
-            throw new IllegalStateException("Missing team development proof; run docker compose up -d and etl/team_dev.py status");
+            throw new IllegalStateException("Missing team development proof; run docker compose -f docker-compose.legacy.yml up -d and etl/team_dev.py status");
         }
         return value;
     }

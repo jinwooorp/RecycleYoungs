@@ -19,9 +19,12 @@ public class ApiDataSourceConfiguration {
     @Bean DataSource apiDataSource() throws Exception {
         var target=JsonMapper.builder().build().readTree(Files.readString(Path.of("/api-control/target.json")));
         String sid=target.path("sid").asText(),owner=target.path("owner").asText();
+        boolean local=target.path("runtime").asText().equals("local-dev")
+            && target.path("project").asText().matches("recycleyoungs-dev(?:-check-[0-9a-f]{8})?");
+        String expectedVolume=local?target.path("project").asText()+"-db":"recycleyoungs-api-dev-db";
         if (!sid.matches("[0-9]+") || sid.equals("7692329130053947430") || !owner.matches("[0-9a-f]{24}")
             || !target.path("dbname").asText().equals("recycleyoungs_api_dev") || !target.path("host").asText().equals("api-postgres")
-            || !target.path("volume").asText().equals("recycleyoungs-api-dev-db")
+            || !target.path("volume").asText().equals(expectedVolume)
             || !target.path("container_id").asText().matches("[0-9a-f]{64}")
             || !target.path("network_id").asText().matches("[0-9a-f]{64}")) throw new IllegalStateException("API routing proof rejected");
         var delegate=new DriverManagerDataSource("jdbc:postgresql://api-postgres:5432/recycleyoungs_api_dev?connectTimeout=5&socketTimeout=600",

@@ -99,6 +99,8 @@ jobs:
                   super().__init__(code)
                   self.safe_code, self.exit_code, self.service = code, exit_code, service
           def command(args, timeout=1200):
+              if args[:2] == ['docker', 'compose']:
+                  args = [*args[:2], '-f', 'docker-compose.legacy.yml', *args[2:]]
               try:
                   result = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
               except subprocess.TimeoutExpired:

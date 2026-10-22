@@ -4,7 +4,7 @@
 
 에이전트가 구현 계약과 개발·검증 기준을 확인하는 참고 문서입니다. 현재 기능과 우선순위는 [프로젝트 현황](project.md), DB 변경·복구 조건은 [DB 안전 정책](db-safety.md)에 둡니다.
 
-문서·구현 대조 기준일은 **2026-10-21**입니다. 공식 API 전수 수집·CSV 대조, 격리 검증에 이어 [영속 API 환경](#영속-api-개발-환경과-예약-갱신)의 실제 DB·예약 갱신·백업/복원·HTTP·테스트 지도 화면을 확인했습니다. 기존 팀 환경·Releases는 보존했습니다. 아래 전환 준비 절의 과거 단계와 현재 영속 계약을 구분하며, nginx·일반 CI/CD·새 PC/서버 이미지 준비·Frontend 구조 정리는 [다음 작업](project.md#다음-작업)입니다.
+문서·구현 대조 기준일은 **2026-10-22**입니다. 10/21 [영속 API 환경](#영속-api-개발-환경과-예약-갱신)의 실제 DB·예약 갱신·복원·HTTP·테스트 지도 화면을 확인했고, 10/22 [소스 이미지 빌드](#소스-이미지-빌드와-신규-환경-준비)와 새 기본 Compose의 실제 초기 준비·재실행·재시작·실패 차단을 확인했습니다. 기존 팀 환경·영속 API 자원·Releases는 보존했습니다. nginx·일반 CI/CD·별도 PC/EC2 재현·Frontend 구조 정리는 [다음 작업](project.md#다음-작업)입니다.
 
 ## 목차
 
@@ -18,6 +18,7 @@
 - [데이터 출처와 의미](#데이터-출처와-의미)
 - [공공 API 전환 준비](#공공-api-전환-준비)
 - [영속 API 개발 환경과 예약 갱신](#영속-api-개발-환경과-예약-갱신)
+- [소스 이미지 빌드와 신규 환경 준비](#소스-이미지-빌드와-신규-환경-준비)
 - [DB schema와 Flyway](#db-schema와-flyway)
 - [CSV ETL](#csv-etl)
 - [Polygon ETL과 공간 한계](#polygon-etl과-공간-한계)
@@ -117,7 +118,8 @@ GET /api/admin-dong-trends?dongCode=11110515&industryCode=CAFE
 | 위치·카페 API | [location](../../backend/src/main/java/com/example/backend/location), [nearby](../../backend/src/main/java/com/example/backend/nearby) |
 | 스키마 | [Flyway migration](../../backend/src/main/resources/db/migration) |
 | 파일 처리 | [etl/app](../../etl/app) |
-| 개발 환경 | [Compose](../../docker-compose.yml), [호스트 검사](../../etl/team_dev.py), [DB 초기화](../../etl/team_db.py) |
+| 기본 API 개발 환경 | [Compose](../../docker-compose.yml), [자동 준비](../../etl/dev_runtime.py), [예약 갱신](../../etl/api_worker.py) |
+| 보존한 고정 자료 팀 환경 | [legacy Compose](../../docker-compose.legacy.yml), [호스트 검사](../../etl/team_dev.py), [DB 초기화](../../etl/team_db.py) |
 | 테스트 | [Backend](../../backend/src/test), [Frontend](../../frontend/src), [ETL](../../etl/tests) |
 
 Frontend는 API client·types·hooks·components를 분리합니다. Backend는 Controller → Service → Repository 구조와 JdbcClient를 유지합니다.
@@ -142,7 +144,23 @@ JPA로 전환하거나 새로운 상태 관리 라이브러리를 도입한 구�
 
 ## 개발 환경과 안전한 시작
 
-권장 API 실행 순서는 [루트 README](../../README.md#실행-방법)와 [영속 API 계약](#영속-api-개발-환경과-예약-갱신)에 있습니다. 새 API Compose는 DB·Backend·예약 worker를 실행하고 Frontend는 호스트에서 실행합니다. 아래 준비·호스트 서버·팀 환경 절은 보존한 고정 자료 팀 경로를 설명합니다. 기존 명령의 대상을 바꾸지 않았습니다.
+기본 진입점은 [루트 README](../../README.md#실행-방법)의 `docker compose up -d`입니다. `docker-compose.yml`이 새 `recycleyoungs-dev`의 이미지 빌드·DB·API 최초 수집·Backend·Frontend·예약 worker를 준비합니다. host Java/Node/Python·수동 image manifest는 필요하지 않습니다.
+
+- [dev_runtime](../../etl/dev_runtime.py)의 preflight → identity → migrate → initialize를 순차 실행합니다. `inspect-proxy`만 Docker socket을 받으며 local allowlist 밖 metadata·mutation은 거부합니다.
+- project는 `recycleyoungs-dev` 또는 격리 검증용 `recycleyoungs-dev-check-<8hex>`만 허용합니다. 기존 팀·API project와 자원을 공유하지 않습니다.
+- DB 이름은 `recycleyoungs_api_dev`, 내부 `api-postgres:5432`, PGDATA는 `/var/lib/postgresql/data/api`입니다. 호스트 DB port는 없고 Frontend loopback5173만 공개합니다.
+- DB/control/data/reader/writer 전용 볼륨은 환경 label·생성 정보·스키마 SHA에 결속됩니다. 실제 container/network full ID·image·mount·연결 SID·DB/current_user/session_user·owner nonce·timeout·READ ONLY를 검증합니다. `local-dev` target을 명시하며 임의 project/volume은 거부합니다.
+- preflight가 사용자 `etl/api.env`를 read-only로 받아 private control에 복사합니다. 파일600·설정 형식·양쪽 키를 먼저 검사합니다. 비밀번호는 자동 생성하고 Backend에는 reader target/password만, scheduler에는 writer/reader target/password만 전달합니다. 키/비밀번호는 build context·환경변수·로그에 넣지 않습니다.
+- 처음만 V1~V3+선택적V4, runtime schema·역할·경계·API 자료를 적재합니다. 완료 분기를20251부터 순서대로 확인하고 두 서울 원천이 모두 제공할 때 채택합니다. 고정 공개 ZIP은 전체 해시를 검증하고 경계2종/리포트3개만 추출하며 CSV는 적재하지 않습니다.
+- READY 재실행은 최초 migration·수집을 생략하고 reader status를 확인합니다. 불완전 migration/initialize marker, schema/volume/identity 불일치, 설정 키 변경은 자동 채택·복구하지 않습니다. 실패한 기존 초기화를 무조건 재시도하거나 볼륨을 지워 해결하지 않습니다.
+- `frontend/src`만 읽기 전용 mount해 Vite HMR을 지원합니다. Backend·의존성·설정 변경은 `up -d`로 재빌드합니다. 지도 공개 키는 optional `frontend/.env.local`에서 runtime으로 전달하고 실제 Kakao 웹 도메인 등록은 별도입니다.
+- `make dev-status`는 실제 readonly DB 조회, `dev-refresh`는 writer 수집/공개, `dev-reconcile`은 현재 자료 검증 후 상태 변경입니다. 매주 월요일04:30KST 갱신·실패/불확실RUNNING 차단은 기존 api_worker 계약을 따릅니다. DB/control/data/secret 전체 복구와 schema/키 교체 전환은 후속 과제입니다.
+
+**10/22 검증:** 새 기본 Compose에서 실제 API13runs/6quarters·migration4개·HTTP 조회, 재실행의 migration/최초 수집 생략, 새 DB 실제 재시작의 identity/공개 버전 유지, 강제 수집 실패의 FAILED/재실행 차단·기존 HTTP200·명시적 reconcile을 확인했습니다. Backend276·Frontend337·ETL430 PASS, 기존 DB/raw opt-in15 SKIP, build/lint PASS입니다. 모의 지도 SDK와 실제 API로 상세·연도 경계 추세·3후보·모바일 흐름을 확인했습니다. 실제 Kakao 인증/타일·별도 PC/EC2·운영 배포는 미검증입니다.
+
+사용자가 지정한 임시 검증 컨테이너7개와 전용 네트워크6개는 full ID·image·label·tmpfs/mount·전용 여부와 원본/백업 보존을 대조한 뒤 제거했습니다. 볼륨은 삭제하지 않았고 기존 팀·별도 API 보호 컨테이너10개의 ID/image/상태/볼륨 metadata가 유지됐습니다. 과거 backup 기록의 restore_retained는 당시 기록이며 현재 해당 임시 restore 컨테이너의 존속을 뜻하지 않습니다.
+
+**보존 경로:** 아래 준비·호스트 서버·팀 환경 절은 `docker-compose.legacy.yml` 기준입니다. `make db`/`etl`/`db-stop`과 고정 자료 E2E workflow는 이 파일을 명시하며 기존 의미를 유지합니다. `docker-compose.api.yml`과 `make api-*`는 별도 manifest/private-home 환경으로 보존합니다. 과거 기록의 root Compose 명령을 현재 기본 대상과 혼동하지 않습니다.
 
 ### 준비와 정상 실행
 
@@ -177,21 +195,21 @@ Vite는 `/api`를 `http://localhost:8080`으로 전달합니다. 지도 키·비
 먼저 서비스 상태와 초기화 로그를 확인합니다.
 
 ```sh
-docker compose ps -a
-docker compose logs --tail=30 inspect-proxy preflight data-init db-identity db-migrate etl-init
+docker compose -f docker-compose.legacy.yml ps -a
+docker compose -f docker-compose.legacy.yml logs --tail=30 inspect-proxy preflight data-init db-identity db-migrate etl-init
 ```
 
 오류 코드로 실패 단계를 확인합니다. DB·계약·버전 불일치를 해결하려고 볼륨을 삭제하거나 다시 적재하지 않습니다. 원인을 검토한 뒤 허용된 같은 환경의 준비·검증 경로를 사용합니다.
 
 `COMPOSE_PROJECT_NAME`, `-p`, Compose override로 기존 자원을 우회하지 않습니다. 같은 daemon의 Docker context 두 개를 별도 격리 환경으로 보지도 않습니다.
 
-개발 서버는 해당 터미널의 `Ctrl+C`로 종료합니다. DB를 멈출 필요가 있을 때만 대상·범위를 확인하고 `docker compose stop team-postgres`를 사용합니다. DB·cache·control 볼륨은 보존합니다.
+개발 서버는 해당 터미널의 `Ctrl+C`로 종료합니다. DB를 멈출 필요가 있을 때만 대상·범위를 확인하고 `docker compose -f docker-compose.legacy.yml stop team-postgres`를 사용합니다. DB·cache·control 볼륨은 보존합니다.
 
 ### 명령별 영향
 
 | 명령 | 실제 영향 |
 | --- | --- |
-| `docker compose up -d`, `make db`, `make etl` | 팀 환경 생성·시작, 필요한 초기화 또는 기존 상태 검증 |
+| `docker compose -f docker-compose.legacy.yml up -d`, `make db`, `make etl` | 팀 환경 생성·시작, 필요한 초기화 또는 기존 상태 검증 |
 | `make db-info`, `make check-db` | 팀 DB 소유권·READY·fingerprint의 읽기 전용 검사 |
 | `make db-stop` | 팀 DB 서비스 중지 |
 | `make db-migrate`, `make db-baseline` | 현재 Makefile에서 거부 |
@@ -409,7 +427,7 @@ SEMAS는 `https://apis.data.go.kr/B553077/api/open/sdsc2/storeListInDong`의 GET
 | 2 | `seoul_api.py` 매출 53필드 확장, `etl/tests/`의 매핑·대조 테스트 | 모든 매출·건수 필드 보존. 2025년 4분기 전체 비교 리포트와 차이 원인 기록. 20244·20261·20262 제공·품질 검증. 건수 일치만으로 CSV 경로 제거 금지 |
 | 3 | `etl/app/semas_api.py` 점포 baseline 수집·정규화 | 인증 응답 envelope·필터·코드/ID·축·기준년월·paging 안정성 확인. 수집 범위 명시·좌표 NULL 보존. 증분 API는 별도 후속 |
 | 4 | 데이터 버전·publication·metadata 설계와 적재 모듈 분리, 필요 migration 설계 | 대상·권한·이전 버전 보존·실패 처리·공개 전환 방법 검토 후 승인된 격리 환경에서 중복 실행·부분 실패·정정·rollback 검증. 기존 DB 미변경 |
-| 5 | `etl/app/main.py`의 `QUARTERS_2025`, `AdminDongService`의 `TREND_QUARTERS`, `frontend/src/api/adminDongApi.ts`·`hooks/useCandidateComparison.ts` 등의 2025 검사·추세 화면 확장 | 실제 지원 분기 기반 조회·그래프. 연도 경계의 전분기·전년 동분기·행 없음·혼합 버전 응답 검사. 기존 2025년·일반 업종·BIGINT·취소·결측 계약 회귀 |
+| 5 | `AdminDongService`의 `TREND_QUARTERS`, `frontend/src/api/adminDongApi.ts`·`hooks/useCandidateComparison.ts` 등의 2025 검사·추세 화면 확장 | 실제 지원 분기 기반 조회·그래프. 연도 경계의 전분기·전년 동분기·행 없음·혼합 버전 응답 검사. 기존 2025년·일반 업종·BIGINT·취소·결측 계약 회귀 |
 | 6 | API 자료의 Backend 조회·Frontend 통합, 이후 정기 수집 연결 | 격리 환경에서 수집 → 검증 → 공개 → 지도/상세/동일 분기 3후보 비교. 실패 시 이전 공개 자료 유지. nginx·일반 CI·CD는 별도 작업으로 연결 |
 
 1~3의 검증 결과와 미검증 범위는 아래에 기록합니다. 20244 전체 수집·다른 업종의 SEMAS 대조·증분 갱신은 이번 실행 범위에 포함하지 않았습니다. 실제 적재에는 별도의 격리 대상·변경 범위 확정이 필요하며 기존 CSV 경로와 데이터 패키지는 보존합니다.
@@ -596,7 +614,7 @@ cd etl
 .venv/bin/python -m app.api_refresh --env-file api.env --output /absolute/private/new-run --quarter 20262 --previous-run /absolute/private/old-stats-run --previous-run /absolute/private/old-sales-run --previous-run /absolute/private/old-stores-run --allow-seoul-http
 ```
 
-[job entry point](../../etl/app/api_refresh_job.py)는 private 전체 run 경로 목록과 output 부모를 받고 새 실행 디렉터리를 만듭니다. OS 파일 잠금으로 동시 실행을 거부하며 실패한 전체 작업을 자동 재실행하지 않습니다. [service 예시](../../docker/api-refresh/refresh-collect.service.example)·[timer 예시](../../docker/api-refresh/refresh-collect.timer.example)는 **설치·활성화하지 않은 수집 전용 초안**입니다. 월요일 04:30 한국 시간/최대 10분 지연·45분 상한은 제안값입니다. 영속 writer·배포 환경·주기/호출 한도·이전 run 목록 승계·실패 알림을 확정한 뒤 수집→검증→적재→공개를 연결해야 합니다. 현재 job은 `PREPARED_UNPUBLISHED`만 만들며 자동 DB 공개·새 분기 탐색·오래된 증거 정리를 수행하지 않습니다.
+과거 수집 전용 OS 잠금 CLI와 미설치 systemd 초안은 중복 경로여서 제거했습니다. 현재 예약 진입점은 `api_worker.schedule`이며 수집→검증→적재→공개·실패 차단·이전 run 승계를 수행합니다. 독립 수집·대조 CLI는 유지합니다.
 
 최초 격리 실행은 initdb 임시 Unix 서버를 준비 완료로 오인해 migration 전에 중단됐습니다. 원인을 검토해 최종 TCP 서버 준비를 확인하도록 바꾸고 새 실행 ID에서 통과했습니다. 중단된 자원·private 증거는 보존했으며 실패한 target을 자동 재실행하거나 기존 환경을 복구/초기화하지 않았습니다.
 
@@ -610,7 +628,7 @@ cd etl
 
 | 대상 | 이번 결정 | 실제 전환 때 필요한 작업 |
 | --- | --- | --- |
-| `docker-compose.yml`, `docker/team-dev/`, team DB/control/cache 볼륨 | 현행 고정 데이터 환경 보존 | 새 API용 project·영속 volume·역할·identity/READY 계약을 별도 준비. 기존 볼륨 채택/재생성 금지 |
+| `docker-compose.legacy.yml`, `docker/team-dev/`, team DB/control/cache 볼륨 | 고정 데이터 환경 보존 | root Compose는 별도 `recycleyoungs-dev`를 준비. 기존 볼륨 채택/재생성 금지 |
 | `data-init`·`etl-init`·`team_dataset`·`team_db`·고정 fingerprint | 현재 재현/보존 경로 유지 | API 갱신으로 fingerprint를 다시 찍어 기존 guard를 통과시키지 않음. 초기 공간 자료와 API 통계/점포 갱신 책임 분리 |
 | V1~V3·선택적 V4·Backend reader | 기존 기본값 legacy 유지 | 승인된 영속 대상에 migration·권한·공개 검증 후 전용 API reader profile/실행 경로로 전환 |
 | `Makefile`의 `db`·`etl`·`backend`, `bootRun` | 기존 팀 실행 의미 유지 | API 초기 준비·수집·검증·stage·publish·status를 구분하는 명령 추가. 기존 명령을 다른 대상으로 조용히 변경하지 않음 |
@@ -651,7 +669,31 @@ registry 등록 → RUNNING candidate 기록 → 실제 current/점포월 검사
 
 **일반 회귀:** Backend `./gradlew test --offline --rerun-tasks` 276개 PASS·실패/SKIP 0, Frontend `npm run test` 337개 PASS, `make check-frontend` build/lint PASS, `make check-etl` 437개 중 422개 PASS·기존 DB/raw 조건 15개 SKIP입니다. 일반 검사에는 DB/raw opt-in이나 실제 API 키를 전달하지 않았습니다. 대상 거부·reader identity·분기 탐색·주간 시각·실패 차단·deadline·constraint literal 보존을 회귀에 추가했습니다. 독립 읽기 전용 코드 리뷰에서 Critical/Important 결함은 없었으며 과거 분기 재수집 범위와 DB-only 복구 경계를 문서에 명시했습니다.
 
-**남은 실행 범위:** 로컬에 검증한 세 이미지가 있어야 preflight가 통과합니다. 현재 controller는 이미지를 pull/build하지 않으며 새 PC·서버용 이미지 빌드/배포는 미구현입니다. nginx/HTTPS·일반 CI/CD·EC2·Kakao 배포 도메인·외부 알림·전체 worker 복구·용량/보존·과거 분기 정정 정책은 후속 작업입니다. 기존 팀 볼륨·고정 데이터 Releases·CSV 경로의 삭제/퇴역은 실행하지 않았습니다.
+위 기록은 manifest 없는 기존 영속 환경의 검증입니다. 후속 승인으로 새 PC·서버의 소스 빌드 경로를 추가했으며 아래 절이 신규 준비 기준입니다. nginx/HTTPS·일반 CI/CD·EC2·Kakao 배포 도메인·외부 알림·전체 worker 복구·용량/보존·과거 분기 정정 정책은 후속 작업입니다. 기존 팀 볼륨·고정 데이터 Releases·CSV 경로의 삭제/퇴역은 실행하지 않았습니다.
+
+### 소스 이미지 빌드와 신규 환경 준비
+
+2026-10-22 승인 범위는 기존 로컬 이미지 의존성을 해소하는 빌드·실행 구성입니다. [api_images](../../etl/api_images.py)는 Python 표준 라이브러리·Docker/Buildx로 `make api-images`를 제공하며 DB·원천 API·실제 서버 인증키를 읽지 않습니다. [Dockerfile](../../docker/api/Dockerfile)은 digest가 고정된 Python 3.12·Temurin Java21 JDK/JRE·Node24를 사용합니다. worker는 requirements, Frontend는 package-lock으로 의존성을 설치하며 Backend는 저장소 Gradle wrapper로 bootJar를 만듭니다. 호스트 venv·node_modules·jar/dist·기존 custom worker를 빌드 입력으로 사용하지 않습니다. PostGIS/Flyway는 고정 공개 digest를 pull합니다.
+
+**범위와 재현 의미:** Linux amd64 단일 대상입니다. ARM 호스트는 emulation이 필요하며 ARM 서버 native 지원은 검증하지 않았습니다. Docker image inspect의 platform 선택에는 [API1.49+](https://docs.docker.com/reference/cli/docker/image/inspect/), override에는 Compose2.24.4+가 필요합니다. 동일 소스에서 준비 절차를 재현하는 것이며 registry·Maven·npm·PyPI 접근이 필요합니다. transitive Python/Java 의존성까지 완전히 봉인하거나 장비 간 byte-identical 결과를 보장하는 빌드는 아닙니다. CI 이미지 registry·다른 장비로의 image save/load 배포는 다음 단계입니다.
+
+**빌드 입력·출력:** 소스 허용 목록을 Python tar로 구성해 stdin으로 BuildKit에 보냅니다. 기존 root Docker ignore 계약은 변경하지 않습니다. API 키·`.env`·Git metadata·private home·raw·백업·로컬 빌드 결과는 포함하지 않습니다. 각 실행은 새 `.codex-local/tmp/api-build-<UTC>-<nonce>/`에 0600 `context.tar`·build.log·images.json을 만듭니다. 실패·성공 결과를 덮어쓰거나 자동 삭제하지 않습니다. source hash는 파일명/길이/bytes에 결속하며 심볼릭 링크·중간 소스 변경을 거부합니다. 결과 manifest는5역할의 불변 image ID·source hash·CPU platform·선택적 공개 지도 설정 hash를 기록합니다.
+
+Docker의 OCI index handle과 `inspect --platform`의 config ID가 서로 다를 수 있습니다. 실제 참조 가능한 불변 handle을 manifest에 보존하고, 별도 platform inspect로 Linux/amd64와 source/role label을 검사합니다. upstream RepoDigest도 정확히 대조합니다. 이 구별을 회귀에 포함했으며 이름만 같은 mutable tag는 runtime manifest로 허용하지 않습니다.
+
+**Frontend 공개 설정:** `VITE_KAKAO_MAP_APP_KEY`를 빌드 프로세스 환경에서 명시하면 BuildKit secret으로 전달합니다. 키 원문을 build arg/history/manifest에 넣지 않으며 최종 브라우저 JS에는 공개 JavaScript 키가 포함됩니다. [secret은 cache key에 포함되지 않으므로](https://docs.docker.com/build/cache/invalidation/#build-secrets) 공개 설정 SHA를 별도 non-secret build arg로 전달해 변경 때 재빌드합니다. 키 미설정도 빌드 가능하지만 실제 지도 인증 성공으로 해석하지 않습니다. 최종 frontend는 scratch image의 `/site` 정적 산출물이며 HTTP 서버는 없고 다음 nginx 작업에서 제공합니다.
+
+**신규 초기 준비:** `api_dev init --images /absolute/images.json ...`는 현재 소스 hash·실제 로컬 이미지·역할/플랫폼을 먼저 검사합니다. manifest가 없으면 home 생성·Docker/DB 작업 전에 `BUILD_IMAGES_FIRST`로 거부합니다. 새 private home에 manifest를0600으로 복사하고 target에 그 hash를 저장합니다. 기존 home에 manifest를 끼워 넣는 임의 채택과 이후 파일 변경은 거부합니다. 다른 장비에서는 그 장비에서 빌드하고 새 identity로 초기 준비해야 하며 기존 target/volume을 복사·채택하는 지름길이 아닙니다.
+
+**실행·secret:** 신규 home만 [image override](../../docker-compose.api.images.yml)를 적용해 코드·jar bind mount를 완전히 교체합니다. Backend는 완성 image, worker/bootstrap은 image 내부 코드·runtime SQL, backup snapshot 양쪽도 같은 image를 사용합니다. 데이터·target·역할별 비밀번호·API key만 지정한 경로로 mount합니다. API 키와 reader/writer/owner 파일은600, control은700이며 현재 UID/GID로 reader/worker를 실행합니다. DB는 `/run/secrets/owner-password` read-only 파일과 `POSTGRES_PASSWORD_FILE`을 쓰고 Compose env에서 실제 비밀번호를 제거합니다. DB guard는 기존 owned volume1개에 이 정확한 readonly secret bind1개만 허용하며 다른 mount·쓰기 가능한 secret은 거부합니다. `compose.env`는 새 환경에서 경로·owner nonce·UID/GID만 담고 실제 password는 담지 않습니다.
+
+manifest 없는 기존 home은 원래 Compose·이미지·호스트 jar 경로를 유지합니다. `api-up`의 호스트 Gradle build는 이 경우에만 수행합니다. 이번 작업에서 기존 home·DB·컨테이너·키를 열거나 변경하지 않으며 SQL·Flyway 경로도 바꾸지 않습니다. 실제 새 DB의 init/migration/전체 API 준비와 실제 새 장비·EC2 가동 검증은 빌드·config·명령 smoke와 구분합니다.
+
+**10/22 실행 검증:** 호스트 jar·node_modules·venv가 없는 허용 목록 context에서 worker·Backend·Frontend 세 이미지를 실제 빌드하고 manifest 생성·실제 이미지 검증을 통과했습니다. 첫 Frontend 빌드에서 외곽선 JSON 입력 누락을 재현해 회귀 RED→GREEN으로 고쳤습니다. 다음에는 OCI index와 config ID 혼동을 재현해 참조 가능한 handle과 platform 검사를 분리했습니다. 실패한 context/log도 보존합니다.
+
+network none·read-only 일회용 컨테이너로 worker 전체 의존성 import·Java21·Flyway12.4 실행을 확인했습니다. 더미600 password 파일을 PostGIS entrypoint의 env 설정 함수에만 전달하고 root→gosu postgres 환경 승계를 확인했으며 DB 서버·SQL은 시작하지 않았습니다. 새 컨테이너의 inspect.Image와 manifest DB handle 일치도 bash exit만 실행해 확인했습니다. Frontend image layer는 `/site/index.html`·JS·CSS3파일이며 env/키 파일은 없습니다. tools profile을 포함한 새/legacy Compose config에서 source/jar mount 제거·DB secret 파일·내부 network·DB host port 부재를 확인했습니다. 기존 실제 자원은 조회/변경하지 않았습니다.
+
+일반 회귀는 ETL446개 중431PASS·기존 DB/raw15SKIP, Frontend337PASS·build/lintPASS입니다. Backend `./gradlew test --offline`는276개 결과가 UP-TO-DATE이고 새 source image 안의 bootJar 빌드도 통과했습니다. 독립 읽기 전용 리뷰에서 Critical/Important 결함은 없었습니다. 실제 신규 DB init/migration은 미실행이며 이 결과를 새 서버 전체 가동 성공으로 표시하지 않습니다.
 
 ## DB schema와 Flyway
 
@@ -844,9 +886,7 @@ V1은 분기 형식·지표 비음수·비율·좌표 범위를 모두 DB CHECK�
 
 ### 입력과 검사 순서
 
-독립 [CSV CLI](../../etl/app/main.py)는 상권 목록·행정동 점포·행정동/상권 매출·개별 점포의 5개 작업을 지원합니다. 팀 Compose는 이 중 행정동 통계 2종과 개별 점포를 사용합니다.
-
-`--only`로 선택한 입력을 모두 검사한 뒤 적재합니다. `--validate-only`는 DB 연결 없이 끝납니다.
+독립 CSV `app.main`·전용 Dockerfile·상권 대표점 loader는 활성 caller가 없어 제거했습니다. 기존 팀·격리 검증이 사용하는 행정동 통계·개별 점포 loader와 CSV 비교/공간 검증 코드는 유지합니다. 새 기본 Compose는 API 자료와 Polygon 경계만 적재합니다.
 
 [preflight](../../etl/app/preflight.py)는 다음을 검사합니다.
 
@@ -860,17 +900,16 @@ V1은 분기 형식·지표 비음수·비율·좌표 범위를 모두 DB CHECK�
 
 점포 경위도는 유한값·전 지구 범위를 검사합니다. 두 축이 있어야 POINT를 만들며, 한 축만 있으면 원본 scalar를 보존하고 POINT는 NULL입니다.
 
-상권 대표 X/Y의 승인 좌표계는 `AREA_SOURCE_CRS=EPSG:5181`입니다. pyproj의 `always_xy`와 변환 오류 검사를 사용합니다. CSV 구현은 다른 유효 CRS도 해석할 수 있으나 승인 정책과 구분해야 합니다.
+상권의 대표점·Polygon은 현재 공간 처리 profile과 공개 경계 계약을 따릅니다. 퇴역한 독립 CSV 대표점 loader의 CRS 설정을 실행 지침으로 사용하지 않습니다.
 
 ### 적재와 재실행의 의미
 
 | 작업 | 쓰기 범위 |
 | --- | --- |
-| 상권 목록 | 원본 X/Y 보존 후 4326 변환, TRUNCATE·ID 재시작 |
 | 통계·매출 | 해당 2025 분기 삭제 후 복합 키 기준 upsert |
 | 개별 점포 | 매핑 검사 후 TRUNCATE·ID 재시작·청크 COPY |
 
-선택한 모든 작업은 하나의 트랜잭션에 참여합니다. COPY 청크가 트랜잭션을 나누지는 않습니다. 점포 매핑 오류는 TRUNCATE 전에 거부합니다.
+기존 팀 runner가 선택한 CSV 작업은 하나의 트랜잭션에 참여합니다. COPY 청크가 트랜잭션을 나누지는 않습니다. 점포 매핑 오류는 TRUNCATE 전에 거부합니다.
 
 실패한 행 변경은 rollback 대상이지만 sequence 보존은 별도 검사합니다. 값이 같다는 사실과 ID·sequence가 같다는 사실도 구분합니다.
 

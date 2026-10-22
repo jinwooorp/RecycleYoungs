@@ -16,7 +16,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': demoApiProxy ?? 'http://localhost:8080',
+      '/api': demoApiProxy ?? (process.env.RECYCLEYOUNGS_LOCAL_CONTAINER === '1' ? 'http://api-backend:8080' : 'http://localhost:8080'),
     },
   },
 })

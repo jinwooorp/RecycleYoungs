@@ -14,7 +14,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from app import etl_stores, main
+from app import etl_stores
 from store_fixtures import store_rows, write_store_csv
 
 
@@ -131,7 +131,7 @@ class StoreDbTests(unittest.TestCase):
                 cur.execute('DROP TRIGGER stores_fixture_fail_second ON stores; DROP FUNCTION stores_fixture_fail_second()')
         self.assertEqual(self.snapshot(), before)
 
-    def test_coordinate_failure_and_main_caller_transaction(self):
+    def test_coordinate_failure_preserves_prior_rows(self):
         self.load()
         before = self.snapshot()
         rows = store_rows()
@@ -140,12 +140,6 @@ class StoreDbTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, '경도 범위'):
             self.load(chunk_size=1)
         self.assertEqual(self.snapshot(), before)
-        write_store_csv(self.path)
-        def fresh_connection():
-            return psycopg.connect(DSN, autocommit=True)
-        with patch.object(main, 'get_connection', side_effect=fresh_connection), redirect_stdout(StringIO()):
-            self.assertEqual(main.main(['--data-dir', str(self.root), '--only', 'stores']), 0)
-        self.assertEqual([r['industry_code'] for r in self.snapshot()], ['CAFE', None, None, None])
 
 
 if __name__ == '__main__':

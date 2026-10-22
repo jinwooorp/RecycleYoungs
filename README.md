@@ -96,7 +96,7 @@ Frontend는 API 호출, 요청 상태, 화면 표시를 나눠 관리하고 API�
 
 docker compose + AWS EC2 예정, nginx + CI/CD 고려중
 
-새 `docker-compose.api.yml`은 영속 API DB·Backend·예약 worker를 실행하고 Frontend는 호스트에서 실행합니다. 기존 `docker-compose.yml`은 고정 자료 팀 환경으로 보존합니다. 현재 API 구성은 준비된 로컬 이미지에서 검증했으며, 새 PC·서버용 이미지 빌드/배포와 nginx·일반 CI/CD는 후속 과제입니다.
+기본 `docker-compose.yml`은 개발용 Vite·Backend·API 자료·DB·예약 worker를 준비합니다. 배포용 Frontend 정적 산출물도 소스로 빌드할 수 있으며 nginx·일반 CI/CD·EC2 배포는 다음 단계입니다. 기존 별도 API 구성은 `docker-compose.api.yml`, 고정 자료 팀 구성은 `docker-compose.legacy.yml`에 보존합니다.
 
 ## 데이터와 ETL
 
@@ -147,8 +147,10 @@ RecycleYoungs/
 ├── etl/                # Python 데이터 검사·변환·적재
 ├── data/               # 데이터 목록·공개 데이터 계약
 ├── docker/             # 개발 환경과 데이터 준비 자동화
-├── docker-compose.yml  # 개발 DB·데이터 준비 서비스 구성
+├── docker-compose.yml  # API 데이터·DB·Backend·Frontend 자동 준비
+├── docker-compose.legacy.yml  # 고정 CSV 팀 환경 보존
 ├── docker-compose.api.yml  # 별도 영속 API DB·Backend·예약 worker
+├── docker-compose.api.images.yml  # 새 환경의 소스 빌드 이미지·파일 secret 구성
 └── docs/               # 사람이 읽을 문서
     ├── README.md       # 문서 안내·작성 예정 범위
     ├── images/         # 실제 서비스 화면 미리보기
@@ -159,81 +161,61 @@ DB 스키마의 기준은 [Flyway SQL](backend/src/main/resources/db/migration/)
 
 ## 실행 방법
 
-Java 21, Node.js 24/npm, Python 3.12, Docker Engine 또는 Docker Desktop과 Compose v2를 사용합니다. 아래는 **준비된 현재 로컬 API 환경의 기본 실행 경로**입니다. DB·Backend·예약 worker는 Docker에서, Frontend는 호스트에서 실행합니다.
+Docker Engine/Desktop(API 1.49 이상)·Buildx·Compose 2.24.4 이상을 준비합니다. PostGIS는 Linux amd64로 고정하므로 ARM Mac은 amd64 실행 지원이 필요합니다. Java·Node·Python 의존성과 앱은 컨테이너에서 빌드합니다.
 
-### 1. API 환경 확인·최초 준비
+### 최초 설정
 
-이미 준비한 환경은 아래 상태 확인부터 시작합니다. DB에 읽기 전용으로 접속하며 키 값은 출력하지 않습니다.
-
-```sh
-make api-status
-```
-
-처음 준비할 때만 Python 환경과 `etl/api.env`의 서울 일반 인증키·공공데이터포털 Decoding 키를 설정합니다. 빈 양식은 `etl/api.env.example`이며 실제 키 파일은 Git·Docker build에서 제외됩니다. 기존 키 파일을 덮어쓰지 않습니다.
+`etl/api.env`가 없을 때만 빈 양식을 복사합니다. 기존 파일의 키는 유지합니다.
 
 ```sh
-python3 -m venv etl/.venv
-etl/.venv/bin/pip install -r etl/requirements.txt
-(cd etl && .venv/bin/python -m app.collect_main check-config --env-file api.env)
+test -e etl/api.env || cp etl/api.env.example etl/api.env
+chmod 600 etl/api.env
 ```
 
-최초 준비 명령은 새 DB·영속 볼륨·역할을 만들고 API 자료·경계를 적재합니다. 동일 이름의 기존 자원이나 불완전한 이전 준비가 있으면 자동 채택·재실행하지 않습니다. **현재 코드는 검증한 PostGIS·Python worker·Java 이미지 ID가 로컬에 있어야 실행됩니다.** 새 PC에서의 이미지 준비와 배포용 빌드 경로는 아직 갖추지 않았습니다.
+`SEOUL_OPENAPI_KEY`에 서울 일반 인증키, `SEMAS_SERVICE_KEY`에 공공데이터포털 **Decoding** 키를 입력합니다. 이 파일은 Git·이미지에서 제외됩니다.
 
-다음은 확인한 여섯 분기의 최초 수집 예시입니다. 서울 HTTP 사용을 허용한 설정은 이후 갱신에도 저장됩니다. HTTP에서는 인증키가 암호화되지 않은 URL로 전송되므로 이 옵션은 사용 여부를 결정한 환경에서만 지정합니다. SEMAS는 HTTPS를 사용합니다.
+지도는 `frontend/.env.local.example`을 `frontend/.env.local`로 복사하고 `VITE_KAKAO_MAP_APP_KEY`를 설정합니다. 기존 파일은 덮어쓰지 않습니다. Kakao Developers에 `http://localhost:5173` 웹 도메인을 등록합니다. 지도 키가 없어도 앱·API는 시작하지만 지도는 표시되지 않습니다.
+
+### 시작
 
 ```sh
-make api-init API_INIT_ARGS='--quarter 20251 --quarter 20252 --quarter 20253 --quarter 20254 --quarter 20261 --quarter 20262 --allow-seoul-http'
+docker compose up -d
 ```
 
-제어 기록·비밀번호·수집 원본·경계·백업은 프로젝트 밖 `$HOME/.config/recycleyoungs/api-dev`에 보관합니다. DB 포트는 호스트에 노출하지 않습니다. 기존 팀 환경과 이름·볼륨·접속 계정을 분리하며 대상 identity가 다르면 중단합니다.
+이미지 빌드 → 사전 검사 → 새 DB 준비 → identity 확인 → migration → API 최초 수집·경계 적재 → Backend·Frontend → 주간 worker가 자동으로 연결됩니다. 최초 실행은 외부 이미지·패키지·공식 API를 받아 시간이 걸립니다. 완료 후 [http://localhost:5173](http://localhost:5173), API 문서는 [http://localhost:5173/api/docs](http://localhost:5173/api/docs)입니다. Frontend `src` 변경은 바로 반영되고, Backend·의존성·설정 변경은 같은 명령으로 재빌드합니다.
 
-### 2. Backend·예약 worker 실행
+현재 수집 가능한 완료 분기를 2025년 1분기부터 순서대로 확인합니다. 서울 점포·매출은 프로젝트에서 선택한 공식 **HTTP** 주소를 사용하므로 키가 암호화되지 않은 요청 URL에 포함됩니다. SEMAS는 HTTPS입니다. HTTP를 허용하지 않을 때는 시작 전에 `DEV_ALLOW_SEOUL_HTTP=false`를 명시합니다. HTTPS 실패를 HTTP로 자동 우회하지 않습니다.
+
+새 기본 환경의 project는 `recycleyoungs-dev`이며 DB·원본·제어 기록·역할별 secret을 전용 Docker 볼륨에 보존합니다. DB 포트는 호스트에 공개하지 않습니다. 기존 `recycleyoungs-api-dev`·팀 환경을 채택하거나 바꾸지 않습니다. 재실행은 기존 공개 자료를 검증하며 migration·최초 수집을 반복하지 않습니다.
+
+### 상태·갱신·실패 확인
 
 ```sh
-make api-up
-make api-status
+docker compose ps -a
+make dev-status
 ```
 
-Backend jar를 빌드한 뒤 별도 API Compose 서비스를 시작합니다. API 문서는 [http://127.0.0.1:18090/api/docs](http://127.0.0.1:18090/api/docs)입니다. `IDLE`·`SUCCEEDED`는 다음 예약 실행이 가능한 상태입니다. `FAILED`·`RUNNING`이면 아래 복구 안내를 먼저 확인합니다.
-
-### 3. Frontend 실행
-
-의존성과 Kakao JavaScript 키를 준비합니다. 설정 파일이 없을 때만 예시를 복사합니다.
-
-```sh
-npm --prefix frontend ci
-test -e frontend/.env.local || cp frontend/.env.local.example frontend/.env.local
-```
-
-`frontend/.env.local`의 `VITE_KAKAO_MAP_APP_KEY`에 본인의 Kakao JavaScript 키를 입력합니다. Kakao Developers에 웹 도메인 `http://localhost:5173`을 등록한 뒤 실행합니다.
-
-```sh
-make frontend-api
-```
-
-서비스는 [http://localhost:5173](http://localhost:5173)입니다. `frontend-api`는 `/api` 요청을 새 Backend의 `18090` 포트로 전달합니다.
-
-### 갱신·상태·복구
-
-Compose worker는 매주 월요일 04:30 한국 시간에 최신 지원 분기와 서울 카페를 수집합니다. 완료된 신규 분기를 순서대로 탐색해 점포·매출 양쪽에서 제공될 때 추가하며, 이전 분기 자료는 보존합니다. 탐색 간격이 4분기를 넘으면 자동 진행하지 않습니다. 한 작업은 최대 45분이며 동시 실행을 잠금으로 차단합니다. PC·Docker가 실행 중이어야 예약 작업이 동작합니다.
+`preflight`, `identity`, `migrate`, `initialize`의 `Exited (0)`는 정상 종료입니다. Backend·Frontend·DB는 healthy, scheduler·inspect-proxy는 실행 상태여야 합니다. `dev-status`는 실제 DB를 읽기 전용 조회합니다.
 
 | 명령 | 영향 |
 | --- | --- |
-| `make api-status` | 현재 공개 버전·작업 상태·다음 실행·오류 코드를 읽기 전용 조회 |
-| `make api-refresh` | 준비된 상태에서 즉시 실제 수집·검증·적재·공개 |
-| `make api-reconcile` | 실패 원인을 확인한 뒤 실제 공개 버전과 원본 목록을 재검증하고 다음 예약 허용. 자료 재공개는 하지 않음 |
-| `make api-backup` | snapshot에 결속한 DB 백업, 새 독립 DB 복원과 전수 대조. 백업·검증 자원 보존 |
-| `make api-restart-check` | 새 API DB를 실제 재시작하고 identity·공개 버전의 지속성을 확인 |
+| `make dev-refresh` | 실제 API 수집·검증·적재 후 새 버전 공개 |
+| `make dev-reconcile` | 실패 원인 확인 후 현재 공개 자료·원본을 검증하고 다음 예약 허용 |
+| `docker compose stop` | 이 기본 개발 환경 중지, 볼륨 보존 |
+| `docker compose logs --tail=30 preflight identity migrate initialize api-scheduler` | 준비·작업 상태 확인 |
 
-실패하거나 중단돼 `RUNNING`이 남으면 자동 재수집하지 않습니다. 기존 공개 자료를 유지하고 상태·worker 로그로 원인을 확인한 뒤 명시적으로 정합성을 확인합니다. 외부 이메일·메신저 알림은 연결하지 않았습니다. `api-backup`은 DB 복원을 검증하며, registry가 참조하는 수집 원본 파일·제어 기록·secret의 별도 보존까지 대신하지 않습니다. 다른 장비에서 전체 worker를 복구하는 절차는 후속 과제입니다.
+worker는 Docker가 실행 중일 때 매주 월요일 04:30 한국 시간에 최신 지원 분기와 카페를 갱신합니다. 이전 분기를 보존하고 동시 실행을 차단합니다. 갱신 실패는 기존 공개 버전을 유지하며 자동 재수집하지 않습니다. 초기화 중단·identity/스키마 불일치도 자동 복구하지 않으므로 로그를 확인합니다. 볼륨 삭제·`down -v`·secret/제어 파일 수동 수정은 복구 절차가 아닙니다. API 키 교체와 schema 변경 시 기존 환경의 전환 절차는 별도 검토합니다.
 
-### 기존 고정 자료 팀 환경
+### 보존한 별도 실행 경로
 
-`docker-compose.yml`, `make db`·`make etl`·`make backend`·`make frontend`는 기존 의미를 유지합니다. 새 API 실행 명령과 섞어 쓰지 않습니다. 기존 팀 환경·볼륨과 GitHub `real-data-v2`는 보존하며 `docker compose down -v`는 일반 실행 절차에 포함하지 않습니다.
+- `docker-compose.api.yml`·`make api-*`: 기존 별도 영속 API 환경. 소스 이미지 manifest·private home 기반의 상세 절차는 [기술 명세](docs/agents/technical.md#소스-이미지-빌드와-신규-환경-준비)에 보존합니다. 기본 `dev-*`와 대상을 섞지 않습니다.
+- `docker-compose.legacy.yml`·`make db`·`make etl`·`make backend`·`make frontend`: 고정 `real-data-v2` 팀 자료 재현용입니다. Compose를 직접 실행할 때는 `-f docker-compose.legacy.yml`을 지정합니다. 기존 DB·볼륨·GitHub Releases를 유지합니다.
 
 ## 검증과 현재 범위
 
 Backend·Frontend·ETL의 회귀 테스트를 갖추고 있습니다. 2026-10-21 새 영속 API 환경에서 실자료 적재·예약 갱신·실패와 중단 차단·DB 재시작을 확인했습니다. 갱신 후 DB를 독립 복원해 19개 테이블·680,601행의 값·geometry·이력·권한·sequence를 대조했습니다. 실제 HTTP와 테스트 지도 SDK로 여섯 분기·3후보·모바일 화면도 확인했습니다. 실제 Kakao 인증·타일과 운영 서버 검증은 별도로 남아 있습니다.
+
+2026-10-22에는 소스 이미지 빌드와 새 기본 Compose의 실제 DB 초기화·API 수집·여섯 분기 HTTP 조회를 확인했습니다. 같은 명령의 재실행은 migration·최초 수집을 생략했고 새 DB 재시작 뒤에도 identity·공개 버전을 유지했습니다. 별도 PC·EC2의 전체 가동과 운영 배포는 아직 확인하지 않았습니다.
 
 현재 구현은 서울·카페 중심의 탐색·검토·비교 MVP입니다. 미지원 기능과 개선 방향은 [프로젝트 한계 · 개선할 점](#프로젝트-한계--개선할-점)에 정리했습니다. 종합 입지점수와 운영 배포·자동 배포는 아직 제공하지 않습니다.
 

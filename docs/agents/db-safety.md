@@ -4,7 +4,7 @@
 
 DB에 접속하거나 데이터를 바꾸기 전에 확인할 조건을 정리합니다. 정상 개발 실행은 [README](../../README.md#실행-방법), 구현 구조는 [기술 명세](technical.md)를 참고합니다.
 
-문서 정리 기준일은 **2026-10-21**입니다. 기존 보호·승인 조건을 유지하며 후속 사용자 승인으로 새 영속 API 환경의 실제 준비·갱신·재시작·백업/독립 복원을 검증했습니다. 기존 팀·퇴역 DB는 이번 대상이 아닙니다. 아래의 실행 기록을 다른 대상의 현재 상태나 향후 실행 승인으로 사용하지 않습니다.
+문서 정리 기준일은 **2026-10-22**입니다. 기존 보호·승인 조건을 유지하며 후속 사용자 승인으로 새 영속 API 환경의 실제 준비·갱신·재시작·백업/독립 복원을 검증했습니다. 기존 팀·퇴역 DB는 이번 대상이 아닙니다. 아래의 실행 기록을 다른 대상의 현재 상태나 향후 실행 승인으로 사용하지 않습니다.
 
 ## 목차
 
@@ -35,6 +35,14 @@ DB에 접속하거나 데이터를 바꾸기 전에 확인할 조건을 정리�
 
 API release/refresh/job의 수집 준비 CLI는 DB에 연결하지 않습니다. 격리 전용 `api_isolation`·`api_integration` 검증 이후, 후속 사용자 승인으로 별도 영속 `api_dev`·`api_worker`·Backend `api-dev` profile을 연결했습니다. 이 새 경로는 실제 DB 접속·적재·공개를 수행합니다. 선택적 V4는 `backend/src/main/resources/db/api-migration/`, runtime SQL은 별도 `db/api-runtime/`이며 기존 기본 Flyway·팀 reader는 유지합니다. 격리 성공·READY·callback이 다른 대상의 승인이나 고정 패키지 guard 우회를 뜻하지 않습니다.
 
+### 새 기본 API 개발 환경
+
+2026-10-22 사용자 승인 범위는 새 `recycleyoungs-dev`의 초기 준비·실제 API 수집/적재·재실행/재시작/실패 검증과 지정한 임시 검증 컨테이너7개·전용 네트워크 정리입니다. 기존 팀·별도 API 환경과 그 볼륨/백업/Releases 변경·삭제는 포함하지 않습니다. 지정한 tmpfs 검증 컨테이너7개·전용 네트워크6개는 사전검증 후 제거했고, 기존 원본/백업·모든 영속 볼륨과 보호 컨테이너 metadata는 보존했습니다. 완료 기록은 향후 실행 승인으로 사용하지 않습니다.
+
+`docker-compose.yml`이 project 전용 `-db`, `-control`, `-data`, `-reader`, `-writer` named volume과 data/inspect/access network를 만듭니다. DB는 내부 `api-postgres:5432/recycleyoungs_api_dev`, PGDATA `/var/lib/postgresql/data/api`이며 호스트 port는 없습니다. Backend·scheduler는 역할별 제어 볼륨만 받습니다. 이름이 같은 기존 자원을 채택하지 않고 label·생성 정보·schema SHA·full IDs·실제 SID/owner/역할을 검증합니다. READY 재실행은 조회만 하며 초기화 중단이나 schema/키 불일치는 자동 복구하지 않습니다. 상세는 [기술 명세](technical.md#개발-환경과-안전한-시작)를 따릅니다.
+
+`make dev-status`도 DB 조회이며, `dev-refresh`·`dev-reconcile`은 실제 쓰기입니다. 기본 Compose 재시작/재생성·볼륨 삭제·스키마/키 전환·전체 환경 복구는 실제 대상과 승인 범위를 먼저 확인합니다. 이 환경의 자동 준비가 기존 보호 DB나 다른 project의 변경 권한을 주지 않습니다.
+
 ### 현행 팀 개발 환경
 
 Compose가 관리하는 대상은 다음과 같습니다. 이름은 코드상 식별자이며 실제 자원의 존재·소유권은 작업 전에 확인합니다.
@@ -53,7 +61,7 @@ Compose가 관리하는 대상은 다음과 같습니다. 이름은 코드상 �
 
 ### 별도 영속 API 개발 환경
 
-2026-10-21 승인된 새 개발 대상입니다. README 권장 실행은 이 환경이며 기존 팀 DB와 별개입니다. 이름만 같다고 승인된 자원으로 간주하지 않고 기록한 daemon·full container/network ID·image·owner label·볼륨 생성 정보·mount·port·실제 SID를 대조합니다.
+2026-10-21 승인된 새 개발 대상입니다. 이 환경은 기존 별도 API 경로이며 아래 새 기본 환경·팀 DB와 별개입니다. 이름만 같다고 승인된 자원으로 간주하지 않고 기록한 daemon·full container/network ID·image·owner label·볼륨 생성 정보·mount·port·실제 SID를 대조합니다.
 
 | 대상 | 식별자·제한 |
 | --- | --- |
@@ -65,6 +73,8 @@ Compose가 관리하는 대상은 다음과 같습니다. 이름은 코드상 �
 | 원본·제어·백업 | 프로젝트 밖 사용자 private home, 디렉터리 0700·파일 0600. 실제 값·원본은 문서 조사로 열람/인덱싱하지 않음 |
 
 `make api-init`은 신규 생성·migration·DDL/DML/GRANT, `api-up`은 Backend build와 서비스 시작, `api-refresh`는 실제 수집/적재/공개, `api-reconcile`은 검증 후 작업 상태 변경, `api-backup`은 DB backup과 새 독립 restore 자원 생성, `api-restart-check`는 API DB restart를 수행합니다. `api-status`도 실제 readonly DB 접속이므로 문서 검증 명령으로 쓰지 않습니다. 일반 Compose 명령으로 identity guard를 우회하거나 실패한 init을 자동 반복하지 않습니다.
+
+2026-10-22 추가한 `make api-images`는 공개 소스 allowlist로 빌드·공식 이미지 pull만 수행하고 DB·API 키를 읽지 않습니다. 새 초기 준비는 검증한 image manifest를 요구하고 그 hash를 target에 결속합니다. 새 home은 image override로 host 코드/jar mount를 제거하며 DB 비밀번호도 read-only 파일로 전달합니다. DB mount 검사는 기존 owned volume1개와 정확한 owner-password bind1개만 허용합니다. manifest 없는 기존 home은 원래1volume·기존 image 계약을 유지하며 임의 전환하지 않습니다. 소스 이미지 성공·Compose config·DB 서버 없는 명령 smoke는 실제 신규 DB init/migration 승인·검증을 대신하지 않습니다.
 
 주간 worker의 실행은 승인된 새 대상에 한정합니다. FAILED·불확실한 RUNNING은 자동 재시도하지 않으며 실제 공개 버전과 registry를 확인한 명시적 reconciliation 이후 향후 예약을 허용합니다. source run registry는 공개 전에 불변 저장하며 수집 원본은 덮어쓰지 않습니다. 점포월 후퇴·기간 누락·공개 CAS 충돌을 거부합니다.
 
@@ -91,7 +101,7 @@ snapshot-bound DB 백업·독립 복원에서 전체 값/EWKB/ID/이력/catalog/
 | 기존 DB migration·ETL | 변경 범위 승인, 보존 기준, 최신 백업·독립 복원 |
 | 중지·재생성·복원·삭제 | 자원별 소유권과 명시적 승인 범위 |
 
-`docker compose up -d`, `make db`, `make etl`은 현재 같은 준비 경로입니다. 새 환경을 만들거나 기존 컨테이너를 시작·재생성할 수 있으므로 실제 영향을 먼저 읽습니다.
+`docker compose up -d`는 새 기본 API 환경입니다. `make db`, `make etl`은 `docker-compose.legacy.yml`의 기존 팀 준비 경로입니다. 새 환경을 만들거나 기존 컨테이너를 시작·재생성할 수 있으므로 실제 영향을 먼저 읽습니다.
 
 `make db-info`, `make check-db`는 현재 읽기 전용 팀 status입니다. SQL 조회가 포함되므로 문서 검증용 명령으로 사용하지 않습니다.
 

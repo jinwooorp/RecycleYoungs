@@ -79,12 +79,19 @@ def load_keys(path=None, *, environ=None):
             content = source.read(16385)
         if len(content) > 16384:
             raise CollectionError("CONFIG_TOO_LARGE")
-        for line in content.splitlines():
-            if not line.strip() or line.lstrip().startswith("#"):
-                continue
-            name, separator, value = line.partition("=")
-            name, value = name.strip(), value.strip()
-            if not separator or name not in KEY_NAMES or name in values:
-                raise CollectionError("INVALID_CONFIG_LINE")
-            values[name] = value
+        return parse_keys(content)
+    return {name: validate_key(name, values.get(name, "")) for name in KEY_NAMES}
+
+
+def parse_keys(content):
+    """Parse explicit configuration bytes without opening another credentials file."""
+    values = {}
+    for line in content.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        name, separator, value = line.partition("=")
+        name, value = name.strip(), value.strip()
+        if not separator or name not in KEY_NAMES or name in values:
+            raise CollectionError("INVALID_CONFIG_LINE")
+        values[name] = value
     return {name: validate_key(name, values.get(name, "")) for name in KEY_NAMES}

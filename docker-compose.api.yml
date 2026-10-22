@@ -46,7 +46,7 @@ services:
     environment:
       POSTGRES_DB: recycleyoungs_api_dev
       POSTGRES_USER: ry_api_owner
-      POSTGRES_PASSWORD: ${API_DB_PASSWORD:?}
+      POSTGRES_PASSWORD: ${API_DB_PASSWORD:-}
       PGDATA: /var/lib/postgresql/data/api
     networks: [data]
     volumes:

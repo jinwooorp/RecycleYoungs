@@ -115,7 +115,7 @@ class TeamComposeTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which('docker'), 'Docker CLI unavailable (parser is offline)')
     def test_source_yaml_parser_preserves_false_and_detects_removed_safety(self):
-        source = self.parse_source_yaml((ROOT / 'docker-compose.yml').read_text())
+        source = self.parse_source_yaml((ROOT / 'docker-compose.legacy.yml').read_text())
         self.assert_source_raw_mount(source)
         changed = copy.deepcopy(source)
         mount = next(m for m in changed['services']['data-init']['volumes']
@@ -169,7 +169,7 @@ class TeamComposeTests(unittest.TestCase):
                 ({'TEAM_DATA_VERSION': 'real-data-v1', 'TEAM_DATA_MODE': 'local'}, 'real-data-v1', 'local')]:
             with self.subTest(version=version):
                 result = subprocess.run(['docker', 'compose', '--env-file', os.devnull,
-                    '-f', str(ROOT / 'docker-compose.yml'), 'config', '--format', 'json'],
+                    '-f', str(ROOT / 'docker-compose.legacy.yml'), 'config', '--format', 'json'],
                     env=dict(base, **overrides), cwd=ROOT, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, 'Compose rendering failed')
                 config = json.loads(result.stdout)
@@ -212,7 +212,7 @@ class TeamComposeTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which('docker'), 'Docker CLI unavailable')
     def test_explicit_v2_reaches_all_runtime_gates_without_changing_db_resources(self):
         env = dict(os.environ, TEAM_DATA_VERSION='real-data-v2')
-        r = subprocess.run(['docker','compose','-f',str(ROOT/'docker-compose.yml'),'config','--format','json'],
+        r = subprocess.run(['docker','compose','-f',str(ROOT/'docker-compose.legacy.yml'),'config','--format','json'],
                            env=env,cwd=ROOT,capture_output=True,text=True)
         self.assertEqual(r.returncode,0)
         value=json.loads(r.stdout); services=value['services']
@@ -253,7 +253,7 @@ class TeamComposeTests(unittest.TestCase):
     def test_rendered_compose_ignores_legacy_connection_injection(self):
         env = dict(os.environ, DB_NAME='startup_analysis', DB_PORT='5432', DB_HOST='startup-analysis-postgres',
                    DB_USER='app', DB_PASSWORD='fixture-do-not-use')
-        r = subprocess.run(['docker', 'compose', '-f', str(ROOT / 'docker-compose.yml'), 'config', '--format', 'json'],
+        r = subprocess.run(['docker', 'compose', '-f', str(ROOT / 'docker-compose.legacy.yml'), 'config', '--format', 'json'],
                            env=env, capture_output=True, text=True, cwd=ROOT)
         self.assertEqual(r.returncode, 0, 'Compose config validation failed')
         value = json.loads(r.stdout); services = value['services']; db = services['team-postgres']
@@ -267,7 +267,7 @@ class TeamComposeTests(unittest.TestCase):
             self.assertNotIn(forbidden, r.stdout)
         self.assertEqual(set(value['volumes'][v]['name'] for v in value['volumes']), set(VOLUMES.values()))
         self.assertTrue(value['networks']['team']['internal'])
-        self.assert_source_raw_mount(self.parse_source_yaml((ROOT / 'docker-compose.yml').read_text()))
+        self.assert_source_raw_mount(self.parse_source_yaml((ROOT / 'docker-compose.legacy.yml').read_text()))
         self.assert_rendered_raw_mount(value)
         for service in services.values(): self.assertEqual(service['labels'][LABEL], OWNER)
         self.assertEqual(services['etl-init']['depends_on']['db-migrate']['condition'], 'service_completed_successfully')
@@ -291,7 +291,7 @@ class TeamComposeTests(unittest.TestCase):
     def test_legacy_project_override_cannot_select_legacy_postgres_service(self):
         with tempfile.TemporaryDirectory() as tmp:
             env_file = Path(tmp) / 'fixture.env'; env_file.write_text('COMPOSE_PROJECT_NAME=recycleyoungs\n')
-            r = subprocess.run(['docker', 'compose', '--env-file', str(env_file), '-f', str(ROOT / 'docker-compose.yml'),
+            r = subprocess.run(['docker', 'compose', '--env-file', str(env_file), '-f', str(ROOT / 'docker-compose.legacy.yml'),
                                 'config', '--format', 'json'], capture_output=True, text=True, cwd=ROOT)
             self.assertEqual(r.returncode, 0)
             services = json.loads(r.stdout)['services']
