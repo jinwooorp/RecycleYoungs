@@ -46,7 +46,7 @@ public class ChangeScoreService {
         var items = dongs.stream().map(d -> {
             var r = ChangeScore.evaluate(d.code(), currentRows, previousRows);
             return new Item(d, r.score() == null ? "UNAVAILABLE" : "AVAILABLE", r.score(), r.currentCount(), r.previousCount(), r.changeRate(), r.direction(),
-                previousSupported ? r.reason() : "PREVIOUS_QUARTER_UNAVAILABLE");
+                !previousSupported && "NO_ROW_PREVIOUS".equals(r.reason()) ? "PREVIOUS_QUARTER_UNAVAILABLE" : r.reason());
         }).toList();
         int size = ChangeScore.evaluate(codes.getFirst(), currentRows, previousRows).cohortSize();
         String canonical = ChangeScore.MODEL + ":" + quarter + ":" + previous + ":" + industry.sourceCode() + ":" + industry.id() + "\n"

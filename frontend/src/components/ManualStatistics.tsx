@@ -9,7 +9,7 @@ import { NativeSelect } from './ui/native-select'
 import { Field, FieldLabel } from './ui/field'
 import { PublicationInfo } from './PublicationInfo'
 
-export function ManualStatistics({ state, scores, review }: { state: ReturnType<typeof useLocationAnalysis>; scores?: ReactNode; review?: ReactNode }) {
+export function ManualStatistics({ state, scores, review, references }: { state: ReturnType<typeof useLocationAnalysis>; scores?: ReactNode; review?: ReactNode; references?: ReactNode }) {
   const { lookups, lookupLoading, lookupError, stats, statsLoading, statsError, trend, trendLoading, trendError } = state
   const noLookups = lookups && (!lookups.adminDongs.length || !lookups.industries.some(i => i.code === 'CAFE') || !lookups.quarters.length)
   const resolvedDong = state.location.result?.adminDong.resolvedDong
@@ -43,6 +43,7 @@ export function ManualStatistics({ state, scores, review }: { state: ReturnType<
     {review}
     {(stats || trend) && <PublicationInfo metadata={stats?.metadata ?? trend?.metadata} />}
     {scores}
+    {references}
     <div aria-live="polite" aria-atomic="true">
       {statsLoading && <p className="notice" role="status">통계를 조회하는 중입니다.</p>}
       {!statsLoading && stats && <span className="visually-hidden">선택 분기 통계 조회가 완료되었습니다.</span>}

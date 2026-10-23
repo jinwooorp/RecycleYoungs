@@ -2,6 +2,8 @@
 import importlib,importlib.util
 from pathlib import Path
 import tempfile,unittest
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 
 class LocalDevTests(unittest.TestCase):
@@ -26,6 +28,17 @@ class LocalDevTests(unittest.TestCase):
             (root/'ready.json').write_text('{}')
             self.assertEqual(m.startup_state(root),'READY')
 
+    def test_ready_initializer_skips_collection_with_all_external_operations_mocked(self):
+        m=self.module();status=Mock(return_value={'status':'READY'})
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);(root/'ready.json').write_text('{}')
+            with patch.object(m,'CONTROL',root),patch.object(m,'checked_context'), \
+                    patch.dict('sys.modules',{'api_worker':SimpleNamespace(status=status)}), \
+                    patch.object(m,'initial_periods',side_effect=AssertionError('must not probe')), \
+                    patch('app.api_config.load_keys',side_effect=AssertionError('must not read keys')):
+                self.assertEqual(m.initialize(),{'status':'READY','initialized':False})
+                status.assert_called_once_with()
+
     def test_identity_rejects_foreign_mount_or_exposed_db_port(self):
         m=self.module(); project='recycleyoungs-dev'
         db=dict(Id='a'*64,Name='/'+project+'-api-postgres-1',Image=m.DB_IMAGE,
@@ -41,13 +54,21 @@ class LocalDevTests(unittest.TestCase):
                         db|{'Mounts':[db['Mounts'][0]]},db|{'Mounts':[db['Mounts'][0],db['Mounts'][1]|{'RW':True}]}]:
             with self.assertRaises(ValueError):m.check_database(project,changed,network)
 
-    def test_initial_periods_are_bounded_and_stop_when_either_source_is_absent(self):
+    def test_initial_periods_start_in_2021_and_distinguish_partial_or_internal_gaps(self):
         m=self.module()
         from datetime import datetime,timezone
-        self.assertEqual(m.initial_periods(datetime(2026,10,22,tzinfo=timezone.utc),lambda s,q:q!='20263'),
-                         ['20251','20252','20253','20254','20261','20262'])
+        self.assertEqual(m.initial_periods(datetime(2026,10,22,tzinfo=timezone.utc),lambda s,q:q!='20263',start_year=2021),
+                         [f'{year}{q}' for year in range(2021,2027) for q in range(1,5) if f'{year}{q}'<='20262'])
         with self.assertRaisesRegex(ValueError,'INITIAL_SOURCE_UNAVAILABLE'):
             m.initial_periods(datetime(2026,10,22,tzinfo=timezone.utc),lambda s,q:False)
+        with self.assertRaisesRegex(ValueError,'INITIAL_SOURCE_PAIR_MISMATCH'):
+            m.initial_periods(datetime(2026,10,22,tzinfo=timezone.utc),lambda s,q:not(s=='sales' and q=='20222'),start_year=2021)
+        with self.assertRaisesRegex(ValueError,'INITIAL_SOURCE_PERIOD_GAP'):
+            m.initial_periods(datetime(2026,10,22,tzinfo=timezone.utc),lambda s,q:q!='20222',start_year=2021)
+        with self.assertRaisesRegex(ValueError,'INITIAL_PERIOD_RANGE_REJECTED'):
+            m.initial_periods(datetime(2040,10,22,tzinfo=timezone.utc),lambda s,q:True)
+        self.assertEqual(m.initial_periods(datetime(2026,10,22,tzinfo=timezone.utc),lambda s,q:q!='20263'),
+                         ['20251','20252','20253','20254','20261','20262'])
 
     def test_source_image_context_contains_all_new_runtime_inputs(self):
         import api_images

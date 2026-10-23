@@ -19,6 +19,25 @@ class RuntimeErrorCode(ValueError):pass
 def require(ok,code):
     if not ok:raise RuntimeErrorCode(code)
 
+def verify_fresh_migration(result,sql_hashes):
+    """Fresh-target proof only; never replaces an existing binding."""
+    from control import check_flyway_json
+    check_flyway_json(result,'migrate')
+    files={}
+    for name,sha in sql_hashes.items():
+        match=re.fullmatch(r'V([1-9][0-9]*)__.+\.sql',Path(name).name)
+        if match:
+            version=int(match[1])
+            require(version not in files and re.fullmatch('[0-9a-f]{64}',sha),'MIGRATION_SOURCE_BINDING_REJECTED')
+            files[version]=Path(name).name
+    require(len(files) in (4,5) and sorted(files)==list(range(1,len(files)+1)),'MIGRATION_SOURCE_BINDING_REJECTED')
+    migrated=result.get('migrations',[])
+    require(result.get('migrationsExecuted')==len(files) and len(migrated)==len(files)
+        and [m.get('version') for m in migrated]==[str(v) for v in sorted(files)]
+        and all(Path(m.get('filepath','')).name==files[v] for v,m in zip(sorted(files),migrated)),
+        'FRESH_MIGRATION_RECEIPT_REJECTED')
+    return dict(kind='FRESH_INITIALIZATION',versions=sorted(files),sql_sha256=sql_hashes)
+
 def private_read(path):
     path=Path(path)
     require(not any(p.is_symlink() for p in [path,*path.parents]),'PRIVATE_SYMLINK_REJECTED')

@@ -28,12 +28,28 @@ def locked(conn):
 
 def register(conn,t,release,paths):
     # Bind immutable paths to the exact validated release before exposing its pointer.
-    require(prepare_release(paths)['release_id']==release['release_id'],'ARTIFACT_RELEASE_MISMATCH')
+    registry=paths if release.get('contract_version')==2 else [str(p) for p in paths]
+    require(registered_release(registry)['release_id']==release['release_id'],'ARTIFACT_RELEASE_MISMATCH')
     with conn.transaction():
         verify_connection(conn,t,'api_writer')
         conn.execute('INSERT INTO api_runtime.artifacts(release_id,runs) VALUES (%s,%s) ON CONFLICT DO NOTHING',
-                     (release['release_id'],Jsonb([str(p) for p in paths])))
-        require(conn.execute('SELECT runs FROM api_runtime.artifacts WHERE release_id=%s',(release['release_id'],)).fetchone()==([str(p) for p in paths],),'ARTIFACT_REGISTRY_CONFLICT')
+                     (release['release_id'],Jsonb(registry)))
+        require(conn.execute('SELECT runs FROM api_runtime.artifacts WHERE release_id=%s',(release['release_id'],)).fetchone()==(registry,),'ARTIFACT_REGISTRY_CONFLICT')
+
+def context_artifact(bundle):
+    path=Path(bundle)
+    require(path.is_absolute() and '..' not in path.parts and path.is_relative_to(DATA)
+        and not any(p.is_symlink() for p in [path,*path.parents]),'ARTIFACT_PATH_REJECTED')
+    return [dict(contract_version=2,bundle=str(path))]
+
+def registered_release(registry):
+    if isinstance(registry,list) and len(registry)==1 and isinstance(registry[0],dict):
+        entry=registry[0]
+        require(set(entry)=={'contract_version','bundle'} and entry['contract_version']==2,'ARTIFACT_REGISTRY_INVALID')
+        context_artifact(entry['bundle'])
+        from app.api_context_release import read_release_bundle
+        return read_release_bundle(entry['bundle'])
+    return prepare_release(artifact_paths(registry))
 
 def artifact_paths(paths):
     require(isinstance(paths,list) and 3<=len(paths)<=81,'ARTIFACT_REGISTRY_INVALID')
@@ -62,6 +78,9 @@ def bootstrap():
             conn.execute('GRANT UPDATE(release_id) ON api_current_release TO api_writer')
             conn.execute('GRANT UPDATE ON api_runtime.state TO api_writer')
             conn.execute('GRANT USAGE,SELECT ON SEQUENCE api_store_stats_dong_id_seq,api_sales_dong_id_seq,api_stores_id_seq TO api_writer')
+            if conn.execute("SELECT to_regclass('public.api_context_runs') IS NOT NULL").fetchone()==(True,):
+                conn.execute('GRANT INSERT ON api_context_runs,api_context_rows,api_release_context_sources TO api_writer')
+                conn.execute('GRANT UPDATE(run_id) ON api_context_runs TO api_writer')
             conn.execute('INSERT INTO api_runtime.state(singleton,status,next_due) VALUES(true,\'IDLE\',%s)',(next_due(datetime.now(UTC)),))
         from team_public_data import public_specs
         from app.spatial_geometry import prepare_dataset
@@ -70,10 +89,14 @@ def bootstrap():
             folder=DATA/'boundaries'
             prepared=prepare_dataset(spec,folder/(kind+'.zip'),{role:folder/name for role,name in spec.report_artifacts.items()})
             verify_connection(conn,target,'ry_api_owner');publish(conn,prepared)
-    paths=artifact_paths(json.loads(private_read(DATA/'seed-runs.json')))
-    release=prepare_release(paths)
+    registry=json.loads(private_read(DATA/'seed-runs.json'))
+    release=registered_release(registry)
+    paths=registry if release.get('contract_version')==2 else artifact_paths(registry)
     with connect(CONTROL,'api_writer',False)[0] as writer:
-        stage_release(writer,release,verify_identity=lambda c:verify_connection(c,target,'api_writer'))
+        if release.get('contract_version')==2:
+            from app.api_context_release import stage_context_release
+            stage_context_release(writer,release,verify_identity=lambda c:verify_connection(c,target,'api_writer'))
+        else:stage_release(writer,release,verify_identity=lambda c:verify_connection(c,target,'api_writer'))
         register(writer,target,release,paths)
         publish_release(writer,release['release_id'],expected_current=None,verify_identity=lambda c:verify_connection(c,target,'api_writer'))
     return dict(status='READY',release_id=release['release_id'],rows=sum(len(r['records']) for r in release['runs']))
@@ -104,7 +127,7 @@ def refresh(*,force=False):
         now=datetime.now(UTC)
         if not force and now<state[1]:return dict(status='NOT_DUE',next_due=state[1].isoformat())
         require(state[4] is not None and state[6] is not None,'CURRENT_ARTIFACTS_MISSING')
-        previous=artifact_paths(state[6]);require(prepare_release(previous)['release_id']==state[4],'CURRENT_ARTIFACTS_CHANGED')
+        previous_release=registered_release(state[6]);require(previous_release['release_id']==state[4],'CURRENT_ARTIFACTS_CHANGED')
         update_state(conn,t,'RUNNING')
         try:
             keys=load_keys(CONTROL/'api.env');client=HttpClient()
@@ -113,10 +136,18 @@ def refresh(*,force=False):
             allow_http=transport['allow_seoul_http']
             periods=choose_periods(state[5],client,keys,now,allow_http)
             output=DATA/'runs'/('run-'+now.strftime('%Y%m%dT%H%M%SZ')+'-'+secrets.token_hex(4))
-            release=collect_refresh(output,periods,keys,previous_runs=previous,client=client,allow_seoul_http=allow_http)
-            retained=[p for p in previous if (r:=load_run(p))['source']!='semas-stores' and r['period'] not in periods]
-            paths=[*retained,*[output/(s+'-'+q) for q in periods for s in ('seoul-stores','seoul-sales')],output/'semas-stores']
-            stage_release(conn,release,verify_identity=lambda c:verify_connection(c,t,'api_writer'))
+            if previous_release.get('contract_version')==2:
+                from app.api_context_refresh import collect_context_refresh
+                from app.api_context_release import stage_context_release
+                release=collect_context_refresh(output,periods,keys,previous_release=previous_release,client=client,allow_seoul_http=allow_http)
+                paths=context_artifact(output/'bundle')
+                stage_context_release(conn,release,verify_identity=lambda c:verify_connection(c,t,'api_writer'))
+            else:
+                previous=artifact_paths(state[6])
+                release=collect_refresh(output,periods,keys,previous_runs=previous,client=client,allow_seoul_http=allow_http)
+                retained=[p for p in previous if (r:=load_run(p))['source']!='semas-stores' and r['period'] not in periods]
+                paths=[*retained,*[output/(s+'-'+q) for q in periods for s in ('seoul-stores','seoul-sales')],output/'semas-stores']
+                stage_release(conn,release,verify_identity=lambda c:verify_connection(c,t,'api_writer'))
             register(conn,t,release,paths)
             update_state(conn,t,'RUNNING',candidate=release['release_id'])
             result=refresh_release(conn,release,expected_current=state[4],verify_identity=lambda c:verify_connection(c,t,'api_writer'))
@@ -132,7 +163,7 @@ def reconcile():
     conn,t=connect(CONTROL,'api_writer',False)
     with conn:
         locked(conn);state=read_state(conn,t)
-        paths=artifact_paths(state[6]);require(prepare_release(paths)['release_id']==state[4],'CURRENT_ARTIFACTS_CHANGED')
+        require(registered_release(state[6])['release_id']==state[4],'CURRENT_ARTIFACTS_CHANGED')
         update_state(conn,t,'SUCCEEDED' if state[2]==state[4] else 'IDLE',candidate=state[4],due=next_due(datetime.now(UTC)))
         return dict(status='RECONCILED',release_id=state[4])
 

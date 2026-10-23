@@ -25,6 +25,22 @@ final class QueryValidator {
         return new StatsQuery(query.getFirst("dongCode"), query.getFirst("industryCode"), query.getFirst("quarterCode"),version(query));
     }
 
+    static StatsQuery context(MultiValueMap<String,String> query) {
+        rejectUnknown(query, List.of("dongCode","quarterCode","dataVersion"));
+        var copy = new org.springframework.util.LinkedMultiValueMap<String,String>(query);
+        copy.set("industryCode","CAFE");
+        return versionRequired(stats(copy));
+    }
+
+    static StatsQuery breakdown(MultiValueMap<String,String> query) {
+        return versionRequired(stats(query));
+    }
+
+    private static StatsQuery versionRequired(StatsQuery query) {
+        if (query.dataVersion()==null) throw invalid("자료 버전은 필수입니다.","dataVersion");
+        return query;
+    }
+
     static TrendQuery trends(MultiValueMap<String, String> query) {
         validate(query, FIELDS.subList(0, 2));
         return new TrendQuery(query.getFirst("dongCode"), query.getFirst("industryCode"),version(query));

@@ -24,6 +24,13 @@ export function buildCafeReview(input: CafeReviewInput): CafeReview {
     return empty('UNAVAILABLE', '자료 부족으로 판단 보류', '같은 지역·분기의 두 소비 지표가 준비되면 검토 요약을 보여드립니다.')
   if (!samePublication(c.metadata, g.metadata))
     return empty('UNAVAILABLE', '자료를 다시 확인해 주세요', '공개 자료 버전이 달라 두 소비 지표를 함께 해석하지 않습니다. 조회 조건을 다시 불러와 주세요.')
+  if (a?.status === 'AVAILABLE' && a.score !== null && b?.reason === 'PREVIOUS_QUARTER_UNAVAILABLE'
+    && b.status === 'UNAVAILABLE' && b.currentCount !== null && a.transactionCount === b.currentCount) {
+    return { state: 'UNAVAILABLE', headline: '현재 소비 확인·변화 비교 대기',
+      summary: '직전 분기 자료가 없어 증가·감소를 판단하지 않습니다. 이번 분기의 소비규모와 거래 현황을 확인해 주세요.',
+      evidence: [`행정동 소비규모 ${a.score}/100점`],
+      checks: ['이번 분기 소비규모·거래 건수·추정매출 함께 확인', '다음 제공 분기의 거래 변화를 확인', '현장의 고객 흐름·임대료·운영비 확인'], missing }
+  }
   if (!a || !b || a.status !== 'AVAILABLE' || b.status !== 'AVAILABLE' || a.score === null || b.score === null || !b.direction || b.changeRate === null)
     return empty('UNAVAILABLE', '자료 부족으로 판단 보류', b?.reason === 'ZERO_PREVIOUS' ? '지난 분기 거래가 0건이어서 변화율을 계산할 수 없습니다.' : '두 분기의 거래를 함께 비교할 자료가 부족합니다. 아래 점수의 산정 불가 사유를 확인해 주세요.')
   if (a.transactionCount !== b.currentCount) return empty('UNAVAILABLE', '자료를 다시 확인해 주세요', '두 지표의 현재 거래 건수가 달라 함께 해석하지 않습니다. 자료를 다시 조회해 주세요.')

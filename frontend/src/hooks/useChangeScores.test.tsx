@@ -40,3 +40,19 @@ it('rejects unavailable responses disguised as numeric scores', async () => {
   await waitFor(() => expect(result.current.error).toBeTruthy())
   expect(result.current.result).toBeNull()
 })
+
+it('ignores a late first-quarter response after the whole selected quarter changes', async () => {
+  let finish!: (r: Response) => void
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => String(input).includes('quarterCode=20211')
+    ? new Promise<Response>(done => { finish = done }) : Promise.resolve(regionFixtureResponse(input)!)))
+  const { result, rerender } = renderHook(({ quarter }) => useChangeScores(['11110515'], quarter), { initialProps: { quarter: '20211' } })
+  const firstSignal = vi.mocked(fetch).mock.calls[0][1]?.signal
+  rerender({ quarter: '20212' })
+  await waitFor(() => expect(result.current.result?.quarter.code).toBe('20212'))
+  expect(firstSignal?.aborted).toBe(true)
+  const first = await regionFixtureResponse('/api/cafe-change-scores?dongCodes=11110515&quarterCode=20211')!.json()
+  first.items[0] = { ...first.items[0], status: 'UNAVAILABLE', score: null, previousCount: null, changeRate: null, direction: null, reason: 'PREVIOUS_QUARTER_UNAVAILABLE' }
+  await act(async () => finish(new Response(JSON.stringify(first))))
+  expect(result.current.result?.quarter.code).toBe('20212')
+  expect(result.current.result?.items[0].score).toBe(60)
+})

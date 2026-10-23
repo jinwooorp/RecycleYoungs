@@ -51,7 +51,7 @@ async function ready(strict = false) {
 }
 function click(lat = 37.5665, lng = 126.978) { showMap(); act(() => map.click(lat, lng)); openStatisticsPanel() }
 const locationCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/locations/resolve'))
-const statCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/admin-dong-'))
+const statCalls = () => fetchMock.mock.calls.filter(([url]) => /^\/api\/admin-dong-(stats|trends)\?/.test(String(url)))
 function manualSearchButton() {
   openStatisticsPanel()
   return screen.getByRole('button', { name: '통계 다시 불러오기' })

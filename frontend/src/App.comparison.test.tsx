@@ -101,6 +101,36 @@ async function compare() {
   fireEvent.click(screen.getByRole('button', { name: '같은 분기로 후보 분석' }))
   await waitFor(() => expect(within(candidate(1)).getByText(/2025년 1분기 ·/)).toBeInTheDocument())
 }
+it('changes the common quarter from the first-quarter explanation and waits for a fresh comparison', async () => {
+  lookups.quarters = [{ code: '20211', label: '2021년 1분기' }, { code: '20212', label: '2021년 2분기' }]
+  stats = async q => json({ ...comparisonStats(), quarter: lookups.quarters.find(p => p.code === q.quarterCode) })
+  const original = fetchMock.getMockImplementation()!
+  fetchMock.mockImplementation(async (input, options) => {
+    const body = await original(input, options)
+    if (String(input).startsWith('/api/cafe-change-scores') && String(input).includes('quarterCode=20211')) {
+      const value = await body.json()
+      value.items = value.items.map((i: { dong: unknown }) => ({ dong: i.dong, status: 'UNAVAILABLE', score: null,
+        currentCount: '110', previousCount: null, changeRate: null, direction: null, reason: 'PREVIOUS_QUARTER_UNAVAILABLE' }))
+      return json(value)
+    }
+    return body
+  })
+  await ready(); add(p1); selectQuarter('20211')
+  await waitFor(() => expect(screen.getByRole('button', { name: '같은 분기로 후보 분석' })).toBeEnabled())
+  fireEvent.click(screen.getByRole('button', { name: '같은 분기로 후보 분석' }))
+  const panel = within(comparison())
+  await waitFor(() => expect(panel.getByRole('row', { name: /^실제 소비 증감/ })).toHaveTextContent('첫 제공 분기 · 비교 기준 없음'))
+  const requested = () => calls('/api/cafe-change-scores').filter(([u]) => String(u).includes('quarterCode=20212'))
+  const beforeNext = requested().length
+  fireEvent.click(panel.getByText('동별 점수 산정 근거'))
+  fireEvent.click(await panel.findByRole('button', { name: '2021년 2분기 변화 보기' }))
+  expect(screen.getByLabelText('비교 통계 분기')).toHaveValue('20212')
+  expect(panel.getAllByRole('article', { name: /^후보 / })).toHaveLength(1)
+  expect(requested()).toHaveLength(beforeNext)
+  expect(panel.getByRole('row', { name: /^실제 소비 증감/ })).toHaveTextContent('미조회')
+  fireEvent.click(screen.getByRole('button', { name: '같은 분기로 후보 분석' }))
+  await waitFor(() => expect(requested()).toHaveLength(beforeNext + 1))
+})
 it('shows loading rather than the old score when resubmitting after a quarter round trip', async () => {
   await ready(); add(p1); selectQuarter('20252')
   await waitFor(() => expect(screen.getByRole('button', { name: '같은 분기로 후보 분석' })).toBeEnabled())

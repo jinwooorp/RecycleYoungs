@@ -155,15 +155,19 @@ def identity():
     return dict(status='IDENTITY_OK',reused=ready)
 
 
-def initial_periods(now,available):
-    end=now.year*4+(now.month-1)//3-1;start=2025*4
+def initial_periods(now,available,*,start_year=2025):
+    # Historical expansion remains explicit until all source scopes pass full validation.
+    end=now.year*4+(now.month-1)//3-1;start=start_year*4
     require(0<=end-start<40,'INITIAL_PERIOD_RANGE_REJECTED')
-    periods=[]
+    periods=[];gap=False
     for number in range(start,end+1):
         q=str(number//4)+str(number%4+1)
         present=[available(source,q) for source in ('stores','sales')]
-        if not all(present):break
-        periods.append(q)
+        require(all(present) or not any(present),'INITIAL_SOURCE_PAIR_MISMATCH')
+        if all(present):
+            require(not gap,'INITIAL_SOURCE_PERIOD_GAP')
+            periods.append(q)
+        else:gap=True
     require(bool(periods),'INITIAL_SOURCE_UNAVAILABLE');return periods
 
 
@@ -174,7 +178,8 @@ def initialize():
     require(not (CONTROL/'init.started').exists(),'INITIALIZATION_INTERRUPTED')
     from control import check_flyway_json
     migration=json.loads(private_read(CONTROL/'migration-result.json'));check_flyway_json(migration,'migrate')
-    require(migration['migrationsExecuted']==4,'FOUR_NEW_MIGRATIONS_REQUIRED')
+    from api_runtime import verify_fresh_migration
+    write(CONTROL/'initialization-migration.json',verify_fresh_migration(migration,schemas()))
     write(CONTROL/'init.started',b'')
     from app.api_config import load_keys
     from app.api_http import HttpClient

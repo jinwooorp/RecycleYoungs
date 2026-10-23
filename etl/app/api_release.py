@@ -10,7 +10,7 @@ from pathlib import Path
 import re
 import sys
 
-from .api_artifacts import create_file, encoded
+from .api_artifacts import create_file, encoded, EvidenceRecords
 from .api_compare import file_sha
 from .api_config import private_parent
 from .api_http import unique_object
@@ -24,7 +24,36 @@ TABLES = {'seoul-stores': 'api_store_stats_dong', 'seoul-sales': 'api_sales_dong
 
 
 def digest(value):
-    return hashlib.sha256(encoded(value)).hexdigest()
+    # Preserve the original canonical bytes (including the final newline) while
+    # avoiding a second multi-GB JSON string. iterencode also supports RecordFile.
+    h = hashlib.sha256()
+    for part in canonical_chunks(value):
+        h.update(part)
+    h.update(b'\n')
+    return h.hexdigest()
+
+
+def canonical_chunks(value):
+    """Canonical JSON bytes; hash-checked JSONL rows avoid per-field Python work."""
+    scalar = lambda v:json.dumps(v,ensure_ascii=False,sort_keys=True,separators=(',',':'),allow_nan=False).encode()
+    if isinstance(value,dict):
+        if not any(isinstance(v,(dict,list)) for v in value.values()):
+            yield scalar(value); return
+        yield b'{'
+        for index,key in enumerate(sorted(value)):
+            if index: yield b','
+            yield scalar(key); yield b':'
+            yield from canonical_chunks(value[key])
+        yield b'}'
+    elif isinstance(value,list):
+        yield b'['
+        items=value.canonical_json_items() if hasattr(value,'canonical_json_items') else (canonical_chunks(v) for v in value)
+        for index,item in enumerate(items):
+            if index: yield b','
+            yield from item
+        yield b']'
+    else:
+        yield scalar(value)
 
 
 def canonical_record(source, row, period, industry=None):
@@ -100,7 +129,7 @@ def load_run(path):
     if finished.tzinfo is None: raise CollectionError('INVALID_COLLECTION_TIME')
     return dict(source=source, period=period, scope=scope, normalizer_version=manifest['normalizer_version'],
                 normalized_sha256=manifest['normalized_sha256'], pages=pages,
-                collected_at=finished.astimezone(timezone.utc).isoformat(), records=records)
+                collected_at=finished.astimezone(timezone.utc).isoformat(), records=EvidenceRecords(records,path))
 
 
 def prepare_release(paths):
@@ -123,8 +152,15 @@ def verify_release(release):
     content={k:v for k,v in release.items() if k!='release_id'}
     if not re.fullmatch('[0-9a-f]{64}', release.get('release_id','')) or digest(content)!=release['release_id']:
         raise CollectionError('RELEASE_DIGEST_MISMATCH')
-    if release.get('contract_version')!=1 or release.get('text_policy')!=TEXT_POLICY:
+    if (release.get('contract_version')!=1 or release.get('text_policy')!=TEXT_POLICY
+            or any(r.get('normalizer_version') not in (1,2) or 'quality' in r for r in release['runs'])
+            or any(k in release for k in ('quality_policy','candidate_status'))):
         raise CollectionError('RELEASE_CONTRACT_MISMATCH')
+    verify_record_layout(release)
+
+
+def verify_record_layout(release):
+    """Shared numeric/key/layout checks; not a release or DB authorization gate."""
     stats=set(); sales=set(); stores=[]; scopes=set()
     for run in release['runs']:
         source=run['source']; scope=run['scope']; period=run['period']
@@ -170,9 +206,14 @@ def stage_release(conn, release, *, verify_identity):
     No connect(), migration, legacy DELETE/TRUNCATE or current-pointer change occurs here.
     """
     verify_release(release)
+    return _stage_verified_release(conn, release, verify_identity=verify_identity)
+
+
+def _stage_verified_release(conn, release, *, verify_identity, metadata=None, before_seal=None):
+    """Shared COPY transaction; callers must enforce their separate contract gate."""
     connection_ready(conn)
     from psycopg.types.json import Jsonb
-    metadata={k:v for k,v in release.items() if k!='runs'} | {
+    metadata=metadata if metadata is not None else {k:v for k,v in release.items() if k!='runs'} | {
         'runs':[{k:v for k,v in r.items() if k!='records'} | {'row_count':len(r['records'])} for r in release['runs']]}
     version=release['release_id']
     with conn.transaction():
@@ -206,6 +247,8 @@ def stage_release(conn, release, *, verify_identity):
                 expected=sum(len(r['records']) for r in release['runs'] if r['source']==source)
                 cur.execute(f'SELECT count(*) FROM {table} WHERE release_id=%s',(version,))
                 if cur.fetchone()!=(expected,): raise CollectionError('STAGED_COUNT_MISMATCH')
+            if before_seal is not None:
+                before_seal(cur, release)
             cur.execute("UPDATE api_releases SET status='READY' WHERE release_id=%s",(version,))
     return True
 

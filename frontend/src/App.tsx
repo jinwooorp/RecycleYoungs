@@ -27,6 +27,10 @@ import { allCafes, filterCafes, type CafeFilter } from './lib/cafeBrands'
 import { buildCafeReview } from './lib/cafeReview'
 import { CafeReviewSummary } from './components/CafeReviewSummary'
 import { CafeReviewDetails } from './components/CafeReviewDetails'
+import { useAdminDongContext } from './hooks/useAdminDongContext'
+import { useSalesBreakdown } from './hooks/useSalesBreakdown'
+import { AdminDongContextPanel } from './components/AdminDongContextPanel'
+import { SalesBreakdownPanel } from './components/SalesBreakdownPanel'
 import './App.css'
 
 function App() {
@@ -53,6 +57,8 @@ function App() {
   const scoreVersion = state.lookups?.quarters.find(q => q.code === scoreQuarter)?.metadata?.dataVersion
   const consumption = useConsumptionScores(scoreCodes, scoreQuarter, scoreVersion)
   const change = useChangeScores(scoreCodes, scoreQuarter, scoreVersion)
+  const context = useAdminDongContext(scoreCodes, scoreQuarter, scoreVersion)
+  const breakdown = useSalesBreakdown(route.detail && scoreCodes.length ? scoreCode : '', scoreQuarter, scoreVersion)
   const comparison = useCandidateComparison(state.lookups, state.lookupLoading, !!state.lookupError)
   const visibleStores = useMemo(() => filterCafes(state.nearby.result?.stores ?? [], cafeFilter), [state.nearby.result, cafeFilter])
   const region = state.location.loading ? '지역 확인 중' : state.location.error ? '지역 확인 실패'
@@ -109,7 +115,11 @@ function App() {
           : !scoreCodes.length ? '이 지역·분기의 점수 조회 조건을 확인해 주세요.' : undefined
   const scores = (compact: boolean) => <div className={compact ? 'panel-scores' : 'detail-scores'}>
     <ConsumptionScoreCard {...consumption} dongCode={scoreCode} onRetry={consumption.retry} compact={compact} emptyMessage={scoreEmpty} />
-    <ChangeScoreCard {...change} dongCode={scoreCode} onRetry={change.retry} compact={compact} emptyMessage={scoreEmpty} />
+    <ChangeScoreCard {...change} dongCode={scoreCode} onRetry={change.retry} compact={compact} emptyMessage={scoreEmpty}
+      quarters={state.lookups?.quarters} onQuarterChange={quarter => {
+        if (route.detail) route.open(scoreCode, quarter, pointDetail ? pointKey : false, true)
+        else state.changeSelection('quarterCode', quarter)
+      }} />
   </div>
   const detailReady = !routeError && (!route.code || !!state.lookups && knownRoute)
   const review = buildCafeReview({ dongCode: scoreCode, quarterCode: scoreQuarter, consumption, change, unavailableReason: scoreEmpty,
@@ -137,6 +147,7 @@ function App() {
             onChange={e => state.changeSelection('quarterCode', e.target.value)}><option value="">분기를 선택하세요</option>{state.lookups?.quarters.map(q => <option key={q.code} value={q.code}>{q.label}</option>)}</NativeSelect></div>
           <CafeReviewSummary review={review} />
           {scores(true)}
+          <AdminDongContextPanel result={context.results[scoreCode]} loading={context.loading} error={context.errors[scoreCode]} onRetry={context.retry} />
           <p className="text-xs text-muted-foreground">행정동 전체의 상대 점수이며 창업 성공률이 아닙니다.</p>
           <div className="panel-actions"><Button id="open-detail" disabled={!activeCode && !coordinate} onClick={() => route.open(activeCode, state.selection.quarterCode, pointKey || false)}>상세 분석 보기</Button>
           <Button variant="outline" disabled={!coordinate || duplicate || limitReached} onClick={() => { if (coordinate) comparison.add(coordinate) }}>후보지에 추가</Button>
@@ -154,7 +165,9 @@ function App() {
         <div className="detail-inner"><Button variant="outline" onClick={route.close}>지도로 돌아가기</Button>
           <header className="my-5"><p className="text-sm text-muted-foreground">서울 · 카페 · 행정동 상세 분석</p><h1 id="detail-title" tabIndex={-1} className="mt-2 text-2xl font-semibold">{routeError ? '상세 분석을 확인해 주세요' : detailRegion}</h1><p className="mt-2 text-sm">점수는 창업 환경을 살펴보는 참고 지표입니다. 성공·수익을 예측하거나 보장하지 않습니다.</p></header>
           {routeError ? <div role="alert"><p>{routeError}</p>{state.lookupError && <Button variant="outline" onClick={state.retryLookups}>조회 조건 다시 시도</Button>}{regions.error && <Button variant="outline" onClick={regions.retry}>지역 목록 다시 조회</Button>}</div> : !detailReady ? <p role="status">상세 분석 조건을 확인하는 중입니다.</p> : <>
-            <ManualStatistics review={<CafeReviewDetails review={review} />} scores={scoreCode && scores(false)} state={{ ...detailState, changeSelection: (key, value) => {
+            <ManualStatistics review={<CafeReviewDetails review={review} />} scores={scoreCode && scores(false)}
+              references={<><AdminDongContextPanel detailed result={context.results[scoreCode]} loading={context.loading} error={context.errors[scoreCode]} onRetry={context.retry} /><SalesBreakdownPanel {...breakdown} /></>}
+              state={{ ...detailState, changeSelection: (key, value) => {
                 if (key === 'quarterCode') route.open(scoreCode, value, pointDetail ? pointKey : false, true)
               } }} />
             {!scoreCode && <p role="status">행정동이 확정되지 않아 통계와 점수를 연결하지 않습니다.</p>}

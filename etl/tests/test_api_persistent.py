@@ -2,6 +2,8 @@
 from datetime import datetime,timezone
 import importlib,importlib.util
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 
 class PersistentTests(unittest.TestCase):
@@ -26,6 +28,27 @@ class PersistentTests(unittest.TestCase):
         for status in ['RUNNING','FAILED','INTERRUPTED','BOGUS']:
             with self.assertRaises(m.RuntimeErrorCode):m.require_automatic_ready(status)
         m.require_automatic_ready('IDLE');m.require_automatic_ready('SUCCEEDED')
+
+    def test_contract2_registry_cannot_fall_back_to_a_contract1_run_list(self):
+        import api_worker as worker
+        value=[dict(contract_version=2,bundle='/api-data/runs/new/bundle')]
+        with patch('app.api_context_release.read_release_bundle',return_value={'release_id':'a'*64}) as load:
+            self.assertEqual(worker.registered_release(value)['release_id'],'a'*64)
+            load.assert_called_once_with('/api-data/runs/new/bundle')
+        for changed in [[dict(contract_version=1,bundle='/api-data/runs/new/bundle')],
+                        [dict(contract_version=2,bundle='/outside/bundle')],
+                        [dict(contract_version=2,bundle='/api-data/../outside')]]:
+            with self.assertRaises(ValueError):worker.registered_release(changed)
+
+    def test_fresh_migration_receipt_requires_every_bound_source_version(self):
+        m=self.module()
+        files={f'/api-migration/V{v}__test.sql':'a'*64 for v in range(1,6)}
+        result=dict(operation='migrate',flywayVersion='12.4.0',migrationsExecuted=5,
+                    migrations=[dict(version=str(v),filepath=f'/flyway/api/V{v}__test.sql') for v in range(1,6)])
+        m.verify_fresh_migration(result,files)
+        for changed in [result|{'migrationsExecuted':4},result|{'migrations':result['migrations'][1:]},
+                        result|{'migrations':[dict(version=str(v),filepath='different.sql') for v in range(1,6)]}]:
+            with self.assertRaises(ValueError):m.verify_fresh_migration(changed,files)
 
     def test_target_cannot_be_team_db_or_invented_owner(self):
         m=self.module()

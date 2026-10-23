@@ -56,3 +56,14 @@ it('uses the full observed radius total only for the matching selected point and
   expect(buildCafeReview({ ...value, nearby }).evidence.join(' ')).not.toContain('206곳')
   expect(buildCafeReview({ ...value, point: { ...point, lat: 37.58 }, nearby }).evidence.join(' ')).not.toContain('206곳')
 })
+
+it('keeps current consumption evidence when only the previous quarter is unavailable', () => {
+  const value = input()
+  Object.assign(value.change.result.items[0], { status: 'UNAVAILABLE', score: null, currentCount: '900', previousCount: null,
+    changeRate: null, direction: null, reason: 'PREVIOUS_QUARTER_UNAVAILABLE' })
+  const review = buildCafeReview(value)
+  expect(review.headline).toBe('현재 소비 확인·변화 비교 대기')
+  expect(review.summary).toContain('직전 분기 자료')
+  expect(review.evidence.join(' ')).toContain('99/100점')
+  expect(review.checks.join(' ')).toContain('소비규모')
+})

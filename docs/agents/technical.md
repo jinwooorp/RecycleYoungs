@@ -4,7 +4,7 @@
 
 에이전트가 구현 계약과 개발·검증 기준을 확인하는 참고 문서입니다. 현재 기능과 우선순위는 [프로젝트 현황](project.md), DB 변경·복구 조건은 [DB 안전 정책](db-safety.md)에 둡니다.
 
-문서·구현 대조 기준일은 **2026-10-22**입니다. 10/21 [영속 API 환경](#영속-api-개발-환경과-예약-갱신)의 실제 DB·예약 갱신·복원·HTTP·테스트 지도 화면을 확인했고, 10/22 [소스 이미지 빌드](#소스-이미지-빌드와-신규-환경-준비)와 새 기본 Compose의 실제 초기 준비·재실행·재시작·실패 차단을 확인했습니다. 기존 팀 환경·영속 API 자원·Releases는 보존했습니다. nginx·일반 CI/CD·별도 PC/EC2 재현·Frontend 구조 정리는 [다음 작업](project.md#다음-작업)입니다.
+문서·구현 대조 기준일은 **2026-10-23**입니다.22분기 카페와5종 참고 자료를 연결하는 최종 계약2·additive V5·GET2개·Frontend를 구현했습니다. 격리 검증과 현재 개발 DB 적용은 구분합니다. 기존 영속 환경·예약 갱신·복원·소스 이미지·Compose 검증 이력은 보존하고, [다음 작업](project.md#다음-작업)은 개발 환경 전환·점수 검증·nginx·CI/CD입니다.
 
 ## 목차
 
@@ -344,7 +344,224 @@ CAFE 경쟁군은 I21201의 통합 범주 전체입니다. 커피전문점 외 �
 
 서울시 안내에는 2026-07-03 기준 공간 기반 변경에 따른 추정치 개편과 2021년 이후 제공 방침이 있습니다. 동일 분기의 재수집도 과거 파일과 달라질 수 있으므로 원천 공지·수집 버전·변경 내역을 기록합니다. 아직 조회하지 않은 2021~2024년 모든 분기까지 제공된다고 확정하지 않습니다. `INFO-200`은 해당 조회의 자료 없음으로 기록하며 최신 분기나 완전한 0건 자료로 공개하지 않습니다.
 
+### 추가 데이터·지표 원천 목록과 채택 기준
+
+**조사일: 2026-10-22.** 최신 사용자 범위는 서울·CAFE의 근거를 넓히고 데이터·화면·점수를 검증한 뒤 배포하는 것입니다. 아래 목록·sample 표는 1단계의 공개 명세 조사 기록입니다. 그 뒤 승인된 7종 수집기와 인증 전수 검사 결과는 [추가 7종 인증 수집과 품질 검증](#추가-7종-인증-수집과-품질-검증)으로 구분합니다. 이 조사 단계는 DB 접속 없이 수행했습니다. 이후의 참고 자료 DB·조회 API·Frontend 구현은 아래 현행 계약과 최신 검증 기록을 따르며 종합점수는 미연동입니다.
+
+#### 채택 상태와 공통 기록
+
+- **기존 활용:** 수집·보관하는 원천입니다. 새로운 세부지표의 표시·산식은 별도 검증합니다.
+- **우선 후보:** API 명세가 있고 서비스 질문에 직접 대응합니다. 다음 단계에서 인증 전수 검증 후 화면 연결 여부를 결정하며, 아직 점수 사용 가능 상태가 아닙니다.
+- **참고 후보:** 유용하지만 시간·공간·포괄 범위 또는 추가 신청 제약이 있습니다. 우선 원값과 한계를 표시할 대상으로, 초기 종합지수에서는 제외합니다.
+- **보류:** API·권리·관측 정의·매핑을 확보하지 못했거나 제공이 중단됐습니다. 대체값을 조용히 채우지 않습니다.
+
+원천별로 제공기관·공식 URL·서비스/명세 버전·이용조건·키/권한·호출 한도, 자연키·단위·공간/기간·코드/CRS·결측/중복·정정 방식을 기록합니다. `공표/수정일`, `관측 기준일/기간`, `수집 시각`은 별개이며 실제 기준일을 모르면 미확인으로 둡니다. 아래의 필드 수는 조사일의 **출력 명세**이며 모든 행의 값·기간·정밀도가 검증됐다는 뜻이 아닙니다.
+
+#### 원천 목록과 화면 용도
+
+| 영역·판단 | 공식 원천·서비스 | 필드·단위·공간/기간 | 화면에서 답할 질문·사용 제한 |
+| --- | --- | --- | --- |
+| 소비·기존 활용 | 서울시 [추정매출-행정동 OA-22175](https://data.seoul.go.kr/dataList/OA-22175/S/1/datasetView.do), `VwsmAdstrdSelngW` | 53필드, 행정동×업종×분기. 금액·건수, 주중/주말·요일·6시간대·성별·연령 | 언제 어떤 소비가 발생하는가. 이미 보관한 세부필드 재사용; 거래 건수는 고객 수·이익이 아님 |
+| 경쟁·변화·기존 활용 | 서울시 [점포-행정동 OA-22172](https://data.seoul.go.kr/dataList/OA-22172/S/1/datasetView.do), `VwsmAdstrdStorW` | 12필드, 행정동×업종×분기. 점포·개업·폐업·가맹 수/율 | 공급과 변화 추세. 공식 비율 분모 검증; 점포가 많다는 이유만으로 불리하다고 점수화하지 않음 |
+| 위치별 경쟁·기존 활용 | [SEMAS 상가업소정보](https://www.data.go.kr/data/15012005/openapi.do), `storeListInDong` | 점포 ID·업종·주소·좌표·응답 기준년월. 현재 snapshot | 500m 경쟁 목록·향후 전체 집계. 과거 매출 분기와 현재 점포 시점을 구분; snapshot 누락은 폐업이 아님 |
+| 인구활동·우선 후보 | 서울시 [길단위인구-행정동 OA-22178](https://data.seoul.go.kr/dataList/OA-22178/S/1/datasetView.do), `VwsmAdstrdFlpopW` | 25필드, 행정동·분기 표기. 총수·성별·6연령·6시간대·7요일 인구 | 어느 시간·요일에 활동하는가. 추정 인구이며 일평균/기간 합계 등 집계 정의 확정 전 합산·인당 지표 금지 |
+| 배후수요·우선 후보 | 서울시 [상주인구-행정동 OA-22183](https://data.seoul.go.kr/dataList/OA-22183/S/1/datasetView.do), `VwsmAdstrdRepopW` | 27필드, 인구·성/연령·총가구·아파트/비아파트 가구 | 주거 기반은 어떠한가. 행정동 집계·연간 갱신/분기 반복; 활동인구와 합쳐 새 고객 수를 만들지 않음 |
+| 배후수요·우선 후보 | 서울시 [직장인구-행정동 OA-22184](https://data.seoul.go.kr/dataList/OA-22184/S/1/datasetView.do), `VwsmAdstrdWrcPopltnW` | 24필드, 인구·성/연령. 행정동, 연간 갱신/분기 반복 | 직장 기반은 어떠한가. 실제 출근·방문 인원과 다름; 분기 검색 지원은 아래 실측 참조 |
+| 시설·지역특성·우선 후보 | 서울시 [집객시설-행정동 OA-22169](https://data.seoul.go.kr/dataList/OA-22169/S/1/datasetView.do), `VwsmAdstrdFcltyW` | 23필드, 시설 총수와 학교·병원·은행·문화·숙박·교통 등 종류별 개수. 연간 갱신/분기 반복 | 어떤 활동 유발 시설이 있는가. 동별 개수이며 개별 위치·500m 시설 목록이나 방문자 수가 아님 |
+| 변화·우선 후보 | 서울시 [상권변화지표-행정동 OA-15575](https://data.seoul.go.kr/dataList/OA-15575/S/1/datasetView.do), `VwsmAdstrdIxQq` | 9필드, 동·분기·변화 유형 코드/명·운영/폐업 영업기간 평균과 서울 평균(개월) | 지역의 변화 유형은 어떠한가. 전 업종 맥락과 CAFE를 구분; 유형을 임의 순위로 만들거나 개별 점포 생존확률로 해석하지 않음 |
+| 소비 맥락·우선 후보 | 서울시 [소비-행정동 OA-22166](https://data.seoul.go.kr/dataList/OA-22166/S/1/datasetView.do), `VwsmAdstrdNcmCnsmpW` | 14필드, 동·분기·총지출과 10종류 지출 금액. 연간 갱신/분기 반복 | 지역 소비 구성은 어떠한가. 카페 매출·가처분소득이 아님; 삭제된 소득은 사용 금지 |
+| 주거 맥락·우선 후보 | 서울시 [아파트-행정동 OA-22163](https://data.seoul.go.kr/dataList/OA-22163/S/1/datasetView.do), `VwsmAdstrdAptW` | 18필드, 단지 수·면적/가격 구간별 가구 수·평균 면적/시가. 연간 갱신/분기 반복 | 주거 구성은 어떠한가. 부동산 가격은 실제 소득·구매력이 아니며 가격의 정확한 단위/기준을 인증 검증 때 확정 |
+| 세밀한 활동·참고 후보 | 서울시 [내국인 생활인구-행정동 OA-14991](https://data.seoul.go.kr/dataList/OA-14991/A/1/datasetView.do), `SPOP_LOCAL_RESD_DONG` | 32필드, 기준일×시간대×행정동, 총수·성/연령별 인구 | 일별·시간대 활동이 필요할 때 보완. 내국인 범위·추정/비식별 처리·공표 지연·현재 코드 검증; 길단위인구와 중복 합산 금지 |
+| 교통 위치·참고 후보 | 서울시 T-Data [지하철역 좌표정보](https://t-data.seoul.go.kr/dataprovide/trafficdataviewopenapi.do?data_id=1036), `TaimsKsccDvSubwayStationGeom/1.0` | `outStnNum`, `stnKrNm`, `lineNm`, `convX/Y`. 명세상 분기별, 페이지 수정일 2024-07-01 | 역 위치·직선거리. 별도 키; 실제 기준일·좌표 의미·역 코드/환승 중복 검증. 출입구·도보 경로까지 제공한다고 가정하지 않음 |
+| 교통 위치·참고 후보 | 서울시 [좌표기반 근접 정류소 OA-15335](https://data.seoul.go.kr/dataList/OA-15335/L/1/datasetView.do), 버스 `stationinfo/getStationByPos` | 기준 좌표·반경 검색, 정류소 ID·좌표·거리. 버스 API의 수시 자료 | 가까운 버스정류소. 원천 서비스 별도 이용권한·CRS/거리 단위·최대 반경/누락 검증; 도보거리로 표시하지 않음 |
+| 교통 활동·참고 후보 | 서울시 [지하철 시간대 승하차 OA-12252](https://data.seoul.go.kr/dataList/OA-12252/A/1/datasetView.do), `CardSubwayTime` | 52필드, 사용월×호선×역·24시간 승하차·작업일 | 역의 시간대별 이용 규모. 역 코드/이름 변경·위치 매핑·환승 중복 검증, 후보 방문자 수로 환산 금지 |
+| 교통 활동·참고 후보 | 서울시 [버스 시간대 승하차 OA-12913](https://data.seoul.go.kr/dataList/OA-12913/A/1/datasetView.do), `CardBusTimeNew` | 57필드, 사용월×노선×정류소·24시간 승하차·교통수단·등록일 | 정류소·노선의 이용 규모. ARS/표준 ID·중복/결측과 월간 완전성 검증 후 집계; API 필드명을 임의 생성하지 않음 |
+| 주차 환경·참고 후보 | 서울시 [공영주차장 OA-13122](https://data.seoul.go.kr/dataList/OA-13122/A/1/datasetView.do), `GetParkInfo` | 39필드, 주차장 위치·면수·요금·운영시간 등 기본정보 | 주차 공급·조건. 현재 주차대수 항목은 삭제돼 실시간 잔여 면수를 이 API로 계산할 수 없음 |
+| 현재 주차·참고 후보 | 서울시 [시영 실시간 주차 OA-21709](https://data.seoul.go.kr/dataList/OA-21709/A/1/datasetView.do), `GetParkingInfo` | 42필드, 시영 주차장 일부·현재 주차 정보·갱신 시각. 공식 안내상 약 5분 지연 가능 | 현재 참고만 제공. 서울 전체/민영 포괄 아님, 과거 이력 미제공으로 과거 분기 지수에 사용 금지 |
+| 관광·행사·참고 후보 | 한국관광공사 [국문 관광정보 서비스](https://www.data.go.kr/data/15101578/openapi.do), `KorService2` | 위치/지역 기반 관광·문화·숙박·행사 목록, 콘텐츠 ID·좌표·수정일/행사기간 | 관광·계절적 활동 맥락. 별도 활용신청, 폐지/정정·행사 기간·위치 중복 검증; 콘텐츠 수는 관광객 수가 아님 |
+| 비용·참고 후보 | 한국부동산원 [상업용부동산 임대동향](https://www.reb.or.kr/reb/cm/cntnts/cntntsView.do?cntntsId=1049&mi=10335&statId=S237220284), R-ONE `SttsApiTblData.do` | 분기, 시도/조사 상권·부동산 유형별 임대료·공실률·표본오차. 표/항목 ID와 단위 미확정 | 지역 임대시장 참고. 공표 상권과 서비스 경계 매핑 전 동·500m·개별 점포 비용으로 배분 금지 |
+| 구매력·보류 | OA-22166의 과거 소득, 자치구 단위 소득 대체원천 | 공식 설명상 월평균 소득은 2026-05-13 삭제, 소득구간도 NULL/삭제 안내 | 소비 통계를 소득으로 이름만 바꾸지 않음. 대체 소득의 API·현재성·공간 적합성 미확보 |
+| 실제 비용·운영 형태·보류 | 점포별 실임대 조건·보증금·운영비·가맹/직영/독립 근거 | 현재 확보한 API에 없음 | 현장 확인·향후 사용자 입력 후보. 평균 임대료/상호 추정으로 실제 비용·운영 형태를 확정하지 않음 |
+
+상주·직장·시설·소비·아파트의 원천 설명은 **4분기 연 1회 갱신하고 다음 1~3분기에 같은 값을 반복**한다고 안내합니다. 포털의 일반 갱신주기 “분기”나 최신 분기 코드만으로 새 관측이라고 표시하지 않습니다. [상권분석 원천 설명](https://golmok.seoul.go.kr/source.do)과 포털 메타의 기준일·설명에 차이가 있으면 충돌을 기록하고 실제 응답·제공기관 확인으로 해소합니다. 길단위인구의 사람 수를 일평균/분기 합계 중 하나로 아직 확정하지 않았습니다.
+
+공원·개별 학교/병원·출입구 등의 위치를 집객시설 **개수**에서 생성하지 않습니다. 현재 목록으로 개별 위치를 확보하지 못한 항목은 보류이며, 후속에 공식 위치 API·재사용 권리·중복/폐지 처리를 확인한 경우에만 지도 레이어로 확장합니다. 수동 CSV를 필수 실행 절차로 다시 도입하지 않습니다.
+
+#### 무인증 sample에서 확인한 분기 검색 제약
+
+2026-10-22에 기존 키를 사용하지 않고 7개 우선 후보를 조회했습니다. 공개 명세에서 분기 검색 인자를 확인한 서비스는 **직장인구뿐**입니다. 다른 6개는 경로 뒤에 분기를 붙여도 분기 선택이 보장되지 않으므로 기존 점포/매출의 분기별 수집기를 그대로 재사용하면 안 됩니다.
+
+| 서비스 | 기본 조회의 선언 총건수·첫 행 분기 | `/1/1/20262` 응답의 선언 총건수·첫 행 분기 |
+| --- | --- | --- |
+| `VwsmAdstrdFlpopW` | 9,350·20251 | 9,350·20251 |
+| `VwsmAdstrdRepopW` | 9,350·20241 | 9,350·20241 |
+| `VwsmAdstrdWrcPopltnW` | 9,108·20241 | 414·20262 |
+| `VwsmAdstrdFcltyW` | 9,350·20211 | 9,350·20211 |
+| `VwsmAdstrdIxQq` | 9,350·20242 | 9,350·20242 |
+| `VwsmAdstrdNcmCnsmpW` | 9,350·20252 | 9,350·20252 |
+| `VwsmAdstrdAptW` | 9,331·20262 | 9,331·20262 |
+
+이는 요청당 **1행**만 확인한 결과이며 전체 건수 실측·완전성·최신 제공 기간을 증명하지 않습니다. 아파트는 첫 행이 우연히 요청 분기와 같지만 20251/20263 요청에서도 같았습니다. 직장인구는 20262 필터가 적용되고 20263은 `INFO-200`이었습니다. 나머지의 20263 제공 여부를 첫 행만으로 판단하지 않습니다. 모든 기간의 행을 합친 `list_total_count`를 분기별 행 수로 기록하면 안 됩니다.
+
+후속 수집 계약은 6개 서비스별로 **전체 기간 snapshot을 한 번 완주 → 실제 행의 기간·키·총건수 검증 → 기간별 분리**하는 방식입니다. 직장인구는 검증한 분기 검색을 사용할 수 있습니다. 다른 검색 인자를 사용하려면 공식 명세와 실제 필터를 먼저 검증합니다. 원천 전체 선언 건수와 내부 분기별 건수·`source_periods`를 별도로 기록하고, 실패/불완전 paging는 공개하지 않습니다. 전체 기간 snapshot의 정정·분기 확장·재실행 정책도 기존 분기 입력 목록과 구분합니다.
+
+#### 이용조건·신청과 예상 수집량
+
+| 계열 | 키·이용조건·한도 | 다음 단계에서 확인할 사항 |
+| --- | --- | --- |
+| 서울 열린데이터 상권 7종·생활인구·승하차·주차 | 서울시 일반 인증키 계열, 공식 페이지의 출처표시 조건(공공누리 제1유형) 유지. [공통 안내](https://data.seoul.go.kr/together/guide/useGuide.do): 요청당 최대 1,000행, sample 최초 5행 | 보유 키의 실제 사용 가능 여부·키별 일일/속도 한도·무료 범위/추가 제한·각 서비스 필터·라이선스 변경. 인증 전수 호출은 이번에 미실행 |
+| 기존 SEMAS | 공공데이터포털의 현재 상가정보 활용 권한·Decoding 키, 기존 원천 고지 유지 | 같은 키라고 다른 포털 API도 승인된 것으로 간주하지 않음. 현재 서울 CAFE 전체 갱신 정책 보존 |
+| T-Data 지하철 좌표 | [이용안내](https://t-data.seoul.go.kr/userguide/guideopenapi.do)에 별도 회원·활용신청·발급 키, 일 1,000회. `apikey/startRow/rowCnt` | 서울 일반 키와 별개. 샘플 URL은 HTTP로 안내되므로 인증 전 지원 전송 방식·재배포 조건·좌표/기준일 확인 |
+| 버스 근접 정류소 | `ws.bus.go.kr/api/rest/stationinfo/getStationByPos`, 버스 서비스 활용신청/권한 확인 필요 | 보유 SEMAS 키만으로 권한을 가정하지 않음. 최신 신청 창구·실제 quota·전송 방식·재배포 조건 검증 |
+| TourAPI | 공식 페이지상 무료·이용허락범위 제한 없음, 개발계정 신청 가능 트래픽 1,000·개발 자동/운영 심의 승인 | 별도 활용신청 후 실제 권한/한도 확인. `MobileOS/MobileApp/serviceKey`와 `KorService2` 명세 사용. 사진/본문은 개별 저작권 고지 확인 후 사용 |
+| 한국부동산원 R-ONE | [Open API 개발가이드](https://www.reb.or.kr/r-one/portal/openapi/openApiDevPage.do), 별도 로그인/키. `https://www.reb.or.kr/r-one/openapi/SttsApiTblData.do` | [API 목록](https://www.reb.or.kr/r-one/portal/openapi/openApiListPage.do)에서 실제 임대료·공실률 표/항목/분류 ID 선택, `STATBL_ID/DTACYCLE_CD/CLS_ID/ITM_ID`·기간·paging·단위·이용조건·실제 한도 확인. sample 제한과 인증 quota를 혼동하지 않음 |
+
+서울시 일반 키로 추가 서비스 전부가 정상 호출된다고 확정하지 않습니다. 이번 조사는 실제 키·키 포함 URL을 읽거나 전송하지 않았으며, 새로운 키 필드를 `api.env`에 미리 추가하지 않습니다. 추가 신청 후보는 **T-Data, 버스 정류소, TourAPI, R-ONE**이며 참고 자료의 도입 우선순위를 정한 뒤 필요한 권한부터 준비합니다. 실제 키는 채팅·문서·Git에 넣지 않습니다. HTTP 사용은 기존에 사용자가 선택한 서울시 경로의 범위와 신규 서비스의 지원 경로를 구분하며 자동 우회하지 않습니다.
+
+7개 우선 후보의 sample 선언 건수 합계는 **65,189행**, 한 페이지 1,000행이면 서비스별 올림 합계 **약 70회**입니다. 이는 전 기간 snapshot 1회분의 단순 계획치이며 인증 paging·동시 수정·재시도·실제 저장량을 측정한 결과가 아닙니다. 이 값을 대상 6분기에 다시 곱하지 않습니다. 생활인구는 하루에 동별 24시간 행이 존재한다면 약 `행정동 수×24`행(425동 가정 시 10,200행·약 11회/일)이어서 장기 수집 비용이 훨씬 큽니다. 실제 동 수·일별 완전성·보존 기간 확인 후 도입합니다. 교통 월간·시설 위치·관광/임대 API의 건수·byte 저장량·운영 quota는 아직 미측정이며 인증 소량 확인 때 별도 산정합니다.
+
+#### 지표·점수 채택 조건과 후속 완료 기준
+
+| 단계 | 필수 조건 | 미충족 처리 |
+| --- | --- | --- |
+| 수집 채택 | 공식 명세·이용조건·권한·제공 범위·실제 필터·단위 확인, 전체 paging·중복/NULL/0·정밀 수치·정정·비밀값 비노출 검사 | 실패 원천 보류. 일부 sample 성공을 전수 성공으로 승격하지 않음 |
+| 화면 채택 | 실제 관측 기간·공간·코드/경계 호환성·CRS·시설 ID 검증, 원값·출처·단위·결측 이유·제한 표시 | 다른 공간 자료는 참고 패널에 표시하거나 미제공. 행정동 통계를 500m로 비례 배분하지 않음 |
+| 영역 점수 채택 | 같은 업종/기간/공간의 충분한 서울 기준집단·분포·분모·방향성·지표 중복 검증, 산식·모델·benchmark 버전 고정 | 의미/방향이 불명확한 시설 수·변화 유형·경쟁 수는 정보로 남김. 선택한 2~3후보만으로 순위 산출 금지 |
+| 종합지수 채택 | 필수 영역·가중치 근거, 동일가중/대안 비교·상관/중복 기여·가중치/정규화 민감도·기간별 재현 검증, 동일 입력 재계산 가능 | 필수 자료 누락/기간 불일치면 `UNAVAILABLE`와 이유. 0점 대입·남은 가중치 자동 재정규화·서로 다른 산식 비교 금지 |
+
+초기 점수 검토 축은 **수요·소비·경쟁 압력·시장 변화**이며 정확한 지표와 필수 축은 전수 품질·분포 검증 뒤 확정합니다. 접근·시설·비용은 우선 참고 정보이며, 별도 비교 집단과 해석을 검증한 경우만 후속 점수 모델에 포함합니다. 같은 동의 후보는 지역 지표를 공유하고 위치별 경쟁/거리 정보는 별도로 표시합니다. 점수 설계는 [OECD/JRC 복합지수 방법론](https://publications.jrc.ec.europa.eu/repository/handle/JRC47008)을 참고하되 카페 창업 결과에 대한 타당성이 입증됐다고 주장하지 않습니다.
+
+“객관적”은 공공 원값과 공개 산식으로 **재현 가능한 상대평가**를 목표로 한다는 뜻입니다. 지표·가중치 선택의 판단을 숨기지 않으며 성공·수익·폐업 확률로 표시하지 않습니다. 기존 `CAFE_ENV_V0_1_DRAFT`의 35/25/25/15와 실험 최소 표본 30은 확정 모델이 아닙니다. 민감도 범위를 통계적 신뢰구간으로 부르지 않습니다.
+
+우선 후보 7종의 어댑터·합성 검증과 인증 전수 수집 결과를 아래에 기록합니다. 저장·공개 확장 때는 현재 release 입력 허용 목록과 원천별 snapshot 계약을 설계합니다. 새 SQL은 기본 개발 환경의 migration 개수/SQL hash binding에 영향을 줄 수 있으므로 격리 전환을 검증하고 기존 DB 적용은 [DB 안전 정책](db-safety.md)을 따릅니다. guard·binding·볼륨 초기화로 우회하지 않으며 `docker compose up -d` 개발 진입점을 유지합니다.
+
+### 추가 7종 인증 수집과 품질 검증
+
+2026-10-22 사용자 승인으로 DB 없이 `seoul_context.py`·기존 `collect_main`/artifact writer를 연결했습니다. 기존 키 파일은 `load_keys`로만 사용하고 값·키 포함 URL을 출력·인덱싱하지 않았습니다. 기존에 사용자가 선택한 서울시 공식 HTTP를 명시해 서비스별 인증 probe 5행을 통과한 뒤, **분기 필터 없는 전체 기간 snapshot**으로 수집했습니다. 직장인구만 선택적 `--quarter`도 지원하며, 다른 신규 원천에 이를 지정하면 네트워크 전에 거부합니다. 기존 release 허용목록과 DB·예약 worker·Compose는 변경하지 않았습니다.
+
+| 원천 | 원문 행·페이지 | 실제 분기 범위·동 수 | 정상화/격리·공개 상태 |
+| --- | --- | --- | --- |
+| 길단위인구 | 9,350·10 | 20211~20262, 22분기×425동 | 9,350·격리0, 수집 완료·미공개 |
+| 상주인구 | 9,350·10 | 같은 22분기×425동 | 9,350·격리0, 수집 완료·미공개 |
+| 직장인구 | 9,108·10 | 같은 22분기×414동 | 9,108·격리0, 수집 완료·미공개 |
+| 집객시설 | 9,350·10 | 같은 22분기×425동 | 9,350·격리0, 수집 완료·미공개 |
+| 상권변화 | 9,350·10 | 같은 22분기×425동 | 9,350·격리0, 수집 완료·미공개 |
+| 소비 | 9,350·10 | 같은 22분기×425동(원문) | 9,344·음수6행 격리, `raw_complete=true/complete=false`, 미공개 |
+| 아파트 | 9,331·10 | 20211~20213 각425동, 20214~20262 각424동 | 9,331·격리0, 수집 완료·미공개 |
+
+합계는 **원문65,189행·70페이지, 정상화65,183행, 격리6행**입니다. 앞선 sample의 선언 건수와 인증 수집/저장 건수를 구분합니다. 전체 paging 중 선언 건수가 고정됐고 자연키 중복은 없었으며, 원문 페이지·정규화·품질보고 SHA-256, raw 자연키=`정상화 키∪격리 키`, 두 집합의 교집합 없음, 건수·기간·파일0600/디렉터리0700을 독립 대조했습니다. 이는 원천의 동일 시점 snapshot 원자성·모든 실세계 동의 포괄·역사적 경계 호환성을 증명하지 않습니다.
+
+**정상화 계약:** `quarter_code/dong_code/dong_name`과 원천 필드명을 보존한 `metrics`·`attributes`로 저장합니다. 새 원천 normalizer 버전은1이며 기존 원천 버전2와 source별로 구분합니다. 코드8자리·서울 prefix, 정확한 필드 집합·분기·정밀 숫자를 검사합니다. 숫자는 float를 거치지 않은 Decimal→문자열이며 NULL·0·분수/평균을 구분합니다. 시설/소비 금액·아파트 개수는 비음수 정수, 인구 추정치·평균은 최대12자리 소수와 BIGINT 상한 안에서 보존합니다. 집계 가설의 차이·반복 여부는 경고로 기록하고 임의 수정하지 않습니다.
+
+**소비 격리:** 기본 엄격 수집은 첫 페이지의 기타 지출 음수로 `FAILED`·`complete=false` 종료했습니다. 원인을 별도 private 진단으로 확인한 뒤 새 경로에서 `--quarantine-negative-consumption`을 명시했습니다. 정상화의 비음수 검증은 유지하며 음수 문제 행의 전체 원문과 식별키·오류 필드만 격리 기록에 남깁니다. 스키마 변경·다른 숫자 오류·중복·paging 오류는 계속 실패합니다. 전체 원문은 완주했어도 상태는 `QUARANTINED_UNPUBLISHED`, CLI 종료3이며 자동 정상 적재·공개 대상이 아닙니다. 음수는 20211/20242/20253/20254/20261/20262 각1행에서 확인됐습니다. 제공기관의 의미 설명/정정 전 0·절댓값·NULL로 변환하거나 제거한 부분집합을 완전한 소비 자료로 사용하지 않습니다.
+
+**자료 채택 전 보류 사항:**
+
+- 직장인구는 인구425동 집합 대비11개 동이 없습니다. 자기 원천의 관측 합집합414동으로만 검사하면 이 차이가 숨겨지므로 원천 간 범위도 비교했습니다. 없는 동은 `NO_ROW`이며 인구0으로 채우지 않습니다. 아파트도 20214 이후1동 누락을 보존합니다.
+- 길단위인구의 전체와 성별·연령·시간·요일 분해를 대조하면 차이가 있습니다(최대 절대차는 성별3, 나머지5). 반올림 때문이라고 단정하거나 합계를 수정하지 않습니다.
+- 집객시설 총수와 나열된 종류별 합계는 전9,350행에서 다릅니다(최대 절대차391). 이 합산은 **확정 정의가 아닌 점검 가설**이며 포괄 범위/중복 여부를 먼저 확인해야 합니다. 시설 값은 수집본의22분기에서 모두 같아 분기 코드만으로 새 관측이라고 표시하지 않습니다.
+- 상주·직장·시설·아파트는 Q4→Q1/Q1→Q2/Q2→Q3의 공통 동 값이 반복됐습니다. 반면 소비는 같은 조건의 비교에서6,794개 동·분기 쌍이 달라 공식 연간 반복 안내와 충돌합니다. 소비의 `annual_repeated_values` scope 값은 **설명상 기대**이며 실제 반복 확인값이 아닙니다. 실제 관측 기준일·집계 단위·갱신 정의를 확인하기 전 최신성/분기별 증감 지표로 승격하지 않습니다.
+- 정상화된6종의 수집 필수 숫자 NULL·분수와 동 코드별 이름 충돌은 이번 검사에서 없었습니다. 실제0은 별도 집계했습니다. 일부 출처의 합계 차이·시점/단위·역사적 경계가 미확정이므로 모든 신규 자료의 `score_ready=false`를 유지합니다.
+
+`quality.json`에는 기간별 행/동 수와 관측 합집합 대비 누락, 필드별 NULL/0/분수·min/max, 동 이름 충돌, 잠정 분해 합계 차이, 연간 반복 비교, 격리 키/필드와 경고를 담습니다. 연간 비교는 문자열 표기 차이(`1/1.0/1.00`)를 변경으로 세지 않고 NULL을 구분한 Decimal 동등성으로 처리합니다. 보고서 생성·저장 중 실패하면 `FAILED`와 `complete=false/raw_complete=false`로 남깁니다.
+
+최종 품질 경고/정밀 비교 보완 후에는 이미 만든 run을 덮어쓰지 않고 새 private 파생 보고서에 입력 manifest hash·정규화 hash·원문 hash 검증 결과를 기록했습니다. 원본·실패 run·진단과 실제 private 경로는 Git에 넣지 않습니다. 현재 run은 [기존 공개 validator](../../etl/app/api_release.py)의 허용목록에 없어 전부 거부됩니다. 후속 저장 계약·품질 보류 해소 없이 기존 worker에 연결하지 않습니다.
+
+실행은 `etl/`에서 기존에 없는 절대 경로를 지정합니다. 프로젝트 밖0700 부모를 사용하며 실패 경로도 재사용/자동 삭제하지 않습니다.
+
+```sh
+.venv/bin/python -m app.collect_main collect seoul-population --page-size 1000 --allow-seoul-http --env-file api.env --output /absolute/private/new-population-run
+# 다른 원천: seoul-residents / seoul-workers / seoul-facilities / seoul-change / seoul-apartments
+# 소비의 기본 엄격 수집은 음수에서 실패합니다. 원문 확보·문제행 격리를 명시할 때만 아래 옵션을 사용합니다(종료3).
+.venv/bin/python -m app.collect_main collect seoul-consumption --page-size 1000 --allow-seoul-http --quarantine-negative-consumption --env-file api.env --output /absolute/private/new-consumption-quarantine-run
+```
+
+검증: `make check-etl PYTHON=/path/to/prepared/python` **465개 실행, 실패0·SKIP15**(기존 실DB/raw opt-in 유지). 신규 합성20개는 전체 필드·정밀/NULL/0·불허 분기 필터·건수/페이지/중복·격리/완료/종료·기존 release 거부·보고서 실패와 숫자 동등성을 검사합니다. 독립 읽기 전용 코드 리뷰에서 찾은 완료 플래그·정밀 비교2건은 실패 재현→수정→전체 회귀를 통과했습니다. 실제 인증70페이지 검사와 일반 테스트를 구분하며 이번에 DB/Frontend/Backend 서버·컨테이너는 실행하지 않았습니다.
+
+### 신규 6종 통합의 채택·저장·조회 계약
+
+2026-10-22의 품질·표시 결정과 10-23 후속 구현입니다. 아파트를 제외한6종을 검토하고,5종은 참고 원값·소비는 전체 보류로 구현했습니다. 수집7종/65,189행은 과거 기록으로 보존합니다. additive V5·계약2 ETL/registry·GET2개·[화면 연결](#신규-자료의-화면-연결)이 추가됐으며, 현재 개발 DB 적용과 격리 검증 결과는 구분합니다.
+
+#### 원천·필드별 채택 결정
+
+`참고 연결`은 출처·기간·품질 한계를 표시한 원값 조회를 허용한다는 설계 판단입니다. 동일 관측일·역사적 경계·점수 적합성이 검증됐다는 뜻이 아닙니다. 원문 필드/값은 보존하고 **공개 허용 필드**를 별도로 고정합니다. 신규 모든 필드의 `scoreReady=false`이며 새 인당지출·경쟁밀도·구매력·종합점수는 이 단계에서 계산하지 않습니다.
+
+| 원천·설계 판단 | 공개 허용 필드(원천 이름) | 보류·제외 항목과 표시 조건 |
+| --- | --- | --- |
+| 길단위인구 `REFERENCE` | `TOT/ML/FML_FLPOP_CO`, `AGRDE_{10,20,30,40,50,60_ABOVE}_FLPOP_CO`, `TMZON_{00_06,06_11,11_14,14_17,17_21,21_24}_FLPOP_CO`, `{MON,TUES,WED,THUR,FRI,SAT,SUN}_FLPOP_CO` | 생활인구를 배분한 추정 원값. 분기 코드만 표시하고 일평균·분기 누적인원·고유 방문자라고 이름 붙이지 않음. 분해 합계를 총수에 맞춰 보정하지 않으며 비율/합계100%·기간 증감·500m 배분은 보류 |
+| 상주인구 `REFERENCE` | `TOT/ML/FML_REPOP_CO`, `AGRDE_*_REPOP_CO`, `MAG/FAG_*_REPOP_CO`(연령6구간), `TOT_HSHLD_CO` | 주민등록 기반 지역 맥락. `APT_HSHLD_CO/NON_APT_HSHLD_CO`는 아파트 구분을 이번 활용에서 제외하므로 공개 제외. 실제 관측 기준일 미확인·연간 값 반복 안내, 분기 증감·다른 인구와 합산 금지 |
+| 직장인구 `REFERENCE` | `TOT/ML/FML_WRC_POPLTN_CO`, `AGRDE_*_WRC_POPLTN_CO`, `MAG/FAG_*_WRC_POPLTN_CO`(연령6구간) | 출근 실측/잠재고객 수가 아닌 원천 추정치. 414동과 다른 원천425동의 차이를 유지하고11동을0으로 채우지 않음. 누락 원인·기준일 미확인, 연간 반복·분기 증감 보류 |
+| 집객시설 `REFERENCE` | `PBLOFC_CO`부터 `BUS_STTN_CO`까지의 종류별19필드(수집 명세 그대로) | `VIATR_FCLTY_CO` 총수는 포괄 정의/세부합 불일치로 공개 보류. 종류별 개수도22분기 동일·실기준일 미확인 표시. 전체시설합·증감·밀도·고객 유발량·개별시설/500m 지도 위치 생성 금지 |
+| 상권변화 `REFERENCE` | `TRDAR_CHNGE_IX/TRDAR_CHNGE_IX_NM`, `OPR_SALE_MT_AVRG/CLS_SALE_MT_AVRG/SU_OPR_SALE_MT_AVRG/SU_CLS_SALE_MT_AVRG` | 업종 식별자가 없는 행정동 원천. 공식 설명의 ‘같은 업종’ 표현만으로 CAFE 전용이라고 확정하지 않음. 유형/개월 원값만 참고, 등급 서열·추천·점포별 생존확률·기존10년/30년 지표와 자동 동일시 금지 |
+| 소비 `WITHHELD` | 없음 | 음수6행과 연간 반복 안내/실제 분기 값 충돌이 미해결. 양수 부분·총액만 골라 공개하지 않음. 전체 원천의 사용자 수치·소비 추세·점수 보류. 기존 **카페 추정매출/거래**는 별도 원천으로 계속 사용 |
+| 아파트 `EXCLUDED` | 없음 | 신규 적재·조회·화면·점수·갱신 대상에서 제외. 기존 수집기·원본·검증 이력 보존, 이번에 삭제하지 않음 |
+
+위 패턴의 `*`는 수집 명세의6개 연령 구간만 뜻하며 임의 필드를 허용하지 않습니다. 인구 추정치는 원천상 ‘명’, 가구는 ‘가구’, 시설은 ‘개’, 평균 영업기간은 ‘개월’로 표시하되 길단위인구의 시간 집계는 `UNKNOWN`으로 둡니다. 현재 공개 통계의 원/건·정밀 문자열 계약은 유지합니다.
+
+**근거와 미해결 구분:** [상권분석 원천 설명](https://golmok.seoul.go.kr/source.do)은 주민등록 기반 상주인구, 통신 기반 직장/길단위인구와 종류별 시설의 일반 의미를 안내합니다. [직장인구 API](https://data.seoul.go.kr/dataList/OA-22184/S/1/datasetView.do)는 Q4 갱신/다음Q1~3 반복을 설명하지만 원천 설명의 기준시점/주기와 동일하지 않습니다. 설명 페이지의 날짜를 개별 행의 관측일로 대입하지 않습니다. [시설 공식 설명](https://data.seoul.go.kr/bsp/wgs/dataView/data300View/5971.do)에도 총수와 종류 합산 정의·이번 장기 동일값의 원인이 명시되지 않아 총수 보류를 유지합니다. 원래 포털 시설 페이지가 일시103 지연일 때 같은 공식 데이터 허브 설명을 확인했습니다.
+
+[변화지표 공식 설명](https://data.seoul.go.kr/dataList/OA-15575/S/1/datasetView.do)은 생존/폐업 평균 영업기간의 서울 대비 조합으로4유형을 설명합니다. API에 업종 검색/식별자가 없어 이를 카페 성과로 해석하지 않습니다. [소비 API 설명](https://data.seoul.go.kr/dataList/OA-22166/S/1/datasetView.do)의 반복 안내·소득 삭제와 앞선 전수 관찰을 함께 보존하며 음수를 환불·보정 잔차로 추정하지 않습니다. 이번 단계에서 공식 정의로 확인된 의미와 **공개자료에서 해결되지 않은 집계·누락·갱신 원인**을 구분했습니다. 외부 기관에 문의를 보내거나 실제 키/private 원문을 다시 열람하지 않았습니다.
+
+보류 해제는 설명/정정 근거와 검증 보고를 확보하고 새 정책 버전을 발행한 뒤 판단합니다. 음수의 의미 확인만으로 소비의 기간 충돌까지 해소됐다고 보지 않습니다. 필드/원천 하나라도 공개 정책이 바뀌면 정책 hash와 `dataVersion`을 함께 바꿉니다. 모든 공식 데이터가 없어도 참고 가능한 원천 연결은 진행할 수 있습니다.
+
+#### 저장·공개 버전 설계
+
+다음 객체는 `db/api-migration/V5__api_context_and_quality_contract.sql`에 구현했습니다. 기존 `api_releases/api_current_release`, 공개 뷰·기존3원천과 reader/writer 역할을 유지합니다. 현재 개발 DB에는 적용하지 않았습니다.
+
+| 신규 객체 | 키·핵심 데이터·제약 |
+| --- | --- |
+| `api_context_runs` | `run_id`=검증된 입력 descriptor의 SHA-256. 채택5종만 허용, 정규화/페이지/품질 hash·수집시각·실제 제공분기·관측일 nullable·원천 schema/정책 검증 정보. 완료·격리0인 run만 저장. 소비 보류/아파트 run은 적재하지 않음 |
+| `api_context_rows` | PK `(run_id,quarter_code,dong_code)`, FK run. 동 이름·JSONB 보존. `metrics`는 원천 필드명→**십진 문자열/NULL**, `attributes`는 원천 필드명→**텍스트 문자열/NULL**. run별 정확한 필드 whitelist·숫자 형식/범위와 텍스트 계약을 각각 검증. 아파트 구분 필드 등 비공개 필드는 내부 보존하되 공개 projector에서 제외 |
+| `api_release_context_sources` | PK `(release_id,source_id)`, FK release/run. 고정6종 항목 각각 `REFERENCE` 또는 `WITHHELD`, 사유·허용필드·`policy_version`/정책본문 hash를 결속. `REFERENCE`면 run필수, `WITHHELD`면 run없음. 아파트 항목/행은 허용하지 않음 |
+| `published_context_rows` | 현재 READY release→해당 source 매핑→해당 run의 행만 조회하는 reader view. 공개 카페 분기 목록에 포함된 기간만 노출. 과거22분기를 보관해도 `/api/quarters`의 기간을 신규원천 때문에 자동 확장하지 않음 |
+
+run·행은 append-only/sealed 방식으로 보존하고 기존 run에 임의 덮어쓰기·UPDATE·TRUNCATE를 허용하지 않습니다. 정책 본문은 공개 필드/상태/근거/경고 정의의 canonical JSON이며 hash를 검증하고 release metadata에 불변 저장합니다. public 응답에 로컬 경로·키·개별 점포 개인정보를 포함하지 않습니다.
+
+**공개 계약2:** `api_context_release.py`의 별도 최종 검증·staging gate를 사용합니다. 기존 `api_release.verify_release/stage_release`의 엄격한 계약1 경로는 유지합니다. 기존3원천 `runs/baseline/quality_policy`와5개 참고 run·6개 상태·정책본문/hash를 새 canonical digest에 결속합니다. history-only 후보는 최종 release로 취급하지 않습니다. Python·Backend·Frontend는 동일한 고정 정책 fixture를 사용합니다.
+
+private bundle schema2는 정규화 JSONL 외에 원본 manifest/pages·quality·quarantine·replay 원본 manifest를 run별 evidence로 보존합니다. registry에는 bundle 경로를 불변 등록하고 등록·refresh·reconcile 때 모든 파일 hash와 재생 descriptor 및 전체 digest를 확인합니다. 원본 근거가 없는 이전 schema1 bundle은 runtime에 등록하지 않습니다. 새 갱신은 원래13개 baseline run을 `baseline_archive`로 보존하고 `refresh_parent`에 현재 READY ID를 결속합니다.5종의 기존 분기·동 key가 하나라도 사라지면 수집 단계에서 중단하며 SQL 공개 guard도 원천별 key 감소를 거부합니다.
+
+새 release를 `PREPARING`으로 저장 → 기존 통계·점포와 context의 예상건수/키·정밀값·기간·허용필드·권한 대조 → READY seal → 단일 `api_current_release` CAS 전환 순서로 공개합니다. 한 원천의 의도한 `WITHHELD`는 정책 상태이며, 필수 `REFERENCE` run의 실패를 자동 보류/옛 run으로 대체하지 않습니다. 승인된 원천별 기간/동 coverage와 source run hash를 결속하고 신규 누락·건수 후퇴는 품질 재검토 없이 허용하지 않습니다. 반복 연간값을 메모리상 최신분기로 복사해 없는 행을 만들지 않습니다.
+
+**같은 공개 버전은 같은 원천 관측일을 뜻하지 않습니다.** 신규 context의 원천별 기간/수집시각/관측일과 SEMAS snapshot 기준년월을 별도로 표시합니다. 기존 `PublicationMetadata`의5필드·오류 구조·정밀 문자열과 점수 산식은 유지하며 새 조회도 그 metadata를 반환합니다. legacy/계약1 데이터는 기존 endpoint로 계속 조회하고, context 계약이 없는 버전의 새 endpoint는503 `CONTEXT_UNAVAILABLE`을 반환합니다. 자동 갱신의 정상 경로는 컷오버 후 계약2를 요구해 계약1 release로 context가 사라지지 않게 하고, 이전 계약으로의 운영 롤백은 별도 승인·검증 경로로 다룹니다.
+
+#### 추가 GET 조회 계약
+
+| endpoint | 필수 query·검증 | 결과 |
+| --- | --- | --- |
+| `/api/admin-dong-context` | `dongCode`, `quarterCode`, `dataVersion` 각각1회. 공식 지원8자리동·현재카페공개분기·64자리소문자hash 또는 `legacy-unversioned`. `industryCode`, `lat/lng`, `radius`, 임의source필터는 받지 않음 | 업종 미구분 행정동 참고6섹션과 출처/품질·보류 상태. 소비도 항목은 남기되 수치 없음. legacy 요청은 버전검사 후503 |
+| `/api/admin-dong-sales-breakdown` | `dongCode`, `industryCode=CAFE`, `quarterCode`, `dataVersion` 각각1회. 기존 lookup/공개분기/형식 검사 재사용, 버전은64자리hash 또는 `legacy-unversioned` | 기존 매출 전체필드의 총액/건수·요일/시간·성별·연령별 상세. 신규 소비 원천과 분리 |
+
+기존 GET11개·`/api/quarters`의 선택/기본분기 계약을 바꾸지 않습니다. 새 context trends endpoint는 초기 범위에 넣지 않으며 인구/시설의 기준 정의가 미확정인 상태에서 추세 그래프를 만들지 않습니다. 새 오류도 기존 `{code,message,field}` 형식입니다. 검증 순서는 **형식/중복·lookup(400) → 실제 공개 버전 검사(409) → context 계약 가용성(503)**입니다. 정상 legacy의 sentinel이 일치하면503이며, API 공개 모드에서 sentinel/오래된hash를 보내면409 `DATA_VERSION_CHANGED`입니다. 내부 품질/중복/정책 오류는500 `DATA_INTEGRITY_ERROR`로 닫습니다. 새503코드는 Frontend 오류 validator·API 문서에 함께 추가하며 일반 네트워크 오류/데이터 없음으로 위장하지 않습니다.
+
+`admin-dong-context`의 고정 응답은 `metadata`, `dong:{code,name}`, `quarter:{code,label}`, `spatialUnit:"ADMINISTRATIVE_DONG"`, `contextPolicyVersion`, `sections`입니다. `sections`의 키는 정확히 `population/residents/workers/facilities/change/consumption`이며 아파트 키는 없습니다. JSON의 고정 속성명은 camelCase, `metrics/attributes` 딕셔너리 키는 추적 가능한 **원천 필드 식별자**를 사용합니다. UI에는 서버/클라이언트가 공유하는 정책 registry의 한글 라벨을 사용합니다. 각 섹션은 아래 필드를 갖습니다.
+
+| 필드 | 값과 불변 조건 |
+| --- | --- |
+| `state` | `REFERENCE / NO_ROW / NO_PERIOD / WITHHELD`. 실제0은 `REFERENCE`의 값 `"0"`이며 상태값이 아님 |
+| `reasonCodes` | 안정적인 코드 배열. `OBSERVATION_DATE_UNKNOWN`, `AGGREGATION_UNVERIFIED`, `ANNUAL_REPEAT`, `COVERAGE_GAP`, `TOTAL_DEFINITION_UNVERIFIED`, `SOURCE_CONFLICT`, `QUALITY_WITHHELD` 등 정책 정의만 허용 |
+| `metrics`, `attributes` | `REFERENCE`면 허용 필드만 담은 객체(변화유형은 attributes), 나머지 상태는 모두null. 원천 컬럼 NULL은 metrics의 `value:null/valueState:SOURCE_NULL`; 빈 객체/0으로 대체하지 않음 |
+| metric item | `{value:string\|null,valueState:REPORTED\|SOURCE_NULL,unit:PERSON\|HOUSEHOLD\|FACILITY\|MONTH,temporalAggregation:SOURCE_REPORTED\|UNKNOWN}`. 숫자는 기존BIGINT범위·소수최대12자리의 비음수십진문자열. 소수표기 차이는 값 변경으로 세지 않음 |
+| `provenance` | `{sourceId,datasetId,sourceUrl,runId,sourceQuarter,observedAt,collectedAt,refreshModel}`. 관측일은 미확인일때null. sourceQuarter는 요청분기와 같은 실제행/제공기간, 관측일을 뜻하지 않음. 보류로run이없으면runId/sourceQuarter/observedAt/collectedAt은null |
+| `spatialCompatibility`, `scoreReady` | 초기 `HISTORICAL_UNVERIFIED`, false. 같은코드의조인성공만으로범위/점수검증상태를승격하지않음 |
+
+변화유형 `attributes`의 `TRDAR_CHNGE_IX`는 `LL/LH/HL/HH` 또는NULL, `TRDAR_CHNGE_IX_NM`은 원천 텍스트 또는NULL로 보존합니다. 숫자 변환·코드→서열 변환을 하지 않습니다. 이름은 표시용이며 조인키가 아닙니다. 미지의 코드나 정책상의 코드/이름 정의 충돌은 원문을 보존하고 공개 전에 정책 재검토 대상으로 분리하며 임의로 네 유형 중 하나를 선택하지 않습니다.
+
+`NO_ROW`는 **해당 원천의 그 분기 전수 수집은 완료됐지만 그 동의 행이 없는 경우**에만 사용합니다(직장인구11동 등). 분기 자체가 원천 snapshot에 없으면 `NO_PERIOD`, 정책상 보류면 `WITHHELD`가 우선입니다. 다른 분기/이전 연간값을 자동 선택하지 않습니다. 고정 source entry·hash·키가 불일치하면 missing 상태로 감추지 않고500입니다. `NO_ROW/NO_PERIOD`의 provenance는 원천/run 수집 정보는 유지하되 `sourceQuarter=null`, 해당수치/관측일은null입니다.
+
+매출 상세는 context 채택과 독립적으로 기존 계약1 공개 자료·legacy에서도 제공하도록 설계합니다(legacy는 기존처럼 metadata 없음/`legacy-unversioned` 판정). 응답은 동일 metadata·동·CAFE·분기, `sales`와 `missingReason`을 반환합니다. 행 부재면 `sales=null/missingReason=NO_ROW`; 있으면 `missingReason=null`이고 `sales`는 `totals`, `dayTypes[MDWK,WKEND]`, `weekdays[MON..SUN]`, `timeSlots[00_06,06_11,11_14,14_17,17_21,21_24]`, `sexes[ML,FML]`, `ages[10,20,30,40,50,60_ABOVE]`입니다. `totals`는 금액/건수 객체이고 각 배열 item은 고정code와 `estimatedSalesAmount/transactionCount` 십진정수문자열또는NULL이며, 그룹/순서/NULL를생략하지않습니다. 성별/연령을신규고객수로부르지않고,합계를맞추거나구간길이로나눠시간당값을추정하지않습니다.
+
+#### migration·실행 전환과 검증 gate
+
+additive V5가 계약1/2 seal·context 권한/불변·공개 후퇴 방지 검증을 추가합니다. V1~V4와 `db/api-runtime/schema.sql`은 보존합니다. 새 초기화는 실제 migration 목록의 version/file/SQL hash 전부를 확인한 별도 receipt를 남기며 숫자4를5로 치환하거나 기존 binding/READY를 덮어쓰지 않습니다. fresh V1~V5와 기존 V4→V5 전환 기록은 별도로 검증합니다. 현재dev·별도API·legacy·퇴역환경은 이번 격리 대상이 아닙니다.
+
+순서는 DB없는 정책/manifest/DTO 회귀 → 승인된새격리DB에서V1~V5·계약1→2·권한/실값/HTTP·실패/롤백검증 → 기존dev에대한구체identity·백업/독립복원·중지/적용/복구범위제시 → 명시적승인후적용입니다. 기존자동갱신중전환,계약1으로의자동후퇴,불명확한중단상태재실행을금지하는전환검사가필요합니다. `docker compose up -d` 진입점은유지하며manual초기화/볼륨삭제를사용자절차로추가하지않습니다.
+
+구현 때 고정할 회귀는 아파트입력/표시거부·주거가구아파트세부제외, 소비보류/격리run공개거부, 총시설필드비공개, 414/425동과NO_PERIOD구분, NULL/0/정밀Decimal, 허용필드·출처버전/hash, 지원분기교집합, 기존11endpoint/점수응답, 느린응답·정책/공개버전교체, reader쓰기거부·append-only·기존값보존입니다. 이번에는 schema/DB/API 구현 테스트를 실행하지 않았습니다.
+
 ### README 개선 항목별 대응
+
+아래 표는 초기 API 전환 시의 범위 결정 기록입니다. 10/31 우선순위는 현재 일정·실행 승인이 아니며 추가 데이터/점수의 최신 범위는 위 목록과 [프로젝트 로드맵](project.md#다음-작업)을 따릅니다.
 
 | 개선 항목 | 검토 결과와 구현 방향 | 10/31 우선 범위 |
 | --- | --- | --- |
@@ -579,6 +796,70 @@ V4를 기본 `db/migration`에 넣으면 현재 고정 데이터 패키지가 �
 **실자료 offline 준비 검사:** 기존 수집본 13개(서울시 20251~20262 쌍·SEMAS v2 replay) 335,002행을 새 `prepare_release`에 넣어 `VALIDATED_UNPUBLISHED`를 확인했습니다. 공개 후보 ID는 `3f3311b71f2f6839cfb959b989704cff366ad11aa7952ddfdb389b3c61b3652e`, 점포 기준년월은 202606·범위는 I21201입니다. 메모리 검사만 수행했고 새 bundle 파일·DB 행·공개 pointer는 만들지 않았습니다. 이 성공은 실제 DB 적재·공개·동일 시점 완전성의 증거가 아닙니다.
 
 이 최초 코드 단계는 기존 서비스의 데이터를 갱신한 결과가 아닙니다. 실제 격리 검증과 그 이후 남은 운영 전환 범위는 다음 절을 따릅니다.
+
+### 과거 분기 backfill과 첫 제공 분기 안내
+
+2026-10-22의 승인 범위는 DB 없는 과거 수집·후보 준비와 기존 점수 안내 구현입니다. `etl/app/api_backfill.py`는 명시한 추가 분기의 점포·매출만 수집하고 `--previous-run`으로 지정한 기존 run·SEMAS를 승계합니다. 과거 분기 추가를 이유로 SEMAS나 기존 분기를 재수집하지 않습니다. 중복/기존 분기·40분기 초과·불완전 baseline은 호출 전에 거부하며, 어떤 원천이라도 실패하면 후보를 생성하지 않습니다. 성공 시에도 `PREPARED_UNPUBLISHED`이며 현재 DB registry/pointer를 확인한 것이 아닙니다. 기존 공개 적용 전에는 현재 registry와 baseline을 대조하고 CAS·백업/복원·승인 조건을 다시 충족해야 합니다.
+
+격리 정책 승인 전 첫 수집 결과는 다음과 같습니다. 후속 복구·후보 준비 결과는 아래에 구분합니다. 원본·실패run·요약은 프로젝트 밖 private 경로에만 보관하며 이 문서에는 집계만 기록합니다.
+
+| 검사 | 결과와 한계 |
+| --- | --- |
+| 20211~20244 제공 소량 조회 | 16분기 점포·매출 모두 제공. 과거 선언 합계839,306행이며 전수 통과 행 수와 구분 |
+| 20204·20263 소량 조회 | 양 원천 INFO-200. 20211의 비교 기준을 임의 복원하지 않음 |
+| 추가32scope 수집 | 30scope·804,968행 전수 통과, 정상14개 분기쌍. 완료run의 raw/normalized hash·정규화·자연키 재검증 PASS, 동명 충돌0 |
+| 미완료2scope | 20222·20243 매출. 각각 처음 거부된 페이지에 카페 외 업종 `TMZON_06_11_SELNG_CO` 음수 확인. 해당scope의 남은 페이지/추가 오류는 미확인 |
+| 기존자료 승계 준비 | 현행dev scheduler의 초기13seed run만 읽기 전용 복사·검증. 335,002행·6분기·SEMAS202606, 복사본 baseline `a9a8749d055a38e6595487ba3ddec7d2737bde4b63173cb744bb51923d15fb2b`. 현재 공개 registry 일치 확인은 아님 |
+| 최초 시도 후보 | 격리 승인 전에는 전체22분기 후보 미생성. 실패 원천의 값을0으로 보정하거나 행을 조용히 버려 검증을 우회하지 않음. 실제 DB 접속·적재·공개·컨테이너 변경 없음 |
+
+`initial_periods(..., start_year=2021)`은 확장 목표의 분기쌍·중간 누락·40분기 상한을 검증할 수 있습니다. 현재 초기화/자동갱신은 아직 계약1이므로 실제 초기화 기본2025는 유지합니다. READY 초기화는 기존처럼 초기 수집을 반복하지 않습니다. 계약2의 새/기존환경 전환을 검증하기 전 과거 분기를 기본 초기화에 켜지 않습니다. 초기 baseline13run 검증은 약3GiB peak RSS였으며 후속22분기 후보 측정은 아래와 같습니다.
+
+점수 산식·모델 버전·metadata·BIGINT 문자열은 유지합니다. `ChangeScoreService`는 현재 NO_ROW/NULL/음수 사유를 전분기 미지원보다 먼저 반환하고, 현재가 정상일 때만 전분기 미지원 사유를 붙입니다. 첫 제공 분기의 소비규모는 계산 가능하지만 증감은 계산하지 않습니다. 20212→20211·20221→20214·20251→20244를 정확히 비교하며 전분기가 새로 지원되면20251의 증감도 계산 가능해집니다.
+
+화면은 지원 목록의 최초 분기+정상 현재 거래 건수+`PREVIOUS_QUARTER_UNAVAILABLE`일 때만 ‘첫 제공 분기’와 이유·현재 건수·소비규모/추정매출 안내를 보여줍니다. 정상0은 보존하며 중간 누락·현재 오류는 구분합니다. 지원된 바로 다음 분기가 있을 때만 ‘변화 보기’를 노출합니다. 버튼은 상세 경로나 일반 선택의 전체 분기를 변경하며 기존 요청 취소/무효화 흐름을 사용합니다. 후보 비교는 공통 분기만 바꾸고 후보를 보존하며 ‘같은 분기로 후보 분석’을 다시 눌러야 새 점수·통계를 조회합니다. 요약·상세 비교표도 같은 사유를 표시하고 정상 소비규모를 유지합니다. 그래프는 기존 실제 원값과 결측 연결 정책을 유지하며 가상의 증감점을 만들지 않습니다.
+
+일반 검증 PASS: `make check-etl` 470건(455PASS/15SKIP), Backend `./gradlew test --offline` 279PASS, Frontend `npm run test` 344PASS, `make check-frontend` 타입·번들·린트 PASS. READY 초기화는 외부 동작을 모두 mock 처리한 회귀에서 초기 수집·키 읽기를 건너뛰는 것도 확인했습니다. 모의 브라우저는 Browser plugin 부재로 준비된 Playwright와 기존 Chrome을 사용했으며, 별도 loopback Vite의 모든API를 합성 응답으로 처리했습니다. 1440×1080·390×844에서 최초분기·키보드 다음분기 전환·3후보 공통분기/재분석, 가로 넘침 없음·framework overlay 없음·page/console 오류0을 확인하고 화면을 육안 검토했습니다. 독립 최종 코드 리뷰 지적0건입니다. 실제22분기 적재/HTTP/점수 원값 대조와 기존 개발환경 적용은 후속 격리 검증·승인 범위입니다.
+
+#### 명시적 격리 승인 후 22분기 후보 준비
+
+두 미완료 매출 분기를 새 진단 경로에서 전수 조사했습니다(20222 17,401행·18페이지, 20243 16,937행·17페이지). 각1행의 `TMZON_06_11_SELNG_CO=-1.0`만 거부됐고 모두 현재4개 지원 업종에 매핑되지 않았습니다. 다른 숫자/필드/자연키 오류는 없었습니다. [공식 원천 안내](https://data.seoul.go.kr/dataList/OA-22175/S/1/datasetView.do?tab=A)에서 이 음수의 업무적 의미를 확인하지 못했으므로 환불·마스킹·공식 오류로 단정하지 않습니다.
+
+사용자가 원본 보존·명시적 격리 계약을 승인했습니다. [api_history_quality](../../etl/app/api_history_quality.py)의 정책 `EXACT_APPROVED_UNMAPPED_SALES_NEGATIVE_COUNT_V1`은 private 승인 목록에 고정한 **quarter/dong/industry/field/value**와 일치하는 미지원 업종 행만 격리합니다. 지원 업종 오류·새로운 행/값/필드의 오류·승인case 누락/중복은 실패합니다. 전체 raw와 격리 JSONL·사유·페이지/행 번호·hash를 보존하고, 원본 값을0/NULL로 보정하지 않습니다. 정상 행은 기존 정규화 규칙을 따릅니다.
+
+복구run은 `normalizer_version=3`, `QUARANTINED_UNPUBLISHED`, `raw_complete=true/complete=false`이며 현재 계약1 loader가 계속 거부합니다. 후보는 `contract_version=2`, 기존run/baseline descriptor·정책/승인목록·격리개수/근거를digest에 결속합니다. `verify_history_candidate`는 파일 read-back의digest·정규값·기간·승인case·격리개수/hash/위치·baseline을 검증합니다. 계약1 verifier는 quality metadata/normalizer3·계약2 marker를 명시 거부해 version만1로 바꾼 잘못된 하향 전환도 차단합니다. 공통 행 검증 helper는 순수 숫자/키/layout 검사이며 DB 실행 gate가 아닙니다.
+
+| 결과 | 검증 범위 |
+| --- | --- |
+| 후보 ID | `58d40ef4aa9a8b8d33a7f28748d1d22571a75d11ab209a5d93635b5ed9cb378d` |
+| 파일 SHA-256 | `b4b12249043ca790b34596d8436deafb8f98ec600c75559888c7640d0d6be47a` |
+| 기간/규모 | 20211~20262 연속22분기·45run, raw1,174,308행 / 정상1,174,306행 / 격리2행 |
+| 원본/기존값 | 서울 정상1,151,567행을 raw 필드와 독립 전수대조. SEMAS 포함 baseline335,002행 전체 동일. 같은분기/동의 이름 충돌0, 현행425동목록밖 행0. 과거경계 호환성 증명과는 구분 |
+| 점수 파일회귀 | 기존6분기의 규모2,525행, 기존전분기가 있던5분기의 증감2,104행 독립 정수/유리수 계산 일치. 새20251은20244와420동 비교 가능. 전체21개 변화분기 최소집단418동. 첫20211의20204는미제공 |
+| 시간/메모리 | 후보 준비74.4초·peak7,594.1MiB, 별도read-back/원본/점수감사63.1초·peak6,896.5MiB. 로컬24GiB 환경의 측정이며 작은배포서버/동시작업의 상한 보증 아님 |
+
+상태는 `PREPARED_UNPUBLISHED_REQUIRES_CONTRACT_2_INTEGRATION`입니다. history-only 후보에는 아직 context6종의 정책/원천이 추가되지 않았으므로 **최종 context release·DB 적용 가능/성공을 뜻하지 않습니다**. 추가하면 최종digest도 새로 만듭니다. 현재 공개registry는 미조회이고 baseline은 초기seed 복사본입니다. 다음 적용 시 current registry와 갱신run/SEMAS월을 승계·재대조해야 합니다. 정상43run을 재수집하지 않았으며 기존실패run/파일을 덮어쓰거나 지우지 않았습니다. 기존SQL·컨테이너·DB·공개pointer 변경 없음.
+
+DB 없는 재현 CLI는 `python -m app.api_history_quality collect-sales --help`, `prepare --help`입니다. collect는 명시적policy/env/quarter/새output, prepare는 명시적policy/private input-plan/새output만 받으며 DB에 연결하지 않습니다. 입력plan은 정상run·quality run·baseline run·목표기간의 네목록을 포함합니다. private파일을Git에추가하거나 기존출력경로에서재실행하지않습니다. 2026-10-23 최종검증은 `make check-etl` 475건(460PASS/15SKIP:격리DB·고정원본 opt-in 미설정)입니다. raw보존·정확격리·지원업종/새오류차단·변조·baseline·계약1거부/하향전환·다중페이지/빈꼬리페이지 거부 회귀 PASS. prepare CLI는 큰원본객체를 해제한뒤 저장JSON을 다시읽어 검증하며, `readback_verified=true`일때만 성공 preparation.json을 남깁니다. 위74.4초 측정과 최초 preparation은 이 CLI보강 전 결과이며 해당 실후보는 별도63.1초 파일감사로 검증했습니다. 재개시에는 후보파일SHA 동일성을 확인해 완료된수집/감사를 반복하지 않았습니다. 독립코드리뷰 지적0건, 실제Backend/SQL/HTTP 결과는 아직 미검증입니다.
+
+**후속 공동 실행 현황:** 이 문단의 구현·격리검증 계획은 후속 사용자 승인으로 진행했습니다. 공통 최종계약2·V5/ETL·GET2개·Frontend 구현은 아래 최신 검증 기록을 기준으로 판단합니다. 기존dev 적용은 이번 승인에서 제외됐으며 actual current registry·백업/복구·worker·binding 전환안과 별도 승인이 필요합니다.
+
+### 22분기·참고 자료 통합 구현과 검증
+
+2026-10-23 후속 승인 범위는 A~F 구현·새 격리 DB/HTTP/화면 검증·이번 생성 자원 정리입니다. 현재dev·팀·별도 API·퇴역 DB 조회/변경·Releases·Git commit/push는 제외했습니다. 최초 최대2세트 계획에서 첫 fresh CAS 실패 뒤 추가1세트의 검증·정리를 사용자에게 명시적으로 승인받았습니다. 각 대상은 고유 nonce/full ID·owner label·SID를 기록하며2GiB tmpfs·internal network·DB host port 없음·고정 이미지를 사용합니다.
+
+- 최종 release ID: `4f6a03653f036ce271880d34d02a3042575c071aaef61be9601547b31189daf2`.20211~20262의22분기/45run·정상1,174,306행·정확2행 격리와 참고5run/46,508행·소비 보류 정책을 하나의 digest에 결속했습니다. 원래13seed/335,002행·SEMAS202606은 별도 baseline이며 현재dev registry와 같다고 가정하지 않습니다.
+- 원본 재수집 없이 run 단위 replay·정규화 JSONL streaming으로 준비했습니다. 최초 정규화 bundle은519.22초/RSS182.9MiB, 리뷰 후 원본 근거까지 담는 schema2 bundle은423.32초·full read-back PASS였습니다. 작은 운영 서버의 처리 상한 보증은 아닙니다.
+- 기존 V1~V4/runtime SQL과 binding/READY를 보존했습니다. V5는 context5종 저장/6상태·정확 격리·seal·append-only·CAS·계약/기간/점포월/coverage 감소 방지를 추가합니다. 기존 SQL을 숫자 치환하거나 실패 target에서 자동 재실행하지 않습니다.
+- 첫 fresh는 V1~V5 migration과 typed staging 후 공개 guard의 JSONB 연산자 우선순위 오류(SQLSTATE42883)로 CAS가 실패했습니다. RO 감사에서 이전 baseline pointer 유지·새 release READY를 확인하고 해당 own 자원만 정리했습니다. 괄호를 수정한 뒤 별도 V4→V5 대상에서34항목을 통과했습니다. 이후 HTTP 진단에서 named parameter와 `?` 연산자 충돌을 발견해 실제 parser offline RED 후 `jsonb_exists`로 수정했습니다.
+- source 최종 독립 리뷰는 Critical0·Important2(갱신 coverage 감소·registry 원본 근거 누락)였으며 둘 다 회귀 테스트 후 보완했습니다. 수집 단계의 키 포함 검사와 SQL guard, bundle schema2의 원본/quality/quarantine hash·replay 검증을 사용합니다. 프론트는 변화유형 code/name 쌍도 검사합니다.
+- 최종 fresh는 리뷰 보완 후 V5 SHA `69f4f0f009bae39030c6621e00e9a6272c14f87f983067f8c48bbe5d728282cb`로39항목 PASS입니다. V1~V5 초기화·기존 계약1 writer·전체 typed/geometry 대조·2격리·context46,508행·CAS·READY no-op·하향계약 차단·append-only·reader 권한과 기존 모든 boundary 속성/양쪽 EWKB·legacy sequence 보존을 확인했습니다. SQL publication guard의 분기/동 key 감소 검사는 rollback-only 임시 pointer에서 실제 함수를 호출하고 현재 공개 유지도 확인했습니다. 앞선34항목 V4→V5 결과는 보완 전 V5의 별도 전환 기록이며 최종 fresh 결과와 구분합니다.
+- 실제 HTTP:13개 GET·130요청·576검사 PASS.22분기 전체의 소비규모66개/소비증감66개 점수·비교 집단·원값·첫 분기 사유·전분기 코드를 파일 기반 정수/분수 순위와 대조했습니다.22분기 참고6섹션 projection과 매출 모든 구성 원값,400 query/409 버전·실제 직장인구 NO_ROW를 확인했습니다.500 오류를 없애기 위해 값을 보정하거나 결측을0으로 바꾸지 않았습니다.
+- 실API 화면: prepared Playwright/Chrome·테스트 지도 SDK로1440×1000/390×844, 최신20262 기본·20211 첫 분기 안내·22분기 전체 표·명동/서교동/성수2가3동3후보·동일 명동2위치의 참고자료2패널 공유·상세 제목 초점·키보드 펼치기·소비보류를 PASS했습니다. 앱 page/console 오류0·실제 API 오류0·모바일 document overflow 없음. 브라우저가 자동 요청한 favicon404는 별도 기록했고 제품/API 오류에 섞지 않았습니다. 실제 Kakao 인증/타일·전체 실기기·포괄적 접근성은 미검증입니다.
+- 일반 회귀: Backend290PASS/skip0, Frontend350PASS·build/lint PASS, ETL494건 중479PASS/15SKIP(일반 실행의 DB/raw opt-in 미설정). mock 화면은 decimal/NULL/실제0·소비보류·context503 독립 오류/재시도·PC/모바일을 확인했습니다.
+
+정리 결과: 첫 실패 fresh·중단 후 stopped upgrade·마지막 fresh의 이번 생성 DB3개/전용 network3개와 Backend2개를 exact full ID/소유권 검증 후 정리했습니다. 마지막 대상은 같은 연결의 READ ONLY identity 감사에서 최종 pointer·baseline READY·46,508행을 확인한 뒤 정리했습니다. host 임시 Vite/HTTP bridge도 종료했습니다. 원본·private bundle·검증/실패 증거와 프로젝트 수동 임시/리뷰 파일은 보존했습니다. 기존 자원·볼륨·백업·키·Releases·Git index는 변경하지 않았습니다.
+
+기존dev는 여전히20251~20262이며 이번 격리 성공을 dev 적용이나 배포 성공으로 간주하지 않습니다. 실제 주간 예약 시각의 외부 재수집·전체 worker 복구·현행 registry/CAS 승계·백업/복원·binding 전환은 후속 적용 검증에서 분리합니다. 새 종합점수는 제공하지 않으며 참고자료 모두 `scoreReady=false`입니다.
 
 ### API 격리 통합 검증과 전환 준비
 
@@ -982,7 +1263,7 @@ DB는 네 상태를 표현하지만 현재 준비 코드는 예상 밖·미지�
 
 ## 현재 GET API 계약
 
-현재 비즈니스 API는 GET 11개입니다. 통계·추세·위치·주변 카페와 지역 검색·표시 경계·카페 소비규모/소비증감 점수를 제공합니다. 성공률·종합 입지 추천 API는 없습니다.
+현재 비즈니스 API는 GET 13개입니다. 기존11개에 행정동 참고 자료·카페 세부 매출2개를 추가했습니다. 성공률·종합 입지 추천 API는 없습니다.
 
 | 경로 | 필수 query | 결과 |
 | --- | --- | --- |
@@ -997,6 +1278,8 @@ DB는 네 상태를 표현하지만 현재 준비 코드는 예상 밖·미지�
 | `/api/regions/admin-dongs/{dongCode}/boundary` | 없음, 선택 query datasetVersion | 현재 operational geometry의 EPSG:4326 GeoJSON 및 품질·역사적 호환성 |
 | `/api/cafe-consumption-scores` | dongCodes, quarterCode | 1~3개 행정동의 카페 소비규모 점수와 산정 근거 |
 | `/api/cafe-change-scores` | dongCodes, quarterCode | 1~3개 행정동의 소비증감 상대 점수·실제 증감률·산정 근거 |
+| `/api/admin-dong-context` | dongCode, quarterCode, dataVersion | 행정동 전체의 참고5종·소비보류6섹션, 고정 정책·출처·정밀 원값 |
+| `/api/admin-dong-sales-breakdown` | dongCode, industryCode=CAFE, quarterCode, dataVersion | 기존 매출의 총액/건수와 요일·시간·성별·연령별 정밀 원값 |
 
 ### 지역 목록과 표시 경계
 
@@ -1261,6 +1544,37 @@ quality에는 다음 7개 건수가 있습니다.
 품질 사유는 중복될 수 있습니다. 0개 결과는 조회 가능한 자료의 결과이며 실제 경쟁 점포의 부재를 보장하지 않습니다.
 
 ## Frontend 화면과 요청 상태
+
+### 신규 자료의 화면 연결
+
+2026-10-23 신규6종 정책·조회 계약을 화면에 연결했습니다. 지도 요약·상세·공통 분기 후보 비교에 참고 원값과 출처·한계를 표시하고, 카페 세부 매출은 상세에서만 조회합니다. 신규 종합점수·자동 추천 문구·아파트 영역은 추가하지 않습니다. 현재dev 적용 여부와 실제 검증 범위는 별도로 기록합니다.
+
+| 화면 | 먼저 보여줄 질문·값 | 상세·주의·상태 |
+| --- | --- | --- |
+| 지도 탐색 요약 | 기존 카페 소비규모/증감·주변카페 유지, 상주/직장 원값 카드와 활동인구 참고자료 진입 | ‘행정동 전체’ 배지·선택자료분기·실관측일 미확인/반복 안내. 지점전용매출·고객수로 부르지 않음. 같은 동 후보는 같은 지역값임을 표시 |
+| 상세: 카페 소비 | 기존 카페 매출/거래 총값·기존추세, 주중/주말·요일7·시간대6·성별2·연령6의 원값 표/막대 | 신규 지역소비 원천과 제목 분리. 집계 차이/누락 유지, 원·건/정확한 문자열/출처/기간. 거래건수를 고객수로, 시간대 합계를 시간당 수요로 변환하지 않음 |
+| 상세: 인구·배후수요 | 길단위인구 총수/시간/요일/성·연령, 상주/직장 인구 구성·총가구 | 원값 표 우선. ‘원천 추정값·집계기준 미확인’과 ‘연간 값 반복’ 표시. 길단위인구의 비율100%/기간증감 차트는 보류, 인구3종 합산 없음. 아파트 구분 가구 숨김 |
+| 상세: 경쟁·변화·시설 | 기존 점포/개폐업·반경500m 목록, 변화유형과 영업기간 개월, 시설 종류별개수 | 변화유형을 서열/추천으로 색칠하지 않음. 카페전용아님·시설총수보류·22분기동일/관측일미확인 표시. 시설점·주변시설개수를 생성하지 않음 |
+| 최대3후보 비교 | 기존 소비신호·반경카페수와 상주/직장·활동인구 총값을 같은자료분기로 나란히 | 같은 동의 지역근거 공유 표시. 시설/변화·인구 구성과 원천별 세부 출처는 상세 화면에서 확인. 서로 다른 관측일을 같은시점이라고 표시하지 않음. 결측/보류는빈칸·0·최하위가아닌이유로표시, 신규종합순위없음 |
+| 출처·미제공 안내 | sourceURL·자료분기·실관측일·수집시각·데이터/정책버전·집계/범위제약 | 소비는 ‘지역소비 자료 검토 중’과 사유를 표시하고 수치영역은 제공하지 않음. 별도 클릭으로 기존 카페소비는 계속 확인 가능 |
+
+패널의 추가 참고 카드가 기존 두 점수/주변카페의 주요 동선을 밀어내지 않도록 작은 요약→상세 펼치기 구조를 유지합니다. 시설·인구를 지도 점으로 그리지 않습니다. 상세는 현행 `ManualStatistics`와 `CafeReviewDetails/AnalysisCharts`의 책임을 확장하고 React API→hook→component 분리를 유지합니다. 새 router/state/UI 의존성을 추가하지 않습니다.
+
+**API·상태 소유:** `frontend/src/types/context.ts`, `api/contextApi.ts`, `hooks/useAdminDongContext.ts`, `hooks/useSalesBreakdown.ts`와 두 패널로 나눴습니다. 공통 `get/ApiFailure`를 재사용하고 정밀값은 Number 변환 없이 표시합니다. 같은 동·분기·버전·재조회 세대의 context 요청과 결과를 구독자 간 공유하고 마지막 구독 해제 시 취소합니다. 정책 hash와 변화 code/name 쌍도 검사합니다. 판매 상세는 상세를 열 때 조회하며 context 실패와 독립적으로 기존 카페 자료를 보여줍니다.
+
+| 상태/입력 | 사용자 표시·요청 처리 |
+| --- | --- |
+| loading/error | 섹션별 로딩/재시도. 이전조건수치를새조건아래남기지않음. 신규context503이면‘아직연결되지않음’,기존통계/점수/카페상세는독립유지 |
+| `REFERENCE` + `value:"0"` | 실제0과원천단위표시. NULL/미제공 라벨로 바꾸지 않음 |
+| `REFERENCE` + `SOURCE_NULL` | ‘원천 값 없음’, 같은 행의 다른 필드는 유지. 해당값을0이나비율분모로사용하지않음 |
+| `NO_ROW / NO_PERIOD / WITHHELD` | 각각‘해당동 자료 없음’/‘해당분기 자료 없음’/‘품질 검토로 제공 보류’. 소비보류·기관범위누락·네트워크실패를같은원인으로표시하지않음 |
+| 동·분기 변경, A→B→A, 후보삭제 | AbortController·요청세대검사, 종속 context/sales결과무효화·늦은응답무시. 조건이같은요약/상세는완료된결과공유 |
+| 같은 동 후보여러개 | 동일실행에서한동당context/sales요청1개로중복을줄임. 주변카페/위치정보는좌표별유지. 현재최대3후보제약유지 |
+| 버전/정책불일치·409 | 같은실행의통계/context/점수/매출세부를혼합하지않고분기목록갱신후다시조회안내. 정책버전도release에결속,임의구버전응답혼합금지 |
+
+최초 context 요청 전에는 policyVersion을 모르므로 요청키는 `(dongCode,quarterCode,dataVersion)`을 사용하고 응답에서 정책버전을 검증·결속합니다. 같은 dataVersion인데 policyVersion이 다르면 응답 무결성 오류이며 임의로 최신 것을 선택하지 않습니다. 후보비교는기존실행버튼/취소계약을유지하고동일실행에서지역결과를공유합니다.
+
+후속 테스트는 일반컴포넌트/validator의 원값·정밀문자열·NULL/0/세상태·부분오류·버전혼합·같은동공유를 먼저 고정하고, 실제API연결뒤PC/모바일·키보드·native dialog초점복원·지도유지·표의단위/헤더를 검증합니다. 이번 설계의 완료는 화면이나 실자료 통합 검증 완료를 뜻하지 않습니다.
 
 ### 화면 구조와 상태 소유
 

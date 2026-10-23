@@ -6,7 +6,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-@RestControllerAdvice(assignableTypes = {AdminDongController.class, ConsumptionScoreController.class, ChangeScoreController.class, RegionController.class})
+@RestControllerAdvice(assignableTypes = {AdminDongController.class, ConsumptionScoreController.class, ChangeScoreController.class, RegionController.class,
+    AdminDongContextController.class, AdminDongSalesBreakdownController.class})
 public class ApiExceptionHandler {
     private static final Logger LOG = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
@@ -32,5 +33,11 @@ public class ApiExceptionHandler {
         LOG.error("행정동 API 내부 오류", ex);
         return ResponseEntity.internalServerError().body(
             new ApiResponses.Error("INTERNAL_ERROR", "서버 오류가 발생했습니다.", null));
+    }
+
+    @ExceptionHandler(ContextUnavailableException.class)
+    ResponseEntity<ApiResponses.Error> contextUnavailable(ContextUnavailableException ex) {
+        return ResponseEntity.status(503).body(new ApiResponses.Error("CONTEXT_UNAVAILABLE",
+            "현재 공개 자료에는 참고 지표가 제공되지 않습니다.",null));
     }
 }

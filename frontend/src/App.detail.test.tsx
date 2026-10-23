@@ -30,6 +30,34 @@ it('opens a region URL directly with scores and charts without inventing a nearb
   expect(screen.queryByRole('button', { name: '후보지에 추가' })).not.toBeInTheDocument()
   expect(vi.mocked(fetch).mock.calls.some(([u]) => /locations\/resolve|nearby-stores/.test(String(u)))).toBe(false)
 })
+it('moves the entire detail route to the next supported quarter from the first-quarter explanation', async () => {
+  const periods = [{ code: '20211', label: '2021년 1분기' }, { code: '20212', label: '2021년 2분기' }]
+  const original = vi.mocked(fetch).getMockImplementation()!
+  vi.mocked(fetch).mockImplementation(async (input, options) => {
+    const u = new URL(String(input), 'http://localhost')
+    const q = u.searchParams.get('quarterCode') ?? '20211'
+    if (u.pathname === '/api/quarters') return new Response(JSON.stringify(periods))
+    if (u.pathname === '/api/admin-dong-stats') return new Response(JSON.stringify({ ...comparisonStats(), quarter: periods.find(p => p.code === q) }))
+    if (u.pathname === '/api/admin-dong-trends') return new Response(JSON.stringify({ ...normalTrend,
+      quarters: periods.map((quarter, i) => ({ ...normalTrend.quarters[i], quarter })) }))
+    const response = await original(input, options)
+    if (u.pathname === '/api/cafe-change-scores' && q === '20211') {
+      const value = await response.json()
+      value.items = value.items.map((i: { dong: unknown }) => ({ dong: i.dong, status: 'UNAVAILABLE', score: null,
+        currentCount: '110', previousCount: null, changeRate: null, direction: null, reason: 'PREVIOUS_QUARTER_UNAVAILABLE' }))
+      return new Response(JSON.stringify(value))
+    }
+    return response
+  })
+  window.history.replaceState(null, '', '/analysis?dongCode=11110515&quarterCode=20211')
+  render(<App />)
+  fireEvent.click(await screen.findByRole('button', { name: '2021년 2분기 변화 보기' }))
+  await waitFor(() => expect(window.location.search).toContain('quarterCode=20212'))
+  await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).startsWith('/api/admin-dong-stats?') && String(u).includes('quarterCode=20212'))).toBe(true))
+  await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).startsWith('/api/cafe-consumption-scores?') && String(u).includes('quarterCode=20212'))).toBe(true))
+  expect(screen.queryByText('첫 제공 분기')).not.toBeInTheDocument()
+  expect(vi.mocked(fetch).mock.calls.some(([u]) => /locations\/resolve|nearby-stores/.test(String(u)))).toBe(false)
+})
 it('loads a supported direct detail URL even if the region catalog fails', async () => {
   const original = vi.mocked(fetch).getMockImplementation()!
   vi.mocked(fetch).mockImplementation((input, options) => String(input) === '/api/regions' ? Promise.reject(new TypeError('catalog unavailable')) : original(input, options))

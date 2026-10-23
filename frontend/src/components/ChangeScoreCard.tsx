@@ -4,6 +4,9 @@ import { formatDecimal } from '../lib/formatStats'
 import { formatChangeRate } from '../lib/readableNumbers'
 import { DataIdentifiers } from './DataProvenance'
 import { ScoreCardFrame } from './ScoreCardFrame'
+import type { Quarter } from '../types/api'
+import { quarterIndex } from '../lib/publication'
+import { isFirstProvidedQuarter } from '../lib/changeScoreAvailability'
 
 const reasons: Record<string, string> = {
   NO_ROW_CURRENT: '선택 분기의 거래 집계 자료가 없습니다.', NO_ROW_PREVIOUS: '지난 분기의 거래 집계 자료가 없습니다.',
@@ -12,15 +15,21 @@ const reasons: Record<string, string> = {
   ZERO_PREVIOUS: '지난 분기 거래가 0건이어서 변화율을 계산할 수 없습니다.', PREVIOUS_QUARTER_UNAVAILABLE: '비교할 지난 분기 자료를 아직 제공하지 않습니다.',
   INSUFFICIENT_COHORT: '비교할 수 있는 동네가 부족해 점수를 계산하지 않습니다.',
 }
-export function ChangeScoreCard({ result, dongCode, loading, error, onRetry, compact = false, emptyMessage }: {
+export function ChangeScoreCard({ result, dongCode, loading, error, onRetry, compact = false, emptyMessage, quarters = [], onQuarterChange }: {
   result: ChangeScores | null; dongCode: string; loading: boolean; error: string | null; onRetry: () => void; compact?: boolean; emptyMessage?: string
+  quarters?: Quarter[]; onQuarterChange?: (quarter: string) => void
 }) {
   const item = result?.items.find(i => i.dong.code === dongCode)
+  const first = isFirstProvidedQuarter(result, dongCode, quarters)
+  const next = first && result ? quarters.find(q => quarterIndex(q.code) === quarterIndex(result.quarter.code) + 1) : null
   return <ScoreCardFrame title="카페 소비증감 점수" compact={compact}>
     {loading ? <p role="status" className="mt-3">점수를 계산하는 중입니다.</p> : error ? <div role="alert"><p>{error}</p><Button variant="outline" onClick={onRetry}>소비증감 점수 다시 조회</Button></div>
-      : item ? <><p className="score-value">{item.score === null ? '산정 불가' : <>{item.score}<span>/100점</span></>}</p>
+      : item ? <><p className={first ? 'mt-3 font-semibold' : 'score-value'}>{first ? '첫 제공 분기' : item.score === null ? '산정 불가' : <>{item.score}<span>/100점</span></>}</p>
         {item.changeRate !== null && <p className={compact ? 'score-subtitle' : 'text-sm'} aria-label={`지난 분기 대비 ${formatChangeRate(item.changeRate, item.direction)}`}>{!compact && '지난 분기 대비 '}{formatChangeRate(item.changeRate, item.direction)}</p>}
-        {item.reason && <p className="mt-2 text-sm">{reasons[item.reason] ?? '자료 확인이 필요합니다.'}</p>}</> : <p className="mt-3 text-sm">{emptyMessage ?? '지역과 분기를 선택해 보세요.'}</p>}
+        {first ? <div className="mt-2 space-y-2 text-sm"><p>직전 분기 자료가 없어 증가·감소를 판단할 수 없습니다.</p>
+          <p>이번 분기 거래 {formatDecimal(item.currentCount, '건')} · 소비규모와 추정매출을 함께 확인해 주세요.</p>
+          {next && onQuarterChange && <Button variant="outline" onClick={() => onQuarterChange(next.code)}>{next.label} 변화 보기</Button>}</div>
+          : item.reason && <p className="mt-2 text-sm">{reasons[item.reason] ?? '자료 확인이 필요합니다.'}</p>}</> : <p className="mt-3 text-sm">{emptyMessage ?? '지역과 분기를 선택해 보세요.'}</p>}
     {!compact && result && <><p className="mt-3 text-sm">{result.previousQuarterCode.slice(0, 4)}년 {result.previousQuarterCode[4]}분기 → {result.quarter.label} · 비교한 동네 {result.cohortSize}개</p>
       {item && <p className="text-sm">거래 {formatDecimal(item.previousCount, '건')} → {formatDecimal(item.currentCount, '건')}</p>}
       <p className="mt-3 text-sm text-muted-foreground">지난 분기보다 카페 거래가 얼마나 달라졌는지, 서울의 다른 동네와 비교합니다.</p>

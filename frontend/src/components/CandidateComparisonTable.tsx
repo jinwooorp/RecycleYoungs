@@ -1,11 +1,12 @@
 import type { Candidate, StatsBlockReason } from '../types/comparison'
-import type { AdminDongStats, StoreStats, SalesStats } from '../types/api'
+import type { AdminDongStats, StoreStats, SalesStats, Quarter } from '../types/api'
 import { formatCount, formatDecimal } from '../lib/formatStats'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption } from './ui/table'
 import { candidateTitle } from '../lib/candidatePresentation'
 import type { ChangeScores, ConsumptionScores } from '../types/regions'
 import { formatChangeRate } from '../lib/readableNumbers'
 import { buildCafeReview } from '../lib/cafeReview'
+import { isFirstProvidedQuarter } from '../lib/changeScoreAvailability'
 
 const storeMetrics: { key: keyof StoreStats; label: string }[] = [
   { key: 'storeCount', label: '행정동 점포 수' }, { key: 'similarStoreCount', label: '유사 업종 점포 수' },
@@ -17,11 +18,12 @@ const salesMetrics: { key: keyof SalesStats; label: string; unit: '원' | '건' 
   { key: 'weekdayEstimatedSalesAmount', label: '평일 추정매출', unit: '원' }, { key: 'weekendEstimatedSalesAmount', label: '주말 추정매출', unit: '원' },
 ]
 
-export function CandidateComparisonTable({ candidates, quarter, blockReason, consumption, scoreLoading, scoreError, change, changeLoading, changeError, detailed = false }: {
+export function CandidateComparisonTable({ candidates, quarter, blockReason, consumption, scoreLoading, scoreError, change, changeLoading, changeError, detailed = false, quarters = [] }: {
   candidates: Candidate[]; quarter: string; blockReason: (candidate: Candidate) => StatsBlockReason | null
   consumption?: ConsumptionScores | null; scoreLoading?: boolean; scoreError?: string | null
   change?: ChangeScores | null; changeLoading?: boolean; changeError?: string | null
   detailed?: boolean
+  quarters?: Quarter[]
 }) {
   const code = (c: Candidate) => c.location.result?.adminDong.resolvedDong?.code ?? ''
   const shared = (c: Candidate) => {
@@ -50,7 +52,8 @@ export function CandidateComparisonTable({ candidates, quarter, blockReason, con
           if (changeLoading) return '조회 중'
           if (changeError) return '점수 조회 실패'
           const value = change?.quarter.code === quarter ? change.items.find(i => i.dong.code === c.location.result?.adminDong.resolvedDong?.code) : null
-          return value ? value.score === null ? '산정 불가' : `${value.score}/100점 · ${formatChangeRate(value.changeRate, value.direction)}` : '미조회'
+          return value ? isFirstProvidedQuarter(change ?? null, code(c), quarters) ? '첫 제공 분기 · 비교 기준 없음'
+            : value.score === null ? '산정 불가' : `${value.score}/100점 · ${formatChangeRate(value.changeRate, value.direction)}` : '미조회'
         })()}</TableCell>)}</TableRow>
         <TableRow><TableHead scope="row">카페 소비규모 점수 (100점)</TableHead>{candidates.map(c => <TableCell key={c.id}>{(() => {
           if (blockReason(c)) return '조회 조건 확인 필요'
@@ -90,7 +93,7 @@ export function CandidateComparisonTable({ candidates, quarter, blockReason, con
             if (changeLoading) return '조회 중'
             if (changeError) return '조회 실패'
             const value = change?.quarter.code === quarter ? change.items.find(i => i.dong.code === code(c)) : null
-            return value ? formatChangeRate(value.changeRate, value.direction) : '미조회'
+            return value ? isFirstProvidedQuarter(change ?? null, code(c), quarters) ? '첫 제공 분기 · 비교 기준 없음' : value.reason === 'PREVIOUS_QUARTER_UNAVAILABLE' ? '직전 분기 자료 없음' : formatChangeRate(value.changeRate, value.direction) : '미조회'
           })()}</TableCell>)}</TableRow>
           <TableRow><TableHead scope="row">반경 500m 조회 카페 수</TableHead>{candidates.map(c => <TableCell key={c.id}>{c.nearby.loading ? '조회 중' : c.nearby.error ? '조회 실패 · 0개가 아님' : c.nearby.result ? `${BigInt(c.nearby.result.totalCount).toLocaleString('ko-KR')}개` : '미조회'}</TableCell>)}</TableRow>
           <TableRow><TableHead scope="row">다음 확인사항</TableHead>{candidates.map(c => <TableCell key={c.id}>{review(c).checks.length ? review(c).checks.slice(0, 2).join(' · ') : '자료를 먼저 확인한 뒤 영업시간·임대·운영비를 검토하세요.'}</TableCell>)}</TableRow>

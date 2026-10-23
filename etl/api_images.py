@@ -35,6 +35,7 @@ def context_files(root):
              'frontend/package.json', 'frontend/package-lock.json', 'frontend/index.html', 'frontend/src/data/seoul-boundary.json',
              'etl/requirements.txt', 'data/manifest.json', 'data/release.json', 'data/public-data-v2.json']
     patterns = ['backend/gradle/wrapper/*', 'backend/src/main/**/*.java', 'backend/src/main/**/*.yaml',
+                'backend/src/main/resources/contracts/*.json', 'frontend/src/data/context-policy-v1.json',
                 'backend/src/main/**/*.yml', 'backend/src/main/**/*.sql', 'backend/src/main/**/*.properties',
                 'frontend/tsconfig*.json', 'frontend/vite.config.*', 'frontend/src/**/*.ts',
                 'frontend/src/**/*.tsx', 'frontend/src/**/*.css', 'frontend/src/**/*.svg',

@@ -92,6 +92,8 @@ snapshot-bound DB 백업·독립 복원에서 전체 값/EWKB/ID/이력/catalog/
 
 ## 접속·변경·정리의 승인 범위
 
+2026-10-23의22분기/context 구현 승인은 새 격리 검증 대상만 포함합니다. 최초2세트에 더해 실패 원인 수정·리뷰 보완의 최종 fresh 검증용1세트와 그 정리를 별도 승인받았습니다. 기존dev/팀/별도API/퇴역 DB·볼륨·백업·원격 Releases는 제외합니다. 생성한 nonce/full ID·image·label·internal network·tmpfs/no host port와 실제 연결 identity를 대조하고, 실패 target에 migration/ETL을 자동 재실행하지 않습니다. 정리는 이 실행이 만든 정확한 자원으로 제한합니다. 중단 후 stopped 상태였던 두 번째 tmpfs DB는 재기동하지 않고 생성 full IDs·소유권·metadata·기존 검증 증거로 정리했으며 SID 재조회 미실행을 기록했습니다. source/원본/private 실패 증거는 보존합니다. 이 기록을 이후 대상의 실행 승인으로 사용하지 않습니다.
+
 세션에서 승인한 대상과 작업만 수행합니다. 문서·일반 테스트에는 DB 접속이 필요하지 않습니다.
 
 | 작업 | 실행 전 확인 |

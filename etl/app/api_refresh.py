@@ -58,7 +58,13 @@ def collect_refresh(output, quarters, keys, *, previous_runs=(), client=None, al
 
 def refresh_release(conn, release, *, expected_current, verify_identity):
     """Failure before publication leaves current unchanged. CAS rejects overlapping refreshes."""
-    verify_release(release)
+    if release.get('contract_version')==2:
+        from .api_context_release import verify_context_release, stage_context_release
+        verify_context_release(release)
+        stage=stage_context_release
+    else:
+        verify_release(release)
+        stage=stage_release
     connection_ready(conn)
     with conn.transaction():
         verify_identity(conn)
@@ -70,7 +76,7 @@ def refresh_release(conn, release, *, expected_current, verify_identity):
             raise CollectionError('CURRENT_RELEASE_CHANGED')
         if current[0] is not None and (not current[1] or release['store_reference_month']<current[1]):
             raise CollectionError('REFRESH_STORE_PERIOD_REGRESSION')
-    staged=stage_release(conn,release,verify_identity=verify_identity)
+    staged=stage(conn,release,verify_identity=verify_identity)
     published=publish_release(conn,release['release_id'],expected_current=expected_current,verify_identity=verify_identity)
     return dict(release_id=release['release_id'],staged=staged,published=published)
 

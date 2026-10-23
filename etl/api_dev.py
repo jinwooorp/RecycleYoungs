@@ -145,7 +145,8 @@ def init(home,args):
         '-e','FLYWAY_PASSWORD',images['images']['flyway'],'-url=jdbc:postgresql://api-postgres:5432/'+DATABASE,'-user=ry_api_owner',
         '-locations=filesystem:/flyway/base,filesystem:/flyway/api','-schemas=public','-createSchemas=false','-baselineOnMigrate=false',
         '-cleanDisabled=true','-connectRetries=0','-initSql='+init_sql,'-outputType=json','migrate'],env={'FLYWAY_PASSWORD':passwords['owner']}))
-    check_flyway_json(result,'migrate');require(result['migrationsExecuted']==4,'FOUR_NEW_MIGRATIONS_REQUIRED')
+    from api_runtime import verify_fresh_migration
+    write(home/'initialization-migration.json',verify_fresh_migration(result,t['sql']))
     print(compose(home,'run','--rm','--no-deps','api-bootstrap','bootstrap').decode().strip())
     return dict(status='INITIALIZED',home=str(home),db_host_port=False)
 

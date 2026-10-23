@@ -19,6 +19,8 @@ import type { Candidate } from '../types/comparison'
 import { PublicationInfo } from './PublicationInfo'
 import { validQuarterCode, samePublication } from '../lib/publication'
 import { ApiFailure } from '../api/adminDongApi'
+import { useAdminDongContext } from '../hooks/useAdminDongContext'
+import { AdminDongContextPanel } from './AdminDongContextPanel'
 
 export function CandidateComparison({ state, lookups, lookupLoading, lookupError, onRetryLookups, onExplore, onSelectCandidate }: {
   state: ReturnType<typeof useCandidateComparison>; lookups: Lookups | null; lookupLoading: boolean
@@ -34,6 +36,7 @@ export function CandidateComparison({ state, lookups, lookupLoading, lookupError
   const submitted = applied === queryKey
   const consumption = useConsumptionScores(submitted ? scoreCodes : [], state.quarter, metadata?.dataVersion)
   const change = useChangeScores(submitted ? scoreCodes : [], state.quarter, metadata?.dataVersion)
+  const context = useAdminDongContext(submitted ? scoreCodes : [], state.quarter, metadata?.dataVersion)
   const comparableCandidates = state.candidates.map(c => ({ ...c,
     stats: c.stats.result && !samePublication(c.stats.result.metadata, metadata)
       ? { result: null, error: null, loading: false } : c.stats,
@@ -43,7 +46,7 @@ export function CandidateComparison({ state, lookups, lookupLoading, lookupError
   }))
   const analyze = () => {
     state.queryStats(); setApplied(queryKey)
-    consumption.retry(); change.retry()
+    consumption.retry(); change.retry(); context.retry()
   }
   const versionMismatch = new Set(locations.map(l => l.adminDong.dataset.version)).size > 1
     || new Set(locations.map(l => l.commercialArea.dataset.version)).size > 1
@@ -86,11 +89,15 @@ export function CandidateComparison({ state, lookups, lookupLoading, lookupError
       </Card>
       {!submitted && <p role="status" className="text-sm">분기를 정한 뒤 ‘같은 분기로 후보 분석’을 누르면 점수와 통계를 함께 불러옵니다.</p>}
       <PublicationInfo metadata={metadata} />
-      <CandidateComparisonTable candidates={comparableCandidates} quarter={state.quarter} blockReason={state.statsBlockReason} consumption={consumption.result} scoreLoading={consumption.loading} scoreError={consumption.error} change={change.result} changeLoading={change.loading} changeError={change.error} />
+      {submitted && <section aria-label="후보별 행정동 참고 자료" className="flex flex-col gap-3">
+        <h3 className="font-semibold">같은 분기의 지역 참고 자료</h3><p className="text-sm text-muted-foreground">같은 행정동의 후보는 아래 한 자료를 공유합니다. 서로 다른 인구 자료를 합산하거나 점수로 순위를 매기지 않습니다.</p>
+        <div className="grid items-start gap-4 lg:grid-cols-3">{[...new Set(scoreCodes)].map(code => <AdminDongContextPanel key={code} result={context.results[code]} loading={context.loading && !context.results[code] && !context.errors[code]} error={context.errors[code]} onRetry={context.retry} />)}</div>
+      </section>}
+      <CandidateComparisonTable candidates={comparableCandidates} quarter={state.quarter} blockReason={state.statsBlockReason} consumption={consumption.result} scoreLoading={consumption.loading} scoreError={consumption.error} change={change.result} changeLoading={change.loading} changeError={change.error} quarters={lookups?.quarters} />
       {state.candidates.length === 1 && <p className="text-sm">다른 후보를 추가하면 소비 흐름과 주변 카페 수의 차이를 함께 확인할 수 있습니다.</p>}
-      <details className="source-details"><summary>전체 통계 비교</summary><CandidateComparisonTable detailed candidates={comparableCandidates} quarter={state.quarter} blockReason={state.statsBlockReason} consumption={consumption.result} scoreLoading={consumption.loading} scoreError={consumption.error} change={change.result} changeLoading={change.loading} changeError={change.error} /></details>
+      <details className="source-details"><summary>전체 통계 비교</summary><CandidateComparisonTable detailed candidates={comparableCandidates} quarter={state.quarter} blockReason={state.statsBlockReason} consumption={consumption.result} scoreLoading={consumption.loading} scoreError={consumption.error} change={change.result} changeLoading={change.loading} changeError={change.error} quarters={lookups?.quarters} /></details>
       <details className="source-details"><summary>동별 점수 산정 근거</summary>
-        {submitted && <div className="grid gap-4 lg:grid-cols-3">{[...new Set(scoreCodes)].map(code => <div key={code} className="flex flex-col gap-3"><ConsumptionScoreCard {...consumption} dongCode={code} onRetry={consumption.retry} /><ChangeScoreCard {...change} dongCode={code} onRetry={change.retry} /></div>)}</div>}
+        {submitted && <div className="grid gap-4 lg:grid-cols-3">{[...new Set(scoreCodes)].map(code => <div key={code} className="flex flex-col gap-3"><ConsumptionScoreCard {...consumption} dongCode={code} onRetry={consumption.retry} /><ChangeScoreCard {...change} dongCode={code} onRetry={change.retry} quarters={lookups?.quarters} onQuarterChange={state.changeQuarter} /></div>)}</div>}
       </details>
       {versionMismatch && <Alert variant="warning" role="status"><AlertDescription>후보마다 지역을 확인한 지도 자료의 버전이 다릅니다. 같은 경계로 비교한 결과가 아닐 수 있으므로 후보의 지역 정보를 다시 불러와 주세요.</AlertDescription></Alert>}
       {sameDong && <Alert role="status"><AlertDescription>같은 행정동에 속한 후보가 있습니다. 통계는 동일 행정동의 집계값이며 좌표별 독립 통계가 아닙니다. 합산하지 않습니다.</AlertDescription></Alert>}
