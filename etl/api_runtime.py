@@ -7,7 +7,6 @@ from pathlib import Path
 import psycopg
 from app.api_records import quarter
 
-PROJECT='recycleyoungs-api-dev'
 DATABASE='recycleyoungs_api_dev'
 PGDATA='/var/lib/postgresql/data/api'
 DB_IMAGE='sha256:44126d872ac91993766c341e369c539e8196614321765d36a6f1bab0419a5fa5'
@@ -52,10 +51,10 @@ def private_read(path):
 def validate_target(t):
     local=t.get('runtime')=='local-dev'
     valid_local=local and bool(re.fullmatch(r'recycleyoungs-dev(?:-check-[0-9a-f]{8})?',t.get('project','')))
-    volume=t.get('project','')+'-db' if local else PROJECT+'-db'
+    volume=t.get('project','')+'-db'
     require(bool(re.fullmatch('[0-9a-f]{24}',t.get('owner',''))) and t.get('dbname')==DATABASE
         and t.get('host')=='api-postgres' and t.get('port')=='5432' and t.get('data')==PGDATA
-        and (valid_local if local else t.get('runtime') is None) and t.get('volume')==volume and bool(re.fullmatch('[0-9]+',t.get('sid','')))
+        and valid_local and t.get('volume')==volume and bool(re.fullmatch('[0-9]+',t.get('sid','')))
         and t.get('sid') not in ('7692329130053947430','7696461093743411240')
         and all(re.fullmatch('[0-9a-f]{64}',t.get(k,'')) for k in ('container_id','network_id')),'API_TARGET_REJECTED')
 

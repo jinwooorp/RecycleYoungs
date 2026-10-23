@@ -21,7 +21,7 @@
 - 원본과 조회용 geometry를 보존·구분한다. 복수 경계 match나 알려진 품질·속성 충돌을 임의 선택·보정하지 않는다. 공간 처리의 상세 계약은 `docs/agents/technical.md`를 따른다.
 - DB 접속은 승인된 대상·범위로 제한하고 실제 연결 identity를 확인한다. 조회는 READ ONLY로 수행하며 문서 조사·일반 테스트에는 DB에 접속하지 않는다.
 - 기존 DB의 migration·ETL·DDL/DML·권한·sequence 변경, 컨테이너 중지·재생성, 볼륨 조작·삭제, 복원·백업 변경은 명시적 승인과 `docs/agents/db-safety.md`의 사전 검증 없이 실행하지 않는다. guard를 우회하거나 실패 후 자동 재실행하지 않는다.
-- `make db`, `make etl`, Compose 명령은 자원을 생성·시작·재생성할 수 있다. status·서버 실행도 DB에 접속할 수 있으므로 실제 동작과 승인 범위를 먼저 확인한다. mock·격리 검증·READY는 기존 DB 변경 승인이 아니다.
+- Compose 명령은 자원을 생성·시작·재생성할 수 있다. `make db`·`make etl`·별도 API launcher는 퇴역했다. 현행 status·서버 실행도 DB에 접속할 수 있으므로 실제 동작과 승인 범위를 먼저 확인한다. mock·격리 검증·READY는 기존 DB 변경 승인이 아니다.
 - secret·백업·private evidence를 Git에 넣거나 조사 목적으로 열람·인덱싱·외부 전송하지 않는다. 민감 자료와 백업은 승인된 프로젝트 밖 private 위치에 보관한다.
 
 ## 검증

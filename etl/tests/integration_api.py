@@ -101,18 +101,11 @@ def compare_rows(conn,release):
 
 
 def polygons(conn):
-    from team_public_data import verify_package,public_specs
+    from boundary_data import boundary_specs
     from app.spatial_geometry import prepare_dataset
     from app.spatial_load import publish
-    path=Path('/inputs/baseline/public-baseline.zip')
-    verify_package(path,'6b11901f46d1a207c5b36353483e209f00a10fb401edcc5fd036a3025238ff0b')
-    folder=Path('/tmp/api-boundaries'); folder.mkdir(mode=0o700)
-    names=['admin.zip','commercial.zip','admin-report.json','commercial-report.json','repair-report.json']
-    with zipfile.ZipFile(path) as archive:
-        for name in names:
-            fd=os.open(folder/name,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
-            with os.fdopen(fd,'wb') as f: f.write(archive.read(name))
-    for key,spec in public_specs().items():
+    folder=Path('/inputs/boundaries')
+    for key,spec in boundary_specs().items():
         prepared=prepare_dataset(spec,folder/(key+'.zip'),{role:folder/name for role,name in spec.report_artifacts.items()})
         publish(conn,prepared)
     check('real approved boundary counts',conn.execute('SELECT (SELECT count(*) FROM admin_dong_boundaries),(SELECT count(*) FROM commercial_area_boundaries)').fetchone()==(425,1650))

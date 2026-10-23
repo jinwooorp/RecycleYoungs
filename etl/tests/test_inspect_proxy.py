@@ -7,11 +7,12 @@ import threading
 import unittest
 from unittest.mock import patch
 
-import team_inspect_proxy as proxy
-from team_guard import LABEL, OWNER, PROJECT, SERVICES, VOLUMES
+import inspect_proxy as proxy
+from inspect_proxy import LABEL, OWNER, PROJECT, SERVICES
+VOLUMES = {key: PROJECT + '-' + key for key in ('db', 'control', 'data', 'reader', 'writer')}
 
 
-class TeamInspectProxyTests(unittest.TestCase):
+class InspectProxyTests(unittest.TestCase):
     def test_only_fixed_postgis_image_inspect_is_exposed_without_config_or_env(self):
         reference = 'postgis/postgis@sha256:44126d872ac91993766c341e369c539e8196614321765d36a6f1bab0419a5fa5'
         value = dict(Id='sha256:' + 'a' * 64, RepoDigests=[reference, 'private-fixture'],
@@ -34,7 +35,7 @@ class TeamInspectProxyTests(unittest.TestCase):
                     Created='2026-10-14T00:00:00Z', State={'Running': True, 'Error': 'private'},
                     Config={'Labels': {LABEL: OWNER, 'com.docker.compose.project': PROJECT,
                                        'com.docker.compose.service': 'preflight'},
-                            'Env': ['PRIVATE_SECRET=never-return', 'POSTGRES_DB=recycleyoungs_team_dev'],
+                            'Env': ['PRIVATE_SECRET=never-return', 'POSTGRES_DB=recycleyoungs_api_dev'],
                             'Cmd': ['secret-command']}, HostConfig={'PortBindings': {}, 'Secret': 'private'},
                     NetworkSettings={'Networks': {}, 'Ports': {}}, Mounts=[], **extra)
 
@@ -61,7 +62,7 @@ class TeamInspectProxyTests(unittest.TestCase):
             self.assertEqual(status, 200)
             value = json.loads(body)
             self.assertEqual(value['Id'], 'a' * 64)
-            self.assertEqual(value['Config']['Env'], ['POSTGRES_DB=recycleyoungs_team_dev'])
+            self.assertEqual(value['Config']['Env'], ['POSTGRES_DB=recycleyoungs_api_dev'])
             for private in [b'PRIVATE_SECRET', b'never-return', b'secret-command', b'private']:
                 self.assertNotIn(private, body)
             fetch.assert_called_once_with('/containers/' + 'a' * 12 + '/json')
@@ -95,14 +96,14 @@ class TeamInspectProxyTests(unittest.TestCase):
 
     def test_network_and_volume_inspect_preserve_ownership_metadata(self):
         labels = {LABEL: OWNER, 'com.docker.compose.project': PROJECT}
-        network = dict(Id='b' * 64, Name=PROJECT + '-net', Internal=True, Driver='bridge',
+        network = dict(Id='b' * 64, Name=PROJECT + '-data', Internal=True, Driver='bridge',
                        Labels=labels, Containers={'a' * 64: {'Name': 'private'}}, Options={'private': 'omit'})
         with self.server(network) as (port, fetch):
-            status, body = self.request(port, 'GET', '/inspect/network/' + PROJECT + '-net')
+            status, body = self.request(port, 'GET', '/inspect/network/' + PROJECT + '-data')
             self.assertEqual(status, 200)
             self.assertEqual(json.loads(body)['Containers'], {'a' * 64: {}})
             self.assertNotIn(b'private', body)
-            fetch.assert_called_once_with('/networks/' + PROJECT + '-net')
+            fetch.assert_called_once_with('/networks/' + PROJECT + '-data')
         volume = dict(Name=VOLUMES['db'], Labels=labels, Driver='local', Options=None,
                       CreatedAt='2026-10-14T00:00:00Z', Mountpoint='/private/path')
         with self.server(volume) as (port, _):

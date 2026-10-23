@@ -1,7 +1,7 @@
 """Fixed redacted inspect selectors for the local Compose namespace only."""
 from http.server import ThreadingHTTPServer
 from dev_runtime import project,LABEL
-import team_inspect_proxy as proxy
+import inspect_proxy as proxy
 
 
 def main():

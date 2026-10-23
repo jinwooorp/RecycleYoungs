@@ -64,42 +64,6 @@ class ImageTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'IMAGE_MANIFEST_CHANGED'):
                 m.home_manifest(home, expected=original)
 
-    def test_source_built_compose_does_not_need_host_jar_or_code_mounts(self):
-        m = self.module()
-        from api_dev import compose
-        with tempfile.TemporaryDirectory() as d:
-            home=Path(d).resolve(); value=self.manifest(m)
-            (home/'images.json').write_text(json.dumps(value)); (home/'images.json').chmod(0o600)
-            with patch('api_dev.run', return_value=b'') as command:
-                compose(home, 'config', '--quiet')
-            args=command.call_args.args[0]
-            self.assertIn(str(m.ROOT/'docker-compose.api.images.yml'), args)
-            self.assertEqual(command.call_args.kwargs['env']['API_BACKEND_IMAGE'], value['images']['backend'])
-
-    def test_initialization_requires_image_manifest_before_creating_home(self):
-        self.module()
-        from api_dev import init
-        from argparse import Namespace
-        with tempfile.TemporaryDirectory() as d:
-            home=Path(d).resolve()/'new-home'
-            with patch('api_dev.inspect', side_effect=AssertionError('must fail before Docker')):
-                with self.assertRaisesRegex(ValueError, 'BUILD_IMAGES_FIRST'):
-                    init(home, Namespace(images=None))
-            self.assertFalse(home.exists())
-
-    def test_new_db_allows_only_its_owned_readonly_password_mount(self):
-        self.module()
-        import api_dev
-        self.assertTrue(hasattr(api_dev, 'verify_db_mounts'), 'DB secret mount guard required')
-        home=Path('/approved/private'); target={'volume':'owned-db'}
-        volume=dict(Type='volume',Name='owned-db',Destination='/var/lib/postgresql/data',RW=True)
-        secret=dict(Type='bind',Source=str(home/'owner-password'),Destination='/run/secrets/owner-password',RW=False)
-        api_dev.verify_db_mounts([volume],target,home,False)
-        api_dev.verify_db_mounts([volume,secret],target,home,True)
-        for mounts,new in [([volume,secret],False),([volume],True),([volume,secret|{'RW':True}],True),
-                           ([volume,secret|{'Source':'/other/password'}],True),([volume,secret,secret],True)]:
-            with self.assertRaises(ValueError): api_dev.verify_db_mounts(mounts,target,home,new)
-
     def test_multiplatform_index_and_platform_config_ids_can_differ(self):
         m=self.module(); value=self.manifest(m)
         from types import SimpleNamespace

@@ -82,10 +82,10 @@ def bootstrap():
                 conn.execute('GRANT INSERT ON api_context_runs,api_context_rows,api_release_context_sources TO api_writer')
                 conn.execute('GRANT UPDATE(run_id) ON api_context_runs TO api_writer')
             conn.execute('INSERT INTO api_runtime.state(singleton,status,next_due) VALUES(true,\'IDLE\',%s)',(next_due(datetime.now(UTC)),))
-        from team_public_data import public_specs
+        from boundary_data import boundary_specs
         from app.spatial_geometry import prepare_dataset
         from app.spatial_load import publish
-        for kind,spec in public_specs().items():
+        for kind,spec in boundary_specs().items():
             folder=DATA/'boundaries'
             prepared=prepare_dataset(spec,folder/(kind+'.zip'),{role:folder/name for role,name in spec.report_artifacts.items()})
             verify_connection(conn,target,'ry_api_owner');publish(conn,prepared)

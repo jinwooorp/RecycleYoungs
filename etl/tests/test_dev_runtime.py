@@ -73,7 +73,8 @@ class LocalDevTests(unittest.TestCase):
     def test_source_image_context_contains_all_new_runtime_inputs(self):
         import api_images
         names=api_images.context_files(api_images.ROOT)
-        for p in ['etl/dev_runtime.py','etl/dev_inspect.py','etl/team_inspect_proxy.py','etl/control.py','docker/api/migrate.sh']:
+        for p in ['etl/dev_runtime.py','etl/dev_inspect.py','etl/inspect_proxy.py','etl/boundary_data.py',
+                  'data/boundaries/public-reports.json','etl/control.py','docker/api/migrate.sh']:
             self.assertTrue(p in names,'source builder missing '+p)
 
     def test_preflight_validates_both_keys_before_any_state_is_created(self):

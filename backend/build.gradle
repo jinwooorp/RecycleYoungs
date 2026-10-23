@@ -33,23 +33,11 @@ tasks.named('test') {
     useJUnitPlatform()
 }
 
-// bootJar/production retain application.yaml. Ordinary local bootRun is fail-closed team-dev only.
+// The retired team profile must not be revived by a local convenience command.
+// The current Compose backend uses the bound api-reader configuration directly.
 tasks.named('bootRun') {
     doFirst {
-        def forbidden = System.getenv().findAll { key, value -> value &&
-            (key.startsWith('DB_') || key.startsWith('PG') || key.startsWith('FLYWAY_') || key.startsWith('SPRING_')) }
-        if (!forbidden.isEmpty() || !getArgs().isEmpty()) {
-            throw new GradleException('bootRun rejects ambient DB/Spring settings and CLI overrides. Use a clean shell for team-dev.')
-        }
-        def captured = providers.exec {
-            workingDir rootProject.projectDir.parentFile
-            commandLine 'python3', 'etl/team_dev.py', 'backend-proof'
-        }.standardOutput.asText.get()
-        def proof = new groovy.json.JsonSlurper().parseText(captured)
-        ['sid', 'owner', 'contract', 'password', 'version', 'spatial'].each { key -> environment 'TEAM_DEV_' + key.toUpperCase(), proof[key] }
-        systemProperty 'spring.profiles.active', 'team-dev'
-        systemProperty 'spring.flyway.enabled', 'false'
-        logger.lifecycle('TEAM_DEV_IDENTITY_READY: reader on 127.0.0.1:55432/recycleyoungs_team_dev; migrations disabled')
+        throw new GradleException('Local team-dev bootRun is retired. Use docker compose up -d for the current API development environment.')
     }
 }
 

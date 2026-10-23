@@ -10,12 +10,12 @@ import json
 import re
 import socket
 
-PROJECT = 'recycleyoungs-team-dev'
+PROJECT = 'recycleyoungs-dev'
 LABEL = 'org.recycleyoungs.environment'
-OWNER = 'team-development-v1'
-SERVICES = {'inspect-proxy', 'preflight', 'data-init', 'team-postgres', 'db-identity', 'db-migrate', 'etl-init'}
-NETWORKS = {PROJECT + '-' + key for key in ('net', 'host', 'download', 'inspect')}
-VOLUMES = {PROJECT + '-' + key for key in ('db', 'control', 'cache')}
+OWNER = 'local-development-v1'
+SERVICES = {'inspect-proxy', 'preflight', 'api-postgres', 'identity', 'migrate', 'initialize', 'api-backend', 'api-scheduler', 'frontend'}
+NETWORKS = {PROJECT + '-' + key for key in ('data', 'inspect', 'access')}
+VOLUMES = {PROJECT + '-' + key for key in ('db', 'control', 'data', 'reader', 'writer')}
 MAX_RESPONSE = 1024 * 1024
 DB_IMAGE_REFERENCE = 'postgis/postgis@sha256:44126d872ac91993766c341e369c539e8196614321765d36a6f1bab0419a5fa5'
 

@@ -4,9 +4,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 COPY etl/requirements.txt /workspace/etl/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 COPY etl/app /workspace/etl/app
-COPY etl/api_runtime.py etl/api_worker.py etl/api_snapshot.py etl/team_public_data.py etl/team_data.py etl/demo_worker.py etl/demo_safety.py /workspace/etl/
-COPY etl/dev_runtime.py etl/dev_inspect.py etl/team_inspect_proxy.py etl/control.py /workspace/etl/
-COPY data/manifest.json data/release.json data/public-data-v2.json /workspace/data/
+COPY etl/api_runtime.py etl/api_worker.py etl/api_snapshot.py etl/boundary_data.py etl/demo_worker.py etl/demo_safety.py /workspace/etl/
+COPY etl/dev_runtime.py etl/dev_inspect.py etl/inspect_proxy.py etl/control.py /workspace/etl/
+COPY data/boundaries/public-reports.json /workspace/data/boundaries/public-reports.json
 COPY backend/src/main/resources/db/migration /workspace/backend/src/main/resources/db/migration
 COPY backend/src/main/resources/db/api-runtime /api-schema
 COPY backend/src/main/resources/db/api-migration /api-migration

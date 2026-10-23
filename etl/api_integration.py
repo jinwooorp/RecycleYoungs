@@ -82,6 +82,13 @@ def main(argv=None):
     inputs=args.input_root.resolve()
     private_parent(inputs/'manifest-check')
     if inputs.is_symlink() or not inputs.is_dir(): raise ValueError('PRIVATE_INPUT_REQUIRED')
+    # Boundary preparation runs separately on the host. The isolated DB job has
+    # an internal network and never downloads a retired Release or an original.
+    from boundary_data import boundary_specs
+    from app.spatial_geometry import prepare_dataset
+    for kind,spec in boundary_specs().items():
+        folder=inputs/'boundaries'
+        prepare_dataset(spec,folder/(kind+'.zip'),{role:folder/name for role,name in spec.report_artifacts.items()})
     for image in [DB_IMAGE,ETL_IMAGE,JAVA_IMAGE]:
         if json.loads(command(['docker','image','inspect',image]))[0]['Id']!=image:
             raise ValueError('PINNED_IMAGE_REQUIRED')
@@ -152,8 +159,8 @@ def main(argv=None):
     # Secrets are passed over stdin; they are neither Docker CLI arguments nor output artifacts.
     mounts=[]
     for name in ['etl/app','etl/tests','etl/api_isolation.py','etl/control.py','etl/demo_safety.py',
-                 'etl/team_public_data.py','etl/team_data.py','etl/demo_worker.py','data/manifest.json',
-                 'data/public-data-v2.json','backend/src/main/resources/db/migration']:
+                 'etl/boundary_data.py','etl/demo_worker.py','data/manifest.json',
+                 'data/boundaries/public-reports.json','backend/src/main/resources/db/migration']:
         mounts+=['--mount',f'type=bind,src={ROOT}/{name},dst=/workspace/{name},readonly']
     if budget:
         mounts+=['--mount',f'type=bind,src={args.context_bundle.resolve()},dst=/context-input,readonly']

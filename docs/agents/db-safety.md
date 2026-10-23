@@ -4,7 +4,11 @@
 
 DB에 접속하거나 데이터를 바꾸기 전에 확인할 조건을 정리합니다. 정상 개발 실행은 [README](../../README.md#실행-방법), 구현 구조는 [기술 명세](technical.md)를 참고합니다.
 
-문서 정리 기준일은 **2026-10-22**입니다. 기존 보호·승인 조건을 유지하며 후속 사용자 승인으로 새 영속 API 환경의 실제 준비·갱신·재시작·백업/독립 복원을 검증했습니다. 기존 팀·퇴역 DB는 이번 대상이 아닙니다. 아래의 실행 기록을 다른 대상의 현재 상태나 향후 실행 승인으로 사용하지 않습니다.
+문서 정리 기준일은 **2026-10-23**입니다. 아래의 10/21~22 영속 API 환경 준비·갱신·재시작·백업/독립 복원은 당시 승인 범위의 기록입니다. 후속 레거시 정리와 과거 보호·검증 이력을 구분하며, 과거 실행 기록을 다른 대상의 현재 상태나 향후 실행 승인으로 사용하지 않습니다.
+
+**2026-10-23 레거시 정리 후속:** 사용자 요청으로 팀·별도 API 환경과 GitHub Releases의 퇴역을 진행합니다. 소스 전용 실행 경로를 제거했고 실제 자원은 아직 삭제하지 않았습니다. Docker metadata만 읽어 중지 컨테이너 10개·볼륨 4개·빈 네트워크 6개를 현행 `recycleyoungs-dev` 자원과 구분했습니다. stopped DB를 감사 목적으로 재기동하거나 SQL에 접속하지 않았습니다. 삭제 전 full ID·image·소유권 label·생성 정보·mount·공유 여부와 현행 재현 경로를 확인합니다. 백업·원본·검증 증거·Git tag는 별도 범위로 보존합니다. 현행 dev의 migration·ETL·재생성·전환과 정리 코드의 commit/push는 이번 자원 삭제에서 자동 승인되지 않습니다. 아래의 팀·별도 API 실행 절차는 과거 이력입니다.
+
+새 경로 검증은 `recycleyoungs-dev-check-eb62581c` 한 세트와 전용 이미지 태그로 수행했습니다. 새 볼륨5개·네트워크3개·Frontend loopback15173, DB 메모리2GiB로 기존 자원과 분리했고 실제 identity·migration·최초 수집·공개·HTTP·RO/READY 재실행을 확인했습니다. 완료 후 실행 중인5개를 정상 중지하고 컨테이너9개·볼륨5개·네트워크3개와 수집 원본·제어·secret은 보존했습니다. 기존 현행9개·레거시10개 컨테이너, 원래 볼륨9개·네트워크9개의 metadata가 전후 동일합니다. 이 검증은 기존 레거시 DB의 새 백업·독립 복원이나 볼륨 삭제 gate를 충족한 것으로 취급하지 않습니다.
 
 ## 목차
 
@@ -103,11 +107,11 @@ snapshot-bound DB 백업·독립 복원에서 전체 값/EWKB/ID/이력/catalog/
 | 기존 DB migration·ETL | 변경 범위 승인, 보존 기준, 최신 백업·독립 복원 |
 | 중지·재생성·복원·삭제 | 자원별 소유권과 명시적 승인 범위 |
 
-`docker compose up -d`는 새 기본 API 환경입니다. `make db`, `make etl`은 `docker-compose.legacy.yml`의 기존 팀 준비 경로입니다. 새 환경을 만들거나 기존 컨테이너를 시작·재생성할 수 있으므로 실제 영향을 먼저 읽습니다.
+`docker compose up -d`는 현재 기본 API 환경이며 자원을 생성·시작·재생성할 수 있습니다. `make db`·`make etl`·별도 API launcher는 퇴역했습니다. 기존 자원에 대한 작업은 실제 영향을 먼저 확인합니다.
 
-`make db-info`, `make check-db`는 현재 읽기 전용 팀 status입니다. SQL 조회가 포함되므로 문서 검증용 명령으로 사용하지 않습니다.
+`make dev-status`는 실제 DB 읽기 전용 조회이며 문서 검증용 명령으로 사용하지 않습니다. 과거 `db-info`·`check-db`는 제거했습니다.
 
-`make db-migrate`와 `make db-baseline`은 현재 Makefile에서 거부합니다. 직접 Flyway로 우회하지 않습니다.
+과거 `db-migrate`·`db-baseline`은 제거했습니다. 직접 Flyway로 전환·승인 guard를 우회하지 않습니다.
 
 다음 작업은 해당 범위의 명시적 승인 없이 실행하지 않습니다.
 
@@ -118,7 +122,7 @@ snapshot-bound DB 백업·독립 복원에서 전체 값/EWKB/ID/이력/catalog/
 - 기존 DB restore, 백업 복사·이동·삭제·덮어쓰기
 - `docker compose down -v`
 
-팀 `bootRun`은 READY 확인 후 읽기 전용 계정을 쓰고 Flyway를 끕니다. 일반 애플리케이션 설정·`dbTest`에는 같은 보장을 적용할 수 없으므로 설정을 먼저 확인합니다.
+팀 `bootRun`과 전용 reader profile은 퇴역했습니다. 일반 `bootRun`은 DB 접속 전에 중단합니다. 현행 Compose는 소유권을 확인하는 `api-dev` reader profile과 Flyway 비활성화를 사용하며, 일반 애플리케이션 설정·`dbTest`에 같은 보장을 적용하지 않습니다.
 
 Git stage·commit·push도 별도 승인 범위를 따릅니다. 작업 규칙은 [AGENTS](../../AGENTS.md)가 기준입니다.
 

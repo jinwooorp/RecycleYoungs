@@ -1,5 +1,5 @@
 """One-command local API startup. Fixed namespaces; no legacy DB adoption."""
-import argparse,hashlib,json,os,re,secrets,stat,sys,urllib.request,zipfile
+import argparse,hashlib,json,os,re,secrets,stat,sys,urllib.request
 from datetime import datetime
 from pathlib import Path
 import psycopg
@@ -194,12 +194,8 @@ def initialize():
     write(DATA/'transport.json',dict(allow_seoul_http=allow))
     paths=['/api-data/runs/initial/'+s+'-'+q for q in periods for s in ('seoul-stores','seoul-sales')]+['/api-data/runs/initial/semas-stores']
     write(DATA/'seed-runs.json',paths)
-    from team_data import download
-    from team_public_data import verify_package
-    ref=json.loads(Path('/workspace/data/release.json').read_text());archive=DATA/'public-baseline.zip'
-    download(ref['url'],archive,ref['sha256']);archive.chmod(0o600);verify_package(archive,ref['sha256'])
-    with zipfile.ZipFile(archive) as z:
-        for name in ('admin.zip','commercial.zip','admin-report.json','commercial-report.json','repair-report.json'):write(DATA/'boundaries'/name,z.read(name))
+    from boundary_data import prepare_boundaries
+    prepare_boundaries(DATA/'boundaries')
     api_worker.bootstrap()
     value=api_worker.status();write(CONTROL/'ready.json',dict(release_id=release['release_id'],quarters=periods))
     return value|dict(initialized=True,quarters=periods)

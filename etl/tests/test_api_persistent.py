@@ -52,9 +52,10 @@ class PersistentTests(unittest.TestCase):
 
     def test_target_cannot_be_team_db_or_invented_owner(self):
         m=self.module()
-        valid=dict(owner='a'*24,dbname='recycleyoungs_api_dev',host='api-postgres',port='5432',data='/var/lib/postgresql/data/api',sid='123',container_id='b'*64,network_id='c'*64,volume='recycleyoungs-api-dev-db')
+        valid=dict(runtime='local-dev',project='recycleyoungs-dev',owner='a'*24,dbname='recycleyoungs_api_dev',host='api-postgres',port='5432',data='/var/lib/postgresql/data/api',sid='123',container_id='b'*64,network_id='c'*64,volume='recycleyoungs-dev-db')
         m.validate_target(valid)
-        for change in [dict(dbname='recycleyoungs_team_dev'),dict(host='127.0.0.1'),dict(volume='recycleyoungs-team-dev-db'),dict(sid='7692329130053947430'),dict(owner='')]:
+        for change in [dict(dbname='recycleyoungs_team_dev'),dict(host='127.0.0.1'),dict(volume='recycleyoungs-team-dev-db'),dict(sid='7692329130053947430'),dict(owner=''),
+                       dict(runtime=None,project='recycleyoungs-api-dev',volume='recycleyoungs-api-dev-db')]:
             with self.assertRaises(m.RuntimeErrorCode):m.validate_target(valid|change)
 
     def test_discovery_requires_both_sources_and_stops_at_first_gap(self):

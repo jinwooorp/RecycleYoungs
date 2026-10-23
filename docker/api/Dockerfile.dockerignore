@@ -9,9 +9,8 @@
 !etl/app/
 !etl/app/**
 !data/
-!data/manifest.json
-!data/release.json
-!data/public-data-v2.json
+!data/boundaries/
+!data/boundaries/public-reports.json
 !backend/
 !backend/gradlew
 !backend/build.gradle
