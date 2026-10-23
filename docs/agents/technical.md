@@ -8,7 +8,7 @@
 
 ## 레거시 퇴역과 현행 경계 수급
 
-2026-10-23 후속 사용자 요청으로 팀·별도 API 개발 환경의 소스 실행 경로를 제거했습니다. 실제 자원·Release 삭제와 원격 반영은 [프로젝트 현황](project.md#레거시-개발-환경-정리)에서 별도로 기록합니다. 아래의 팀 공통/별도 영속 환경 절과 삭제된 파일 참조는 과거 이력이며 현재 사용 절차가 아닙니다.
+2026-10-23 후속 사용자 요청으로 팀·별도 API 개발 환경의 소스 실행 경로를 제거하고 `2324db7`을 일반 push했습니다. 새 백업·독립 복원과 원격 소스 의존 제거를 검증한 뒤 레거시·검증용 컨테이너19개·볼륨9개·네트워크9개와 GitHub Release·asset을 삭제했습니다. 현행 `recycleyoungs-dev`와 백업·수집 원본·제어·인증 보존본·검증 증거·Git tag·공유 이미지는 유지했습니다. 대상과 실측 결과는 [프로젝트 현황](project.md#레거시-개발-환경-정리)에 기록합니다. 아래의 팀 공통/별도 영속 환경 절과 삭제된 파일 참조는 과거 이력이며 현재 사용 절차가 아닙니다.
 
 - 현재 실행 진입점은 루트 Compose와 `dev-status`·`dev-refresh`·`dev-reconcile`입니다. `make db`·`etl`·별도 `api-init/up/status/refresh/reconcile/backup/restart-check`·`frontend-api`와 팀 `bootRun` 연결은 퇴역했습니다. `api-images`는 공통 소스 빌드 도구로 남습니다.
 - `etl/boundary_data.py`는 공식 `datafile.seoul.go.kr` HTTPS의 고정 endpoint/query만 허용하고 redirect도 같은 정책으로 검사합니다. ZIP은 admin 1,676,539bytes / SHA `969f7033bd3609a5fd586790f5b2cfedc638d7647ef45c78f9c75e1dabf79f68`, commercial 2,123,078bytes / SHA `38bb8fab4e45a1171af4989cd7fa1275f68e5d644aa770f5431ce7ccc38384dd`입니다. 크기·해시가 바뀌면 중단하며 최신 파일이나 Release로 우회하지 않습니다.
@@ -17,7 +17,7 @@
 - 격리 `api_integration`의 `--input-root`에는 미리 검증한 `boundaries/`의 ZIP 2개·리포트 3개가 필요합니다. controller가 자원 생성 전 `prepare_dataset`으로 검증하고 internal network의 DB job은 읽기 전용 입력만 사용합니다. 과거 `baseline/public-baseline.zip` 경로는 사용하지 않습니다.
 - `inspect_proxy.py`는 현행 namespace의 고정·redacted Docker GET selector만 제공합니다. 실제 daemon socket은 inspect-proxy에만 있으며 mutation·범용 forwarding을 허용하지 않습니다.
 
-**이번 경로 검증:** 공식 경계2ZIP·리포트3개 replay와 public profile(admin `c544159ba5a3d2ed989c8c2fa6c3290da7fce978f7207211279564e7d19df27c`, commercial `fc90e18f3a62633c3748c66b7a62ad59c7bcdf3f8cab3fe8df08c15adf4f547a`)을 확인했습니다. 새 `recycleyoungs-dev-check-eb62581c`에서 source build·최초 준비·V1~V5/SQL6개 receipt·6분기 HTTP·실제 api_reader/READ ONLY·READY 재실행의 `initialized=false`와 동일 공개 pointer를 확인했습니다. data volume에 퇴역 Release archive가 없고 경계5파일이 기존 SHA와 일치합니다. Scheduler에는 owner 전용 migration receipt가 노출되지 않으므로 해당 receipt는 종료된 initialize의 정확한 파일을 읽기 전용 archive로 검증했습니다. migration/ETL을 재실행하거나 볼륨 분리를 완화하지 않았습니다. 검증 후 새 서비스만 중지하고 원본·제어·secret 볼륨을 보존했습니다. 현행 DB 적용·주간 refresh·전체 환경 복구·실제 Kakao 검증은 이 결과에 포함하지 않습니다.
+**이번 경로 검증:** 공식 경계2ZIP·리포트3개 replay와 public profile(admin `c544159ba5a3d2ed989c8c2fa6c3290da7fce978f7207211279564e7d19df27c`, commercial `fc90e18f3a62633c3748c66b7a62ad59c7bcdf3f8cab3fe8df08c15adf4f547a`)을 확인했습니다. 새 `recycleyoungs-dev-check-eb62581c`에서 source build·최초 준비·V1~V5/SQL6개 receipt·6분기 HTTP·실제 api_reader/READ ONLY·READY 재실행의 `initialized=false`와 동일 공개 pointer를 확인했습니다. data volume에 퇴역 Release archive가 없고 경계5파일이 기존 SHA와 일치합니다. Scheduler에는 owner 전용 migration receipt가 노출되지 않으므로 해당 receipt는 종료된 initialize의 정확한 파일을 읽기 전용 archive로 검증했습니다. migration/ETL을 재실행하거나 볼륨 분리를 완화하지 않았습니다. 초기 검증 직후에는 새 서비스만 중지하고 원본·제어·secret 볼륨을 보존했으며, 후속 private cold backup·독립 DB 복원 검증 뒤 위 자원 정리를 완료했습니다. 현행 DB 적용·주간 refresh·전체 worker 복구·실제 Kakao 검증은 이 결과에 포함하지 않습니다.
 
 ## 목차
 
