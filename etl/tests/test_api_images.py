@@ -2,6 +2,7 @@
 import importlib
 import importlib.util
 import json
+import re
 from pathlib import Path
 import tempfile
 import unittest
@@ -20,6 +21,7 @@ class ImageTests(unittest.TestCase):
         self.assertIn('frontend/package-lock.json', names)
         self.assertTrue('frontend/src/data/seoul-boundary.json' in names, 'frontend build requires the tracked outline')
         self.assertIn('etl/api_worker.py', names)
+        self.assertIn('frontend/src/contracts/current-reference-policy-v1.json', names)
         self.assertIn('docker/api/Dockerfile', names)
         self.assertFalse(any(p == 'etl/api.env' or '/.env' in p or p.startswith(('.git/', '.codex-local/', 'data/raw/'))
                              or '/node_modules/' in p or '/build/' in p for p in names))
@@ -34,6 +36,14 @@ class ImageTests(unittest.TestCase):
             (root/'link').symlink_to(root/'one')
             with self.assertRaisesRegex(ValueError, 'BUILD_CONTEXT_SYMLINK'):
                 m.fingerprint(root, ['link'])
+
+    def test_every_literal_backend_classpath_resource_is_in_the_build_context(self):
+        m=self.module();names=set(m.context_files(m.ROOT));resources=set()
+        for path in (m.ROOT/'backend/src/main/java').rglob('*.java'):
+            resources.update(re.findall(r'new ClassPathResource\("([^"]+)"\)',path.read_text()))
+        self.assertIn('regions/seoul-admin-dongs.tsv',resources)
+        for resource in resources:
+            self.assertTrue('backend/src/main/resources/'+resource in names,resource+' must be packaged for runtime startup')
 
     def manifest(self, m):
         return dict(format=1, platform='linux/amd64', source=m.source_fingerprint(),

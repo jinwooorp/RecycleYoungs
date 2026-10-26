@@ -57,7 +57,7 @@ class LocalDevTests(unittest.TestCase):
     def test_initial_periods_start_in_2021_and_distinguish_partial_or_internal_gaps(self):
         m=self.module()
         from datetime import datetime,timezone
-        self.assertEqual(m.initial_periods(datetime(2026,10,22,tzinfo=timezone.utc),lambda s,q:q!='20263',start_year=2021),
+        self.assertEqual(m.initial_periods(datetime(2026,10,22,tzinfo=timezone.utc),lambda s,q:q!='20263'),
                          [f'{year}{q}' for year in range(2021,2027) for q in range(1,5) if f'{year}{q}'<='20262'])
         with self.assertRaisesRegex(ValueError,'INITIAL_SOURCE_UNAVAILABLE'):
             m.initial_periods(datetime(2026,10,22,tzinfo=timezone.utc),lambda s,q:False)
@@ -67,7 +67,7 @@ class LocalDevTests(unittest.TestCase):
             m.initial_periods(datetime(2026,10,22,tzinfo=timezone.utc),lambda s,q:q!='20222',start_year=2021)
         with self.assertRaisesRegex(ValueError,'INITIAL_PERIOD_RANGE_REJECTED'):
             m.initial_periods(datetime(2040,10,22,tzinfo=timezone.utc),lambda s,q:True)
-        self.assertEqual(m.initial_periods(datetime(2026,10,22,tzinfo=timezone.utc),lambda s,q:q!='20263'),
+        self.assertEqual(m.initial_periods(datetime(2026,10,22,tzinfo=timezone.utc),lambda s,q:q!='20263',start_year=2025),
                          ['20251','20252','20253','20254','20261','20262'])
 
     def test_source_image_context_contains_all_new_runtime_inputs(self):

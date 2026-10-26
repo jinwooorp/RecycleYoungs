@@ -29,7 +29,7 @@ def verify_fresh_migration(result,sql_hashes):
             version=int(match[1])
             require(version not in files and re.fullmatch('[0-9a-f]{64}',sha),'MIGRATION_SOURCE_BINDING_REJECTED')
             files[version]=Path(name).name
-    require(len(files) in (4,5) and sorted(files)==list(range(1,len(files)+1)),'MIGRATION_SOURCE_BINDING_REJECTED')
+    require(len(files) in (4,5,6) and sorted(files)==list(range(1,len(files)+1)),'MIGRATION_SOURCE_BINDING_REJECTED')
     migrated=result.get('migrations',[])
     require(result.get('migrationsExecuted')==len(files) and len(migrated)==len(files)
         and [m.get('version') for m in migrated]==[str(v) for v in sorted(files)]
@@ -69,8 +69,15 @@ def verify_connection(conn,t,actor,readonly=False):
     require(value==(DATABASE,actor,actor,t['sid'],PGDATA,'5432','5s','10min','on' if readonly else 'off',t['owner']),
             'API_CONNECTION_IDENTITY_REJECTED')
 
+REFERENCE_PENDING=Path('/api-data/reference-transition-pending.json')
+
+
 def connect(control,actor='api_reader',readonly=True):
     require(actor in ('ry_api_owner','api_writer','api_reader') and (actor!='api_reader' or readonly),'API_ACTOR_REJECTED')
+    if not readonly:
+        from dev_transition import require_clear
+        require_clear(control)
+        require(not REFERENCE_PENDING.exists() and not REFERENCE_PENDING.is_symlink(),'REFERENCE_TRANSITION_REQUIRES_REVIEW')
     require(not any(v and (k.startswith(('PG','DB_','FLYWAY_','SPRING_DATASOURCE'))) for k,v in os.environ.items()),'AMBIENT_DB_SETTINGS_REJECTED')
     control=Path(control);t=json.loads(private_read(control/'target.json'));validate_target(t)
     name={'ry_api_owner':'owner','api_writer':'writer','api_reader':'reader'}[actor]
@@ -84,7 +91,7 @@ def connect(control,actor='api_reader',readonly=True):
 def next_due(now):
     require(now.tzinfo is not None,'AWARE_TIME_REQUIRED')
     local=now.astimezone(KST)
-    due=local.replace(hour=4,minute=30,second=0,microsecond=0)+timedelta(days=(0-local.weekday())%7)
+    due=local.replace(hour=11,minute=0,second=0,microsecond=0)+timedelta(days=(0-local.weekday())%7)
     if due<=local:due+=timedelta(days=7)
     return due.astimezone(UTC)
 

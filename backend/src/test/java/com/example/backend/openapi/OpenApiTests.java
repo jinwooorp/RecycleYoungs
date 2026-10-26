@@ -56,14 +56,14 @@ class OpenApiTests {
         verifyNoInteractions(jdbc);
     }
 
-    @Test void generatesExactlyThirteenGetOperationsAndValidSchemaReferences() {
+    @Test void generatesExactlySixteenGetOperationsAndValidSchemaReferences() {
         assertThat(document.path("openapi").asText()).startsWith("3.1.");
         assertThat(document.path("info").path("title").asText()).isEqualTo("RecycleYoungs API");
         assertThat(names(document.path("paths"))).containsExactlyInAnyOrder(
             "/api/admin-dongs", "/api/industries", "/api/quarters", "/api/admin-dong-stats",
             "/api/admin-dong-trends", "/api/locations/resolve", "/api/nearby-stores", "/api/regions",
             "/api/regions/admin-dongs/{dongCode}/boundary", "/api/cafe-consumption-scores", "/api/cafe-change-scores",
-            "/api/admin-dong-context", "/api/admin-dong-sales-breakdown");
+            "/api/admin-dong-context", "/api/admin-dong-sales-breakdown", "/api/reference-catalog", "/api/reference-records", "/api/admin-dong-indicators/batch");
         document.path("paths").properties().forEach(entry -> {
             assertThat(names(entry.getValue())).containsExactly("get");
             var operation = entry.getValue().path("get");
@@ -80,6 +80,9 @@ class OpenApiTests {
         assertQueries("/api/admin-dong-trends", "dongCode", "industryCode");
         assertQueries("/api/admin-dong-context", "dongCode", "quarterCode", "dataVersion");
         assertQueries("/api/admin-dong-sales-breakdown", "dongCode", "industryCode", "quarterCode", "dataVersion");
+        assertQueries("/api/reference-catalog","dataVersion");
+        assertQueries("/api/reference-records","sourceId","referenceVersion","dataVersion");
+        assertQueries("/api/admin-dong-indicators/batch","dongCodes","quarterCode","dataVersion");
         assertQueries("/api/locations/resolve", "lat", "lng");
         assertQueries("/api/nearby-stores", "lat", "lng", "radius", "industryCode");
         assertThat(parameter("/api/admin-dong-stats", "dongCode").path("pattern").asText()).isEqualTo("^[0-9]{8}$");
@@ -104,8 +107,8 @@ class OpenApiTests {
             var responses = operation(path).path("responses");
             assertThat(names(responses)).containsExactlyInAnyOrderElementsOf(path.equals("/api/locations/resolve")
                 || path.equals("/api/nearby-stores") ? Set.of("200", "400", "500", "503")
-                : path.equals("/api/admin-dong-context") ? Set.of("200","400","409","500","503")
-                : Set.of("/api/admin-dong-stats","/api/admin-dong-trends","/api/cafe-consumption-scores","/api/cafe-change-scores","/api/admin-dong-sales-breakdown").contains(path)
+                : Set.of("/api/admin-dong-context","/api/reference-catalog","/api/reference-records").contains(path) ? Set.of("200","400","409","500","503")
+                : Set.of("/api/admin-dong-stats","/api/admin-dong-trends","/api/cafe-consumption-scores","/api/cafe-change-scores","/api/admin-dong-sales-breakdown","/api/admin-dong-indicators/batch").contains(path)
                     ? Set.of("200","400","409","500") : Set.of("200", "400", "500"));
             for (var code : new String[]{"400", "500"}) assertThat(responseSchema(path, code).path("$ref").asText())
                 .isEqualTo("#/components/schemas/ApiError");
@@ -163,7 +166,7 @@ class OpenApiTests {
     @Test void generatedDocumentParsesAsOpenApiModel() throws Exception {
         var parsed = io.swagger.v3.core.util.Json31.mapper().readValue(document.toString(), io.swagger.v3.oas.models.OpenAPI.class);
         assertThat(parsed.getOpenapi()).startsWith("3.1.");
-        assertThat(parsed.getPaths()).hasSize(13);
+        assertThat(parsed.getPaths()).hasSize(16);
         assertThat(parsed.getComponents().getSchemas()).hasSize(document.path("components").path("schemas").size());
     }
 
@@ -187,7 +190,7 @@ class OpenApiTests {
             var spec = http(client, config.path("url").asText());
             assertThat(spec.statusCode()).isEqualTo(200);
             var liveDocument = JsonMapper.builder().build().readTree(spec.body());
-            assertThat(liveDocument.path("paths").size()).isEqualTo(13);
+            assertThat(liveDocument.path("paths").size()).isEqualTo(16);
             assertThat(liveDocument.path("info").path("title").asText()).isEqualTo("RecycleYoungs API");
         }
         verifyNoInteractions(jdbc);
@@ -228,8 +231,13 @@ class OpenApiTests {
     private void assertQueries(String path, String... expected) {
         var actual = new HashSet<String>();
         for (var parameter : operation(path).path("parameters")) {
+            if (path.equals("/api/reference-records") && Set.of("query","page").contains(parameter.path("name").asText())) {
+                assertThat(parameter.path("required").asBoolean()).isFalse();
+                assertThat(parameter.path("in").asText()).isEqualTo("query");
+                continue;
+            }
             if (parameter.path("name").asText().equals("dataVersion")
-                && !Set.of("/api/admin-dong-context","/api/admin-dong-sales-breakdown").contains(path)) {
+                && !Set.of("/api/admin-dong-context","/api/admin-dong-sales-breakdown","/api/reference-catalog","/api/reference-records","/api/admin-dong-indicators/batch").contains(path)) {
                 assertThat(parameter.path("required").asBoolean()).isFalse();
                 assertThat(parameter.path("in").asText()).isEqualTo("query");
                 assertThat(path).isIn("/api/admin-dong-stats","/api/admin-dong-trends","/api/cafe-consumption-scores","/api/cafe-change-scores");

@@ -9,6 +9,7 @@ from .api_config import KEY_NAMES, init_config, load_keys
 from .api_http import HttpClient
 from .api_records import CollectionError
 from . import semas_api, seoul_api, seoul_context
+from . import seoul_reference
 
 
 def parser():
@@ -20,7 +21,7 @@ def parser():
     check.add_argument("--env-file", type=Path)
     for name in ("probe", "collect"):
         command = commands.add_parser(name, help="One small page" if name == "probe" else "All pages in the explicit scope")
-        command.add_argument("source", choices=("seoul-stores", "seoul-sales", "semas-stores", *seoul_context.SOURCES))
+        command.add_argument("source", choices=("seoul-stores", "seoul-sales", "semas-stores", *seoul_context.SOURCES, *seoul_reference.SOURCES))
         command.add_argument("--env-file", type=Path)
         command.add_argument("--output", type=Path, required=True, help="New absolute run directory under a private 0700 parent outside Git")
         command.add_argument("--quarter", help="Required for stores/sales; optional for workers; unsupported for other context snapshots")
@@ -47,6 +48,15 @@ def main(argv=None):
         page_size = args.page_size if args.page_size is not None else (5 if probe else 100)
         if probe and not 1 <= page_size <= 5:
             raise CollectionError("PROBE_MAX_FIVE_ROWS")
+        if args.source in seoul_reference.SOURCES:
+            if args.quarter or args.industry or args.quarantine_negative_consumption:
+                raise CollectionError("REFERENCE_CURRENT_SNAPSHOT_ONLY")
+            if not keys['SEOUL_OPENAPI_KEY']:
+                raise CollectionError("SEOUL_KEY_MISSING")
+            result = seoul_reference.collect_reference(args.output, args.source, keys['SEOUL_OPENAPI_KEY'],
+                page_size=page_size, probe=probe, allow_http=args.allow_seoul_http)
+            print(json.dumps({k: result[k] for k in ('status', 'complete', 'published', 'received_count', 'declared_count')}))
+            return 0
         if args.source in seoul_context.SOURCES:
             spec = seoul_context.specification(args.source, args.quarter)
             if args.quarantine_negative_consumption and args.source != "seoul-consumption":

@@ -4,7 +4,17 @@
 
 에이전트가 구현 계약과 개발·검증 기준을 확인하는 참고 문서입니다. 현재 기능과 우선순위는 [프로젝트 현황](project.md), DB 변경·복구 조건은 [DB 안전 정책](db-safety.md)에 둡니다.
 
-문서·구현 대조 기준일은 **2026-10-23**입니다.22분기 카페와5종 참고 자료를 연결하는 최종 계약2·additive V5·GET2개·Frontend를 구현했습니다. 격리 검증과 현재 개발 DB 적용은 구분합니다. 기존 영속 환경·예약 갱신·복원·소스 이미지·Compose 검증 이력은 보존하고, [다음 작업](project.md#다음-작업)은 개발 환경 전환·점수 검증·nginx·CI/CD입니다.
+문서·구현 대조 기준일은 **2026-10-26**입니다.22분기 카페와5종 참고 자료를 연결하는 최종 계약2·additive V5·GET2개·Frontend를 구현했습니다. 현행 DB의 새 백업·독립 복원·복제본 검증 후 사용자 명시 승인으로 실제 개발 DB의 V5·계약2·22분기 공개·Backend·binding/receipt 전환과13개 API 검증을 마쳤습니다. 이어 실제 공식 API 갱신·동일 named-volume DB 컨테이너 재시작·전체 보존 대조와 새 스케줄러 교체/재개도 PASS입니다. 후속 시각 변경으로 매주 월요일11시를 사용하며10/26 실제 자연 예약의 정상 공개·전체 등록 원본·22분기·16API 검증과 미사용 Docker 정리까지 완료했습니다. 다음 예약은11/2 11:00 KST입니다. 상세 근거와 후속 확인 일정은 [프로젝트 현황](project.md#현행-개발-환경-적용과-갱신복구-통합-계획)에 구분해 기록합니다. 기존 영속 환경·예약 갱신·복원·소스 이미지·Compose 검증 이력은 보존합니다.
+
+## 현행 V4→V5 전환 코어
+
+[dev_transition.py](../../etl/dev_transition.py)의 범위는 기존 local-dev V1~V4·계약1에서 V5·검증된22분기/context 후보로 전환하는 준비와 단계 제어입니다. 일반 시작의 `schemas()`·READY 재사용 계약을 완화하지 않습니다. 계획의 기존 SQL5개를 그대로 유지하고 V5 한 개만 추가하며, 실제 target·volume 생성 정보·코드·입력·예상 공개 버전·백업/리허설 SHA·30분 유효기간을 결속합니다. SHA와 CLI flag는 사람 승인을 대신하지 않습니다.
+
+`precheck`는 RO·같은 연결에서 실제 identity와 이력/공개/작업 상태를 확인합니다. 승인된 `begin`만 master/writer에 pending marker와 전용 journal을 만듭니다. 운영 bridge는 `execute_step(..., verify_preconditions=step_precheck)`를 사용하며 migration→grants→stage→publish→binding 순서와 각 쓰기 직전의 입력 전체 파일 hash·target/source/SQL/binding/공개 상태·유효기간을 재검증합니다. 비공개 후보는 기존 `stage_context_release`·registry를 사용하고 실제 새 CAS가 수행된 경우만 인정합니다. 일반 갱신·초기화로 이 절차를 대체하지 않습니다.
+
+Journal은 exclusive 생성·fsync·순서·이전 SHA·별도 HEAD를 검사합니다. INTENT 잔존·STOP·누락/변조·중복을 거부하며 자동 resume/force 경로는 없습니다. 외부 Flyway도 실제 start 직전에 `step_precheck`와 유효기간을 다시 검사합니다. binding은 공개 증명의 원본 재검증이 끝난 뒤에도 유효기간을 다시 확인하고, 이전 증거를 새 파일에 보존한 뒤 두 볼륨에서 각각 교체합니다. 모든 완료 증거를 확인한 `finish`만 master→writer 순서로 marker를 제거합니다. 미완료 marker는 `dev_runtime`과 일반 쓰기 `api_runtime.connect`를 차단합니다. 같은 소유자의 악의적인 파일 변조나 승인 위조에 대한 독립 보안 경계로 주장하지 않습니다.
+
+[api_snapshot.py](../../etl/api_snapshot.py)는 기존 값/geometry/ID/history와 함께 default ACL·membership 상속/전환 옵션·sequence ownership/dependency·RLS·role settings·실효 테이블 권한을 비교합니다. 새 백업·독립 복원과 검토 후 수정된 제어 코어의 검증은 [프로젝트 기록](project.md#현행-개발-환경-적용과-갱신복구-통합-계획)에 있습니다. 복제본의 PostgreSQL 프로세스/helper 재시작과 현행 named-volume DB의 Docker 재시작은 구분합니다. 준비 검증 후 별도 사용자 명시 승인으로 현행 migration/적재/공개·Backend·binding 전환을 완료했습니다. 실제 갱신·동일 DB 재시작·scheduler/예약 결과도 위 기록에서 각각 확인합니다.
 
 ## 레거시 퇴역과 현행 경계 수급
 
@@ -164,10 +174,30 @@ JPA로 전환하거나 새로운 상태 관리 라이브러리를 도입한 구�
 - DB 이름은 `recycleyoungs_api_dev`, 내부 `api-postgres:5432`, PGDATA는 `/var/lib/postgresql/data/api`입니다. 호스트 DB port는 없고 Frontend loopback5173만 공개합니다.
 - DB/control/data/reader/writer 전용 볼륨은 환경 label·생성 정보·스키마 SHA에 결속됩니다. 실제 container/network full ID·image·mount·연결 SID·DB/current_user/session_user·owner nonce·timeout·READ ONLY를 검증합니다. `local-dev` target을 명시하며 임의 project/volume은 거부합니다.
 - preflight가 사용자 `etl/api.env`를 read-only로 받아 private control에 복사합니다. 파일600·설정 형식·양쪽 키를 먼저 검사합니다. 비밀번호는 자동 생성하고 Backend에는 reader target/password만, scheduler에는 writer/reader target/password만 전달합니다. 키/비밀번호는 build context·환경변수·로그에 넣지 않습니다.
-- 새 환경에서만 현재 SQL 목록(V1~V5)의 migration receipt와 runtime schema·역할·경계·API 자료를 준비합니다. 완료 분기를20251부터 순서대로 확인하고 두 서울 원천이 모두 제공할 때 채택합니다. 경계 ZIP 2개는 서울시 공식 HTTPS에서 고정 크기·SHA를 검증해 받고, 리포트 3개는 저장소 snapshot에서 원본 바이트·SHA로 복원합니다. CSV 묶음이나 GitHub Release는 내려받지 않습니다. 기존 dev의 V4→V5·계약2 전환은 별도 승인 대상입니다.
+- 새 환경에서만 현재 SQL 목록(V1~V6)의 migration receipt와 runtime schema·역할·경계·API 자료를 준비합니다. 완료 분기를20211부터 순서대로 확인하고 두 서울 원천이 모두 제공할 때 채택합니다. 경계 ZIP 2개는 서울시 공식 HTTPS에서 고정 크기·SHA를 검증해 받고, 리포트 3개는 저장소 snapshot에서 원본 바이트·SHA로 복원합니다. CSV 묶음이나 GitHub Release는 내려받지 않습니다. 기존 환경의 스키마·데이터 확장은 별도 검증된 전환 절차를 따릅니다.
 - READY 재실행은 최초 migration·수집을 생략하고 reader status를 확인합니다. 불완전 migration/initialize marker, schema/volume/identity 불일치, 설정 키 변경은 자동 채택·복구하지 않습니다. 실패한 기존 초기화를 무조건 재시도하거나 볼륨을 지워 해결하지 않습니다.
 - `frontend/src`만 읽기 전용 mount해 Vite HMR을 지원합니다. Backend·의존성·설정 변경은 `up -d`로 재빌드합니다. 지도 공개 키는 optional `frontend/.env.local`에서 runtime으로 전달하고 실제 Kakao 웹 도메인 등록은 별도입니다.
-- `make dev-status`는 실제 readonly DB 조회, `dev-refresh`는 writer 수집/공개, `dev-reconcile`은 현재 자료 검증 후 상태 변경입니다. 매주 월요일04:30KST 갱신·실패/불확실RUNNING 차단은 기존 api_worker 계약을 따릅니다. DB/control/data/secret 전체 복구와 schema/키 교체 전환은 후속 과제입니다.
+- `make dev-status`는 실제 readonly DB 조회, `dev-refresh`는 writer 수집/공개, `dev-reconcile`은 현재 자료 검증 후 상태 변경입니다. 매주 월요일11:00KST 갱신·실패/불확실RUNNING 차단은 api_worker 계약을 따릅니다. DB/control/data/secret 전체 복구 도구와 검증 범위는 이 문서의 복구·검증 이력을 따르며 schema/키 교체에는 별도 검토가 필요합니다.
+
+### 운영 명령과 신규·기존 환경 구분
+
+루트 README는 최초 설정·실행의 핵심만 안내합니다. 현행 개발 상태·다음 개편 계획은 [프로젝트 현황](project.md), 과거 검증·퇴역 결과는 이 문서의 [검증 이력](#검증-이력)과 [프로젝트 기록](project.md#레거시-개발-환경-정리)에 보존합니다. README에서 제거한 개발 상태 배너·기능 아래 운영/재설계 문단·검증과 현재 범위의 내용은 기존 기록과 중복되므로 새 사본을 추가하지 않습니다.
+
+- 새 초기화는2021Q1부터 연속 제공되는 카페 자료와 인구/시설/상권변화 참고5종을 계약2로 수집하고 V6 현재 원천3종을 함께 공개합니다. 이전의2025Q1/6분기·계약1 초기화는 아래 날짜별 이력이며 현재 기본값이 아닙니다. 공개ID·수집시각·최신원천값은 새 공식 수집 시점에 따라 달라지며 로컬DB 파일을 복사하지 않습니다. SQL binding이 다른 기존 볼륨을 일반 시작으로 자동 변환하지 않습니다.
+- 기존 파일은 덮어쓰지 않습니다. `etl/api.env`는600 권한이며 Seoul 일반 키와 SEMAS Decoding 키를 설정합니다. Frontend의 지도 키는 optional `frontend/.env.local`에 두고 실제 접속 도메인을 Kakao Developers에 등록합니다.
+- 서울 점포/매출의 공식 HTTP는 키가 암호화되지 않은 요청 URL에 포함됩니다. SEMAS와 경계 다운로드는 HTTPS이며 HTTPS 실패를 HTTP로 우회하지 않습니다. HTTP를 거부하려면 `DEV_ALLOW_SEOUL_HTTP=false`를 지정합니다.
+- Docker Unix socket은 로컬 Docker 관리 권한을 제공하므로 신뢰하는 개발 PC에서만 실행합니다. 별도 격리 환경은 `COMPOSE_PROJECT_NAME=recycleyoungs-dev-check-<8자리 소문자 hex>`와 다른 `DEV_WEB_PORT`로 컨테이너·볼륨·네트워크·앱 이미지를 함께 분리합니다.
+
+| 명령 | 실제 영향 |
+| --- | --- |
+| `docker compose ps -a` | 상태 조회. preflight/identity/migrate/initialize의 Exited(0)는 정상 |
+| `make dev-status` | guarded 실제 DB READ ONLY 상태 조회 |
+| `make dev-refresh` | 실제 API 수집·검증·적재·새 공개 버전 생성 |
+| `make dev-reconcile` | 원인 검토 후 현재 공개/원본 검증·상태 변경으로 예약 허용 |
+| `docker compose logs --tail=30 preflight identity migrate initialize api-scheduler` | 준비·갱신 로그 확인 |
+| `docker compose stop` | 서비스 중지·볼륨 보존 |
+
+DB/Backend/Frontend/inspect-proxy는 healthy, scheduler는 실행 상태를 확인합니다. 초기화 중단·identity/schema 불일치·실패는 자동 재실행하지 않습니다. `down -v`, 볼륨 삭제, secret/제어 파일 수동 수정은 복구 절차가 아닙니다. 기존 DB 변경·갱신·복구는 [안전 정책](db-safety.md)의 승인 범위와 사전 검증을 따릅니다.
 
 **10/22 검증:** 새 기본 Compose에서 실제 API13runs/6quarters·migration4개·HTTP 조회, 재실행의 migration/최초 수집 생략, 새 DB 실제 재시작의 identity/공개 버전 유지, 강제 수집 실패의 FAILED/재실행 차단·기존 HTTP200·명시적 reconcile을 확인했습니다. Backend276·Frontend337·ETL430 PASS, 기존 DB/raw opt-in15 SKIP, build/lint PASS입니다. 모의 지도 SDK와 실제 API로 상세·연도 경계 추세·3후보·모바일 흐름을 확인했습니다. 실제 Kakao 인증/타일·별도 PC/EC2·운영 배포는 미검증입니다.
 
@@ -519,7 +549,7 @@ CAFE 경쟁군은 I21201의 통합 범주 전체입니다. 커피전문점 외 �
 
 #### 저장·공개 버전 설계
 
-다음 객체는 `db/api-migration/V5__api_context_and_quality_contract.sql`에 구현했습니다. 기존 `api_releases/api_current_release`, 공개 뷰·기존3원천과 reader/writer 역할을 유지합니다. 현재 개발 DB에는 적용하지 않았습니다.
+다음 객체는 `db/api-migration/V5__api_context_and_quality_contract.sql`에 구현했습니다. 기존 `api_releases/api_current_release`, 공개 뷰·기존3원천과 reader/writer 역할을 유지합니다.2026-10-24 사용자 승인으로 현재 개발 DB에도 적용했습니다.
 
 | 신규 객체 | 키·핵심 데이터·제약 |
 | --- | --- |
@@ -965,6 +995,16 @@ registry 등록 → RUNNING candidate 기록 → 실제 current/점포월 검사
 
 위 기록은 manifest 없는 기존 영속 환경의 검증입니다. 후속 승인으로 새 PC·서버의 소스 빌드 경로를 추가했으며 아래 절이 신규 준비 기준입니다. nginx/HTTPS·일반 CI/CD·EC2·Kakao 배포 도메인·외부 알림·전체 worker 복구·용량/보존·과거 분기 정정 정책은 후속 작업입니다. 기존 팀 볼륨·고정 데이터 Releases·CSV 경로의 삭제/퇴역은 실행하지 않았습니다.
 
+### 전체 개발 환경의 명시적 백업·복구
+
+`etl/dev_recovery.py`는 프로젝트 밖 private package의 파일 집합·권한·symlink/hardlink·전체 SHA·완료 marker를 검증합니다. `etl/dev_recovery_docker.py`의 CLI는 `backup`, `restore`, `readers`, `verify-readers`, `restart-check`, `verify`, `retention-plan`입니다. `--help`와 `verify`는 DB를 변경하지 않지만 backup/restore/readers/restart는 명시된 실제 대상과 승인 범위가 필요합니다. 일반 개발 시작·주간 갱신이 복구 도구를 자동 호출하지 않습니다. `verify` 성공은 파일 무결성만 뜻하며 DB 복원 성공과 다릅니다.
+
+백업은 writer 작업 잠금·다른 owner/writer client·prepared transaction·subscription 부재를 확인한 같은 exported REPEATABLE_READ READ ONLY snapshot의 DB dump와 비교 기준, raw/registry/control/reader/writer·인증·고정6종 이미지·실행 설정·host mount Frontend 소스를 보존합니다. 신규 package와 복원 root만 배타적으로 만들고 기존 package/볼륨/DB를 덮어쓰지 않습니다. 실행 이미지 메타데이터가 없으면 실제 rootfs 전 항목(타입/권한/UID/GID/내용/링크 등)과 두 번의 live export를 대조한 별도 capture가 필요합니다. 원본 서비스는 중지/pause하지 않습니다.
+
+복원은 새 SID/container·전용5개 볼륨과3개 네트워크로만 진행하며 원본의 존재 여부·원래 자원을 보호합니다. 전체 행/ID/EWKB/NULL/history/catalog/ACL/roles/sequence, 실제3역할 인증·reader 쓰기 권한 부재, 모든 cafe 및 참고 registry의 raw/record를 재생 검증합니다. 새 control/READY를 발급할 때 DB를 정상 중지하고, 매 파일·부모 디렉터리를 fsync합니다. 두 pending 해제도 DB가 중지된 상태에서만 수행하고 host verified 기록을 fsync한 후 재개·snapshot을 대조합니다. 재시작 검사는 먼저 두 control의 persistent pending을 설정하며, 검증 성공 후 DB 중지→pending 해제→완료 기록→재개 순서를 따릅니다. 실패는 STOP을 먼저 영속화하고 정확한 소유 DB를 정지하며 자동 재실행하지 않습니다.
+
+로컬 실패 notice는 시각·단계·고정 오류 코드·조치 필요 여부만 기록하고 exception 내용·키·비밀번호를 싣지 않습니다. 외부 발송은 연결하지 않았습니다. 보존 제안의 기본은 **마지막 복원 검증을 통과한 전체 백업1세트**(`minimum=1`, `days=0`)이며 중복 package는 횟수에 포함하지 않습니다. 이 도구는 파일 무결성이 확인된 입력의 삭제 검토 후보만 출력하고 직접 삭제하지 않습니다. 실제 정리는 독립 복원 검증과 대체 가능성·현행 의존 없음 확인 및 AGENTS의 상시 정리 범위를 따릅니다. 추가 세트/기간 옵션은 별도 합의한 보존 목적이 있을 때만 지정합니다. 현재 백업은 적용 직전과 주요 갱신 후 운영자가 생성하는 수동 경로이며 백업 자동 스케줄은 활성화하지 않았습니다. 주간 갱신 scheduler를 백업 scheduler로 바꾸지 않습니다. 복구 가능한 시점은 마지막 검증 완료 package의 snapshot 시점이고, 별도 매체·장비와 운영 복구시간 목표는 미확정입니다. 같은 PC의 격리 성공을 재해 복구 SLA로 해석하지 않습니다.
+
 ### 소스 이미지 빌드와 신규 환경 준비
 
 2026-10-22 승인 범위는 기존 로컬 이미지 의존성을 해소하는 빌드·실행 구성입니다. [api_images](../../etl/api_images.py)는 Python 표준 라이브러리·Docker/Buildx로 `make api-images`를 제공하며 DB·원천 API·실제 서버 인증키를 읽지 않습니다. [Dockerfile](../../docker/api/Dockerfile)은 digest가 고정된 Python 3.12·Temurin Java21 JDK/JRE·Node24를 사용합니다. worker는 requirements, Frontend는 package-lock으로 의존성을 설치하며 Backend는 저장소 Gradle wrapper로 bootJar를 만듭니다. 호스트 venv·node_modules·jar/dist·기존 custom worker를 빌드 입력으로 사용하지 않습니다. PostGIS/Flyway는 고정 공개 digest를 pull합니다.
@@ -1276,7 +1316,7 @@ DB는 네 상태를 표현하지만 현재 준비 코드는 예상 밖·미지�
 
 ## 현재 GET API 계약
 
-현재 비즈니스 API는 GET 13개입니다. 기존11개에 행정동 참고 자료·카페 세부 매출2개를 추가했습니다. 성공률·종합 입지 추천 API는 없습니다.
+소스의 비즈니스 API는 GET 16개입니다. 현행 개발 환경의 고정 Backend는 V5·13개이며, 아래 마지막3개는 V6·새 이미지의 별도 적용 대상입니다. 성공률·종합 입지 추천 API는 없습니다.
 
 | 경로 | 필수 query | 결과 |
 | --- | --- | --- |
@@ -1293,6 +1333,23 @@ DB는 네 상태를 표현하지만 현재 준비 코드는 예상 밖·미지�
 | `/api/cafe-change-scores` | dongCodes, quarterCode | 1~3개 행정동의 소비증감 상대 점수·실제 증감률·산정 근거 |
 | `/api/admin-dong-context` | dongCode, quarterCode, dataVersion | 행정동 전체의 참고5종·소비보류6섹션, 고정 정책·출처·정밀 원값 |
 | `/api/admin-dong-sales-breakdown` | dongCode, industryCode=CAFE, quarterCode, dataVersion | 기존 매출의 총액/건수와 요일·시간·성별·연령별 정밀 원값 |
+| `/api/reference-catalog` | dataVersion | 현재3원천의 독립 referenceVersion·출처·정책·수집 시각·원본/검증 건수 |
+| `/api/reference-records` | sourceId, referenceVersion, dataVersion | 허용 필드의 현재 원천 목록. 선택 query 최대80자·page 1~2500, 페이지20건 |
+| `/api/admin-dong-indicators/batch` | dongCodes, quarterCode, dataVersion | 서로 다른1~3동의 기존 두 소비 지표·참고 상태·비교 집단/모델·총점 미제공 사유 |
+
+### 현재 원천 목록과 판단 근거 계약
+
+`app/seoul_reference.py`는 버스 정류장(OA-15067), 공영주차장(OA-13122), 서울교통공사 상가 계약(OA-21305)의 전체 수집·원본 보존·허용 필드 검증을 담당합니다. `CURRENT_SOURCE_SNAPSHOT`이며 실제 관측일은 미확인(NULL), `scoreReady=false`입니다. 과거 분기·행정동·반경500m의 자료로 바꾸지 않습니다. 버스 좌표의 공식 설명 충돌, 주차 위치/요금, 임대료의 통화·계약 범위는 미해결로 공개에서 제외합니다. 상가 면적은 ㎡ 원천 보고값이며 일반 카페 임대료나 개별 점포 면적을 대표하지 않습니다.
+
+공영주차장은 같은 관리번호의 모든 비좌표 속성이 정확히 같은 경우에만 서로 다른 좌표 행을 묶습니다. 원본 행수는 `sourceRowCount`로 보존하고 주차면수를 합산하지 않습니다. 속성 충돌·완전 중복은 거부합니다. 검증본은 버스11,236건, 주차 원본2,180행/관리번호841건, 상가 계약1,377건(면적1,365보고/12원천NULL)입니다. 정밀 숫자는 십진 문자열로 전달하며 보류·원천NULL·실제0을 구분합니다.
+
+공통 정책 `current-reference-policy-v1.json`을 Java와 Frontend가 정확히 대조합니다. 기존 context 정책V1과 카페 공개 버전은 보존합니다. V6의 `api_reference_snapshots/records/current`는 봉인된 snapshot·record 변경을 금지하고,3개 current pointer를 같은 트랜잭션의 예상 이전값 CAS로 교체합니다. `referenceVersion`은 정렬한3원천의 sourceId/snapshotId를 고정 문자열과 결합한 SHA-256이며 카페 `dataVersion`과 별개입니다. 모든 registry snapshot의 원본과 전체 record를 재생 검증합니다. 자동 갱신은 키/원본 행수 감소·수집 시각 후퇴를 거부하며, 정상 삭제도 검토된 별도 전환이 필요합니다.
+
+새 worker는 참고 수집·비공개 staging 이후 기존 카페 공개와 참고 pointer, 작업 SUCCEEDED를 한 트랜잭션에서 확정합니다. 일반 실패로 일부 원천만 공개하지 않습니다. 카페/참고 버전이 바뀐 요청은409, 목록 미공개는503, query 위반은400, 정책·원본·registry 무결성 오류는500으로 구분합니다. 분기/반경 필터를 참고 목록 API에 추가하면400입니다. Service의 READ ONLY REPEATABLE_READ에서 같은 공개 버전과 기준 집단을 조회하며 선택 후보2~3개로 백분위를 다시 계산하지 않습니다.
+
+`decision-indicator-audit-v1`은22분기 실제 거래 건수9,238행의 분포·결측·규모/증감 순위 상관·인접 분기 안정성과 진단용 가중치0/25/50/75/100의 민감도를 계산합니다. 정수·분수로 순위/증감을 계산하고 상관 표시만 실수를 사용합니다. 개인별 종합 점수는 만들지 않습니다. 최소 집단30·현재 두 상대 점수 모델을 새 원천의 타당성 검증으로 간주하지 않습니다. 같은 거래 원천의 중복, 참고자료의 시공간/점수 미검증, 접근성·비용의 대표성, 지역소비 보류와 영역 간 보정 부재 때문에 총점은 UNAVAILABLE/NULL·가중치 빈 목록입니다. 창업 성과·인과·예측 모델이 아닙니다.
+
+Frontend는 기존 페이지에서 데이터 안내의 현재 원천 목록·검색/페이지, 지도·상세·후보 비교의 판단 기준 접기를 추가했습니다. 펼칠 때만 조회하고 AbortController와 요청 key로 늦은 응답을 숨깁니다. 새 API 미적용 환경에서는 미제공 안내와 재조회를 제공합니다. 전체 페이지 재설계는 이 계약의 실제 API/화면 인수 이후 작업입니다.
 
 ### 지역 목록과 표시 경계
 
@@ -1862,6 +1919,22 @@ IAB에서 1440×1000과 390×844로 실제 Kakao 지도·팀 backend를 사용�
 
 독립 runner는 실제 Kakao SDK·타일·3후보 UI를 검증하지 않았습니다. 과거 실제 지도 시연과 합쳐 최신 v2의 전체 브라우저 검증 완료로 표현하지 않습니다.
 
+### 2026-10-25 전체 복구·현재 원천·판단 근거 통합
+
+승인된 A~G 중 코드·새 격리 검증 범위의 결과입니다. `main/6015331`과 기존 미커밋 변경을 보존했고 현행 V5의 DB/서비스·예약은 바꾸지 않았습니다. 현행 V6 적용은 G의 별도 명시 승인입니다.
+
+- **현재 원천:** 버스11,236건·지하철 상가1,377건·주차 원본2,180행/관리번호841건, 합계13,454개 검증 record를 연결했습니다. 지역소비9,350행의 재검증도 보류 판정이며 양수 행만 공개하지 않았습니다. 새3종의 위치·요금·임대료·점수는 보류하고 검증된 원천 필드만 제공합니다.
+- **전체 복구:** 현행 V5의 DB22개 테이블과 raw/registry·역할/제어/인증·고정6종 이미지·현재 Frontend 소스의 새 private package를 만들었습니다. 새 SID·전용5볼륨/3네트워크에서 전체 값/geometry/history/catalog/ACL/roles/sequence·실제3역할 접속과 cafe registry3개를 대조했습니다. 실행 이미지 metadata가 없는 Frontend는 rootfs19,843항목/바이트를 live export 두 번과 대조했습니다. 최신 복원은 DB 중지 후 control 파일/부모 fsync·완료 기록 후 재개 경로를 통과했습니다. 별도 장비/매체 검증은 아닙니다.
+- **V6·실제 공개:** 새 복원본에만 V6·좁은 권한·불변 snapshot/record·3원천 current CAS와 binding/receipt를 전용 operator로 적용했습니다. 기존 모든 행·이력의 모든 열·catalog/ACL/sequence를 전후 대조했습니다. 동일한 최종 worker의 실제 공식 API 갱신은 SUCCEEDED이며 카페와 참고3종을 공동 공개했습니다.22분기/이전 raw·registry를 보존했고 참고 snapshot은6개입니다. 자연 예약 실행으로 계산하지 않습니다.
+- **실패 복구:** 실제 provider 장애와 구분한 모의 source 실패를 새 대상의 정상 refresh 경로에 주입했습니다. 실제 FAILED와 공개 포인터/record 보존을 확인하고 refresh를 재시도하지 않았습니다. 명시적 정상 reconcile은 카페·참고 원본/전체 등록 record·private 경로를 검증한 뒤 상태를 회복했습니다. 이는 새 격리 DB의 실측이며 현행에 장애를 주입하지 않았습니다.
+- **재시작·HTTP:** 새 V6 대상의 정상 재시작은 persistent pending과 DB 중지 상태 unblock을 사용했습니다. 전체25개 테이블·3역할·참고6snapshot·두 공개 버전이 일치했습니다. 기존13개 API/14요청과 새3개 API의37검사/24요청, 실제 이전 참고 버전409·OpenAPI16GET를 확인했습니다. 재시작 후에도16개 API/20요청이 PASS입니다.
+- **지표:** 새 실제 공개 버전의22분기9,238개 동·분기 거래 건수로 감사를 재현했습니다. 비교 집단418~421개, 규모/증감 순위 상관 -0.191455~0.349371, 인접 분기 규모 순위 상관0.991438~0.996637, 진단용 가중치의 최대 백분위 이동 폭91.0501~99.5238입니다. 개별 종합 점수를 만들지 않았고 총점은 미제공입니다. 최소 집단30·사업 성과의 타당성 검증이 아닙니다.
+- **화면:** 실제 API로 현재3원천 검색/페이지/빈 결과, 판단 기준/총점 보류, 첫 분기·상세·3후보/동 중복, 키보드 초점/펼침과 PC1440×1000·모바일390×844를 확인했습니다. 앱/API 오류는 없었습니다. Browser plugin 부재로 준비된 Playwright/Chrome을 사용했고 지도 SDK만 대역입니다. 최종 이미지·새 공개 버전·재시작 후에도 현재 원천/판단 기준 화면을 재확인했습니다. 실제 Kakao 인증/타일·다른 실제 기기·포괄적 접근성은 미검증입니다.
+- **일반 검사:** Backend292PASS, Frontend354PASS 및 build/lint PASS를 재사용했습니다(Java/Frontend 소스 변경 없음). ETL은 `make check-etl PYTHON=/path/to/prepared/python`529개 중514PASS/15SKIP이며 DB/raw opt-in을 켜지 않았습니다. 새 SQL의22검사에서는 실제3원천과 합성 cafe 공개 fixture를 구분했습니다. 일반 테스트를 실제 DB 결과로 계산하지 않았습니다.
+- **발견·보강:** control/receipt fsync와 재시작 실패 차단, 정상 context 미제공의 rollback, 원천 키/시간 후퇴, 중복 package 보존 계산을 회귀로 보강했습니다. 실제 이미지 기동의 필수 TSV 누락과 격리 입력 복사 시 중간 폴더0755도 수정했습니다. 잘못된 부모 권한은 전환 전에 거부합니다. 실패 대상·원본·로그는 보존했고 해당 target을 자동 재실행하거나 guard를 완화하지 않았습니다. 최종 읽기 전용 재리뷰에 추가 중요 결함은 없습니다.
+
+현행 컨테이너5개·볼륨5개·네트워크3개의 ID/image/mount·공개 버전·다음 예약(10/26 04:30KST)은 최신 백업 전후와 최종 READ ONLY 확인에서 같았습니다. 복원본 scheduler는 시작하지 않았습니다. backup 자동 주기·별도 매체/장비·외부 발송은 활성화하지 않았으며 보존 정책은 삭제 없는 제안입니다. 검증 자원·실패 증거·임시 파일은 보존하고 stage/commit/push는 하지 않았습니다.
+
 ### 과거 기록을 찾는 방법
 
 개편 전 상세 수치·명령·검증 범위는 [기존 기술 문서](https://github.com/jinwooorp/RecycleYoungs/blob/e1668ca1100616b3f19d984fc6942ebc28b827b8/docs/technical.md)에 보존돼 있습니다.
@@ -1869,3 +1942,65 @@ IAB에서 1440×1000과 390×844로 실제 Kakao 지도·팀 backend를 사용�
 과거 “main 반영 대기”, v1 수동 절차, 일회용 demo 재현 명령은 해당 시점의 기록입니다. 현재 실행은 README를 따릅니다. workflow 파일의 존재도 새 실행 승인을 뜻하지 않습니다.
 
 추가 실행에서는 대상·입력·코드 버전·명령·PASS/FAIL/SKIP·정리 범위를 새로 기록합니다. 과거 백업·완료 건수·commit을 현재 상태로 고정하지 않습니다.
+
+### 2026-10-25 후속 현행 V6 전환 실행
+
+사용자 승인된 project.md 후속6단계 계획으로 현행 적용 직전 V5 전체 백업·독립 복원(22tables/3roles/3registry), backup/live/prepare 전체 snapshot 일치·기존 쓰기 주체 중지를 확인했습니다. 원래 DB/SID·5볼륨·3네트워크를 유지한 V6·13,454건·좁은 권한·binding/receipt 전환과 Backend/scheduler 교체가 PASS이며, 원래 행·이력·catalog·ACL·sequence를 보존했습니다. 실제 공식 공동 갱신1회로22분기와3원천을 함께 공개했고, 같은 현행 DB 재시작의25tables/3roles/6reference snapshots 및16API(기존14요청+신규24요청37검사)도 PASS입니다. 실제 API로 PC1440×1000·mobile390×844·키보드·검색/페이지/빈 결과·판단 근거 화면을 확인했고 지도 SDK만 대역입니다. 실제 Kakao/실기기·포괄적 접근성 검증과 구분합니다.
+
+새 scheduler는 create 전 fsync activation marker를 기다리는 wrapper와pause/restart=no를 사용합니다. 즉시 인수와 적용 후 V6 전체 백업/독립 복원·복원API·전체 snapshot 재대조가 모두 PASS일 때만 정확한 marker를 검증·제거/fsync하고 operator를 정상 종료한 뒤 예약을 재개합니다. V6 전체 백업·새 독립 복원(25tables/3roles/4registry)과 복원16API, 현행 전체 snapshot 재대조까지 PASS한 후 activation 해제·operator 정상 종료·scheduler 재개와 PID1 초기 상태를 확인했습니다. 다음 예약10/26 04:30KST는 유지되며 첫 READ ONLY 후속은WAITING_FOR_DUE입니다. 아직 실제 예약이나 Docker 정리를 완료로 기록하지 않습니다.
+
+복원 읽기 서비스의 HTTP 분기 수 검증은 고정22가 아닌 같은 연결 READ ONLY의 정확한 target/current release metadata에서 분기 목록을 읽어 형식·중복/순서를 확인하고 그 수와 비교합니다. 정상23분기 거부·22분기 누락 허용의 회귀를 RED→GREEN으로 보강했고 전체 ETL530개 중515PASS/15SKIP입니다. host recovery helper/test는 source09 이미지 build context 밖이며 소스 fingerprint 일치, Java/UI 파일 바이트 동일로 기존 Backend292/Frontend354/build·lint 결과를 재사용합니다.
+
+Docker 정리는 새 scheduler의 실제 예약 출처·원본/registry·16API PASS 뒤에만 진행합니다. nonce/fullID·모든 컨테이너의 볼륨/네트워크 참조(중지/created 포함)·필수 이미지의 Parent 조상을 보호하고, 삭제 후보 volume의 두 cold archive 일치와 폐기 image 보존 후 정확한 후보만 삭제합니다. cold archive는 각 테스트 DB의 독립 복원 증명이 아닙니다. 공용 builder cache의 시간/설명/미사용 상태로 프로젝트 소유를 추정하지 않으며 직접 귀속 증거가 없어 보존합니다. private 보존본·원본·증거와 저장소 scratch는 삭제하지 않습니다.
+
+### 2026-10-25 월요일11시 전환과 개편 순서 변경
+
+api_runtime.next_due의 기준을 매주 월11:00 KST로 변경했습니다. 이전04:30시각·월10:59:59·정각11시·갱신종료 이후를 포함한5경계 사례를 RED→GREEN으로 확인했고 일반 ETL530개 중515PASS/15SKIP입니다. 최종sourceed31e9fbc43381d2672c5878ffaffbe922b6bd887d32e9097ac0c4b51d20f64d와 worker8dfc2f6982357450771840e9c328f5ca90d9e2a44d2381c72677109fcdc1ca21를 사용합니다. 이미지 안의 이전runtime 대비 차이는api_runtime.py 하나이며 Java/UI/SQL/정책·binding은 그대로입니다. 실제 예약 row는 동일 연결의 actor/SID/잠금/이전값 CAS로 next_due·updated_at만 변경했고, 전체25tables의 나머지 값/catalog/sequence와두 공개 버전 보존을 대조했습니다. scheduler04708729…의 PID1 시작·다음10/26 11시를 확인했습니다.
+
+이전source09의 V6 전체 데이터 복구 증거는 불변 보존하고, 새 worker archive·시각 변경 journal/supersession과 새보호목록/후속plan으로 연결합니다. 과거검증결과의hash·시각·ID를 고쳐 새 성공으로 만들지 않습니다. 실제 자연 검증은10/26 12시에 새 PID1의11시이후 공개 로그와전체 원본/registry·16API를 확인하며, PASS 이후에만60컨테이너/30볼륨/20네트워크/22이미지 후보를 보존·선별 정리합니다.
+
+최신 사용자 지시 순서는 현재 DB의 값·제공 가능성 조사와 자료 선별/가공/집계/필터/표현 방식 확정→백엔드 전면 재설계·재구축→Frontend 전면 재설계·재구축입니다. 먼저 사용자 질문/지표/필터/집계/비교/보류 조건을 확정하고, 그 기준으로 새 API/조회 모델·계산 책임·품질/버전·권한·쿼리·테스트를 설계합니다. 기존 코드는 대체 구현과 전환/복구 검증 뒤 제거하며 DB·원본·수집/갱신·복구 자산은 보존합니다. 현재3원천의 목록·검색만으로 주변접근성·임대료 지표를 만들지 않습니다. 상세현재로드맵은 project.md의다음작업을 따릅니다. 아직 재설계 구현은 시작하지 않았습니다.
+
+### 2026-10-26 실제 자연 예약·Docker 정리 완료
+
+월요일11시의 새 scheduler04708729…/runtimeb20b…/sourceed31e9…가11:29:52 KST에 실제 공개를 마쳤습니다. 새 natural_check는 PID1 published 로그의 출처·현재 cafe6d11e218…/referencee7e9714f…·모든 등록 원본과 기존 registry·지역소비 WITHHELD·22분기·16API/38요청을 READ ONLY로 검증해 PASS입니다. 현재 원천은 버스11,236건, 지하철 상가1,377건, 주차841관리번호/원문2,180행이며 다음 예약은11/2 11시입니다. 수집·reconcile을 수동 호출하지 않았습니다.
+
+실제 자연 PASS·기존 V6 전체 독립 복원 PASS·새 supersession/planSHA 결속 이후 cleanup_execute를 한 번 실행했습니다.60후보의 로그/metadata·30볼륨의 cold archive 두 벌/해시·구조·22이미지의 불변ID archive를 보존한 뒤 컨테이너60·볼륨30·네트워크20·이미지22를 삭제했습니다. 현행 inventory·동일 DB/SID·25개 테이블의 값/catalog/sequence·공개/예약이 전후 같고16API를 다시 확인했습니다. 일시 audit/archive helper도 해당 lifecycle에서 정상 제거했습니다. 공유 builder cache에는 직접 프로젝트 귀속 증거가 없어 손대지 않았습니다. Docker 내부 가용 공간은70.16GB 늘었지만 비공개 보존본의 호스트 사용량은 별도입니다. 실제 Kakao/실기기·포괄적 접근성·다른 장비/매체 복구·외부 실패 알림은 아직 미검증입니다. 이후에는 DB 값/제공 가능성과 가공/표현 방식을 먼저 확정하고 Backend→Frontend를 재구축합니다.
+
+### 2026-10-26 대용량 검증 보존본 정리
+
+호스트 비공개 보존 루트237.34GB 중144.75GB는 임시 볼륨30개의 cold tar 두 벌과 퇴역22이미지 archive였으며, 반복된 전체 백업과readback·사용 종료 환경의 복구본도 누적돼 있었습니다. 사용자 명시 요청으로 현재 서비스의 mount 의존이 없음을 확인하고 완료된 검증용7디렉터리225.50GB를 삭제했습니다. 잔여11.84GB에는 실제 무결성/기존 독립 복원 PASS를 확인한10/25 마지막 전체 백업 한 세트와 최신 worker/복구 기록만 유지합니다. 새 대용량 사본이나 백업/복원을 만들지 않았고 현행 DB에 접속하지 않았습니다. 현재5서비스의 ID/image/mount/state/network와 남긴 파일metadata가 전후 동일합니다. 삭제된 private 경로에 의존하던 이전 일회성 controller/검증 명령은 재실행하지 않습니다. 향후 검증 중 필요한readback과복사본은 성공 확인 뒤 즉시 정리하며 상세 보존 정책은 AGENTS와db-safety의 최신 지시를 따릅니다.
+
+### 2026-10-26 전체 Docker 초기화·새 Compose 복원과 기동 중단
+
+사용자 명시 승인으로 현재22분기·V6 데이터를 새 snapshot-bound full package65f6cb44…에 보존하고 새 격리 복원/25tables/3roles/5registry/모든 원본·참고/16API38요청을 검증한 뒤 Docker Desktop 전체container/image/volume/cache0을 확인했습니다. 기존 패키지57b2…와구private루트는 새 검증본으로 대체 삭제했습니다. ROOT .dockerignore의퇴역team전용누락을기존api_images의공개file패턴과맞춰 실제Docker context268입력/secret등부재 RED→GREEN을확인했습니다. Compose빌드플랫폼amd64를명시하고같은worker태그의서비스별라벨경쟁을막기위해inspect-proxy만build하고다른worker역할은같은이미지를재사용합니다.
+
+새Compose로build/create후 새DB SID7700833237598617614/container b3fa6dd7…의전체25테이블·3역할·원본대조를통과했습니다. 정확히정지한DB에만새recovery receipt/target/binding/READY를발급했습니다. 마지막activate의GATES에서helper2개가이미지의Compose project/service라벨을상속해9개모델에추가된것을확인했습니다. 데이터/기존9개모델의변경은없으며DB정지/restart=no와pending/STOP을유지합니다. helper의정확한ID/name/image/token/ownRWmount만분리하도록수정하고실제READONLY9모델일치·음성검사·RO리뷰PASS를확인했지만자동재실행하지않았습니다. Compose자체도상속라벨을해석하므로새명시승인후정지상태에서helper를별도namespace로교체해야합니다. 기존STOP을보존한새PRECHECK/승인기록으로서비스기동·최종16API·cache정리를완료해야하며아직완료하지않았습니다. 운영script/진행기록은.codex-local/tmp/docker-reset-20261026-8ce2832e/입니다. 일반Backend/Frontend/ETL코드는변경하지않았으므로일반suite를반복하지않았고Docker문맥/Compose렌더·guard/maker소유권/실제복원검증을수행했습니다.
+
+### 2026-10-26 명시 승인 재개·최종 가동 완료
+
+사용자가 새재개절차를명시승인한 뒤 기존GATES STOP은불변보존하고별도resume_after_label_fix.py로fresh PRECHECK/authorization/supersession을기록했습니다. 기존helper2개는정확한ID/name/image/token/mount로확인해제거하고독립project/service namespace의client로교체했습니다. 복원된DB/9모델/marker/binding/target/frozeninput을검증하고DB중지상태에서만차단을해제했으며실제Compose설정의모든restart정책을복구한뒤정상 `docker compose up -d`를실행했습니다. 기존실패controller의STOPguard를지우거나완화하지않았고dump/복원/전체삭제를반복하지않았습니다.
+
+가동후동일9개모델·25테이블snapshot·3역할·22분기·16API38요청·cafe6d11…/referencee7e…·실제scheduler runtimeb20b와next_due2026-11-02T02:00Z(11시)을대조해PASS입니다. 현재5서비스정상가동/필요4이미지2.703GB/5볼륨17.93GB/종료컨테이너0/cache0B입니다. 최신데이터백업/필수기록은한세트15.31GB이며나머지hostreadback/rootfs·이전backup·helper/initdb/초기화종료컨테이너는정리했습니다. source-control/source-reader/source-writer staging도활성flatcontrol파일해시를보존하며정리했습니다. 최초stagingcleanup은prune된OCIindexID조회에서생성전에실패했고, 현재localimageID/amd64/runtime을검증한별도networknone/--rm cleanup으로완료했습니다. Docker가container.Image에보여주는index값과imageinspect의현재imageID가다르므로새컨테이너실행에는현재localref/실제imageidentity를확인해야합니다. 현재새이미지형식에대한향후full-backup의실행imagearchive증명경로는다음백업준비때명시확인하며이번에재가동후추가전체백업을만들었다고주장하지않습니다. 보존본65f6…는삭제직전상태로서최종현재DBsnapshot과동일함을검증했습니다.
+
+현재정식DB container b3fa6dd7c144c3c38b36e8ccce4a742144c402ee89ef02098a957865c735448a/SID7700833237598617614/data network ad7754784ee6b75c86d82aa47a0ff8657e9bd8c7b8aee63fd20534b339d2f1e7입니다. worker/proxy의실행index는039e5518…/현재localimageID1092880a…이며backend실행index78d622c0…/local5c9500ed…,frontend실행index9cf0234e…/local4aa31180…로구분합니다. app/SQL/ETL sourceed31e9…는동일하며실제Kakao·실기기·포괄적접근성·외부매체복구/알림은기존미검증범위입니다.
+
+## 2026-10-26 새 클론 Compose 검증과 이미지 ID 계약
+
+`docker/api/Dockerfile.dockerignore`가 root보다 우선하므로 두 파일은 `etl/api_images.context_files`와 같은 공개 file allowlist를 유지합니다. 일반 directory unignore는 secret/raw/cache를 재포함할 수 있어 사용하지 않습니다. 합성canary의 실제 Docker COPY 문맥 RED→GREEN과 모든268개 입력의 4target build를 확인했습니다. Compose 앱이미지는 `${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-<role>:local`이고 기본 이름은 유지하며 새check 환경은 이미지까지 분리합니다.
+
+Git 후보 공개소스만으로 새 f7b211e2 환경의 V1~V6/25tables/6Q/core계약1+reference3·16업무API26요청과 plain up 재실행 시 최초수집/migration생략·동일identity/registry/raw metadata/공개값을 확인했습니다. 기존22Q/context5는 별도전환/복원 데이터이며 새클론 자동초기화와 구분합니다. 현재5서비스는 변경하지 않았습니다. 플랫폼·일반테스트·UI·정리 범위는 project의 새클론 검증 절을 따릅니다.
+
+최신Docker의 `container.Image`, `container.ImageManifestDescriptor.digest`, `image.Id`는 index/platformmanifest/config 중 서로 다른계층을 가리킬 수 있습니다. 이전 config-ID라는 표현은 일괄 적용할 수 없습니다. `verify_executed_image`는 legacy config의 실제파일/SHA/플랫폼 또는 OCI index→정확한linux/amd64 manifest→config의 실제blob SHA/저장manifest 연결을 검증합니다. 현재localtag로 선택한archive라도 실제실행platform digest가 포함되는지 별도로 검사하고 tag이름만으로 일치시키지 않습니다. 로드 전tag충돌의 예외도 검증된archive config에 연결된 같은indexID에 한정합니다. 실제15KB 합성Docker archive와 누락/변조/다른플랫폼·다른태그 음성검사, 전체ETL이 PASS입니다. 현행 전체backup/restore를 추가실행한 결과가 아니며 보존한65f6…package는 그대로입니다.
+
+## 신규 초기화의 22분기·참고자료 일치
+
+사용자 요청으로 GitHub 신규clone/env/`docker compose up -d`의 기본 수집 범위를 현행과 같은2021Q1 이후 카페 이력·context5·현재reference3으로 연결합니다. `dev_runtime.initial_periods`는 두 서울 원천의 연속 제공 분기를 확인하고 기본2021Q1부터 선택합니다. 기존 READY 환경은 그대로 재검증하며 최초 수집·migration을 반복하지 않습니다.
+
+`app/api_initial_release.py`는 기존 엄격 수집기와 승인된 정확2사례 정책만 사용합니다(20222/11470610/CS300043,20243/11440655/CS200024의 TMZON_06_11_SELNG_CO=-1). 두 문제행의 원문·격리 근거를 보존하고 카페 외 업종이라는 이유만으로 다른 오류를 제외하지 않습니다. 변경·누락된 승인 사례, 필수 context 누락, 새 품질 오류는 초기화를 실패시킵니다. 지역소비는 WITHHELD, 아파트와 제외 필드는 기존 정책 그대로이며 추가 점수 합산은 없습니다.
+
+새 초기 history는2025Q1이후 정상run+같은SEMAS snapshot을 baseline으로 잡고, 기존 `_prepare_streamed_history`의 run별 검증·RecordFile·digest·history 검증을 재사용합니다. 기존 `prepare_streamed_history`의 expected_id 감사 guard는 유지하고 새 초기 조합은 별도 함수로 분리했습니다. self-contained schema2 bundle을 독립 readback한 결과만 bootstrap의 context_artifact registry로 연결합니다. 원문/격리/normalized/quality/재현manifest가 bundle 안에 완전하게 결속된 뒤 이번에 만든 수집 폴더만 즉시 지워 중복 사본을 남기지 않습니다. 실패 시에는 자동 삭제·재시도하지 않습니다.
+
+루트 README의 데이터·지표 확장 현황은 삭제했습니다. 이전 확장 입력·검증 기록·보류 사유는 기존의22분기·참고자료 통합 절과 project 기록에 이미 보존돼 있어 중복 원문을 추가하지 않습니다. 신규초기화의 실제 검증 결과는 project의 최신 일치 검증 절을 따릅니다.
+
+이번초기화경로의실측은새7c78702d의V1~V6/25tables/22Q/정상1,174,306·정확격리2·context46,508/reference13,454와16API36요청입니다. 첫20211/연도경계20251/최신20262의context가제공되며소비/총점보류를유지합니다. 로컬의분기·행수·5종동/분기키해시·현재3종건수가일치했고, READY plain up의migration/수집생략과동일identity/registry·전체원본/quality/참고재생·공개/예약보존을확인했습니다. 일반ETL537/522PASS/15opt-inSKIP,읽기전용코드리뷰 C0/I0/M0입니다. 신규schema/Backend/Frontend기능전환이나새전체backup/restore검증으로확대하지않습니다.

@@ -12,6 +12,7 @@ from app.api_release import prepare_release,stage_release,publish_release,load_r
 from app.api_refresh import collect_refresh,refresh_release
 from app.api_http import HttpClient
 from app import seoul_api
+from app import reference_release
 
 CONTROL=Path('/api-control');DATA=Path('/api-data')
 
@@ -81,6 +82,8 @@ def bootstrap():
             if conn.execute("SELECT to_regclass('public.api_context_runs') IS NOT NULL").fetchone()==(True,):
                 conn.execute('GRANT INSERT ON api_context_runs,api_context_rows,api_release_context_sources TO api_writer')
                 conn.execute('GRANT UPDATE(run_id) ON api_context_runs TO api_writer')
+            if reference_release.enabled(conn):
+                reference_release.grant_writer(conn)
             conn.execute('INSERT INTO api_runtime.state(singleton,status,next_due) VALUES(true,\'IDLE\',%s)',(next_due(datetime.now(UTC)),))
         from boundary_data import boundary_specs
         from app.spatial_geometry import prepare_dataset
@@ -93,12 +96,24 @@ def bootstrap():
     release=registered_release(registry)
     paths=registry if release.get('contract_version')==2 else artifact_paths(registry)
     with connect(CONTROL,'api_writer',False)[0] as writer:
+        reference_catalog=None
+        if reference_release.enabled(writer):
+            keys=load_keys(CONTROL/'api.env')
+            transport=json.loads(private_read(DATA/'transport.json'))
+            require(type(transport.get('allow_seoul_http')) is bool,'TRANSPORT_POLICY_REQUIRED')
+            reference_catalog=reference_release.collect_catalog(DATA/'reference-runs'/('bootstrap-'+secrets.token_hex(8)),
+                keys['SEOUL_OPENAPI_KEY'],allow_http=transport['allow_seoul_http'])
+            reference_release.stage_catalog(writer,reference_catalog,verify_identity=lambda c:verify_connection(c,target,'api_writer'))
         if release.get('contract_version')==2:
             from app.api_context_release import stage_context_release
             stage_context_release(writer,release,verify_identity=lambda c:verify_connection(c,target,'api_writer'))
         else:stage_release(writer,release,verify_identity=lambda c:verify_connection(c,target,'api_writer'))
         register(writer,target,release,paths)
-        publish_release(writer,release['release_id'],expected_current=None,verify_identity=lambda c:verify_connection(c,target,'api_writer'))
+        def publish_reference(c):
+            if reference_catalog is not None:
+                reference_release.publish_catalog(c,reference_catalog,expected={},verify_identity=lambda c:verify_connection(c,target,'api_writer'))
+        publish_release(writer,release['release_id'],expected_current=None,verify_identity=lambda c:verify_connection(c,target,'api_writer'),
+                        before_commit=publish_reference)
     return dict(status='READY',release_id=release['release_id'],rows=sum(len(r['records']) for r in release['runs']))
 
 def choose_periods(metadata,client,keys,now,allow_http):
@@ -134,6 +149,12 @@ def refresh(*,force=False):
             transport=json.loads(private_read(DATA/'transport.json'))
             require(type(transport.get('allow_seoul_http')) is bool,'TRANSPORT_POLICY_REQUIRED')
             allow_http=transport['allow_seoul_http']
+            reference_catalog=None
+            if reference_release.enabled(conn):
+                reference_previous=reference_release.registered_catalog(conn)
+                reference_catalog=reference_release.collect_catalog(DATA/'reference-runs'/('refresh-'+secrets.token_hex(8)),
+                    keys['SEOUL_OPENAPI_KEY'],client=client,allow_http=allow_http)
+                reference_release.stage_catalog(conn,reference_catalog,verify_identity=lambda c:verify_connection(c,t,'api_writer'))
             periods=choose_periods(state[5],client,keys,now,allow_http)
             output=DATA/'runs'/('run-'+now.strftime('%Y%m%dT%H%M%SZ')+'-'+secrets.token_hex(4))
             if previous_release.get('contract_version')==2:
@@ -150,8 +171,16 @@ def refresh(*,force=False):
                 stage_release(conn,release,verify_identity=lambda c:verify_connection(c,t,'api_writer'))
             register(conn,t,release,paths)
             update_state(conn,t,'RUNNING',candidate=release['release_id'])
-            result=refresh_release(conn,release,expected_current=state[4],verify_identity=lambda c:verify_connection(c,t,'api_writer'))
-            update_state(conn,t,'SUCCEEDED',candidate=release['release_id'],due=next_due(datetime.now(UTC)))
+            # Both public pointers and the success state commit together. A
+            # reference failure leaves the earlier public versions intact.
+            def finish_publication(c):
+                if reference_catalog is not None:
+                    reference_release.publish_catalog(c,reference_catalog,expected=reference_previous,
+                        verify_identity=lambda c:verify_connection(c,t,'api_writer'))
+                update_state(c,t,'SUCCEEDED',candidate=release['release_id'],due=next_due(datetime.now(UTC)))
+            result=refresh_release(conn,release,expected_current=state[4],verify_identity=lambda c:verify_connection(c,t,'api_writer'),
+                                   before_commit=finish_publication)
+            if reference_catalog is not None:result|=dict(reference_catalog_id=reference_catalog['catalog_id'])
             return result|dict(status='SUCCEEDED',quarters=release['quarters'])
         except BaseException as error:
             code=str(error) if isinstance(error,(RuntimeErrorCode,)) else 'REFRESH_FAILED'
@@ -164,6 +193,19 @@ def reconcile():
     with conn:
         locked(conn);state=read_state(conn,t)
         require(registered_release(state[6])['release_id']==state[4],'CURRENT_ARTIFACTS_CHANGED')
+        # A V6 failure cannot reopen scheduled writes while reference evidence
+        # or its private collection route is still invalid. No pointers move.
+        with conn.transaction():
+            conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+            verify_connection(conn,t,'api_writer',True)
+            if reference_release.enabled(conn):
+                from app.api_config import private_parent
+                private_parent(DATA/'reference-runs'/'reconciliation-check')
+                references=reference_release.registered_catalog(conn)
+                require(set(references)==set(reference_release.SOURCES),'REFERENCE_SOURCE_SET_REQUIRED')
+                verified=reference_release.verify_registered_snapshots(conn,
+                    verify_identity=lambda c:verify_connection(c,t,'api_writer',True))
+                require(set(references.values())<=set(verified),'REFERENCE_REGISTERED_CATALOG_CHANGED')
         update_state(conn,t,'SUCCEEDED' if state[2]==state[4] else 'IDLE',candidate=state[4],due=next_due(datetime.now(UTC)))
         return dict(status='RECONCILED',release_id=state[4])
 

@@ -5,7 +5,7 @@ COPY etl/requirements.txt /workspace/etl/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 COPY etl/app /workspace/etl/app
 COPY etl/api_runtime.py etl/api_worker.py etl/api_snapshot.py etl/boundary_data.py etl/demo_worker.py etl/demo_safety.py /workspace/etl/
-COPY etl/dev_runtime.py etl/dev_inspect.py etl/inspect_proxy.py etl/control.py /workspace/etl/
+COPY etl/dev_runtime.py etl/dev_transition.py etl/dev_reference_transition.py etl/dev_reference_operator.py etl/dev_inspect.py etl/inspect_proxy.py etl/control.py /workspace/etl/
 COPY data/boundaries/public-reports.json /workspace/data/boundaries/public-reports.json
 COPY backend/src/main/resources/db/migration /workspace/backend/src/main/resources/db/migration
 COPY backend/src/main/resources/db/api-runtime /api-schema

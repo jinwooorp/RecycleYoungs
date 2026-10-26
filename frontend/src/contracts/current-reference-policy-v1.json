@@ -1,0 +1,82 @@
+{
+  "model": "SEOUL_CURRENT_REFERENCE_V1",
+  "sources": {
+    "seoul-bus-stops": {
+      "policy": {
+        "id": "SEOUL_CURRENT_REFERENCE_V1",
+        "sourceId": "seoul-bus-stops",
+        "datasetId": "OA-15067",
+        "temporalUnit": "CURRENT_SOURCE_SNAPSHOT",
+        "observedAt": null,
+        "spatialUnit": "SOURCE_RECORD",
+        "scoreReady": false,
+        "reasonCodes": [
+          "CRS_DEFINITION_CONFLICT",
+          "CURRENT_SOURCE_LIST_ONLY"
+        ],
+        "publishedAttributes": [
+          "STOPS_NO",
+          "STOPS_NM",
+          "STOPS_TYPE"
+        ],
+        "publishedMetrics": []
+      },
+      "version": "71d108defc3e08b3121cb75d4436acb52b5f38372f815f2fab0a29896722bf1f"
+    },
+    "seoul-metro-leases": {
+      "policy": {
+        "id": "SEOUL_CURRENT_REFERENCE_V1",
+        "sourceId": "seoul-metro-leases",
+        "datasetId": "OA-21305",
+        "temporalUnit": "CURRENT_SOURCE_SNAPSHOT",
+        "observedAt": null,
+        "spatialUnit": "SOURCE_RECORD",
+        "scoreReady": false,
+        "reasonCodes": [
+          "CURRENCY_AND_CONTRACT_SCOPE_UNVERIFIED",
+          "CONTRACT_GROUP_AREA",
+          "METRO_PROPERTY_ONLY"
+        ],
+        "publishedAttributes": [
+          "STN_NM",
+          "STN_CD",
+          "TPBIZ",
+          "CTRT_STRT_DD",
+          "CTRT_END_DD"
+        ],
+        "publishedMetrics": [
+          "AREA"
+        ]
+      },
+      "version": "e089a04fb07651fec1fe5721c667b229ee9cf4739ba0ef7150ae88f7d5c5ccad"
+    },
+    "seoul-public-parking": {
+      "policy": {
+        "id": "SEOUL_CURRENT_REFERENCE_V1",
+        "sourceId": "seoul-public-parking",
+        "datasetId": "OA-13122",
+        "temporalUnit": "CURRENT_SOURCE_SNAPSHOT",
+        "observedAt": null,
+        "spatialUnit": "SOURCE_RECORD",
+        "scoreReady": false,
+        "reasonCodes": [
+          "COORDINATE_COVERAGE_UNVERIFIED",
+          "CURRENCY_UNVERIFIED",
+          "NOT_REALTIME_AVAILABILITY",
+          "MULTIPLE_SOURCE_ROWS_PER_MANAGEMENT_ID"
+        ],
+        "publishedAttributes": [
+          "PKLT_NM",
+          "ADDR",
+          "PKLT_KND_NM",
+          "LAST_DATA_SYNC_TM"
+        ],
+        "publishedMetrics": [
+          "TPKCT"
+        ],
+        "grouping": "MANAGEMENT_ID_IDENTICAL_NON_COORDINATE_ATTRIBUTES"
+      },
+      "version": "d8ac5e21f8d1ab298e147fc0acb9f04d2e304bd7b80b8d38e7b8ee76994e0e79"
+    }
+  }
+}

@@ -4,7 +4,33 @@
 
 DB에 접속하거나 데이터를 바꾸기 전에 확인할 조건을 정리합니다. 정상 개발 실행은 [README](../../README.md#실행-방법), 구현 구조는 [기술 명세](technical.md)를 참고합니다.
 
-문서 정리 기준일은 **2026-10-23**입니다. 아래의 10/21~22 영속 API 환경 준비·갱신·재시작·백업/독립 복원은 당시 승인 범위의 기록입니다. 후속 레거시 정리와 과거 보호·검증 이력을 구분하며, 과거 실행 기록을 다른 대상의 현재 상태나 향후 실행 승인으로 사용하지 않습니다.
+문서 정리 기준일은 **2026-10-26**입니다. 아래의 10/21~22 영속 API 환경 준비·갱신·재시작·백업/독립 복원은 당시 승인 범위의 기록입니다. 후속 레거시 정리와 과거 보호·검증 이력을 구분하며, 과거 실행 기록을 다른 대상의 현재 상태나 향후 실행 승인으로 사용하지 않습니다.
+
+**최신 승인/완료 상태 — 2026-10-26 전체 초기화·새 복원·Compose 재가동 PASS:** 사용자 승인으로 현재 데이터의 최신 full package65f6cb44…/새 격리 전체 복원/16API를 검증한 뒤 Docker Desktop container/image/volume/cache0을 실제 확인했습니다. 새 Compose DB(SID7700833237598617614/container b3fa6dd7c144c3c38b36e8ccce4a742144c402ee89ef02098a957865c735448a)의25테이블·3역할·모든 등록원본을 복원/전수검증했습니다. 기동 전 helper 라벨 오분류로 STOP한 뒤 수정/RO검증/리뷰와 사용자의 **새 재개 절차 명시 승인**을 받아 기존STOP을 보존한 별도 authorization/PRECHECK/supersession으로만 재개했습니다. helper를 별도 namespace로 교체하고 DB중지상태에서pending을해제한 뒤 `docker compose up -d`를 실행했습니다. 현재5서비스가 정상이며25테이블 snapshot·9개Compose모델의ID/image/config·22분기·16API38요청·공개값·다음11/2 11시가 PASS입니다. 임시helper/initdb/초기화종료컨테이너·불필요image/cache와control source-* 사본을 정리했고 활성control파일 해시는 유지했습니다. 현재4이미지/5볼륨/5running컨테이너/cache0이며비공개최신백업/최소기록 한세트약15.31GB를보존합니다. 아래의이전57b2…/11.84GB/정지/승인대기기록은당시이력이며현재상태가아닙니다. 실패기록은해당실행의불변증거로남겨두고새승인없는재시도에사용하지않습니다.
+
+**현재 보존 정책 — 2026-10-26 사용자 정리 요청 완료:** 완료된 검증용 백업/중복 readback·사용 종료 환경의 백업·임시 볼륨의 두 cold 사본·퇴역 이미지 archive225.50GB를 삭제했습니다. 비공개 루트는237.34GB에서11.84GB로 감소했습니다. 마지막 복원 검증된10/25 전체 백업 한 세트(manifest57b2d0b0…)의 실제 무결성과 기존 독립 복원 PASS, 최신 worker/예약 복구 기록을 유지합니다. 아래의 이전 private 사본 보존 기록은 당시 이력이며 현재 파일 존재나 실행 가능성을 보장하지 않습니다. 현행 DB/볼륨과 유일한 현재 원본/인증은 삭제하지 않았고 DB 접속·서비스 변경·새 백업/복원은 하지 않았습니다. 현재 보존/정리 원칙은 [AGENTS](../../AGENTS.md)의2026-10-26 상시 지시를 따릅니다.
+
+**현재 예약 정책 — 10/25 시각 변경·10/26 실제 예약/정리 검증 완료:** 사용자 요청으로 실제 갱신은매주 월11:00KST, 첫 확인/조건부정리는10/26 12:00KST입니다. 새scheduler와명시적 schedule supersession을 검증했고 업무 행/catalog/sequence·공개값·binding은 유지하며next_due/updated_at만 변경했습니다. 기존 V6 복원 증거를 보존하고 새worker archive·변경journal/새보호목록을 추가했습니다. 아래04:30/05:30·이전source/ID 기록은 당시 이력이며 현재 실행 입력이 아닙니다. 최신계획/안전범위는 이 문서의 월요일11시 변경 절과 project.md를 따릅니다.
+
+**2026-10-25 현행 적용 이전의 V6·복구 작업 승인 경계:** 승인된 [전체 환경 복구·정보 확대 계획](project.md#전체-환경-복구검증된-정보-확대판단-지표-통합-계획)은 코드·공식 원천 검증·새 격리 자원의 생성/복원/전환/읽기 서비스 검증 범위입니다. 현행 `recycleyoungs-dev`는 V5·기존 고정 이미지·예약 상태를 보존합니다. V6를 일반 Compose·기존 V4→V5 도구로 적용하거나 기존 binding/READY의 해시만 고치는 것은 허용하지 않습니다. G의 최신 백업·독립 복원·대상/이미지/SQL/입력·복구 범위를 검토한 별도 명시 승인이 필요합니다.
+
+`dev_reference_transition.py`·`dev_reference_operator.py`는 V5→V6의 별도30분 계획·원본 전체 대조 해시·기존 Flyway 모든 열·현재 공개값을 고정합니다. 단계 전후 같은 연결의 SID/GUC/역할·READ ONLY와 Docker/container/image/volume/network를 확인하며 기존 행·catalog·ACL·sequence를 보존합니다. 두 control의 pending과 공용 data의 pending으로 새 일반 writer를 막고, 마지막 shared pending 제거 전까지 차단을 유지합니다. 구 worker에는 shared guard가 없으므로 실제 전환에서는 구 scheduler/쓰기 주체의 중지·부재를 별도로 확인해야 합니다. 실패한 migration INTENT·부분 전환은 자동 재실행·TTL 연장·marker 삭제로 복구하지 않습니다.
+
+**2026-10-25 후속 명시 승인:** 사용자가 [현행 V6 적용·Docker 정리 계획](project.md#전체-환경-복구검증된-정보-확대판단-지표-통합-계획)을 승인했습니다. 정확한 현행 대상의 최신 전체 백업·독립 복원, 구 writer 중지, V6/권한/3원천 공개·binding 전환과 Backend/scheduler 교체, 실제 공동 갱신·같은 DB 정상 재시작·V6 전체 백업/독립 복원 및 새 scheduler의 실제 예약 실행을 확인한 뒤 프로젝트 미사용 Docker 자원을 선별 삭제하는 범위입니다. 전체 백업 도구의5running 계약을 우회하지 않으며 백업·복원 동안 구 scheduler를 정확한 ID로 일시 동결하고 migration 직전 정상 종료합니다. 컨테이너 교체에 필수인 구 Backend/scheduler 제거는 복구 검증 후 허용하되 나머지 검증 자원은 전체 성공 전 삭제하지 않습니다. 현행 DB/5볼륨·필수 이미지/네트워크·private 백업/원본/실패 증거와 다른 프로젝트는 보호합니다. Git stage/commit/push·저장소 scratch 삭제·전역 prune·실패 자동 재시도는 포함하지 않습니다. 이 승인을 실행 완료 증거로 사용하지 않습니다.
+
+후속 실행에서 적용 직전 V5 전체 백업·독립 복원과 백업/live/prepare baseline 전수 일치, 구 scheduler와 원본 인증을 보유한 완료 source helper5개의 정상 중지를 확인했습니다. 현행 V6·13,454건·좁은 권한·binding 전환과 새 Backend/scheduler 교체, 실제 공식 공동 갱신1회, 같은 DB의25개 테이블·3역할·참고6snapshot 재시작 보존과16개 API가 PASS입니다. 원래 DB/SID·5볼륨·3네트워크를 유지합니다. 생성 전 fsync activation gate와 pause/restart=no로 차단한 상태에서 V6 전체 백업·독립 복원(25tables/3roles/4registry)·복원16API와 실제 현행 PC/모바일/키보드를 통과했고, 현행 전체 snapshot을 보존본과 다시 대조한 후에만 activation 해제·operator 정상 종료·scheduler 재개와 PID1 시작을 확인했습니다. 다음 예약은10/26 04:30KST로 유지하며 첫 READ ONLY 자연 검증은WAITING_FOR_DUE입니다. 실제 예약과 후보59컨테이너/30볼륨/20네트워크/22이미지 삭제는 아직 PASS로 기록하지 않습니다. 복원 HTTP는 고정22 대신 같은 READ ONLY 연결에서 확인한 복원 target/release의 실제 분기 수와 비교합니다. 삭제할 네트워크는 중지/created를 포함한 모든 컨테이너 참조를 검사하며, 직접 프로젝트 귀속을 증명할 수 없는 공용 builder cache는 보존합니다.
+
+`dev_recovery.py`·`dev_recovery_docker.py`는 원본을 덮어쓰지 않는 새 private package와 새 SID/container/volumes/internal networks를 사용합니다. 전체 DB·원본/registry·실제 역할 인증·제어·이미지·Frontend 소스를 대조한 뒤 복원 DB를 정상 중지하고 control pending을 제거하며, 완료 기록을 fsync한 후에만 DB를 재개합니다. 부분 unblock/실패는 STOP을 먼저 영속 기록하고 자동 재시작하지 않습니다. 이미지 메타데이터가 없는 실행 Frontend는 rootfs 전체 항목·바이트의 이중 대조가 필요합니다. 로컬 실패 기록은 민감값을 포함하지 않으며 보존 계획은 제안만 생성하고 삭제하지 않습니다. 같은 PC의 검증은 별도 장비·외부 알림·다른 저장 매체 재해 복구 증명이 아닙니다. 실패한 격리 자원과 모든 증거도 삭제 승인을 받기 전 보존합니다.
+
+최신 실측은 현행 V5 전체22개 테이블의 새 백업·독립 복원, 그 새 대상의 V6·실제 공동 갱신과 모의 source 실패 후 명시적 정상 복구,25개 테이블·3역할·참고6snapshot의 정상 재시작 및16개 API입니다. V6 reconcile은 private 수집 경로와3개 current source·전체 등록 snapshot/raw/record를 같은 연결의 READ ONLY REPEATABLE_READ에서 확인한 뒤에만 상태를 회복합니다. 실패 target의 부모 권한을 바꾸거나 guard를 완화해 재실행하지 않았습니다. 원래 dev의5개 서비스·5개 볼륨·3개 네트워크·공개 버전·예약은 마지막 READ ONLY 확인에서도 그대로입니다. 이 결과를 현행 V6 적용 승인이나 V6 상태의 별도 전체 dump/복원 실측으로 확대하지 않습니다.
+
+**현행 V4→V5 준비 승인과 한계:** 후속 사용자 승인으로 현행의 RO 사전 점검, scheduler 일시 중지, 새 snapshot-bound 백업·원본/제어/인증/이미지 보존, 독립 복원과 복제본 전환·실패/재시작 검증을 수행했습니다. 원본의19테이블·345,597행·catalog19종·sequence13개·계정3개의 독립 복원이 PASS이며, 준비 종료 전 RO 전수 비교에서 현행 DB·기존 볼륨과 컨테이너 ID/image/mount 보존도 확인했습니다. 새 전환 코어는 [기술 계약](technical.md#현행-v4v5-전환-코어)을 따릅니다. 이 도구는 과거V1 감사 수집기·범용 기존 DB 변경 실행기의 구현 완료를 뜻하지 않습니다.
+
+준비 단계에서는 복제본에만 V5·22분기/context 후보를 적재·공개했고, 실제 COPY rollback·CAS 충돌·제어 볼륨 부분 전환/marker 제거 중단과 정상 완료·reader/writer 접속·재시작을 확인했습니다. tmpfs DB의 PostgreSQL 프로세스 재시작은 실제dev named-volume 컨테이너 재시작의 증거가 아닙니다. 이 준비 결과나 도구의 계획/receipt/flag로 기존 DB 변경 승인을 대신하지 않습니다.
+
+**2026-10-24 후속 실제 전환 승인:** 사용자가 [통합 실행안 A~E](project.md#현행-개발-환경-적용과-갱신복구-통합-계획)의 정확한 검증 자원13개·볼륨2개·네트워크1개 정리, 현행 V5/권한/22분기·참고 적재·CAS·binding/receipt 전환·Backend/scheduler 교체, 수동 실 API 갱신·동일 DB/지정 서비스 재시작·scheduler 재개와 첫 자연 예약 확인을 명시 승인했습니다. 새 RO 전수 측정으로 백업 이후 DB·기존 자원 불변과 백업 실제 바이트를 재확인하고, 삭제할 테스트 제어 기록도 private 보존한 뒤 지정 검증 자원을 정리했습니다. 실제 현행 V5·계약2·22분기 공개와13개 API·이전 행/ID/geometry·legacy sequence·원본 registry13개·reader/writer 접속 대조는 PASS입니다. 실제 공식 API 수동 갱신·동일 named-volume DB 컨테이너 재시작·전수 보존과 새 scheduler 교체/재개도 PASS이며, 첫 자연 예약은2026-10-26 04:30 KST로 아직 결과 확인 대기입니다. 읽기 전용 후속 일정과 최신 결과는 프로젝트 기록을 따릅니다. 기존 백업·원본·실패 증거는 보존하며 commit/push·원본 전체 복원/교체는 이번 승인에 포함하지 않습니다. 실패 시 자동 재실행/repair·guard 우회 없이 STOP·writer 통제와 증거 보존을 유지합니다.
+
+**2026-10-24 미사용 Docker 자원 추가 정리:** 사용자의 후속 명시 승인으로 완료된 초기 준비4개·전환 helper2개 컨테이너와 미사용 이미지4개·중복 태그3개를 정리했습니다. full ID·종료 상태·소유권·참조를 대조하고 로그를 private 보존했으며, 교체 전 Backend/migrator의 기존 이미지 보존본은 크기·SHA를 재검증했습니다. 실행 서비스5개·볼륨5개·네트워크3개·필수 이미지와 현재 공개/예약 상태는 전후 동일합니다. 미사용 볼륨은 없었으므로 볼륨 삭제·DB 접속 쓰기·서비스 중지/재생성·백업 변경은 없었습니다. 첫 자연 예약 확인 도구도 읽기 전용 대기 결과를 유지합니다. 삭제 목록과 남긴 이미지의 용도는 [프로젝트 기록](project.md#현행-개발-환경-적용과-갱신복구-통합-계획)을 따릅니다.
 
 **2026-10-23 레거시 정리 완료:** 후속 사용자 명시 승인으로 소스 정리 `2324db7`과 기존 미공개 커밋을 일반 push하고, 새 백업·독립 복원 검증과 원격 소스 의존 제거 확인 뒤 팀·별도 API 환경과 GitHub Release를 삭제했습니다. 레거시 컨테이너 10개·볼륨 4개·네트워크 6개를 현행 `recycleyoungs-dev`와 구분해 full ID·image·소유권 label·생성 정보·mount·공유 여부를 확인했습니다. 원본 stopped DB를 재기동하거나 SQL에 접속하지 않고 읽기 전용 cold copy를 만들었으며, 복제본에서 같은 exported snapshot의 비교 기준과 논리 백업을 확보했습니다. 독립 internal network·tmpfs DB의 전체 값·geometry·catalog·역할/ACL·sequence·계정 접속 비교가 모두 PASS였습니다. 프로젝트 밖 0700 디렉터리·0600 파일의 새 백업·원본/제어/인증 보존본·검증 증거와 Git tag·공유 이미지는 유지합니다. 현행 dev의 migration·ETL·재생성·전환은 이번 승인에 포함하지 않았습니다. 아래의 팀·별도 API 실행 절차는 과거 이력입니다.
 
@@ -395,3 +421,37 @@ HMAC는 변조 탐지 수단입니다. 사람 승인이나 코드·설정·secre
 후속 팀 환경·독립 Ubuntu E2E는 [기술 문서 이력](technical.md#검증-이력)에 있습니다. 그 성공을 기존 DB 변경 경로의 구현 완료로 보지 않습니다.
 
 개편 전 상세 감사 수치·보존 기록은 [기존 DB 정책](https://github.com/jinwooorp/RecycleYoungs/blob/e1668ca1100616b3f19d984fc6942ebc28b827b8/docs/db-safety.md)에 보존합니다. 원문은 `git show <SHA>:<문서 경로>`로 읽고 작업 트리를 reset·restore하지 않습니다.
+
+## 2026-10-25 월요일11시 예약 변경
+
+사용자는 PC 절전을 고려해 실제 주간 갱신을11시로 옮기도록 명시 요청했습니다. 시간 계산 한 파일만 달라진 새 불변 worker를 검증하고 기존25개 테이블의 전체 snapshot이 검증된 V6 보존본과 일치함을 확인한 뒤, 정확한 원본SID/actor·advisory/row lock·이전값 CAS로 api_runtime.state.next_due/updated_at만 변경했습니다. 업무 행·catalog·sequence·공개 cafe/reference와 SQL binding/READY·인증·기존5볼륨을 보존했습니다. 영속 activation guard 아래 scheduler만 교체했고 실제 PID1 시작과다음10/26 11:00을 확인했습니다. 코드상 매주 월11시이며 후속 Codex 검증/조건부 정리는이번10/26 12:00입니다.
+
+기존 V6 전체 백업/독립 복원 증거와 원본은 덮어쓰지 않고 재사용합니다. 새 worker archive·변경 전후 snapshot·시각 변경 journal과 명시적 supersession을 별도 보존했으며 새로운 전체 백업/복원을 반복했다고 보고하지 않습니다. 복구한 환경의 scheduler를 시작하기 전에는 최신 승인된 시각과 worker·제어/예약 상태를 대조해야 합니다. 자연 검증·cleanup에는 새 scheduler/source/runtime/시각과새 planSHA↔supersessionSHA를 결속합니다. 기존 후보에 정확한 중지 helper1개만 추가해60컨테이너/30볼륨/20네트워크/22이미지이며 실제 자연 PASS 전 삭제하지 않습니다. 과거04:30/05:30 기록은 당시 이력이며 현재 실행 입력으로 재사용하지 않습니다.
+
+## 2026-10-26 실제 예약 확인·선별 정리 완료
+
+새 scheduler의11시 자연 예약은11:29:52에 SUCCEEDED/published로 완료했고, READ ONLY의 정확한 대상·PID1 출처·전체 등록 원본/registry·22분기·16API/38요청 검증이 PASS입니다. 다음 예약은11/2 11시 KST입니다. 수동 refresh/reconcile·DB 쓰기·서비스 재생성·marker 제거는 하지 않았습니다.
+
+새 schedule supersession·plan7b863156…와 기존 V6 전체 백업/독립 복원 PASS를 결속한 뒤 승인된 정리를 최초 한 번 실행했습니다.60후보의 불변metadata/소유권/모든 참조와 로그를 보존하고 정상 종료한 뒤30볼륨을 읽기 전용 mount로 cold archive 두 벌 생성/해시·구조 검증했으며,22이미지도 불변ID로 보존했습니다. 이후 해당60컨테이너·30볼륨·20네트워크·22이미지만 삭제했고 전역 prune/force는 사용하지 않았습니다. cold 보존본 자체의 독립 복원은 미실행이며 기존 V6 전체 복원 증거와 구분합니다. 현행 DB/SID·5서비스·5볼륨·필수 네트워크/이미지·25개 테이블 전체 값/catalog/sequence·공개/예약의 전후 동일성과16API 재검증이 PASS입니다. 공용 builder cache·기존 백업/원본/인증/실패 증거·저장소 scratch는 보존했습니다. 실제 주간 갱신은 계속 매주 월요일11시에 동작하며 일회성 결과 확인 자동화와 구분합니다.
+
+완료된12시 Codex 일회성 결과 확인 자동화는 삭제했습니다. Docker scheduler의 매주 월요일11시 예약과 다음11/2 11시는 유지합니다. 이 후속에서 새로운 DB 조사·재설계 구현·Git stage/commit/push는 시작하지 않았습니다.
+
+## 검증 산출물 보존 기간과 즉시 정리
+
+사용자의2026-10-26 지시로, 검증 성공과 현재 실행/복구 의존 없음 확인 후 해당 작업의 일회용 캐시·readback·전체 복사본·preview/export를 같은 작업에서 정리합니다. 기본 장기 보존은 마지막 독립 복원 검증을 통과한 전체 백업 한 세트와 필요한 최신 worker/복구 기록이며, 추가 대용량 사본은 목적·예상 용량·삭제 조건을 먼저 합의합니다. 새 백업의 복원 검증과 대체 가능성 확인 후 불필요해진 이전 백업을 정리합니다. 검증 중 필요한 대조 사본을 무조건 영구 두 벌로 보관하지 않으며 새 대용량 사본을 만들 때는 종료/실패 시 정리 조건을 명시합니다.
+
+이번 정리는 정확한7개 디렉터리의 소유권·inode·symlink 부재와 현재 mount 의존 없음을 확인해 수행했습니다. 남긴 전체 백업의manifest/파일metadata와 최신 worker archive의SHA, 현재5컨테이너의 ID/image/mount/state/network를 전후 대조했습니다. 보존한 백업의 기준 시점은10/25이며10/26 자연 갱신 이후 새 전체 백업을 만든 것으로 해석하지 않습니다. 현행 DB/볼륨·원본/인증과 아직 대체되지 않은 유일한 복구본은 즉시 정리 대상이 아닙니다.
+
+## 2026-10-26 신규 클론 검증의 분리 범위
+
+새클론 실행 점검 승인으로 생성한f7b211e2/새SID7700857980791156776은 현행b3fa6dd7…/SID7700833237598617614와 다릅니다. 새5볼륨/3네트워크/전용앱이미지·loopback15179의 최초공식수집과 V1~V6,16API를 확인했고 실제READ ONLY의 동일연결identity·전체등록원본/참고record와 READY 재실행의 공개·이력·파일metadata보존을 검증했습니다. 이 일회용초기화 데이터는 현행업무/복구 자산으로 채택하지 않았으며 새 백업/전체tar/readback을 생성하지 않았습니다. 통과 후 소유권/전체컨테이너 의존과 현행5서비스metadata 보존을 다시확인해 이번9컨테이너/5볼륨/3네트워크/5이미지·이번빌드이력/생성시각에결속된 정확한59캐시ID만 정상정리했습니다. 전역prune/강제삭제·현행볼륨 조작은 없고 최신전체복원검증백업 한세트는 유지합니다.
+
+커밋전 전체읽기전용리뷰와 일반테스트 결과·초기화와현행데이터의차이는 project/README에 기록했습니다. 복구 도구 이미지ID의 OCI/legacy검증을 합성archive로 보강했으나 이를 현행새전체백업/복원실측으로 기록하지 않습니다. 보존제안의기본1세트도 파일검증 입력에 대한 제안일뿐이며 실제오래된백업삭제에는 새독립복원/대체가능성/의존없음 검증과 상시정리범위가 필요합니다.
+
+## 2026-10-26 신규 22분기 초기화 검증 범위
+
+새클론을 로컬의22Q/context5/reference3과 같은범위로 맞추라는 사용자 요청에 따라 공식 수집·schema/typed 적재·새공개는 새로운7c78702d namespace의 빈5볼륨에만 수행합니다. canonical SID7700833237598617614/5서비스/볼륨·보존백업은 보호합니다. 초기화guard·identity/READONLY·정확2격리/소비보류·기존expectedID 검증을 우회하지 않습니다. 현행의같은READONLY연결에서 최소 승인분류정책/공개분기만 확인했으며 원본행·비밀번호·backup/private증거를 조사하거나Git에포함하지 않았습니다. 독립재검증된bundle의원본·격리·인증과영속제어는유지하고 그bundle과동일함이확인된이번중복수집폴더만정리합니다. 실제검증의PASS/FAIL과이후일회용자원정리결과는project최신절에구분합니다.
+
+해당새환경의실제초기화·25테이블/22Q/context5/reference3·같은READONLY연결의전체등록원본/격리/참고record와16API36요청이PASS입니다. 로컬공개판의분기·행수·참고동/분기키·현재목록건수와일치합니다. READY재실행후같은증거를다시확인해동일하며canonical5서비스의metadata/StartedAt은보존했습니다. 기존초기화/실패guard해제·현재DB쓰기·원본dump/전체backup/restore는수행하지않았습니다.
+
+성공인수후소유권/모든참조·현재보호대상전후동일성을대조하고이번9컨테이너/5볼륨/3네트워크/4앱이미지/귀속이입증된신규55cacheID만정리했습니다. cache0B이며기존5서비스/5볼륨/4필수이미지·최신전체복원백업은유지합니다. 전역prune/force삭제·기존다른scratch삭제는하지않았습니다.

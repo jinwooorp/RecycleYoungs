@@ -7,9 +7,10 @@ x-env: &env
   # Seoul official HTTP is the project's selected transport; no silent fallback.
   DEV_ALLOW_SEOUL_HTTP: ${DEV_ALLOW_SEOUL_HTTP:-true}
 x-worker: &worker
-  image: recycleyoungs-dev-worker:local
-  pull_policy: build
-  build: {context: ., dockerfile: docker/api/Dockerfile, target: worker}
+  platform: linux/amd64
+  image: ${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-worker:local
+  # One shared worker image is built by inspect-proxy before its dependants.
+  pull_policy: never
   user: "10001:10001"
   labels: *labels
   environment: *env
@@ -21,6 +22,8 @@ x-worker: &worker
 services:
   inspect-proxy:
     <<: *worker
+    pull_policy: build
+    build: {context: ., dockerfile: docker/api/Dockerfile, target: worker}
     user: "0:0"
     entrypoint: [python, /workspace/etl/dev_inspect.py]
     restart: unless-stopped
@@ -83,7 +86,8 @@ services:
     volumes: [control:/api-control, reader:/reader-control, writer:/writer-control]
 
   migrate:
-    image: recycleyoungs-dev-migrator:local
+    platform: linux/amd64
+    image: ${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-migrator:local
     pull_policy: build
     build: {context: ., dockerfile: docker/api/Dockerfile, target: migrator}
     labels: *labels
@@ -105,7 +109,8 @@ services:
     volumes: [control:/api-control, data:/api-data]
 
   api-backend:
-    image: recycleyoungs-dev-backend:local
+    platform: linux/amd64
+    image: ${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-backend:local
     pull_policy: build
     build: {context: ., dockerfile: docker/api/Dockerfile, target: backend}
     labels: *labels
@@ -124,7 +129,8 @@ services:
       retries: 30
 
   frontend:
-    image: recycleyoungs-dev-frontend:local
+    platform: linux/amd64
+    image: ${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-frontend:local
     pull_policy: build
     build: {context: ., dockerfile: docker/api/Dockerfile, target: frontend-dev}
     labels: *labels
