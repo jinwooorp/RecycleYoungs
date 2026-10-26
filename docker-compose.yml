@@ -2,14 +2,18 @@ name: recycleyoungs-dev
 
 x-labels: &labels
   org.recycleyoungs.environment: local-development-v1
+x-build-labels: &build-labels
+  org.recycleyoungs.project: ${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}
+  org.recycleyoungs.artifact: local-development-v1
 x-env: &env
   DEV_PROJECT: ${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}
   # Seoul official HTTP is the project's selected transport; no silent fallback.
   DEV_ALLOW_SEOUL_HTTP: ${DEV_ALLOW_SEOUL_HTTP:-true}
 x-worker: &worker
-  image: recycleyoungs-dev-worker:local
-  pull_policy: build
-  build: {context: ., dockerfile: docker/api/Dockerfile, target: worker}
+  platform: linux/amd64
+  image: ${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-worker:local
+  # One shared worker image is built by inspect-proxy before its dependants.
+  pull_policy: never
   user: "10001:10001"
   labels: *labels
   environment: *env
@@ -19,14 +23,71 @@ x-worker: &worker
   entrypoint: [python, /workspace/etl/dev_runtime.py]
 
 services:
+  # Preview by default. Only --apply --confirm <project> deletes owned resources.
+  reset:
+    profiles: [tools]
+    image: python:3.12-slim@sha256:cb33f7f771ecec2ef1225cf39b159591a040391bd73e4c01f00fdfc4c47611d2
+    platform: linux/amd64
+    labels: *labels
+    environment: {DEV_PROJECT: "${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}"}
+    entrypoint: [python, -B, /bootstrap/reset_dev.py]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    volumes:
+      - type: bind
+        source: ./docker/api/reset_dev.py
+        target: /bootstrap/reset_dev.py
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${DEV_DOCKER_SOCKET:-/var/run/docker.sock}
+        target: /var/run/docker.sock
+        read_only: true
+        bind: {create_host_path: false}
+
+  # Explicit opt-in utility: no DB, runtime volumes or Docker socket.
+  setup:
+    profiles: [tools]
+    image: python:3.12-slim@sha256:cb33f7f771ecec2ef1225cf39b159591a040391bd73e4c01f00fdfc4c47611d2
+    platform: linux/amd64
+    entrypoint: [python, -B, /bootstrap/setup_env.py]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE]
+    volumes:
+      - type: bind
+        source: ./docker/api/setup_env.py
+        target: /bootstrap/setup_env.py
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./etl
+        target: /config/etl
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./frontend
+        target: /config/frontend
+        bind: {create_host_path: false}
+
   inspect-proxy:
     <<: *worker
+    pull_policy: build
+    build: {context: ., dockerfile: docker/api/Dockerfile, target: worker, labels: *build-labels}
     user: "0:0"
     entrypoint: [python, /workspace/etl/dev_inspect.py]
     restart: unless-stopped
     cap_drop: [ALL]
     networks: [inspect]
-    volumes: [/var/run/docker.sock:/var/run/docker.sock:ro]
+    # Linux-daemon path, including Docker Desktop's Linux VM on Windows/macOS.
+    # Never mount a Windows named pipe into this Linux container.
+    volumes:
+      - type: bind
+        source: ${DEV_DOCKER_SOCKET:-/var/run/docker.sock}
+        target: /var/run/docker.sock
+        read_only: true
+        bind: {create_host_path: false}
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health',timeout=2).close()"]
       interval: 3s
@@ -83,9 +144,10 @@ services:
     volumes: [control:/api-control, reader:/reader-control, writer:/writer-control]
 
   migrate:
-    image: recycleyoungs-dev-migrator:local
+    platform: linux/amd64
+    image: ${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-migrator:local
     pull_policy: build
-    build: {context: ., dockerfile: docker/api/Dockerfile, target: migrator}
+    build: {context: ., dockerfile: docker/api/Dockerfile, target: migrator, labels: *build-labels}
     labels: *labels
     user: "10001:10001"
     read_only: true
@@ -105,9 +167,10 @@ services:
     volumes: [control:/api-control, data:/api-data]
 
   api-backend:
-    image: recycleyoungs-dev-backend:local
+    platform: linux/amd64
+    image: ${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-backend:local
     pull_policy: build
-    build: {context: ., dockerfile: docker/api/Dockerfile, target: backend}
+    build: {context: ., dockerfile: docker/api/Dockerfile, target: backend, labels: *build-labels}
     labels: *labels
     user: "10001:10001"
     read_only: true
@@ -124,9 +187,10 @@ services:
       retries: 30
 
   frontend:
-    image: recycleyoungs-dev-frontend:local
+    platform: linux/amd64
+    image: ${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-frontend:local
     pull_policy: build
-    build: {context: ., dockerfile: docker/api/Dockerfile, target: frontend-dev}
+    build: {context: ., dockerfile: docker/api/Dockerfile, target: frontend-dev, labels: *build-labels}
     labels: *labels
     restart: unless-stopped
     depends_on:
@@ -134,9 +198,16 @@ services:
     env_file:
       - path: ./frontend/.env.local
         required: false
+    environment:
+      DEV_WATCH_POLLING: ${DEV_WATCH_POLLING:-true}
     networks: [access]
     ports: ["127.0.0.1:${DEV_WEB_PORT:-5173}:5173"]
-    volumes: [./frontend/src:/build/src:ro]
+    volumes:
+      - type: bind
+        source: ./frontend/src
+        target: /build/src
+        read_only: true
+        bind: {create_host_path: false}
     healthcheck:
       test: [CMD, node, -e, "fetch('http://127.0.0.1:5173').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s

@@ -32,15 +32,16 @@ def require(ok, code):
 def context_files(root):
     """An allowlist archive, independent of the caller's Docker ignore files."""
     fixed = ['docker/api/Dockerfile','docker/api/migrate.sh', 'backend/gradlew', 'backend/build.gradle', 'backend/settings.gradle',
+             'backend/src/main/resources/regions/seoul-admin-dongs.tsv',
              'frontend/package.json', 'frontend/package-lock.json', 'frontend/index.html', 'frontend/src/data/seoul-boundary.json',
              'etl/requirements.txt', 'data/boundaries/public-reports.json']
     patterns = ['backend/gradle/wrapper/*', 'backend/src/main/**/*.java', 'backend/src/main/**/*.yaml',
-                'backend/src/main/resources/contracts/*.json', 'frontend/src/data/context-policy-v1.json',
+                'backend/src/main/resources/contracts/*.json', 'frontend/src/data/context-policy-v1.json', 'frontend/src/contracts/*.json',
                 'backend/src/main/**/*.yml', 'backend/src/main/**/*.sql', 'backend/src/main/**/*.properties',
                 'frontend/tsconfig*.json', 'frontend/vite.config.*', 'frontend/src/**/*.ts',
                 'frontend/src/**/*.tsx', 'frontend/src/**/*.css', 'frontend/src/**/*.svg',
                 'etl/app/*.py', 'etl/api_*.py']
-    helpers = ['boundary_data', 'demo_worker', 'demo_safety','dev_runtime','dev_inspect','inspect_proxy','control']
+    helpers = ['boundary_data', 'demo_worker', 'demo_safety','dev_runtime','dev_transition','dev_reference_transition','dev_reference_operator','dev_inspect','inspect_proxy','control']
     files = {p for p in fixed if (root/p).is_file()}
     files.update('etl/'+p+'.py' for p in helpers)
     for pattern in patterns:

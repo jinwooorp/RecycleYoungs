@@ -253,8 +253,8 @@ def _stage_verified_release(conn, release, *, verify_identity, metadata=None, be
     return True
 
 
-def publish_release(conn, version, *, expected_current, verify_identity):
-    """Explicit compare-and-set publication; previous releases remain immutable and retained."""
+def publish_release(conn, version, *, expected_current, verify_identity, before_commit=None):
+    """Explicit CAS; optional related pointers commit in this owned transaction."""
     if not re.fullmatch('[0-9a-f]{64}',version or ''): raise CollectionError('INVALID_RELEASE_ID')
     connection_ready(conn)
     with conn.transaction():
@@ -266,7 +266,9 @@ def publish_release(conn, version, *, expected_current, verify_identity):
             if current is None: raise CollectionError('PUBLICATION_POINTER_MISSING')
             cur.execute('SELECT status FROM api_releases WHERE release_id=%s',(version,))
             if cur.fetchone()!=('READY',): raise CollectionError('RELEASE_NOT_READY')
-            if current[0]==version: return False
+            if current[0]==version:
+                if before_commit is not None: before_commit(conn)
+                return False
             if current[0]!=expected_current: raise CollectionError('CURRENT_RELEASE_CHANGED')
             if current[0] is not None:
                 cur.execute("SELECT metadata->'quarters' @> (SELECT metadata->'quarters' FROM api_releases WHERE release_id=%s) FROM api_releases WHERE release_id=%s",
@@ -276,6 +278,7 @@ def publish_release(conn, version, *, expected_current, verify_identity):
                             (current[0],version))
                 if cur.fetchone()!=(True,): raise CollectionError('RELEASE_SCOPE_NARROWING')
             cur.execute('UPDATE api_current_release SET release_id=%s WHERE singleton=true',(version,))
+            if before_commit is not None: before_commit(conn)
     return True
 
 

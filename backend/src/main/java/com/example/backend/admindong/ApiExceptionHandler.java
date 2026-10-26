@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice(assignableTypes = {AdminDongController.class, ConsumptionScoreController.class, ChangeScoreController.class, RegionController.class,
-    AdminDongContextController.class, AdminDongSalesBreakdownController.class})
+    AdminDongContextController.class, AdminDongSalesBreakdownController.class, ReferenceController.class, DecisionEvidenceController.class})
 public class ApiExceptionHandler {
     private static final Logger LOG = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
@@ -39,5 +39,11 @@ public class ApiExceptionHandler {
     ResponseEntity<ApiResponses.Error> contextUnavailable(ContextUnavailableException ex) {
         return ResponseEntity.status(503).body(new ApiResponses.Error("CONTEXT_UNAVAILABLE",
             "현재 공개 자료에는 참고 지표가 제공되지 않습니다.",null));
+    }
+
+    @ExceptionHandler(ReferenceVersionChangedException.class)
+    ResponseEntity<ApiResponses.Error> referenceVersionChanged(ReferenceVersionChangedException ex) {
+        return ResponseEntity.status(409).body(new ApiResponses.Error("REFERENCE_VERSION_CHANGED",
+            "참고 자료 버전이 변경됐습니다. 목록을 새로 불러온 뒤 다시 조회해 주세요.",null));
     }
 }

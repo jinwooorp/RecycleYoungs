@@ -5,7 +5,7 @@ COPY etl/requirements.txt /workspace/etl/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 COPY etl/app /workspace/etl/app
 COPY etl/api_runtime.py etl/api_worker.py etl/api_snapshot.py etl/boundary_data.py etl/demo_worker.py etl/demo_safety.py /workspace/etl/
-COPY etl/dev_runtime.py etl/dev_inspect.py etl/inspect_proxy.py etl/control.py /workspace/etl/
+COPY etl/dev_runtime.py etl/dev_transition.py etl/dev_reference_transition.py etl/dev_reference_operator.py etl/dev_inspect.py etl/inspect_proxy.py etl/control.py /workspace/etl/
 COPY data/boundaries/public-reports.json /workspace/data/boundaries/public-reports.json
 COPY backend/src/main/resources/db/migration /workspace/backend/src/main/resources/db/migration
 COPY backend/src/main/resources/db/api-runtime /api-schema
@@ -16,6 +16,10 @@ FROM flyway/flyway@sha256:5be18367a9b3979a9f37234c371b80da457a448fb9577bd94d4bf2
 COPY backend/src/main/resources/db/migration /flyway/base
 COPY backend/src/main/resources/db/api-migration /flyway/api
 COPY docker/api/migrate.sh /migrate.sh
+USER root
+# Also tolerate CRLF from an archive/manual copy outside a Git checkout.
+RUN sed -i 's/\r$//' /migrate.sh
+USER 10001:10001
 ENTRYPOINT ["/bin/sh", "/migrate.sh"]
 
 FROM eclipse-temurin:21-jdk-jammy@sha256:742daacb9316be4b6fc60258f6e4ac2a11882f6c597373c92290a57bfad0d2e0 AS backend-build
@@ -23,7 +27,7 @@ WORKDIR /build
 COPY backend/gradlew backend/build.gradle backend/settings.gradle /build/
 COPY backend/gradle /build/gradle
 COPY backend/src/main /build/src/main
-RUN chmod +x gradlew && ./gradlew --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx512m bootJar -x test
+RUN sed -i 's/\r$//' gradlew && chmod +x gradlew && ./gradlew --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx512m bootJar -x test
 
 FROM eclipse-temurin:21-jre-jammy@sha256:affcab5356e1270ac35d2361ee83135af2f03e8d580eca78a6d5d6fdbf048db0 AS backend
 COPY --from=backend-build /build/build/libs/backend-0.0.1-SNAPSHOT.jar /service/backend.jar
@@ -51,4 +55,4 @@ FROM frontend-build AS frontend-dev
 RUN chown -R 10001:10001 /build
 USER 10001:10001
 ENV RECYCLEYOUNGS_LOCAL_CONTAINER=1
-ENTRYPOINT ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
+ENTRYPOINT ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173", "--strictPort"]

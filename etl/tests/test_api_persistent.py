@@ -4,6 +4,8 @@ import importlib,importlib.util
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from unittest.mock import MagicMock
+from contextlib import ExitStack
 
 
 class PersistentTests(unittest.TestCase):
@@ -13,8 +15,15 @@ class PersistentTests(unittest.TestCase):
 
     def test_next_due_is_future_korean_monday_even_on_restart(self):
         m=self.module()
-        self.assertEqual(m.next_due(datetime(2026,10,21,12,tzinfo=timezone.utc)).isoformat(),'2026-10-25T19:30:00+00:00')
-        self.assertEqual(m.next_due(datetime(2026,10,25,19,30,tzinfo=timezone.utc)).isoformat(),'2026-11-01T19:30:00+00:00')
+        cases=[
+            (datetime(2026,10,21,12,tzinfo=timezone.utc),'2026-10-26T02:00:00+00:00'),
+            (datetime(2026,10,25,19,30,tzinfo=timezone.utc),'2026-10-26T02:00:00+00:00'),
+            (datetime(2026,10,26,1,59,59,tzinfo=timezone.utc),'2026-10-26T02:00:00+00:00'),
+            (datetime(2026,10,26,2,tzinfo=timezone.utc),'2026-11-02T02:00:00+00:00'),
+            (datetime(2026,10,26,3,tzinfo=timezone.utc),'2026-11-02T02:00:00+00:00'),
+        ]
+        for now,expected in cases:
+            with self.subTest(now=now):self.assertEqual(m.next_due(now).isoformat(),expected)
 
     def test_probe_periods_are_completed_bounded_and_do_not_skip_gaps(self):
         m=self.module()
@@ -39,6 +48,33 @@ class PersistentTests(unittest.TestCase):
                         [dict(contract_version=2,bundle='/outside/bundle')],
                         [dict(contract_version=2,bundle='/api-data/../outside')]]:
             with self.assertRaises(ValueError):worker.registered_release(changed)
+
+    def test_v6_reconciliation_cannot_resume_before_all_reference_evidence_is_verified(self):
+        import api_worker as worker
+        from app.api_records import CollectionError
+        for failure in ['PRIVATE_PARENT_0700_REQUIRED','REFERENCE_REGISTERED_RECORDS_CHANGED',None]:
+            with self.subTest(failure=failure),ExitStack() as patches:
+                conn=MagicMock();conn.__enter__.return_value=conn
+                target={};release='a'*64;refs={s:str(i)*64 for i,s in enumerate(worker.reference_release.SOURCES,1)}
+                patches.enter_context(patch.object(worker,'connect',return_value=(conn,target)))
+                patches.enter_context(patch.object(worker,'locked'))
+                patches.enter_context(patch.object(worker,'read_state',return_value=('FAILED',None,None,None,release,{},[])))
+                patches.enter_context(patch.object(worker,'registered_release',return_value=dict(release_id=release)))
+                patches.enter_context(patch.object(worker,'verify_connection'))
+                update=patches.enter_context(patch.object(worker,'update_state'))
+                patches.enter_context(patch.object(worker.reference_release,'enabled',return_value=True))
+                patches.enter_context(patch.object(worker.reference_release,'registered_catalog',return_value=refs))
+                parent=patches.enter_context(patch('app.api_config.private_parent'))
+                verify=patches.enter_context(patch.object(worker.reference_release,'verify_registered_snapshots',return_value=list(refs.values())))
+                if failure=='PRIVATE_PARENT_0700_REQUIRED':parent.side_effect=CollectionError(failure)
+                if failure=='REFERENCE_REGISTERED_RECORDS_CHANGED':verify.side_effect=CollectionError(failure)
+                if failure:
+                    with self.assertRaisesRegex(ValueError,failure):worker.reconcile()
+                    update.assert_not_called()
+                else:
+                    self.assertEqual(worker.reconcile()['status'],'RECONCILED')
+                    verify.assert_called_once();parent.assert_called_once();update.assert_called_once()
+                    self.assertTrue(any('READ ONLY' in str(call) for call in conn.execute.call_args_list))
 
     def test_fresh_migration_receipt_requires_every_bound_source_version(self):
         m=self.module()

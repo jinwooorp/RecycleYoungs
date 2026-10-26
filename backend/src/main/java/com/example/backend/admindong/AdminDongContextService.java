@@ -8,7 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
 
 @Service
-@Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
+@Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ,noRollbackFor=ContextUnavailableException.class)
 public class AdminDongContextService {
     private final AdminDongRepository lookup;
     private final AdminDongContextRepository repository;
@@ -16,7 +16,16 @@ public class AdminDongContextService {
         this.lookup=lookup; this.repository=repository;
     }
     public ContextResponses.Context context(QueryValidator.StatsQuery query) {
-        var selected=ContextSelection.select(lookup.lookup(),query,false);
+        return context(lookup.lookup(),query);
+    }
+    /** The caller has already validated the official dong through the score services. */
+    public ContextResponses.Context contextIfPresent(QueryValidator.StatsQuery query) {
+        var known=lookup.lookup();
+        if (known.dongs().stream().noneMatch(d->d.code().equals(query.dongCode()))) return null;
+        return context(known,query);
+    }
+    private ContextResponses.Context context(AdminDongRepository.Lookup known,QueryValidator.StatsQuery query) {
+        var selected=ContextSelection.select(known,query,false);
         var metadata=lookup.requireVersion(query.dataVersion());
         if (metadata==null) throw new ContextUnavailableException();
         var release=repository.release(metadata.dataVersion());

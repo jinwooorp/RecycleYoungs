@@ -15,6 +15,10 @@ export default defineConfig({
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
   server: {
+    // Desktop/WSL host edits may not emit Linux inotify events on bind mounts.
+    watch: process.env.RECYCLEYOUNGS_LOCAL_CONTAINER === '1'
+      ? { usePolling: process.env.DEV_WATCH_POLLING !== 'false', interval: 500 }
+      : undefined,
     proxy: {
       '/api': demoApiProxy ?? (process.env.RECYCLEYOUNGS_LOCAL_CONTAINER === '1' ? 'http://api-backend:8080' : 'http://localhost:8080'),
     },

@@ -1,5 +1,6 @@
 import type { Lookups } from '../types/api'
 import { useState } from 'react'
+import { DecisionEvidencePanel } from './DecisionEvidencePanel'
 import type { useCandidateComparison } from '../hooks/useCandidateComparison'
 import { CandidateCard } from './CandidateCard'
 import { CandidateComparisonTable } from './CandidateComparisonTable'
@@ -94,6 +95,7 @@ export function CandidateComparison({ state, lookups, lookupLoading, lookupError
         <div className="grid items-start gap-4 lg:grid-cols-3">{[...new Set(scoreCodes)].map(code => <AdminDongContextPanel key={code} result={context.results[code]} loading={context.loading && !context.results[code] && !context.errors[code]} error={context.errors[code]} onRetry={context.retry} />)}</div>
       </section>}
       <CandidateComparisonTable candidates={comparableCandidates} quarter={state.quarter} blockReason={state.statsBlockReason} consumption={consumption.result} scoreLoading={consumption.loading} scoreError={consumption.error} change={change.result} changeLoading={change.loading} changeError={change.error} quarters={lookups?.quarters} />
+      {submitted && <DecisionEvidencePanel codes={[...new Set(scoreCodes)]} quarter={state.quarter} dataVersion={metadata?.dataVersion} />}
       {state.candidates.length === 1 && <p className="text-sm">다른 후보를 추가하면 소비 흐름과 주변 카페 수의 차이를 함께 확인할 수 있습니다.</p>}
       <details className="source-details"><summary>전체 통계 비교</summary><CandidateComparisonTable detailed candidates={comparableCandidates} quarter={state.quarter} blockReason={state.statsBlockReason} consumption={consumption.result} scoreLoading={consumption.loading} scoreError={consumption.error} change={change.result} changeLoading={change.loading} changeError={change.error} quarters={lookups?.quarters} /></details>
       <details className="source-details"><summary>동별 점수 산정 근거</summary>

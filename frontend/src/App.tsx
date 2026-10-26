@@ -3,6 +3,8 @@ import { KakaoMap, type MapCoordinate } from './components/KakaoMap'
 import { LocationResult } from './components/LocationResult'
 import { NearbyResult } from './components/NearbyResult'
 import { CandidateComparison } from './components/CandidateComparison'
+import { CurrentReferencePanel } from './components/CurrentReferencePanel'
+import { DecisionEvidencePanel } from './components/DecisionEvidencePanel'
 import { AppNavigation, type AppView } from './components/AppNavigation'
 import { ManualStatistics } from './components/ManualStatistics'
 import { ExploreWorkspace } from './components/ExploreWorkspace'
@@ -149,6 +151,7 @@ function App() {
           {scores(true)}
           <AdminDongContextPanel result={context.results[scoreCode]} loading={context.loading} error={context.errors[scoreCode]} onRetry={context.retry} />
           <p className="text-xs text-muted-foreground">행정동 전체의 상대 점수이며 창업 성공률이 아닙니다.</p>
+          <DecisionEvidencePanel codes={scoreCodes} quarter={scoreQuarter} dataVersion={scoreVersion} />
           <div className="panel-actions"><Button id="open-detail" disabled={!activeCode && !coordinate} onClick={() => route.open(activeCode, state.selection.quarterCode, pointKey || false)}>상세 분석 보기</Button>
           <Button variant="outline" disabled={!coordinate || duplicate || limitReached} onClick={() => { if (coordinate) comparison.add(coordinate) }}>후보지에 추가</Button>
           </div>
@@ -165,7 +168,7 @@ function App() {
         <div className="detail-inner"><Button variant="outline" onClick={route.close}>지도로 돌아가기</Button>
           <header className="my-5"><p className="text-sm text-muted-foreground">서울 · 카페 · 행정동 상세 분석</p><h1 id="detail-title" tabIndex={-1} className="mt-2 text-2xl font-semibold">{routeError ? '상세 분석을 확인해 주세요' : detailRegion}</h1><p className="mt-2 text-sm">점수는 창업 환경을 살펴보는 참고 지표입니다. 성공·수익을 예측하거나 보장하지 않습니다.</p></header>
           {routeError ? <div role="alert"><p>{routeError}</p>{state.lookupError && <Button variant="outline" onClick={state.retryLookups}>조회 조건 다시 시도</Button>}{regions.error && <Button variant="outline" onClick={regions.retry}>지역 목록 다시 조회</Button>}</div> : !detailReady ? <p role="status">상세 분석 조건을 확인하는 중입니다.</p> : <>
-            <ManualStatistics review={<CafeReviewDetails review={review} />} scores={scoreCode && scores(false)}
+            <ManualStatistics review={<><CafeReviewDetails review={review} /><DecisionEvidencePanel codes={scoreCodes} quarter={scoreQuarter} dataVersion={scoreVersion} /></>} scores={scoreCode && scores(false)}
               references={<><AdminDongContextPanel detailed result={context.results[scoreCode]} loading={context.loading} error={context.errors[scoreCode]} onRetry={context.retry} /><SalesBreakdownPanel {...breakdown} /></>}
               state={{ ...detailState, changeSelection: (key, value) => {
                 if (key === 'quarterCode') route.open(scoreCode, value, pointDetail ? pointKey : false, true)
@@ -191,6 +194,7 @@ function App() {
         <p>서울시 행정동 통계와 소상공인시장진흥공단 점포 자료로 카페 창업 환경을 비교합니다.</p>
         <p className="text-sm text-muted-foreground">주변 카페는 선택한 지점에서 500m 안의 수집된 점포 목록입니다. 점수와 매출은 선택한 분기의 행정동 전체 통계입니다. 두 자료는 작성 시기와 지역 범위가 다릅니다. 자료의 기준일과 빠진 점포가 없는지, 지도와 과거 통계의 지역 구분이 같은지는 확인 전입니다.</p>
         <section className="flex flex-col gap-2 text-sm"><h3 className="font-semibold">현재 제공하는 점수</h3><p>소비규모는 거래가 얼마나 많은 편인지, 소비증감은 지난 분기와 비교한 변화가 어느 정도인지 보여줍니다. 높은 점수가 창업 성공이나 수익을 보장하지 않습니다.</p></section>
+        <CurrentReferencePanel dataVersion={scoreVersion ?? state.lookups?.quarters[0]?.metadata?.dataVersion} />
         <section aria-labelledby="keyboard-guide"><h3 id="keyboard-guide" className="font-semibold">지도 사용법·키보드 조작</h3><p className="mt-2 text-sm">Tab으로 지도에 초점을 맞춘 뒤 방향키로 지도를 이동하고, Enter로 지도 중심을 후보 위치로 선택하세요. 지도 클릭으로도 선택할 수 있습니다. 선택 위치로 이동 버튼은 이미 선택한 지점으로 돌아갑니다. 지도 위 지역 선택기로 자치구와 행정동을 찾을 수 있습니다.</p></section>
         <details className="source-details"><summary>자료 출처</summary><div className="mt-2 flex flex-col gap-2 text-sm">
           <a className="underline" href="https://data.seoul.go.kr/dataList/OA-22172/S/1/datasetView.do" target="_blank" rel="noreferrer">서울시 점포 통계 · 행정동</a>

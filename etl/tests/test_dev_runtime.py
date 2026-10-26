@@ -57,7 +57,7 @@ class LocalDevTests(unittest.TestCase):
     def test_initial_periods_start_in_2021_and_distinguish_partial_or_internal_gaps(self):
         m=self.module()
         from datetime import datetime,timezone
-        self.assertEqual(m.initial_periods(datetime(2026,10,22,tzinfo=timezone.utc),lambda s,q:q!='20263',start_year=2021),
+        self.assertEqual(m.initial_periods(datetime(2026,10,22,tzinfo=timezone.utc),lambda s,q:q!='20263'),
                          [f'{year}{q}' for year in range(2021,2027) for q in range(1,5) if f'{year}{q}'<='20262'])
         with self.assertRaisesRegex(ValueError,'INITIAL_SOURCE_UNAVAILABLE'):
             m.initial_periods(datetime(2026,10,22,tzinfo=timezone.utc),lambda s,q:False)
@@ -67,7 +67,7 @@ class LocalDevTests(unittest.TestCase):
             m.initial_periods(datetime(2026,10,22,tzinfo=timezone.utc),lambda s,q:q!='20222',start_year=2021)
         with self.assertRaisesRegex(ValueError,'INITIAL_PERIOD_RANGE_REJECTED'):
             m.initial_periods(datetime(2040,10,22,tzinfo=timezone.utc),lambda s,q:True)
-        self.assertEqual(m.initial_periods(datetime(2026,10,22,tzinfo=timezone.utc),lambda s,q:q!='20263'),
+        self.assertEqual(m.initial_periods(datetime(2026,10,22,tzinfo=timezone.utc),lambda s,q:q!='20263',start_year=2025),
                          ['20251','20252','20253','20254','20261','20262'])
 
     def test_source_image_context_contains_all_new_runtime_inputs(self):
@@ -90,6 +90,42 @@ class LocalDevTests(unittest.TestCase):
                     port='5432',data='/var/lib/postgresql/data/api',sid='123',volume='recycleyoungs-dev-db',container_id='b'*64,network_id='c'*64)
         validate_target(target)
         with self.assertRaises(ValueError):validate_target(target|{'project':'foreign','volume':'foreign-db'})
+
+    def test_shared_host_config_accepts_windows_mode_and_preserves_exact_bytes(self):
+        m=self.module()
+        raw=b'\xef\xbb\xbfSEOUL_OPENAPI_KEY=sample\r\nSEMAS_SERVICE_KEY=sample+key==\r\n'
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d).resolve()/'api.env';path.write_bytes(raw);path.chmod(0o777)
+            self.assertEqual(m.read_host_config(path),raw)
+            private=path.parent/'private.env';m.write(private,raw)
+            self.assertEqual(private.stat().st_mode&0o777,0o600)
+            self.assertEqual(private.read_bytes(),raw)
+            # Re-running preflight must compare the same CRLF bytes, not a
+            # universal-newline translation of the internal copy.
+            with patch.object(m,'UID',private.stat().st_uid),patch('dev_runtime.os.getuid',return_value=0):
+                self.assertEqual(m.read(private).encode(),raw)
+            from app.api_config import load_keys
+            # Internal runtime still requires a private owner-only file.
+            with patch('app.api_config.key_file_path',return_value=path):
+                with self.assertRaisesRegex(ValueError,'PRIVATE_CONFIG_0600_REQUIRED'):load_keys(path)
+
+    def test_host_config_rejects_links_directories_oversize_and_invalid_keys(self):
+        m=self.module()
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d).resolve();path=root/'api.env'
+            for raw in [b'x'*16385,b'SEOUL_OPENAPI_KEY=sample\nSEMAS_SERVICE_KEY=encoded%2Bkey\n']:
+                path.write_bytes(raw)
+                with self.assertRaises(ValueError):m.read_host_config(path)
+            link=root/'link';link.symlink_to(path)
+            for value in [link,root]:
+                with self.assertRaises(ValueError):m.read_host_config(value)
+
+    def test_windows_bom_crlf_keys_load_from_internal_private_copy(self):
+        from app.api_config import load_keys
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d).resolve();root.chmod(0o700);path=root/'api.env'
+            path.write_bytes(b'\xef\xbb\xbfSEOUL_OPENAPI_KEY=sample\r\nSEMAS_SERVICE_KEY=sample+key==\r\n');path.chmod(0o600)
+            self.assertEqual(load_keys(path),{'SEOUL_OPENAPI_KEY':'sample','SEMAS_SERVICE_KEY':'sample+key=='})
 
 
 if __name__=='__main__':unittest.main()

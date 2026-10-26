@@ -42,7 +42,7 @@ def read(path):
     if os.getuid()!=0:return private_read(path)
     require(not any(p.is_symlink() for p in [path,*path.parents]),'PRIVATE_SYMLINK_REJECTED')
     fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
-    with os.fdopen(fd) as f:
+    with os.fdopen(fd,encoding='utf-8',newline='') as f:
         s=os.fstat(f.fileno());require(stat.S_ISREG(s.st_mode) and s.st_uid==UID and not s.st_mode&0o077,'PRIVATE_FILE_REQUIRED')
         value=f.read(100001)
     require(len(value)<=100000,'PRIVATE_FILE_TOO_LARGE');return value
@@ -72,11 +72,27 @@ def validate_config(raw):
     require(all(keys.values()),'API_KEYS_REQUIRED')
 
 
+def read_host_config(path):
+    # A read-only transport from the host, whose ACL/mode Desktop may translate
+    # to 0777. Only the copies on owned Linux volumes are private runtime files.
+    path=Path(path)
+    require(not any(p.is_symlink() for p in [path,*path.parents]),'API_ENV_SYMLINK_REJECTED')
+    fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        require(False,'API_ENV_REGULAR_FILE_REQUIRED')
+    with os.fdopen(fd,'rb') as source:
+        raw=source.read(16385)
+    validate_config(raw)
+    return raw
+
+
 def preflight():
     require(os.getuid()==0,'PREFLIGHT_REQUIRES_ROOT')
+    from dev_transition import require_clear
+    require_clear(CONTROL);require_clear(WRITER)
     source=Path('/input/api.env')
-    require(source.is_file() and not source.is_symlink() and not source.stat().st_mode&0o077,'API_ENV_0600_REQUIRED')
-    raw=source.read_bytes();validate_config(raw)
+    raw=read_host_config(source)
     binding=volume_binding();state=startup_state(CONTROL)
     first=not (CONTROL/'binding.json').exists()
     if first:
@@ -119,6 +135,8 @@ def check_database(p,d,n,expected_image=DB_IMAGE):
 
 
 def checked_context():
+    from dev_transition import require_clear
+    require_clear(CONTROL)
     p=project();binding=json.loads(private_read(CONTROL/'binding.json'))
     require(binding==dict(project=p,volumes=volume_binding(),sql=schemas()),'LOCAL_BINDING_CHANGED')
     image=metadata('image','postgis-pinned')
@@ -155,8 +173,8 @@ def identity():
     return dict(status='IDENTITY_OK',reused=ready)
 
 
-def initial_periods(now,available,*,start_year=2025):
-    # Historical expansion remains explicit until all source scopes pass full validation.
+def initial_periods(now,available,*,start_year=2021):
+    # Fresh environments use the same historical scope as the validated contract2 path.
     end=now.year*4+(now.month-1)//3-1;start=start_year*4
     require(0<=end-start<40,'INITIAL_PERIOD_RANGE_REJECTED')
     periods=[];gap=False
@@ -184,15 +202,15 @@ def initialize():
     from app.api_config import load_keys
     from app.api_http import HttpClient
     from app import seoul_api
-    from app.api_refresh import collect_refresh
+    from app.api_initial_release import collect_initial_release
     keys=load_keys(CONTROL/'api.env');client=HttpClient()
     allow=os.environ.get('DEV_ALLOW_SEOUL_HTTP','true')=='true'
     def available(source,q):
         return bool(next(seoul_api.pages(client,source,q,keys['SEOUL_OPENAPI_KEY'],page_size=1,probe=True,allow_http=allow)).records)
     periods=initial_periods(datetime.now(UTC),available)
-    release=collect_refresh(DATA/'runs/initial',periods,keys,client=client,allow_seoul_http=allow)
+    release=collect_initial_release(DATA/'runs/initial',periods,keys,client=client,allow_seoul_http=allow)
     write(DATA/'transport.json',dict(allow_seoul_http=allow))
-    paths=['/api-data/runs/initial/'+s+'-'+q for q in periods for s in ('seoul-stores','seoul-sales')]+['/api-data/runs/initial/semas-stores']
+    paths=api_worker.context_artifact(DATA/'runs/initial/bundle')
     write(DATA/'seed-runs.json',paths)
     from boundary_data import prepare_boundaries
     prepare_boundaries(DATA/'boundaries')

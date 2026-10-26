@@ -85,6 +85,7 @@ def load_keys(path=None, *, environ=None):
 
 def parse_keys(content):
     """Parse explicit configuration bytes without opening another credentials file."""
+    content = content.removeprefix('\ufeff')  # UTF-8 BOM from Windows editors.
     values = {}
     for line in content.splitlines():
         if not line.strip() or line.lstrip().startswith("#"):

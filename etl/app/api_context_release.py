@@ -383,8 +383,20 @@ def stage_context_release(conn, release, *, verify_identity):
 
 
 def prepare_streamed_history(plan, policy, *, expected_id):
-    """Replay existing runs one at a time; bind to the already audited candidate."""
+    """Replay existing runs one at a time; keep the audited-candidate guard."""
     require(isinstance(expected_id,str) and re.fullmatch('[0-9a-f]{64}',expected_id), 'HISTORY_CANDIDATE_ID_REQUIRED')
+    result = _prepare_streamed_history(plan, policy)
+    require(result['release_id']==expected_id, 'AUDITED_HISTORY_CANDIDATE_CHANGED')
+    return result
+
+
+def prepare_initial_history(plan, policy):
+    """Build new-source history for fresh initialization, without an old candidate."""
+    require(bool(plan.get('quarters')) and plan['quarters'][0]=='20211', 'INITIAL_HISTORY_START_REQUIRED')
+    return _prepare_streamed_history(plan, policy)
+
+
+def _prepare_streamed_history(plan, policy):
     approved_cases(policy)
     runs = []; by_path = {}
     paths = [Path(p) for p in plan['runs']]; quality_paths = [Path(p) for p in plan['quality_runs']]
@@ -412,7 +424,6 @@ def prepare_streamed_history(plan, policy, *, expected_id):
             source_meaning='UNVERIFIED_NEGATIVE_COUNT_EXCLUDED_NOT_CORRECTED'),
         'candidate_status':HISTORY_STATUS}
     result['release_id'] = digest(result)
-    require(result['release_id']==expected_id, 'AUDITED_HISTORY_CANDIDATE_CHANGED')
     verify_history_candidate(result)
     return result
 

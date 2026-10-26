@@ -1,0 +1,4 @@
+# Keep source hashes and Linux container inputs identical with core.autocrlf=true.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.jar binary
