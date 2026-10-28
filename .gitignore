@@ -1,0 +1,85 @@
+
+# ==========================================
+# OS
+# ==========================================
+.DS_Store
+Thumbs.db
+
+# ==========================================
+# IDE / Editor
+# ==========================================
+.idea/
+.vscode/
+*.iml
+.project
+.classpath
+.settings/
+
+# ==========================================
+# Environment / Secrets
+# ==========================================
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Spring Boot local configuration
+application-local.yml
+application-local.yaml
+application-local.properties
+
+# ==========================================
+# Node.js / TypeScript
+# (Frontend, ETL)
+# ==========================================
+node_modules/
+
+# Build outputs
+dist/
+coverage/
+*.tsbuildinfo
+
+# Next.js
+.next/
+out/
+
+# Vite / Other tooling
+.vite/
+.turbo/
+.cache/
+.parcel-cache/
+
+# Package manager
+.pnpm-store/
+.npm/
+.yarn/install-state.gz
+.yarn/unplugged/
+
+# ==========================================
+# Java / Spring Boot
+# ==========================================
+.gradle/
+build/
+target/
+
+# ==========================================
+# Logs / Temporary files
+# ==========================================
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+
+# ==========================================
+# Testing
+# ==========================================
+playwright-report/
+test-results/
+
+# ==========================================
+# Miscellaneous
+# ==========================================
+*.swp
+*.swo
+*~
