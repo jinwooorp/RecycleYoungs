@@ -1,0 +1,6 @@
+spring:
+  flyway:
+    enabled: true
+    url: ${DB_JDBC_URL}
+    user: ${DB_USER}
+    password: ${DB_PASSWORD}

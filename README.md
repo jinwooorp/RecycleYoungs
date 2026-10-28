@@ -472,34 +472,31 @@ flowchart TB
 
 ```text
 RecycleYoungs/
-├── .gitignore
 ├── AGENTS.md
 ├── README.md
-│
-├── frontend/
-│   └── .gitkeep
-│
-├── backend/
-│   └── .gitkeep
-│
-├── etl/
-│   └── .gitkeep
-│
+├── frontend/       # React · Vite · Tailwind · shadcn/ui
+│   ├── src/
+│   ├── components.json
+│   └── package.json
+├── backend/        # Java 21 · Spring Boot 4 · Gradle Wrapper
+│   ├── src/
+│   ├── gradle/wrapper/
+│   └── build.gradle
+├── etl/            # Node.js 24 · TypeScript · Zod · node-postgres
+│   ├── src/
+│   └── package.json
 └── docs/
-    ├── .gitkeep
     ├── agents/
-    │   └── .gitkeep
     └── images/
-        └── .gitkeep
 ```
 
 ### 디렉터리별 역할
 
 | 경로           | 용도                                       | 현재 상태       |
 | -------------- | ------------------------------------------ | --------------- |
-| `frontend/`    | React 기반 프론트엔드 애플리케이션         | 디렉터리만 생성 |
-| `backend/`     | Spring Boot 기반 REST API 및 비즈니스 로직 | 디렉터리만 생성 |
-| `etl/`         | 공공데이터 수집·검증·변환·적재 프로그램    | 디렉터리만 생성 |
+| `frontend/`    | React 기반 프론트엔드 애플리케이션         | 개발 환경 구성 |
+| `backend/`     | Spring Boot 기반 REST API 및 비즈니스 로직 | 개발 환경 구성 |
+| `etl/`         | 공공데이터 수집·검증·변환·적재 프로그램    | 개발 환경 구성 |
 | `docs/`        | 프로젝트 상세 설계 및 기술 문서            | 디렉터리만 생성 |
 | `docs/agents/` | AI 에이전트 관련 보조 문서                 | 디렉터리만 생성 |
 | `docs/images/` | README 및 문서에 사용할 이미지             | 디렉터리만 생성 |
@@ -507,59 +504,83 @@ RecycleYoungs/
 | `.gitignore`   | Git 추적 제외 파일 및 디렉터리 설정        | 작성됨          |
 | `README.md`    | 프로젝트 소개 및 개발 관련 안내            | 작성 중         |
 
-현재 `frontend/`, `backend/`, `etl/`, `docs/`의 하위 디렉터리에는 `.gitkeep` 파일만 존재합니다.
-
-각 애플리케이션의 세부 디렉터리 구조는 실제 프로젝트를 초기화하고 개발을 진행하면서 확장할 예정입니다.
+각 애플리케이션의 빌드·실행·테스트 기반만 초기화되어 있습니다. 프론트엔드는 준비 화면을 표시하고, 백엔드는 웹 서버를 시작하며, ETL은 초기화 안내 후 종료합니다. 실제 서비스 기능, 공공데이터 연동, Docker Compose 및 CI/CD는 아직 구현하지 않았습니다.
 
 ## 실행 방법
 
-현재 `project-upgrade` 브랜치는 프로젝트 구조와 문서를 준비하는 단계입니다.
+### 1. 개발 도구
 
-**프론트엔드, 백엔드 및 ETL 애플리케이션이 아직 초기화되지 않았으므로 현재 상태에서는 서비스를 실행할 수 없습니다.**
+- Node.js **24 LTS**, npm **11**: `frontend/`, `etl/`에서 각각 `nvm use`와 `npm ci`를 실행합니다. 두 프로젝트는 독립적인 잠금 파일을 사용합니다.
+- Java **21**: 백엔드는 포함된 Gradle Wrapper(`./gradlew`, Windows는 `gradlew.bat`)를 사용합니다.
+- PostgreSQL + PostGIS: DB 프로필 실행 시 사용자가 준비한 로컬 개발 DB가 필요합니다.
+- Docker: 백엔드 DB 통합 테스트를 실행할 때만 필요합니다. Compose 설정은 포함하지 않습니다.
 
-### 1. 저장소 내려받기
-
-`project-upgrade` 브랜치를 기준으로 저장소를 내려받습니다.
+### 2. Frontend
 
 ```bash
-git clone -b project-upgrade --single-branch https://github.com/jinwooorp/RecycleYoungs.git
-cd RecycleYoungs
+cd frontend
+nvm use
+npm ci
+npm run dev
 ```
 
-이미 저장소를 내려받았다면 로컬 변경 사항을 확인한 후 `project-upgrade` 브랜치에서 작업합니다.
+[http://localhost:5173](http://localhost:5173)에서 준비 화면을 확인합니다. `npm run build`는 타입 검사 후 정적 파일을 `dist/`에 생성하고, `npm run preview`로 빌드 결과를 확인할 수 있습니다.
 
-### 2. 개발 환경 준비 (예정)
+`frontend/.env.example`을 `.env`로 복사하면 API 프록시 대상을 바꿀 수 있습니다. 생략하면 `/api` 요청을 `http://localhost:8080`으로 전달합니다. 현재 API 호출이나 서비스 엔드포인트는 구현하지 않았습니다. `API_PROXY_TARGET`은 Vite 개발 서버 전용입니다. 프론트엔드의 `VITE_*` 변수는 브라우저에 공개되므로 비밀정보를 넣지 않습니다.
 
-애플리케이션 초기화 후 다음 도구와 실행 환경이 필요할 예정입니다.
+Tailwind CSS 4와 shadcn/ui 설정 및 기본 Button 컴포넌트가 포함되어 있습니다. 추가 UI는 `frontend/`에서 `npx shadcn@latest add <컴포넌트>`로 설치할 수 있습니다.
 
-| 도구                    | 용도                             |
-| ----------------------- | -------------------------------- |
-| Node.js 24 LTS          | 프론트엔드 및 ETL 실행           |
-| Java 21                 | Spring Boot 백엔드 실행          |
-| PostgreSQL + PostGIS    | 상권 및 공간 데이터 저장·조회    |
-| Docker / Docker Compose | 로컬 개발 환경 및 배포 구성 검토 |
+### 3. Backend
 
-패키지 매니저, Gradle 설정 및 데이터베이스 실행 방법은 프로젝트 초기화 후 확정합니다.
+```bash
+cd backend
+./gradlew bootRun
+```
 
-### 3. 환경변수 설정 (예정)
+기본 포트는 **8080**입니다. 기본 실행은 DB 없이 가능하며, 서비스 API는 없으므로 루트 경로의 **404 응답은 정상**입니다. DB 접근 기술(JPA, QueryDSL, JDBC/JdbcClient 등)은 아직 선택하지 않았습니다. Flyway는 마이그레이션 전용 연결을 사용합니다.
 
-공공데이터 인증키, 데이터베이스 접속 정보 등은 환경변수로 관리할 예정입니다.
+DB를 사용할 때는 `backend/.env.example`을 `.env`로 복사하고 로컬 개발 DB 정보를 수정한 뒤 다음과 같이 실행합니다. Spring Boot는 `.env`를 자동으로 읽지 않으므로 셸에 내보냅니다.
 
-환경변수 예시 파일은 실제 애플리케이션과 설정이 구현된 후 추가합니다.
+```bash
+cd backend
+set -a
+source .env
+set +a
+./gradlew bootRun --args='--spring.profiles.active=db'
+```
 
-인증키와 비밀번호 등 비밀정보가 포함된 파일은 Git 저장소에 커밋하지 않습니다.
+`db` 프로필은 시작 시 Flyway 마이그레이션으로 PostGIS 확장을 활성화합니다. DB 서버에 PostGIS가 설치되어 있어야 하며, 접속 계정에 확장 생성 권한이 필요합니다. 이미 확장이 있으면 유지합니다. 공유·운영 DB 대신 준비한 로컬 개발 DB를 사용합니다. 서비스용 테이블과 조회 코드는 아직 없습니다.
 
-### 4. 애플리케이션 실행 (예정)
+### 4. ETL
 
-향후 다음 순서로 로컬 실행 절차를 구성할 예정입니다.
+```bash
+cd etl
+nvm use
+npm ci
+npm run dev
+npm run build
+npm start
+```
 
-1. PostgreSQL 및 PostGIS 실행
-2. 데이터베이스 마이그레이션 적용
-3. ETL을 통한 초기 공공데이터 수집·적재
-4. Spring Boot 백엔드 실행
-5. React 프론트엔드 실행
-6. 브라우저에서 서비스 접속 및 동작 확인
+개발 실행은 TypeScript를 직접 실행하고, 빌드는 `dist/`에 JavaScript를 생성합니다. `npm start`는 빌드된 진입점을 실행합니다. 현재는 초기화 안내 후 종료하며 외부 API나 DB에 접속하지 않습니다.
 
-실제 실행 명령과 접속 주소는 각 애플리케이션의 초기화 및 실행 설정이 완료된 후 추가할 예정입니다.
+`etl/.env.example`을 `.env`로 복사하면 `npm run dev`와 `npm start`가 Node.js의 환경변수 파일 기능으로 읽습니다. 향후 DB 사용 시 `DATABASE_URL`, `DB_POOL_MAX`, `DB_CONNECTION_TIMEOUT_MS`를 Zod로 검증하고 `pg.Pool`을 생성하는 기반이 포함되어 있습니다. 연결 정보가 실제로 사용될 때 검증하며, 연결 풀 생성만으로 DB에 접속하지 않습니다.
 
-현재는 실행 스크립트, Docker Compose 파일 및 애플리케이션 빌드 설정이 준비되지 않았으므로 구체적인 실행 명령을 제공하지 않습니다.
+### 5. 빌드·테스트·품질 검사
+
+각 디렉터리에서 실행합니다.
+
+| 프로젝트 | 명령 | 검증 내용 |
+| --- | --- | --- |
+| Frontend | `npm run build` | TypeScript 타입 검사 · Vite 빌드 |
+| Frontend | `npm test` | Vitest · React Testing Library 렌더링 테스트 |
+| Frontend / ETL | `npm run lint` | ESLint |
+| Frontend / ETL | `npm run format:check` | Prettier 검사 |
+| Backend | `./gradlew build` | Java 컴파일 · JUnit/Spring Boot Test · Spotless 검사 · 실행 JAR |
+| Backend | `./gradlew integrationTest` | Docker의 별도 PostgreSQL/PostGIS 컨테이너에서 Flyway·공간 확장 검증 |
+| ETL | `npm run build` | TypeScript 빌드 |
+| ETL | `npm test` | Vitest 환경설정 검증 테스트 |
+
+`npm run test:watch`로 테스트 감시 모드를 사용합니다. 포맷 수정은 TypeScript 프로젝트의 `npm run format`, Java의 `./gradlew spotlessApply`로 수행합니다. 백엔드 통합 테스트는 일반 `build`와 분리되어 있으며 Docker가 실행 중이어야 합니다.
+
+환경변수 예시에는 로컬 개발용 값만 포함합니다. 실제 비밀번호가 포함된 `.env` 파일은 Git에서 제외됩니다.
