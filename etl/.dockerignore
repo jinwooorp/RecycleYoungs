@@ -1,6 +1,0 @@
-__pycache__/
-*.py[cod]
-.venv/
-tests/
-data/
-api.env
