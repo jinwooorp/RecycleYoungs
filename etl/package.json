@@ -18,13 +18,16 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "fflate": "0.8.3",
     "pg": "8.23.1",
+    "shapefile": "0.6.6",
     "zod": "4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/node": "24.19.2",
     "@types/pg": "8.23.1",
+    "@types/shapefile": "0.6.4",
     "eslint": "10.13.0",
     "prettier": "3.9.10",
     "tsx": "4.23.15",
