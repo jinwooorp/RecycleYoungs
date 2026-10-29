@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { importBoundaries, type BoundaryOptions } from './boundaries.js';
 import { createDatabasePool } from './database.js';
 
+/** CLI 인자를 적재 옵션으로 변환하며, 인자가 없거나 도움말을 요청하면 null을 반환합니다. */
 export function parseBoundaryArguments(args: string[]): BoundaryOptions | null {
   const { values, positionals } = parseArgs({
     args,
@@ -20,6 +21,7 @@ export function parseBoundaryArguments(args: string[]): BoundaryOptions | null {
   if (positionals.length !== 1 || positionals[0] !== 'boundaries') {
     throw new Error('지원 명령은 boundaries입니다. --help를 확인하세요.');
   }
+  // 425·25를 고정하지 않고 입력 버전의 기대 건수를 받습니다. 소수·음수·정밀도 손실은 거부합니다.
   const count = z
     .string()
     .regex(/^[1-9][0-9]*$/)
@@ -38,6 +40,7 @@ export function parseBoundaryArguments(args: string[]): BoundaryOptions | null {
     });
 }
 
+// 다른 모듈이나 테스트에서 가져올 때는 실행하지 않고, CLI로 직접 호출했을 때만 적재합니다.
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
@@ -53,6 +56,7 @@ if (
       try {
         console.log(JSON.stringify(await importBoundaries(pool, options)));
       } finally {
+        // 실패해도 연결 풀을 닫아 CLI 프로세스가 연결을 붙잡고 남지 않게 합니다.
         await pool.end();
       }
     }

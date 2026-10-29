@@ -1,3 +1,4 @@
+# 기본 프로필은 DB 연결 없이 웹 서버를 실행할 수 있도록 마이그레이션을 비활성화한다.
 spring:
   application:
     name: recycleyoungs

@@ -1,3 +1,5 @@
+# db 프로필에서만 Flyway 전용 연결을 사용한다. 서비스 조회용 DataSource 설정은 아직 없다.
+# 환경변수는 실행 셸에서 전달하며 Spring Boot가 .env 파일을 자동으로 읽지는 않는다.
 spring:
   flyway:
     enabled: true

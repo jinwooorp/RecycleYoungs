@@ -30,6 +30,7 @@ describe.runIf(process.env.RUN_BOUNDARY_DB_TESTS === '1')(
       [x, y + 100],
       [x, y],
     ];
+    // 원본 파일과 무관한 5181 합성 도형입니다. 구멍이 있는 도형으로 내부 대표점 생성을 검사합니다.
     function source(): BoundarySource {
       return {
         checksum: 'a'.repeat(64),
@@ -72,6 +73,7 @@ describe.runIf(process.env.RUN_BOUNDARY_DB_TESTS === '1')(
         ],
       };
     }
+    // 행 수뿐 아니라 도형·면적·배치 연결까지 비교해 부분 갱신이나 출처 변경도 잡습니다.
     const snapshot = async () =>
       (
         await pool.query(
@@ -88,6 +90,7 @@ describe.runIf(process.env.RUN_BOUNDARY_DB_TESTS === '1')(
       ).rows[0];
 
     beforeAll(async () => {
+      // 새 컨테이너와 임의의 로컬 포트를 사용해 기존 개발 DB와 격리합니다.
       container = execFileSync(
         'docker',
         [
@@ -122,6 +125,7 @@ describe.runIf(process.env.RUN_BOUNDARY_DB_TESTS === '1')(
     }, 30000);
 
     beforeEach(async () => {
+      // 테스트마다 스키마를 새로 만들어 앞선 테스트의 데이터를 삭제하지 않고도 독립적으로 검사합니다.
       const schema = `boundary_test_${randomUUID().replaceAll('-', '')}`;
       await admin.query(`CREATE SCHEMA ${schema}`);
       pool = createDatabasePool({
@@ -130,6 +134,7 @@ describe.runIf(process.env.RUN_BOUNDARY_DB_TESTS === '1')(
           `?options=${encodeURIComponent('-csearch_path=' + schema + ',public')}`,
       });
       pools.push(pool);
+      // 실제 마이그레이션 SQL을 읽기만 하며, 일회용 DB의 새 스키마에 실행합니다.
       for (const file of [
         'V1__enable_postgis.sql',
         'V2__create_core_tables.sql',
@@ -148,6 +153,7 @@ describe.runIf(process.env.RUN_BOUNDARY_DB_TESTS === '1')(
     });
 
     afterAll(async () => {
+      // 이 테스트가 생성한 연결·컨테이너만 정리합니다. --rm으로 해당 일회용 컨테이너가 제거됩니다.
       await Promise.all(pools.map((item) => item.end()));
       if (admin) await admin.end();
       if (container)
@@ -155,6 +161,7 @@ describe.runIf(process.env.RUN_BOUNDARY_DB_TESTS === '1')(
     }, 30000);
 
     it('publishes 4326 multipolygons, district unions, interior points and original areas', async () => {
+      // 변환 결과와 공식 구 명칭, 원본 면적 보존을 확인하며 대표점이 구멍에 놓이지 않아야 합니다.
       const result = await importBoundaries(pool, options, async () =>
         source(),
       );
@@ -202,6 +209,7 @@ describe.runIf(process.env.RUN_BOUNDARY_DB_TESTS === '1')(
     });
 
     it('skips the same source without changing data or provenance', async () => {
+      // 두 번째 배치만 SKIPPED로 추가되고 기존 경계의 값·출처는 그대로여야 합니다.
       await importBoundaries(pool, options, async () => source());
       const before = await snapshot();
       expect(
@@ -227,6 +235,7 @@ describe.runIf(process.env.RUN_BOUNDARY_DB_TESTS === '1')(
     });
 
     it('dissolves the published dong geometries in their stored coordinate system', async () => {
+      // 결합 과정에서 새 꼭짓점이 생겨도 자치구는 저장된 4326 행정동 도형의 결합과 같아야 합니다.
       const data = source();
       data.features[1]!.geometry = {
         type: 'Polygon',
@@ -281,6 +290,7 @@ describe.runIf(process.env.RUN_BOUNDARY_DB_TESTS === '1')(
     });
 
     it('rolls back district and dong updates together when publication fails', async () => {
+      // 자치구 갱신 뒤 행정동 갱신을 강제로 실패시켜 두 테이블이 함께 롤백되는지 검사합니다.
       await importBoundaries(pool, options, async () => source());
       const before = await snapshot();
       await pool.query(`CREATE FUNCTION reject_test_publish() RETURNS trigger LANGUAGE plpgsql AS
@@ -316,6 +326,7 @@ describe.runIf(process.env.RUN_BOUNDARY_DB_TESTS === '1')(
     });
 
     it('records source validation errors separately from the data transaction', async () => {
+      // 파일 단계의 오류도 실패 건수와 함께 남기되 경계 테이블에는 반영하지 않아야 합니다.
       await expect(
         importBoundaries(pool, options, async () => {
           throw new BoundarySourceError('duplicate dong code', {
@@ -369,6 +380,7 @@ describe.runIf(process.env.RUN_BOUNDARY_DB_TESTS === '1')(
     });
 
     it('serializes concurrent reruns of the same source', async () => {
+      // 같은 입력을 동시에 실행해도 하나만 반영되고 나머지는 최신 상태를 보고 건너뛰어야 합니다.
       const results = await Promise.all([
         importBoundaries(pool, options, async () => source()),
         importBoundaries(pool, options, async () => source()),

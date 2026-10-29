@@ -6,6 +6,7 @@ import type { MultiPolygon, Polygon } from 'geojson';
 import { openShp } from 'shapefile';
 import { z } from 'zod';
 
+// 원본 EPSG:5181 좌표의 경계와 적재에 필요한 속성이다. 면적은 정밀도를 보존하는 정수 문자열이다.
 export type BoundaryFeature = {
   dongCode: string;
   dongName: string;
@@ -22,6 +23,7 @@ type BoundaryFiles = {
 };
 const extensions = ['shp', 'dbf', 'prj', 'cpg'] as const;
 
+// 원본 검증 실패도 배치 이력에 남길 수 있도록, 확인한 건수와 원본 체크섬을 오류에 함께 담는다.
 export class BoundarySourceError extends Error {
   readonly fetchedRows: number;
   readonly validRows: number;
@@ -50,13 +52,13 @@ function requireValid(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
+// 잘못된 UTF-8을 대체 문자로 바꾸면 원본 이름이 손상된 채 적재되므로 즉시 실패시킨다.
 const decode = (bytes: Uint8Array) =>
   new TextDecoder('utf-8', { fatal: true }).decode(bytes);
 const normalize = (name: string) => name.toLowerCase().replace(/[ _]/g, '');
 type WktNode = { key: string; values: (string | number | WktNode)[] };
 
-// Only WKT1 is accepted. Parsing its structure prevents an EPSG label from
-// concealing different units, axes, or projection parameters.
+// WKT1만 받으며 중첩 구조를 해석한다. EPSG 표기만 믿으면 다른 단위·축·투영 매개변수를 놓칠 수 있다.
 function parseWkt(input: string): WktNode {
   const tokens =
     input.match(
@@ -140,6 +142,7 @@ function numeric(node: WktNode, index: number, expected: number) {
   );
 }
 
+// PRJ의 실제 정의가 EPSG:5181과 맞는지 검사한다. 좌표 변환은 이후 DB 적재 단계에서 수행한다.
 export function validateProjection(prj: string): void {
   const root = parseWkt(prj.trim());
   requireValid(root.key === 'PROJCS', 'Expected EPSG:5181 projected WKT1');
@@ -181,6 +184,7 @@ export function validateProjection(prj: string): void {
   allowedChildren(meters, ['AUTHORITY'], 2);
   named(meters, ['Meter', 'Metre']);
   numeric(meters, 1, 1);
+  // 투영 원점과 단위를 포함한 값이 일치해야 같은 좌표를 같은 위치로 해석할 수 있다.
   const expected = new Map([
     ['falseeasting', 200000],
     ['falsenorthing', 500000],
@@ -224,6 +228,7 @@ export function validateProjection(prj: string): void {
       );
     });
   }
+  // AUTHORITY가 없는 ESRI WKT도 허용하지만, 표기가 있다면 검증한 좌표계와 일치해야 한다.
   const authorities = children(root, 'AUTHORITY');
   requireValid(authorities.length <= 1, 'Duplicate projection authority');
   authorities.forEach((authority) =>
@@ -234,6 +239,7 @@ export function validateProjection(prj: string): void {
   );
 }
 
+// 좌표의 유한성·링 폐쇄·GeoJSON 구조를 검사한다. 도형의 전체 공간 유효성은 이후 PostGIS에서 검사한다.
 const pointSchema = z.tuple([z.number().finite(), z.number().finite()]);
 const ringSchema = z
   .array(pointSchema)
@@ -285,6 +291,7 @@ function view(bytes: Uint8Array) {
 
 type Ring = [number, number][];
 
+// 부호로 SHP 링의 역할을 구분한다. 이 계산에서는 시계 방향 외곽선이 양수, 반시계 방향 구멍이 음수다.
 function ringArea(ring: Ring): number {
   let area = 0;
   for (let index = 1; index < ring.length; index += 1) {
@@ -295,6 +302,7 @@ function ringArea(ring: Ring): number {
   return area;
 }
 
+// 포함 관계를 판별할 때 경계 위 점을 구별하도록 내부는 1, 경계는 0, 외부는 -1을 돌려준다.
 function pointInRing(ring: Ring, [x, y]: [number, number]): number {
   let inside = false;
   for (let index = 1; index < ring.length; index += 1) {
@@ -314,6 +322,7 @@ function pointInRing(ring: Ring, [x, y]: [number, number]): number {
   return inside ? 1 : -1;
 }
 
+// 경계 위 점은 건너뛰고 첫 판별 가능한 점을 사용한다. 모든 점이 경계에 있으면 포함으로 보지 않는다.
 function containsRing(shell: Ring, ring: Ring): boolean {
   for (const point of ring) {
     const containment = pointInRing(shell, point);
@@ -328,8 +337,8 @@ function validateRingNesting(rings: Ring[]): void {
     areas.every((area) => Number.isFinite(area) && area !== 0),
     'Invalid SHP ring area',
   );
-  // shapefile promotes orphan counterclockwise holes into exterior rings.
-  // Establish raw ring roles first, then reject any grouping it would change.
+  // shapefile 라이브러리는 외곽선 밖의 반시계 방향 구멍을 외곽선으로 승격한다.
+  // 원본 링의 역할을 먼저 확인하고, 라이브러리 해석으로 묶음이 바뀌는 입력은 거부한다.
   for (let index = 0; index < rings.length; index += 1) {
     const ring = rings[index]!;
     const area = areas[index]!;
@@ -344,6 +353,7 @@ function validateRingNesting(rings: Ring[]): void {
       )
         parent = candidate;
     }
+    // 가장 작은 포함 링을 부모로 삼아 외곽선과 구멍이 번갈아 중첩되는지 확인한다.
     requireValid(
       parent === undefined ? area > 0 : area > 0 !== areas[parent]! > 0,
       'Invalid SHP shell/hole nesting or orphan hole',
@@ -361,6 +371,7 @@ function validateRingNesting(rings: Ring[]): void {
   }
 }
 
+// 라이브러리 파싱 전에 원본 SHP 구조와 링을 검사하고, DBF와 대조할 레코드 수를 반환한다.
 function validateShp(bytes: Uint8Array): number {
   requireValid(bytes.length >= 100, 'Truncated SHP header');
   const data = view(bytes);
@@ -370,6 +381,7 @@ function validateShp(bytes: Uint8Array): number {
       data.getInt32(32, true) === 5,
     'SHP must be version 1000 Polygon (type 5)',
   );
+  // 파일·레코드 길이는 16비트 워드 단위의 빅 엔디언 값이므로 바이트 단위로 환산한다.
   requireValid(
     data.getInt32(24) * 2 === bytes.length,
     'SHP declared length mismatch',
@@ -379,6 +391,7 @@ function validateShp(bytes: Uint8Array): number {
     requireValid(offset + 8 <= bytes.length, 'Truncated SHP record header');
     const length = data.getInt32(offset + 4) * 2;
     const start = offset + 8;
+    // 레코드 번호는 1부터 연속되어야 하며, 선언된 본문이 실제 버퍼 안에 모두 있어야 한다.
     requireValid(
       data.getInt32(offset) === count + 1 &&
         length >= 44 &&
@@ -389,6 +402,7 @@ function validateShp(bytes: Uint8Array): number {
       data.getInt32(start, true) === 5,
       'SHP record must be Polygon',
     );
+    // Polygon 본문은 리틀 엔디언이며, 고정 영역 뒤에 링 시작 인덱스와 XY 좌표 쌍이 이어진다.
     const parts = data.getInt32(start + 36, true);
     const points = data.getInt32(start + 40, true);
     requireValid(
@@ -401,6 +415,7 @@ function validateShp(bytes: Uint8Array): number {
       const first = data.getInt32(start + 44 + part * 4, true);
       const end =
         part + 1 < parts ? data.getInt32(start + 48 + part * 4, true) : points;
+      // 링 인덱스는 바이트 위치가 아니라 점 배열의 위치다. 각 링은 닫힌 최소 네 점을 가져야 한다.
       requireValid(
         (part !== 0 || first === 0) &&
           first >= 0 &&
@@ -424,6 +439,7 @@ function validateShp(bytes: Uint8Array): number {
   return count;
 }
 
+// DBF 헤더를 검증한 뒤 행별 속성 읽기 기능을 제공한다. 숫자 자동 변환 없이 원문을 직접 읽는다.
 function parseDbf(bytes: Uint8Array) {
   requireValid(
     bytes.length >= 33 && bytes[0] === 3,
@@ -440,6 +456,7 @@ function parseDbf(bytes: Uint8Array) {
       bytes[headerLength - 1] === 13,
     'Invalid DBF header length',
   );
+  // 선언된 행 수와 실제 길이가 맞아야 하며, 마지막의 선택적 DBF 종료 바이트만 허용한다.
   const requiredLength = headerLength + count * rowLength;
   requireValid(
     requiredLength === bytes.length ||
@@ -450,6 +467,7 @@ function parseDbf(bytes: Uint8Array) {
     string,
     { offset: number; length: number; type: number; scale: number }
   >();
+  // 각 행 첫 바이트는 삭제 여부 표시이고, 필드 설명자의 길이를 누적해 속성 위치를 구한다.
   let fieldOffset = 1;
   for (let offset = 32; offset < headerLength - 1; offset += 32) {
     const rawName = bytes.subarray(offset, offset + 11);
@@ -470,6 +488,7 @@ function parseDbf(bytes: Uint8Array) {
     fieldOffset += length;
   }
   requireValid(fieldOffset === rowLength, 'DBF actual row length mismatch');
+  // 원본 DBF에 실제 저장된 필드명을 사용한다. C는 문자, N은 숫자이며 소수 자릿수는 0이어야 한다.
   for (const [name, type] of [
     ['ADSTRD_CD', 67],
     ['ADSTRD_NM', 67],
@@ -510,15 +529,20 @@ function parseDbf(bytes: Uint8Array) {
         dongName: text('ADSTRD_NM'),
         centerX: integer('XCNTS_VALU'),
         centerY: integer('YDNTS_VALU'),
+        // N(38,0) 면적을 Number로 바꾸면 안전 정수 범위를 넘는 값이 반올림될 수 있다.
+        // 원문 문자열을 정수 형식·int64 범위로 검증하고 이후 BigInt로 정규화한다.
         areaM2: text('RELM_AR'),
       });
     },
   };
 }
 
+// 네 원본 파일을 검증해 경계 목록과 체크섬을 반환한다. 첫 실패에서 중단하며 입력을 보정하지 않는다.
 export async function parseBoundaryFiles(
   files: BoundaryFiles,
 ): Promise<BoundarySource> {
+  // 압축 방식·파일명과 무관하게 네 파일의 원본 바이트를 고정 순서로 해시한다.
+  // 확장자와 길이도 넣어 파일 경계가 다른 바이트 조합을 구분한다.
   const hash = createHash('sha256');
   for (const extension of extensions) {
     hash.update(`${extension}:${files[extension].length}:`);
@@ -544,6 +568,7 @@ export async function parseBoundaryFiles(
     const source = await openShp(files.shp);
     const features: BoundaryFeature[] = [];
     const codes = new Set<string>();
+    // 파일 구조 검증이 끝난 뒤에만 행 검증을 시작한다. 속성과 도형이 모두 통과한 행만 유효 건수다.
     validatingRows = true;
     for (let index = 0; index < fetchedRows; index += 1) {
       const attributes = dbf.row(index);
@@ -572,12 +597,15 @@ export async function parseBoundaryFiles(
         checksum,
         fetchedRows,
         validRows,
+        // 첫 실패 행만 거부 건수에 포함한다. 미검증 행이나 파일 전체 오류를 행 거부로 세지 않는다.
         rejectedRows: validatingRows ? 1 : 0,
       },
     );
   }
 }
 
+// 경로와 이름 몸통이 같은 SHP·DBF·PRJ·CPG 한 묶음만 선택한다. 대소문자 차이는 허용한다.
+// 누락·중복·다른 묶음을 거부해 서로 다른 경계의 도형과 속성이 섞이는 것을 막는다.
 function selectParts(
   names: string[],
 ): Record<(typeof extensions)[number], string> {
@@ -609,6 +637,7 @@ function selectParts(
   return result;
 }
 
+// ZIP을 디스크에 풀지 않고 메모리에서 읽는다. 관련 없는 항목은 압축 해제 대상에서 제외한다.
 export async function parseBoundaryZip(
   bytes: Uint8Array,
 ): Promise<BoundarySource> {
@@ -642,6 +671,7 @@ export async function parseBoundaryZip(
   }
 }
 
+// ZIP 또는 SHP 경로를 입력받아 같은 검증 경로로 보낸다. SHP의 보조 파일은 같은 디렉터리에서 찾는다.
 export async function readBoundarySource(
   path: string,
 ): Promise<BoundarySource> {

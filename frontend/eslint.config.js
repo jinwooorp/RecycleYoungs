@@ -22,14 +22,16 @@ export default defineConfig([
     files: ['src/**/*.{ts,tsx}'],
     plugins: { shadcn },
     rules: {
+      // 화면에서 임의 색상 대신 디자인 토큰을 사용하도록 검사합니다.
       'shadcn/no-raw-colors': 'error',
     },
   },
   {
     files: ['src/**/*.{ts,tsx}'],
-    // UI primitives own their styles; existing ESLint rules still check them.
+    // 기본 UI 컴포넌트는 자체 스타일을 갖되 기존 ESLint 검사는 계속 적용합니다.
     ignores: ['src/components/ui/**'],
     rules: {
+      // 사용 화면에서는 배치만 조절하고 기본 UI 컴포넌트의 시각적 스타일은 유지합니다.
       'shadcn/no-restyle': ['error', { allow: ['layout'] }],
     },
   },

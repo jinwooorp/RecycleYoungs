@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { loadDatabaseConfig } from './config.js';
 
+// 실제 DB 없이 URL·기본값·숫자 변환과 잘못된 환경변수 거부를 확인합니다.
 describe('loadDatabaseConfig', () => {
   it('provides pool limits for a valid PostgreSQL URL', () => {
     expect(

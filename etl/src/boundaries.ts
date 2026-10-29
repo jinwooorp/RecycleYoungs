@@ -39,17 +39,20 @@ const districtNames: Readonly<Record<string, string>> = {
 const datasetCode = 'SEOUL_DONG_BOUNDARY';
 const etlVersion = 'boundary-v1';
 
+// 기대 건수는 데이터 버전마다 다를 수 있으므로 호출자가 입력 파일에 맞게 지정합니다.
 export type BoundaryOptions = {
   source: string;
   expectedDongs: number;
   expectedDistricts: number;
 };
 
+/** 개발 DB를 실수로 공유·운영 DB에 연결하지 않도록 loopback 주소만 허용합니다. */
 export function assertLocalDatabaseUrl(value: string | undefined): void {
   if (!value) throw new Error('DATABASE_URL이 필요합니다.');
   const url = new URL(value);
   if (
     !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) ||
+    // node-postgres는 URL 쿼리의 host 등으로 접속 대상을 덮어쓸 수 있으므로 함께 검사합니다.
     [...url.searchParams.keys()].some((key) =>
       ['host', 'hostaddr', 'service', 'servicefile'].includes(
         key.toLowerCase(),
@@ -61,6 +64,7 @@ export function assertLocalDatabaseUrl(value: string | undefined): void {
     );
 }
 
+// 배치 이력·CLI에 남길 메시지에서 접속 URI와 비밀번호를 가리고 길이를 제한합니다.
 function safeMessage(error: unknown, connectionString?: string): string {
   let message = error instanceof Error ? error.message : '알 수 없는 적재 오류';
   if (connectionString) {
@@ -74,6 +78,11 @@ function safeMessage(error: unknown, connectionString?: string): string {
   return message.slice(0, 4000);
 }
 
+/**
+ * 원본 경계를 검증한 뒤 자치구·행정동과 배치 성공 이력을 한 번에 반영합니다.
+ * options는 CLI에서 검증한 입력 경로·버전별 기대 건수이며 결과로 상태와 처리 건수를 돌려줍니다.
+ * loadSource는 기본 파일 판독기이고, DB 테스트에서는 메모리 원본을 주입해 같은 반영 경로를 검사합니다.
+ */
 export async function importBoundaries(
   pool: Pool,
   options: BoundaryOptions,
@@ -90,6 +99,7 @@ export async function importBoundaries(
   let validRows = 0;
   let rejectedRows = 0;
   try {
+    // 파일을 읽기 전, 반영 트랜잭션 밖에서 시작 이력을 남겨 파일 오류도 추적할 수 있게 합니다.
     await client.query(
       `INSERT INTO etl_batch
        (batch_id, dataset_code, source_type, scope_type, source_reference,
@@ -108,6 +118,7 @@ export async function importBoundaries(
     checksum = source.checksum;
     fetchedRows = source.features.length;
     const rows = source.features.map((feature) => {
+      // 행정동 이름으로 구를 추측하지 않고 코드 앞 5자리와 공식 코드표를 대응합니다.
       const districtCode = feature.dongCode.slice(0, 5);
       const districtName = districtNames[districtCode];
       if (!districtName) {
@@ -136,18 +147,23 @@ export async function importBoundaries(
 
     await client.query('BEGIN');
     transaction = true;
+    // 같은 데이터셋의 동시 실행을 순서대로 처리하고, 다른 쓰기 작업과의 경합도 막습니다.
+    // 두 잠금은 트랜잭션 종료 시 풀리며 일반 조회는 계속 허용합니다.
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
       datasetCode,
     ]);
     await client.query(
       'LOCK TABLE district, administrative_dong IN SHARE ROW EXCLUSIVE MODE',
     );
+    // 검증 중인 값은 임시 테이블에만 둡니다. COMMIT 시 삭제되고 ROLLBACK 시 생성도 취소됩니다.
     await client.query(`CREATE TEMP TABLE boundary_stage (
       dong_code TEXT PRIMARY KEY, dong_name TEXT NOT NULL,
       district_code TEXT NOT NULL, district_name TEXT NOT NULL, area_m2 BIGINT NOT NULL,
       geom_source geometry(MultiPolygon,5181) NOT NULL,
       geom geometry(MultiPolygon,4326), label_point geometry(Point,4326)
     ) ON COMMIT DROP`);
+    // 이미 검증한 5181 좌표임을 지정하고 Polygon을 MultiPolygon으로 감쌉니다.
+    // ST_SetSRID는 좌표 변환이 아니며, 잘못된 도형을 자동 보정하지 않습니다.
     await client.query(
       `INSERT INTO boundary_stage
        (dong_code, dong_name, district_code, district_name, area_m2, geom_source)
@@ -157,6 +173,8 @@ export async function importBoundaries(
          district_code text, district_name text, area_m2 bigint, geometry jsonb)`,
       [JSON.stringify(rows)],
     );
+    // 원본 투영 좌표의 면적 단위는 ㎡입니다. 양의 실제 면적과 원본 RELM_AR 값을 각각 확인합니다.
+    // 저장할 area_m2는 계산 면적으로 대체하지 않고 원본의 정수 값을 보존합니다.
     const invalidSource = await client.query<{
       dong_code: string;
       reason: string;
@@ -172,12 +190,15 @@ export async function importBoundaries(
         `유효하지 않은 원본 도형: ${JSON.stringify(invalidSource.rows.slice(0, 10))}`,
       );
     }
+    // 실제 좌표 변환은 여기서 수행합니다. 대표점도 저장할 4326 도형에서 생성합니다.
     await client.query(
       `UPDATE boundary_stage SET geom = ST_Transform(geom_source,4326)`,
     );
+    // 단순 중심점은 오목한 도형이나 구멍 밖에 놓일 수 있어 내부를 보장하는 점을 사용합니다.
     await client.query(
       `UPDATE boundary_stage SET label_point = ST_PointOnSurface(geom)`,
     );
+    // 서울 인근 범위는 단위·축 오류를 잡는 검사이며, 정밀한 서울 행정 경계 판정은 아닙니다.
     const invalidTransformed = await client.query<{ dong_code: string }>(
       `SELECT dong_code FROM boundary_stage WHERE ST_SRID(geom) <> 4326
        OR NOT ST_IsValid(geom) OR ST_IsEmpty(geom) OR NOT ST_Contains(geom,label_point)
@@ -190,6 +211,7 @@ export async function importBoundaries(
         `변환 도형·내부 대표점·서울 인근 좌표 범위 검증 실패: ${JSON.stringify(invalidTransformed.rows.slice(0, 10))}`,
       );
 
+    // 실제 저장하는 4326 행정동 도형을 결합해 변환 순서에 따른 자치구 경계 차이를 피합니다.
     await client.query(`CREATE TEMP TABLE district_stage ON COMMIT DROP AS
       SELECT district_code, district_name,
         ST_Multi(ST_UnaryUnion(ST_Collect(geom))) AS geom
@@ -201,6 +223,7 @@ export async function importBoundaries(
     );
     if (invalidDistricts.rows.length)
       throw new Error('자치구 경계 결합 결과가 유효하지 않습니다.');
+    // 빠진 기존 코드를 지우거나 서로 다른 스냅샷을 섞지 않고, 입력 확인이 필요하다고 보고합니다.
     const missingExisting = await client.query(
       `SELECT dong_code AS code FROM administrative_dong a
        WHERE NOT EXISTS (SELECT 1 FROM boundary_stage s WHERE s.dong_code=a.dong_code)
@@ -212,6 +235,7 @@ export async function importBoundaries(
         '원본에 없는 기존 행정구역 코드가 있습니다. 삭제 없이 반영할 수 없어 중단합니다.',
       );
 
+    // 체크섬만 같다고 건너뛰면 DB의 수정·다른 출처를 놓칠 수 있어 실제 값과 배치 연결도 비교합니다.
     const previous = await client.query<{ batch_id: string }>(
       `SELECT batch_id FROM etl_batch WHERE dataset_code=$1 AND source_checksum=$2
        AND etl_version=$3 AND status='PUBLISHED' ORDER BY published_at DESC LIMIT 1`,
@@ -236,6 +260,7 @@ export async function importBoundaries(
       unchanged = result.rows[0]!.unchanged;
     }
     if (!unchanged) {
+      // 자치구를 먼저 반영해 행정동 FK를 만족시킵니다. 기본키를 삭제하지 않아 기존 참조도 유지됩니다.
       await client.query(
         `INSERT INTO district (district_code,district_name,geom,boundary_batch_id)
          SELECT district_code,district_name,geom,$1 FROM district_stage
@@ -253,6 +278,8 @@ export async function importBoundaries(
         [batchId],
       );
     }
+    // SKIPPED이면 경계와 기존 출처를 유지하고 새 실행 이력만 남깁니다.
+    // PUBLISHED 이력과 경계 변경은 같은 트랜잭션에서 확정합니다.
     const status = unchanged ? 'SKIPPED' : 'PUBLISHED';
     await client.query(
       `UPDATE etl_batch SET status=$2::varchar,source_checksum=$3,fetched_rows=$4,valid_rows=$5,
@@ -271,15 +298,18 @@ export async function importBoundaries(
       districts: options.expectedDistricts,
     };
   } catch (error) {
+    // 실패 이력을 기록하기 전에 데이터 반영을 되돌려 이전 정상 경계를 보존합니다.
     if (transaction) {
       try {
         await client.query('ROLLBACK');
       } catch {
+        // 되돌리기마저 실패한 연결은 풀에 재사용하지 않고 새 연결로 이력 기록을 시도합니다.
         client.release(true);
         released = true;
       }
     }
     if (error instanceof BoundarySourceError) {
+      // 파일 판독 중 중단된 경우 실제 확인한 건수만 전달하며 미검증 행을 유효로 세지 않습니다.
       fetchedRows = error.fetchedRows;
       validRows = error.validRows;
       rejectedRows = error.rejectedRows;
@@ -288,6 +318,7 @@ export async function importBoundaries(
     const message = safeMessage(error, pool.options.connectionString);
     if (started) {
       try {
+        // ROLLBACK 후 별도로 저장하고, 이미 성공한 상태를 실패로 덮어쓰지 않도록 RUNNING만 갱신합니다.
         await (released ? pool : client).query(
           `UPDATE etl_batch SET status='FAILED',source_checksum=$2,fetched_rows=$3,
            valid_rows=$4,rejected_rows=$5,finished_at=now(),error_message=$6

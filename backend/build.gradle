@@ -30,6 +30,7 @@ dependencies {
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
+// Docker가 필요한 통합 테스트를 일반 단위 테스트와 분리하고 애플리케이션 출력을 함께 사용한다.
 sourceSets {
 	integrationTest {
 		compileClasspath += sourceSets.main.output
@@ -37,6 +38,7 @@ sourceSets {
 	}
 }
 
+// 통합 테스트에서도 기존 테스트 라이브러리와 런타임 의존성을 재사용한다.
 configurations {
 	integrationTestImplementation.extendsFrom testImplementation
 	integrationTestRuntimeOnly.extendsFrom testRuntimeOnly
@@ -46,6 +48,7 @@ tasks.named('test') {
 	useJUnitPlatform()
 }
 
+// 일반 build와 별도로 명시해 실행하며 Testcontainers용 Docker가 실행 중이어야 한다.
 tasks.register('integrationTest', Test) {
 	description = 'Runs PostgreSQL/PostGIS integration tests. Requires Docker.'
 	group = 'verification'

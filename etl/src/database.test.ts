@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDatabasePool } from './database.js';
 
+// 접속할 수 없는 포트를 사용해 풀 생성 단계에서는 네트워크 연결을 열지 않는지 확인합니다.
 describe('createDatabasePool', () => {
   it('configures an empty pool without connecting to the database', async () => {
     const pool = createDatabasePool({

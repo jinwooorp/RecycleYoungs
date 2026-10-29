@@ -25,18 +25,21 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+/** 일회용 PostGIS DB에서 Flyway 적용과 스키마의 데이터 무결성 제약을 검증한다. */
 @SpringBootTest
 @ActiveProfiles("db")
 @Testcontainers
 class PostgisMigrationIntegrationTests {
 
   @Container
+  // Docker의 별도 컨테이너를 사용하므로 Compose 개발 DB와 그 데이터를 변경하지 않는다.
   static final PostgreSQLContainer POSTGRES =
       new PostgreSQLContainer(
           DockerImageName.parse("postgis/postgis:17-3.5").asCompatibleSubstituteFor("postgres"));
 
   @DynamicPropertySource
   static void configureDatabase(DynamicPropertyRegistry registry) {
+    // 외부 환경변수 대신 컨테이너 접속 정보를 db 프로필의 Flyway 연결에 주입한다.
     registry.add("spring.flyway.url", POSTGRES::getJdbcUrl);
     registry.add("spring.flyway.user", POSTGRES::getUsername);
     registry.add("spring.flyway.password", POSTGRES::getPassword);
@@ -53,6 +56,7 @@ class PostgisMigrationIntegrationTests {
 
   @BeforeEach
   void openTransaction() throws Exception {
+    // 일반 데이터 검증은 테스트별 트랜잭션으로 격리하고 종료 시 되돌린다.
     connection = flyway.getConfiguration().getDataSource().getConnection();
     connection.setAutoCommit(false);
   }
@@ -68,6 +72,7 @@ class PostgisMigrationIntegrationTests {
 
   @Test
   void appliesMigrationAndEnablesPostgisSpatialQueries() throws Exception {
+    // 버전 적용 여부뿐 아니라 실제 공간 질의와 재실행 시 중복 적용 방지도 확인한다.
     assertThat(flyway.info().applied())
         .extracting(migration -> migration.getVersion().getVersion())
         .containsExactly("1", "2", "3");
@@ -86,6 +91,7 @@ class PostgisMigrationIntegrationTests {
 
   @Test
   void upgradesThroughV2AndV3WithoutChangingExistingData() throws Exception {
+    // 전용 스키마에서 V1 → V2 → V3 경로를 따라 기존 체크섬과 데이터의 보존을 확인한다.
     var v1 =
         Flyway.configure()
             .configuration(flyway.getConfiguration())
@@ -101,6 +107,7 @@ class PostgisMigrationIntegrationTests {
     assertThat(v2.migrate().migrationsExecuted).isEqualTo(1);
     var appliedMigrations =
         Arrays.stream(v2.info().applied())
+            // 스키마 생성 표식은 버전이 NULL이므로 버전 마이그레이션만 비교한다.
             .filter(migration -> migration.getVersion() != null)
             .toList();
     assertThat(appliedMigrations)
@@ -120,6 +127,7 @@ class PostgisMigrationIntegrationTests {
             UNION ALL SELECT 'administrative_dong:' || to_jsonb(a)::text FROM administrative_dong a
             UNION ALL SELECT 'service_industry:' || to_jsonb(s)::text FROM service_industry s
             """);
+    // Flyway의 별도 연결에서 V3를 적용할 수 있도록 전용 스키마의 기준 데이터를 확정한다.
     connection.commit();
 
     var v3 = Flyway.configure().configuration(v2.getConfiguration()).target("3").load();
@@ -127,6 +135,7 @@ class PostgisMigrationIntegrationTests {
     assertThat(v3.info().current().getVersion().getVersion()).isEqualTo("3");
     assertThat(
             Arrays.stream(v3.info().applied())
+                // 스키마 생성 표식을 제외한 앞선 V1·V2의 체크섬이 그대로인지 확인한다.
                 .filter(migration -> migration.getVersion() != null)
                 .limit(2)
                 .map(migration -> migration.getChecksum())
@@ -148,6 +157,7 @@ class PostgisMigrationIntegrationTests {
 
   @Test
   void createsCoreTablesWithPrimaryAndForeignKeys() throws Exception {
+    // 기본키의 식별 기준과 경계·업종에서 배치 및 행정구역으로 이어지는 외래키를 확인한다.
     assertThat(
             queryStrings(
                 """
@@ -171,6 +181,7 @@ class PostgisMigrationIntegrationTests {
 
   @Test
   void createsOnlyRequiredIndexesBesidesPrimaryKeys() throws Exception {
+    // 공간 검색과 자치구·배치 조회에 필요한 인덱스만 추가되었는지 확인한다.
     assertThat(
             queryStrings(
                 """
@@ -203,6 +214,7 @@ class PostgisMigrationIntegrationTests {
 
   @Test
   void definesRequiredAndOptionalColumns() throws Exception {
+    // 배치의 선택 항목과 필수 경계 데이터, 도형 종류 및 SRID 계약을 함께 확인한다.
     assertThat(
             queryStrings(
                 """
@@ -236,6 +248,7 @@ class PostgisMigrationIntegrationTests {
 
   @Test
   void acceptsMinimalCoreDataAndDefaultsRowCountsToZero() throws Exception {
+    // 선택 메타데이터는 NULL로 남고 아직 집계하지 않은 처리 건수는 기본값 0을 갖는다.
     insertCoreData();
     assertThat(
             queryStrings(
@@ -285,6 +298,7 @@ class PostgisMigrationIntegrationTests {
 
   @Test
   void acceptsValidScopesQuarterBoundariesAndOptionalBatchDetails() throws Exception {
+    // 연도를 넘는 분기 범위와 같은 분기, 한쪽 기간이 없는 배치도 허용한다.
     insertBatch();
     execute(
         """
@@ -330,6 +344,7 @@ class PostgisMigrationIntegrationTests {
         "scope_type = 'SEOUL', scope_code = ''"
       })
   void rejectsInvalidBatchData(String assignment) throws Exception {
+    // 상태·출처·범위 형식, 음수 건수, 분기 형식 및 역전된 기간을 CHECK 제약으로 거부한다.
     insertBatch();
     assertRejected("UPDATE etl_batch SET " + assignment, "23514");
   }
@@ -337,6 +352,7 @@ class PostgisMigrationIntegrationTests {
   @ParameterizedTest
   @ValueSource(strings = {"etl_batch", "district", "administrative_dong", "service_industry"})
   void rejectsDuplicatePrimaryKeys(String table) throws Exception {
+    // 동일 행을 복제했을 때 기본키 중복 오류가 발생하는지 실제 입력으로 검증한다.
     insertCoreData();
     assertRejected("INSERT INTO " + table + " SELECT * FROM " + table, "23505");
   }
@@ -349,12 +365,14 @@ class PostgisMigrationIntegrationTests {
         "service_industry SET source_batch_id"
       })
   void rejectsMissingBatchReferences(String assignment) throws Exception {
+    // 존재하지 않는 배치를 참조하는 경계·업종 데이터는 외래키 제약으로 거부한다.
     insertCoreData();
     assertRejected("UPDATE " + assignment + " = '" + MISSING_BATCH_ID + "'", "23503");
   }
 
   @Test
   void rejectsMissingDistrictEvenWhenDongPrefixMatches() throws Exception {
+    // 행정동 코드 접두어가 일치하더라도 참조 자치구 행은 실제로 존재해야 한다.
     insertCoreData();
     assertRejected(
         "UPDATE administrative_dong SET dong_code = '11140101', district_code = '11140'", "23503");
@@ -369,6 +387,7 @@ class PostgisMigrationIntegrationTests {
 
   @Test
   void acceptsNumericAdministrativeCodesWithLeadingZeros() throws Exception {
+    // 행정구역 코드는 숫자 계산값이 아닌 고정 길이 문자열이므로 앞자리 0을 보존한다.
     insertBatch();
     execute("INSERT INTO district VALUES ('00001', '테스트구', " + BOUNDARY + ", '" + BATCH_ID + "')");
     execute(
@@ -416,6 +435,7 @@ class PostgisMigrationIntegrationTests {
     "administrative_dong, label_point, POINT EMPTY"
   })
   void rejectsEmptySpatialData(String table, String column, String emptyGeometry) throws Exception {
+    // NULL이 아닌 빈 도형도 유효한 경계나 대표점으로 취급하지 않는다.
     insertCoreData();
     assertRejected(
         "UPDATE " + table + " SET " + column + " = ST_GeomFromText('" + emptyGeometry + "',4326)",
@@ -456,6 +476,7 @@ class PostgisMigrationIntegrationTests {
 
   @Test
   void createsStatTablesWithCompositePrimaryAndForeignKeys() throws Exception {
+    // 통계의 행정동·분기·해당 업종 조합과 원천 배치 참조가 스키마에 반영되어야 한다.
     assertThat(
             queryStrings(
                 """
@@ -507,6 +528,7 @@ class PostgisMigrationIntegrationTests {
   })
   void distinguishesMissingMeasurementsFromZeroAndRejectsNegatives(String table, String column)
       throws Exception {
+    // 미수집 값(NULL)과 실제 측정값 0을 구분하고 음수 통계는 허용하지 않는다.
     insertCoreData();
     insertStat(table);
     assertThat(queryStrings("SELECT " + column + "::text FROM " + table))
@@ -519,6 +541,7 @@ class PostgisMigrationIntegrationTests {
   @ParameterizedTest
   @ValueSource(strings = {"dong_store_stat", "dong_sales_stat", "dong_foot_traffic_stat"})
   void rejectsDuplicateStatKeysButAllowsAnotherQuarter(String table) throws Exception {
+    // 같은 통계 키는 중복 저장할 수 없지만 분기가 다르면 별도 시계열 행으로 저장한다.
     insertCoreData();
     insertStat(table);
     assertRejected("INSERT INTO " + table + " SELECT * FROM " + table, "23505");
@@ -557,6 +580,7 @@ class PostgisMigrationIntegrationTests {
     assertRejected("UPDATE " + table + " SET dong_code = NULL", "23502");
     assertRejected("UPDATE " + table + " SET quarter_code = NULL", "23502");
     if (!table.equals("dong_foot_traffic_stat")) {
+      // 유동인구는 업종 구분이 없으므로 점포·매출 통계에만 업종 참조를 검증한다.
       assertRejected("UPDATE " + table + " SET industry_code = 'UNKNOWN1'", "23503");
       assertRejected("UPDATE " + table + " SET industry_code = NULL", "23502");
     }
@@ -565,6 +589,7 @@ class PostgisMigrationIntegrationTests {
   @ParameterizedTest
   @ValueSource(strings = {"dong_store_stat", "dong_sales_stat", "dong_foot_traffic_stat"})
   void rejectsMalformedStatQuarters(String table) throws Exception {
+    // 분기는 ASCII 연도 4자리와 1~4분기로 구성하며 길이 초과 오류도 구분한다.
     insertCoreData();
     insertStat(table);
     for (var quarter : List.of("", "2026", "20260", "20265", "2026Q", "２0261")) {
@@ -583,6 +608,7 @@ class PostgisMigrationIntegrationTests {
   })
   void preservesNumericPrecisionAndRejectsNonfiniteOrNegativeValues(String table, String column)
       throws Exception {
+    // 소수 정밀도는 보존하되 음수·NaN·양의 무한대·음의 무한대는 측정값에서 제외한다.
     insertCoreData();
     insertStat(table);
     execute("UPDATE " + table + " SET " + column + " = 123.456789");
@@ -595,6 +621,7 @@ class PostgisMigrationIntegrationTests {
 
   @Test
   void acceptsLargeIntegerStatisticsAndDoesNotRequireComponentSumsToMatch() throws Exception {
+    // 큰 정수와 100을 넘는 비율을 수용하며 원천 통계의 부분 합과 총계 일치를 강제하지 않는다.
     insertCoreData();
     insertStat("dong_store_stat");
     insertStat("dong_sales_stat");
@@ -628,6 +655,7 @@ class PostgisMigrationIntegrationTests {
         .containsExactly("3000000000.123456");
   }
 
+  /** 측정값은 지정하지 않고 필수 키와 원천 배치만 갖춘 통계 행을 준비한다. */
   private void insertStat(String table) throws SQLException {
     var hasIndustry = !table.equals("dong_foot_traffic_stat");
     execute(
@@ -654,6 +682,7 @@ class PostgisMigrationIntegrationTests {
             .formatted(BATCH_ID));
   }
 
+  /** 실제 공공데이터 대신 서로 참조하는 합성 배치·자치구·행정동·업종을 준비한다. */
   private void insertCoreData() throws SQLException {
     insertBatch();
     execute("INSERT INTO district VALUES ('11110', '테스트구', " + BOUNDARY + ", '" + BATCH_ID + "')");
@@ -684,6 +713,7 @@ class PostgisMigrationIntegrationTests {
     }
   }
 
+  /** 제약 위반의 SQLSTATE를 확인한 뒤 저장점으로 복구해 다음 검증을 계속할 수 있게 한다. */
   private void assertRejected(String sql, String sqlState) throws SQLException {
     var savepoint = connection.setSavepoint();
     try {
@@ -693,6 +723,7 @@ class PostgisMigrationIntegrationTests {
               SQLException.class,
               exception -> assertThat(exception.getSQLState()).isEqualTo(sqlState));
     } finally {
+      // PostgreSQL의 오류로 중단된 트랜잭션을 복구하되 테스트의 기존 준비 데이터는 유지한다.
       connection.rollback(savepoint);
       connection.releaseSavepoint(savepoint);
     }
