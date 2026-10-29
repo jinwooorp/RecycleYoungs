@@ -745,6 +745,12 @@ RecycleYoungs/
 
 #### 로컬 DB 준비
 
+기본 로컬 개발 환경에서는 저장소 루트의 `.env.example`만 `.env`로 복사하면 됩니다. 루트 `.env`는 Docker Compose·Backend·ETL의 공통 DB 설정에 사용합니다.
+
+- `backend/.env.example`: Backend를 독립적인 DB 환경에서 실행할 때 참고합니다. 기본 환경에서는 복사할 필요가 없습니다.
+- `etl/.env.example`: ETL을 별도로 설정할 때만 사용합니다. `etl/.env`가 별도로 있으면 Node.js가 해당 파일도 읽으므로, 공통 DB 설정을 사용할 때는 불필요한 중복 설정을 피합니다.
+- `frontend/.env.example`: Vite의 API 프록시 주소를 기본값인 `http://localhost:8080`과 다르게 설정할 때만 `frontend/.env`로 복사합니다.
+
 저장소 루트에서 실행합니다.
 
 ```bash
@@ -757,7 +763,7 @@ docker compose ps db
 
 DB 이미지는 Testcontainers와 동일한 `postgis/postgis:17-3.5`입니다. `DB_PORT`의 기본값은 `5432`이며 `127.0.0.1`에만 공개합니다. 이미 사용 중인 포트이면 `.env`의 `DB_PORT`를 변경합니다. 실제 `.env`는 Git에서 제외되며, 예시 비밀번호는 로컬 개발용입니다.
 
-Backend·ETL을 실행할 셸마다 저장소 루트의 환경변수를 먼저 내보냅니다. 두 연결 URL은 같은 `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_PORT`에서 구성됩니다. 비밀번호에 URL 예약 문자를 사용한다면 `DATABASE_URL`의 비밀번호 부분을 URL 인코딩한 값으로 지정합니다.
+Docker Compose는 루트 `.env`를 자동으로 읽지만, Backend·ETL은 자동으로 읽지 않습니다. Backend·ETL을 실행할 터미널마다 저장소 루트에서 아래 명령으로 환경변수를 먼저 내보냅니다. 두 연결 URL은 같은 `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_PORT`에서 구성됩니다. 비밀번호에 URL 예약 문자를 사용한다면 `DATABASE_URL`의 비밀번호 부분을 URL 인코딩한 값으로 지정합니다.
 
 ```bash
 set -a
