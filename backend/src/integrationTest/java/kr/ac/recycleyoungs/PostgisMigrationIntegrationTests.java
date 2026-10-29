@@ -70,7 +70,7 @@ class PostgisMigrationIntegrationTests {
   void appliesMigrationAndEnablesPostgisSpatialQueries() throws Exception {
     assertThat(flyway.info().applied())
         .extracting(migration -> migration.getVersion().getVersion())
-        .containsExactly("1", "2");
+        .containsExactly("1", "2", "3");
     assertThat(flyway.info().pending()).isEmpty();
     try (var connection = flyway.getConfiguration().getDataSource().getConnection();
         var statement = connection.createStatement();
@@ -85,7 +85,7 @@ class PostgisMigrationIntegrationTests {
   }
 
   @Test
-  void upgradesAnExistingV1SchemaWithoutChangingV1() {
+  void upgradesThroughV2AndV3WithoutChangingExistingData() throws Exception {
     var v1 =
         Flyway.configure()
             .configuration(flyway.getConfiguration())
@@ -109,6 +109,41 @@ class PostgisMigrationIntegrationTests {
     assertThat(appliedMigrations.getFirst().getChecksum()).isEqualTo(v1Checksum);
     v2.validate();
     assertThat(v2.migrate().migrationsExecuted).isZero();
+
+    execute("SET search_path TO v1_upgrade, public");
+    insertCoreData();
+    var coreDataBeforeUpgrade =
+        queryStrings(
+            """
+            SELECT 'etl_batch:' || to_jsonb(b)::text FROM etl_batch b
+            UNION ALL SELECT 'district:' || to_jsonb(d)::text FROM district d
+            UNION ALL SELECT 'administrative_dong:' || to_jsonb(a)::text FROM administrative_dong a
+            UNION ALL SELECT 'service_industry:' || to_jsonb(s)::text FROM service_industry s
+            """);
+    connection.commit();
+
+    var v3 = Flyway.configure().configuration(v2.getConfiguration()).target("3").load();
+    assertThat(v3.migrate().migrationsExecuted).isEqualTo(1);
+    assertThat(v3.info().current().getVersion().getVersion()).isEqualTo("3");
+    assertThat(
+            Arrays.stream(v3.info().applied())
+                .filter(migration -> migration.getVersion() != null)
+                .limit(2)
+                .map(migration -> migration.getChecksum())
+                .toList())
+        .containsExactlyElementsOf(
+            appliedMigrations.stream().map(migration -> migration.getChecksum()).toList());
+    assertThat(
+            queryStrings(
+                """
+                SELECT 'etl_batch:' || to_jsonb(b)::text FROM etl_batch b
+                UNION ALL SELECT 'district:' || to_jsonb(d)::text FROM district d
+                UNION ALL SELECT 'administrative_dong:' || to_jsonb(a)::text FROM administrative_dong a
+                UNION ALL SELECT 'service_industry:' || to_jsonb(s)::text FROM service_industry s
+                """))
+        .containsExactlyInAnyOrderElementsOf(coreDataBeforeUpgrade);
+    v3.validate();
+    assertThat(v3.migrate().migrationsExecuted).isZero();
   }
 
   @Test
@@ -417,6 +452,194 @@ class PostgisMigrationIntegrationTests {
         "UPDATE administrative_dong SET label_point = ST_GeomFromText('POINT(NaN 37)',4326)",
         "23514");
     assertRejected("UPDATE administrative_dong SET label_point = geom", "22023");
+  }
+
+  @Test
+  void createsStatTablesWithCompositePrimaryAndForeignKeys() throws Exception {
+    assertThat(
+            queryStrings(
+                """
+                SELECT c.relname || ':' || pg_get_constraintdef(k.oid)
+                FROM pg_constraint k
+                JOIN pg_class c ON c.oid = k.conrelid
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'public' AND k.contype IN ('p', 'f')
+                  AND c.relname IN ('dong_store_stat', 'dong_sales_stat', 'dong_foot_traffic_stat')
+                """))
+        .containsExactlyInAnyOrder(
+            "dong_store_stat:PRIMARY KEY (dong_code, industry_code, quarter_code)",
+            "dong_sales_stat:PRIMARY KEY (dong_code, industry_code, quarter_code)",
+            "dong_foot_traffic_stat:PRIMARY KEY (dong_code, quarter_code)",
+            "dong_store_stat:FOREIGN KEY (dong_code) REFERENCES administrative_dong(dong_code)",
+            "dong_sales_stat:FOREIGN KEY (dong_code) REFERENCES administrative_dong(dong_code)",
+            "dong_foot_traffic_stat:FOREIGN KEY (dong_code) REFERENCES administrative_dong(dong_code)",
+            "dong_store_stat:FOREIGN KEY (industry_code) REFERENCES service_industry(industry_code)",
+            "dong_sales_stat:FOREIGN KEY (industry_code) REFERENCES service_industry(industry_code)",
+            "dong_store_stat:FOREIGN KEY (source_batch_id) REFERENCES etl_batch(batch_id)",
+            "dong_sales_stat:FOREIGN KEY (source_batch_id) REFERENCES etl_batch(batch_id)",
+            "dong_foot_traffic_stat:FOREIGN KEY (source_batch_id) REFERENCES etl_batch(batch_id)");
+    assertThat(
+            queryStrings(
+                """
+                SELECT indexrelid::regclass::text FROM pg_index
+                WHERE indrelid IN ('dong_store_stat'::regclass, 'dong_sales_stat'::regclass,
+                                   'dong_foot_traffic_stat'::regclass) AND NOT indisprimary
+                """))
+        .isEmpty();
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "dong_store_stat, store_count",
+    "dong_store_stat, general_store_count",
+    "dong_store_stat, franchise_store_count",
+    "dong_store_stat, opened_store_count",
+    "dong_store_stat, closed_store_count",
+    "dong_store_stat, opening_rate",
+    "dong_store_stat, closure_rate",
+    "dong_sales_stat, monthly_sales_amount",
+    "dong_sales_stat, monthly_sales_count",
+    "dong_sales_stat, weekday_sales_amount",
+    "dong_sales_stat, weekend_sales_amount",
+    "dong_foot_traffic_stat, total_foot_traffic",
+    "dong_foot_traffic_stat, male_foot_traffic",
+    "dong_foot_traffic_stat, female_foot_traffic"
+  })
+  void distinguishesMissingMeasurementsFromZeroAndRejectsNegatives(String table, String column)
+      throws Exception {
+    insertCoreData();
+    insertStat(table);
+    assertThat(queryStrings("SELECT " + column + "::text FROM " + table))
+        .containsExactly((String) null);
+    execute("UPDATE " + table + " SET " + column + " = 0");
+    assertThat(queryStrings("SELECT " + column + "::text FROM " + table)).containsExactly("0");
+    assertRejected("UPDATE " + table + " SET " + column + " = -1", "23514");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"dong_store_stat", "dong_sales_stat", "dong_foot_traffic_stat"})
+  void rejectsDuplicateStatKeysButAllowsAnotherQuarter(String table) throws Exception {
+    insertCoreData();
+    insertStat(table);
+    assertRejected("INSERT INTO " + table + " SELECT * FROM " + table, "23505");
+    execute("UPDATE " + table + " SET quarter_code = '20262'");
+    insertStat(table);
+    assertThat(queryStrings("SELECT quarter_code FROM " + table + " ORDER BY quarter_code"))
+        .containsExactly("20261", "20262");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"dong_store_stat", "dong_sales_stat"})
+  void allowsDifferentIndustriesInTheSameDongAndQuarter(String table) throws Exception {
+    insertCoreData();
+    insertStat(table);
+    execute("INSERT INTO service_industry VALUES ('TEST0002', '다른테스트업종', '" + BATCH_ID + "')");
+    execute(
+        "INSERT INTO "
+            + table
+            + " (dong_code, industry_code, quarter_code, source_batch_id) "
+            + "VALUES ('11110101', 'TEST0002', '20261', '"
+            + BATCH_ID
+            + "')");
+    assertThat(queryStrings("SELECT industry_code FROM " + table + " ORDER BY industry_code"))
+        .containsExactly("TEST0001", "TEST0002");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"dong_store_stat", "dong_sales_stat", "dong_foot_traffic_stat"})
+  void rejectsMissingStatKeysAndReferences(String table) throws Exception {
+    insertCoreData();
+    insertStat(table);
+    assertRejected("UPDATE " + table + " SET dong_code = '11110102'", "23503");
+    assertRejected(
+        "UPDATE " + table + " SET source_batch_id = '" + MISSING_BATCH_ID + "'", "23503");
+    assertRejected("UPDATE " + table + " SET source_batch_id = NULL", "23502");
+    assertRejected("UPDATE " + table + " SET dong_code = NULL", "23502");
+    assertRejected("UPDATE " + table + " SET quarter_code = NULL", "23502");
+    if (!table.equals("dong_foot_traffic_stat")) {
+      assertRejected("UPDATE " + table + " SET industry_code = 'UNKNOWN1'", "23503");
+      assertRejected("UPDATE " + table + " SET industry_code = NULL", "23502");
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"dong_store_stat", "dong_sales_stat", "dong_foot_traffic_stat"})
+  void rejectsMalformedStatQuarters(String table) throws Exception {
+    insertCoreData();
+    insertStat(table);
+    for (var quarter : List.of("", "2026", "20260", "20265", "2026Q", "２0261")) {
+      assertRejected("UPDATE " + table + " SET quarter_code = '" + quarter + "'", "23514");
+    }
+    assertRejected("UPDATE " + table + " SET quarter_code = '202611'", "22001");
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "dong_store_stat, opening_rate",
+    "dong_store_stat, closure_rate",
+    "dong_foot_traffic_stat, total_foot_traffic",
+    "dong_foot_traffic_stat, male_foot_traffic",
+    "dong_foot_traffic_stat, female_foot_traffic"
+  })
+  void preservesNumericPrecisionAndRejectsNonfiniteOrNegativeValues(String table, String column)
+      throws Exception {
+    insertCoreData();
+    insertStat(table);
+    execute("UPDATE " + table + " SET " + column + " = 123.456789");
+    assertThat(queryStrings("SELECT " + column + "::text FROM " + table))
+        .containsExactly("123.456789");
+    for (var value : List.of("-0.001", "'NaN'", "'Infinity'", "'-Infinity'")) {
+      assertRejected("UPDATE " + table + " SET " + column + " = " + value, "23514");
+    }
+  }
+
+  @Test
+  void acceptsLargeIntegerStatisticsAndDoesNotRequireComponentSumsToMatch() throws Exception {
+    insertCoreData();
+    insertStat("dong_store_stat");
+    insertStat("dong_sales_stat");
+    insertStat("dong_foot_traffic_stat");
+    execute(
+        """
+        UPDATE dong_store_stat SET store_count = 3000000000, general_store_count = 1,
+          franchise_store_count = 2, opened_store_count = 3, closed_store_count = 4,
+          opening_rate = 150.25, closure_rate = 200.75
+        """);
+    execute(
+        """
+        UPDATE dong_sales_stat SET monthly_sales_amount = 9000000000000,
+          monthly_sales_count = 3000000000,
+          weekday_sales_amount = 4000000000, weekend_sales_amount = 5000000000
+        """);
+    execute(
+        """
+        UPDATE dong_foot_traffic_stat SET total_foot_traffic = 3000000000.123456,
+          male_foot_traffic = 1.01, female_foot_traffic = 2.02
+        """);
+    assertThat(
+            queryStrings(
+                "SELECT store_count || ':' || opening_rate || ':' || closure_rate FROM dong_store_stat"))
+        .containsExactly("3000000000:150.25:200.75");
+    assertThat(
+            queryStrings(
+                "SELECT monthly_sales_amount || ':' || monthly_sales_count FROM dong_sales_stat"))
+        .containsExactly("9000000000000:3000000000");
+    assertThat(queryStrings("SELECT total_foot_traffic::text FROM dong_foot_traffic_stat"))
+        .containsExactly("3000000000.123456");
+  }
+
+  private void insertStat(String table) throws SQLException {
+    var hasIndustry = !table.equals("dong_foot_traffic_stat");
+    execute(
+        "INSERT INTO "
+            + table
+            + " (dong_code, quarter_code, source_batch_id"
+            + (hasIndustry ? ", industry_code" : "")
+            + ") VALUES ('11110101', '20261', '"
+            + BATCH_ID
+            + "'"
+            + (hasIndustry ? ", 'TEST0001'" : "")
+            + ")");
   }
 
   private void insertBatch() throws SQLException {

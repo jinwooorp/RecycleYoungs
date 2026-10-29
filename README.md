@@ -521,7 +521,7 @@ erDiagram
 - 점포·추정매출은 `분기 + 행정동 + 업종` 단위로 저장합니다.
 - 길단위인구는 `분기 + 행정동` 단위로 저장합니다.
 - 개업률·폐업률은 원본 집계 방식에 따라 100%를 초과할 수 있으므로 일률적인 상한을 적용하지 않습니다.
-- 금액과 유동인구는 대규모 수치 및 집계를 고려해 `BIGINT`를 우선 검토합니다.
+- V3의 점포 수·매출액·매출 건수는 `BIGINT`, 비율·추정 유동인구는 정밀도 손실을 피하기 위해 `NUMERIC`으로 저장합니다.
 - 실제 값이 `0`인 경우와 데이터가 제공되지 않은 경우를 구분합니다.
 - 서로 다른 집계 단위의 통계를 결합할 때 중복 집계되지 않도록 처리합니다.
 
@@ -579,7 +579,7 @@ ETL은 Node.js·TypeScript 기반으로 구현하며, Zod를 이용해 데이터
 
 DB 스키마는 Flyway를 이용해 관리합니다.
 
-`V1__enable_postgis.sql`은 PostGIS 확장을 활성화하고, `V2__create_core_tables.sql`은 ETL 이력·자치구·행정동·서비스 업종 테이블과 제약조건·인덱스를 생성합니다.
+`V1__enable_postgis.sql`은 PostGIS 확장을 활성화하고, `V2__create_core_tables.sql`은 ETL 이력·자치구·행정동·서비스 업종 테이블과 제약조건·인덱스를 생성합니다. `V3__create_dong_stat_tables.sql`은 행정동별 점포·추정매출·유동인구 통계 테이블을 생성합니다.
 
 이후에는 다음 순서로 마이그레이션을 구성하는 방향을 검토하고 있습니다.
 
@@ -587,11 +587,33 @@ DB 스키마는 Flyway를 이용해 관리합니다.
 | ---- | -------------------------------------- |
 | V1   | PostGIS 확장 활성화 (구현 완료)        |
 | V2   | ETL 이력 및 행정구역·업종 기준 테이블 (구현 완료) |
-| V3   | 점포·추정매출·길단위인구 통계 테이블   |
+| V3   | 점포·추정매출·길단위인구 통계 테이블 (구현 완료) |
 | V4   | 개별 카페 및 공간 검색 인덱스          |
 | 이후 | 평가 알고리즘 확정 후 점수 관련 테이블 |
 
 Flyway는 테이블, 제약조건, 인덱스 등 DB 스키마 변경을 관리하고, 공공데이터의 수집과 대량 적재는 별도의 ETL 프로그램에서 처리할 예정입니다.
+
+#### V3 통계 컬럼과 저장 정책
+
+서울 열린데이터광장의 [점포-행정동](https://data.seoul.go.kr/dataList/OA-22172/S/1/datasetView.do?tab=A), [추정매출-행정동](https://data.seoul.go.kr/dataList/OA-22175/S/1/datasetView.do?tab=A), [길단위인구-행정동](https://data.seoul.go.kr/dataList/OA-22178/S/1/datasetView.do?tab=A) 컬럼 설명과 공개 API 표본을 확인했습니다. 공통 분기 필드는 `STDR_YYQU_CD`이며, DB의 `quarter_code`에는 `20261`처럼 연도 4자리와 분기 1~4를 저장합니다.
+
+| 테이블 | DB 컬럼 | 원천 필드 | 의미·자료형 |
+| --- | --- | --- | --- |
+| `dong_store_stat` | `store_count` | `SIMILR_INDUTY_STOR_CO` | 전체 점포 수 · `BIGINT` |
+| `dong_store_stat` | `general_store_count` | `STOR_CO` | 일반 점포 수 · `BIGINT` |
+| `dong_store_stat` | `franchise_store_count` | `FRC_STOR_CO` | 프랜차이즈 점포 수 · `BIGINT` |
+| `dong_store_stat` | `opened_store_count`, `closed_store_count` | `OPBIZ_STOR_CO`, `CLSBIZ_STOR_CO` | 개업·폐업 점포 수 · `BIGINT` |
+| `dong_store_stat` | `opening_rate`, `closure_rate` | `OPBIZ_RT`, `CLSBIZ_RT` | 개업률·폐업률(%) · `NUMERIC` |
+| `dong_sales_stat` | `monthly_sales_amount`, `monthly_sales_count` | `THSMON_SELNG_AMT`, `THSMON_SELNG_CO` | 당월 추정매출액(원)·매출 건수 · `BIGINT` |
+| `dong_sales_stat` | `weekday_sales_amount`, `weekend_sales_amount` | `MDWK_SELNG_AMT`, `WKEND_SELNG_AMT` | 주중·주말 매출액(원) · `BIGINT` |
+| `dong_foot_traffic_stat` | `total_foot_traffic` | `TOT_FLPOP_CO` | 전체 추정 유동인구 · `NUMERIC` |
+| `dong_foot_traffic_stat` | `male_foot_traffic`, `female_foot_traffic` | `ML_FLPOP_CO`, `FML_FLPOP_CO` | 남성·여성 추정 유동인구 · `NUMERIC` |
+
+- 점포·매출의 기본키는 `(dong_code, industry_code, quarter_code)`, 유동인구는 `(dong_code, quarter_code)`입니다. 행정동·업종 및 수집 출처인 `source_batch_id`는 기존 기준 테이블을 참조하며 필수 값입니다. 추가 인덱스는 만들지 않고 기본키 인덱스를 사용합니다.
+- [매출 API 표본](http://openapi.seoul.go.kr:8088/sample/json/VwsmAdstrdSelngW/1/5/)에는 7,081,380,548원처럼 32비트 정수 범위를 넘는 금액이 있습니다. 정수 의미 값도 `.0`이나 지수 표기로 반환됩니다. 원천의 ‘당월’ 필드명과 분기 기준을 그대로 유지하며 월평균으로 환산하지 않습니다.
+- [유동인구 API 표본](http://openapi.seoul.go.kr:8088/sample/json/VwsmAdstrdFlpopW/1/5/)에서 확인한 값은 정수였지만, 공식 스키마에 정수 보장이나 반올림 규칙은 없습니다. 비율·추정 유동인구는 소수부를 임의로 손실시키지 않도록 고정 정밀도·소수 자릿수 없는 `NUMERIC`을 선택했습니다.
+- 모든 측정값은 NULL을 허용하고 기본값을 두지 않습니다. 누락·빈 값을 임의로 `0`으로 채우지 않으며 실제 `0`과 구분합니다. 저장되는 값은 유한한 0 이상 수여야 합니다.
+- 개업률·폐업률의 100% 초과를 허용하고, 전체·세부 수치의 합계 일치를 강제하지 않습니다. 유동인구 표본에서도 전체와 성별 합계가 1명 차이 나는 경우를 확인했습니다.
 
 ### 현재 진행 상황
 
@@ -603,14 +625,14 @@ Flyway는 테이블, 제약조건, 인덱스 등 DB 스키마 변경을 관리�
 | 주요 DB 테이블 및 관계 1차 설계        | 완료          |
 | DB 스키마 통합 검토                    | 1차 검토 완료 |
 | 전체 데이터 사전·제약조건 확정         | 예정          |
-| Flyway 서비스용 테이블 마이그레이션    | V2 완료, V3 이후 예정 |
+| Flyway 서비스용 테이블 마이그레이션    | V3 완료, V4 이후 예정 |
 | 정식 ETL 수집·검증·적재                | 구현 전       |
 | PostGIS 기반 서비스 공간 조회          | 구현 전       |
 | 창업 환경 점수 평가 알고리즘           | 구현 전       |
 | Spring Boot REST API                   | 구현 전       |
 | React 기반 실제 서비스 화면            | 구현 전       |
 
-현재 V2 기준 테이블과 제약조건까지 구현했습니다. 통계·카페 테이블과 정식 ETL은 후속 단계에서 구현할 예정입니다.
+현재 V3 행정동 통계 테이블과 제약조건까지 구현했습니다. 카페 테이블과 정식 ETL은 후속 단계에서 구현할 예정입니다.
 
 ## 배포 구조
 
@@ -761,7 +783,7 @@ docker compose up -d --wait db # 다시 실행
 docker compose restart db     # 재시작, 데이터 유지
 ```
 
-일반적인 종료·재시작에는 볼륨을 삭제하는 옵션을 사용하지 않습니다. 아래 Backend의 `db` 프로필로 V1·V2를 적용한 후 재시작 전후에 `flyway_schema_history`를 조회하면 마이그레이션 이력의 유지를 확인할 수 있습니다. 기존 Testcontainers 통합 테스트는 Compose와 독립된 일회용 DB를 계속 사용합니다.
+일반적인 종료·재시작에는 볼륨을 삭제하는 옵션을 사용하지 않습니다. 아래 Backend의 `db` 프로필로 V1·V2·V3를 적용한 후 재시작 전후에 `flyway_schema_history`를 조회하면 마이그레이션 이력의 유지를 확인할 수 있습니다. 기존 Testcontainers 통합 테스트는 Compose와 독립된 일회용 DB를 계속 사용합니다.
 
 ### 2. Frontend
 
@@ -794,15 +816,16 @@ cd backend
 ./gradlew bootRun --args='--spring.profiles.active=db'
 ```
 
-`application-db.yaml`은 기존 `DB_JDBC_URL`, `DB_USER`, `DB_PASSWORD`를 사용합니다. `db` 프로필 시작 시 Flyway가 V1·V2를 순서대로 적용하고, 이미 적용된 마이그레이션은 다시 실행하지 않습니다. Compose DB는 PostGIS 확장을 포함합니다. 외부 로컬 DB를 직접 준비하는 경우에는 `backend/.env.example`을 참고하고 PostGIS 설치 및 확장 생성 권한을 확인합니다.
+`application-db.yaml`은 기존 `DB_JDBC_URL`, `DB_USER`, `DB_PASSWORD`를 사용합니다. `db` 프로필 시작 시 Flyway가 V1·V2·V3를 순서대로 적용하고, 이미 적용된 마이그레이션은 다시 실행하지 않습니다. Compose DB는 PostGIS 확장을 포함합니다. 외부 로컬 DB를 직접 준비하는 경우에는 `backend/.env.example`을 참고하고 PostGIS 설치 및 확장 생성 권한을 확인합니다.
 
-Backend를 실행한 후 저장소 루트에서 DB에 접속해 다음을 확인합니다. 이력은 버전 `1`, `2`가 모두 `success = true`여야 하며, 테이블 조회는 4행을 반환해야 합니다.
+Backend를 실행한 후 저장소 루트에서 DB에 접속해 다음을 확인합니다. 이력은 버전 `1`, `2`, `3`이 모두 `success = true`여야 하며, 테이블 조회는 7행을 반환해야 합니다.
 
 ```sql
 SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;
 SELECT tablename FROM pg_tables
 WHERE schemaname = 'public'
-  AND tablename IN ('etl_batch', 'district', 'administrative_dong', 'service_industry')
+  AND tablename IN ('etl_batch', 'district', 'administrative_dong', 'service_industry',
+                    'dong_store_stat', 'dong_sales_stat', 'dong_foot_traffic_stat')
 ORDER BY tablename;
 ```
 
