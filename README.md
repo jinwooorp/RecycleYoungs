@@ -579,14 +579,14 @@ ETL은 Node.js·TypeScript 기반으로 구현하며, Zod를 이용해 데이터
 
 DB 스키마는 Flyway를 이용해 관리합니다.
 
-현재 `V1__enable_postgis.sql`만 구현되어 있으며, PostGIS 확장을 활성화하는 역할을 합니다.
+`V1__enable_postgis.sql`은 PostGIS 확장을 활성화하고, `V2__create_core_tables.sql`은 ETL 이력·자치구·행정동·서비스 업종 테이블과 제약조건·인덱스를 생성합니다.
 
 이후에는 다음 순서로 마이그레이션을 구성하는 방향을 검토하고 있습니다.
 
 | 단계 | 주요 내용                              |
 | ---- | -------------------------------------- |
 | V1   | PostGIS 확장 활성화 (구현 완료)        |
-| V2   | ETL 이력 및 행정구역·업종 기준 테이블  |
+| V2   | ETL 이력 및 행정구역·업종 기준 테이블 (구현 완료) |
 | V3   | 점포·추정매출·길단위인구 통계 테이블   |
 | V4   | 개별 카페 및 공간 검색 인덱스          |
 | 이후 | 평가 알고리즘 확정 후 점수 관련 테이블 |
@@ -603,18 +603,18 @@ Flyway는 테이블, 제약조건, 인덱스 등 DB 스키마 변경을 관리�
 | 주요 DB 테이블 및 관계 1차 설계        | 완료          |
 | DB 스키마 통합 검토                    | 1차 검토 완료 |
 | 전체 데이터 사전·제약조건 확정         | 예정          |
-| Flyway 서비스용 테이블 마이그레이션    | 구현 전       |
+| Flyway 서비스용 테이블 마이그레이션    | V2 완료, V3 이후 예정 |
 | 정식 ETL 수집·검증·적재                | 구현 전       |
 | PostGIS 기반 서비스 공간 조회          | 구현 전       |
 | 창업 환경 점수 평가 알고리즘           | 구현 전       |
 | Spring Boot REST API                   | 구현 전       |
 | React 기반 실제 서비스 화면            | 구현 전       |
 
-현재는 데이터 모델과 ETL 정책을 검토한 단계입니다. 전체 데이터 사전과 최종 제약조건을 확정한 후 Flyway 마이그레이션 및 ETL 구현을 진행할 예정입니다.
+현재 V2 기준 테이블과 제약조건까지 구현했습니다. 통계·카페 테이블과 정식 ETL은 후속 단계에서 구현할 예정입니다.
 
 ## 배포 구조
 
-초기에는 Docker Compose를 활용한 컨테이너 기반 배포를 검토하고 있습니다.
+로컬 개발용 PostgreSQL·PostGIS는 Docker Compose로 실행합니다. 서비스 전체의 컨테이너 배포는 후속 단계에서 검토할 예정입니다.
 
 클라우드 환경은 AWS EC2 또는 다른 클라우드 서비스를 후보로 두고 있으며, Nginx와 CI/CD 도입도 고려 중입니다.
 
@@ -674,6 +674,8 @@ flowchart TB
 RecycleYoungs/
 ├── AGENTS.md
 ├── README.md
+├── compose.yaml    # 로컬 개발용 PostgreSQL · PostGIS DB
+├── .env.example    # Compose · Backend · ETL 공통 환경변수 예시
 ├── frontend/       # React · Vite · Tailwind · shadcn/ui
 │   ├── src/
 │   ├── components.json
@@ -702,11 +704,13 @@ RecycleYoungs/
 | `docs/images/` | README 및 문서에 사용할 이미지             | 디렉터리만 생성 |
 | `AGENTS.md`    | AI 코딩 에이전트 작업 지침                 | 작성됨          |
 | `.gitignore`   | Git 추적 제외 파일 및 디렉터리 설정        | 작성됨          |
+| `compose.yaml` | 로컬 PostgreSQL·PostGIS DB 실행 설정        | 구현됨          |
+| `.env.example` | Compose·Backend·ETL 공통 환경변수 예시      | 작성됨          |
 | `README.md`    | 프로젝트 소개 및 개발 관련 안내            | 작성 중         |
 
 각 애플리케이션의 빌드·실행·테스트 기반만 초기화되어 있습니다. 프론트엔드는 준비 화면을 표시하고, 백엔드는 웹 서버를 시작하며, ETL은 초기화 안내 후 종료합니다.
 
-공공데이터 기본 검증과 DB 설계는 진행했지만, 실제 서비스 기능, 정식 공공데이터 연동, Docker Compose 및 CI/CD는 아직 구현하지 않았습니다.
+공공데이터 기본 검증, DB 설계 및 Docker Compose 기반 로컬 PostgreSQL·PostGIS 환경은 구성했습니다. 실제 서비스 기능, 정식 공공데이터 연동, 서비스 전체의 컨테이너 배포 및 CI/CD는 아직 구현하지 않았습니다.
 
 ## 실행 방법
 
@@ -714,8 +718,50 @@ RecycleYoungs/
 
 - Node.js **24 LTS**, npm **11**: `frontend/`, `etl/`에서 각각 `nvm use`와 `npm ci`를 실행합니다. 두 프로젝트는 독립적인 잠금 파일을 사용합니다.
 - Java **21**: 백엔드는 포함된 Gradle Wrapper(`./gradlew`, Windows는 `gradlew.bat`)를 사용합니다.
-- PostgreSQL + PostGIS: DB 프로필 실행 시 사용자가 준비한 로컬 개발 DB가 필요합니다.
-- Docker: 백엔드 DB 통합 테스트를 실행할 때만 필요합니다. Compose 설정은 포함하지 않습니다.
+- Docker와 Docker Compose: 로컬 PostgreSQL/PostGIS DB 및 백엔드 DB 통합 테스트에 사용합니다. Backend·ETL은 호스트에서 실행합니다.
+
+#### 로컬 DB 준비
+
+저장소 루트에서 실행합니다.
+
+```bash
+cp .env.example .env
+# .env의 로컬 DB 이름·사용자·비밀번호·포트를 설정합니다.
+docker compose config --quiet
+docker compose up -d --wait db
+docker compose ps db
+```
+
+DB 이미지는 Testcontainers와 동일한 `postgis/postgis:17-3.5`입니다. `DB_PORT`의 기본값은 `5432`이며 `127.0.0.1`에만 공개합니다. 이미 사용 중인 포트이면 `.env`의 `DB_PORT`를 변경합니다. 실제 `.env`는 Git에서 제외되며, 예시 비밀번호는 로컬 개발용입니다.
+
+Backend·ETL을 실행할 셸마다 저장소 루트의 환경변수를 먼저 내보냅니다. 두 연결 URL은 같은 `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_PORT`에서 구성됩니다. 비밀번호에 URL 예약 문자를 사용한다면 `DATABASE_URL`의 비밀번호 부분을 URL 인코딩한 값으로 지정합니다.
+
+```bash
+set -a
+source .env
+set +a
+```
+
+DB에 접속하거나 PostgreSQL·PostGIS 동작을 확인하려면 다음 명령을 사용합니다. `psql`은 컨테이너에 포함되어 있습니다. 호스트 DB 도구에서는 `127.0.0.1`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`를 사용합니다.
+
+```bash
+docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+```
+
+```sql
+SELECT version(), PostGIS_Version();
+SELECT ST_SRID(ST_SetSRID(ST_MakePoint(127, 37), 4326));
+```
+
+`\q`로 접속을 종료합니다. DB 데이터는 named volume `recycleyoungs_postgres_data`에 유지됩니다. 초기화된 볼륨에서는 `.env`의 DB 이름·사용자·비밀번호를 바꿔도 기존 DB 계정과 데이터가 자동 변경되지 않습니다.
+
+```bash
+docker compose stop db        # 종료, 컨테이너·볼륨 유지
+docker compose up -d --wait db # 다시 실행
+docker compose restart db     # 재시작, 데이터 유지
+```
+
+일반적인 종료·재시작에는 볼륨을 삭제하는 옵션을 사용하지 않습니다. 아래 Backend의 `db` 프로필로 V1·V2를 적용한 후 재시작 전후에 `flyway_schema_history`를 조회하면 마이그레이션 이력의 유지를 확인할 수 있습니다. 기존 Testcontainers 통합 테스트는 Compose와 독립된 일회용 DB를 계속 사용합니다.
 
 ### 2. Frontend
 
@@ -741,17 +787,26 @@ cd backend
 
 기본 포트는 **8080**입니다. 기본 실행은 DB 없이 가능하며, 서비스 API는 없으므로 루트 경로의 **404 응답은 정상**입니다. DB 접근 기술(JPA, QueryDSL, JDBC/JdbcClient 등)은 아직 선택하지 않았습니다. Flyway는 마이그레이션 전용 연결을 사용합니다.
 
-DB를 사용할 때는 `backend/.env.example`을 `.env`로 복사하고 로컬 개발 DB 정보를 수정한 뒤 다음과 같이 실행합니다. Spring Boot는 `.env`를 자동으로 읽지 않으므로 셸에 내보냅니다.
+Compose DB를 사용할 때는 위에서 루트 `.env`를 셸에 내보낸 뒤 실행합니다. Spring Boot는 `.env`를 자동으로 읽지 않습니다.
 
 ```bash
 cd backend
-set -a
-source .env
-set +a
 ./gradlew bootRun --args='--spring.profiles.active=db'
 ```
 
-`db` 프로필은 시작 시 Flyway 마이그레이션으로 PostGIS 확장을 활성화합니다. DB 서버에 PostGIS가 설치되어 있어야 하며, 접속 계정에 확장 생성 권한이 필요합니다. 이미 확장이 있으면 유지합니다. 공유·운영 DB 대신 준비한 로컬 개발 DB를 사용합니다. 서비스용 테이블과 조회 코드는 아직 없습니다.
+`application-db.yaml`은 기존 `DB_JDBC_URL`, `DB_USER`, `DB_PASSWORD`를 사용합니다. `db` 프로필 시작 시 Flyway가 V1·V2를 순서대로 적용하고, 이미 적용된 마이그레이션은 다시 실행하지 않습니다. Compose DB는 PostGIS 확장을 포함합니다. 외부 로컬 DB를 직접 준비하는 경우에는 `backend/.env.example`을 참고하고 PostGIS 설치 및 확장 생성 권한을 확인합니다.
+
+Backend를 실행한 후 저장소 루트에서 DB에 접속해 다음을 확인합니다. 이력은 버전 `1`, `2`가 모두 `success = true`여야 하며, 테이블 조회는 4행을 반환해야 합니다.
+
+```sql
+SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;
+SELECT tablename FROM pg_tables
+WHERE schemaname = 'public'
+  AND tablename IN ('etl_batch', 'district', 'administrative_dong', 'service_industry')
+ORDER BY tablename;
+```
+
+기존 마이그레이션 파일의 수정이나 DB 초기화 없이 적용·검증합니다. 아직 서비스 조회 코드는 없습니다.
 
 ### 4. ETL
 
@@ -766,7 +821,7 @@ npm start
 
 개발 실행은 TypeScript를 직접 실행하고, 빌드는 `dist/`에 JavaScript를 생성합니다. `npm start`는 빌드된 진입점을 실행합니다. 현재는 초기화 안내 후 종료하며 외부 API나 DB에 접속하지 않습니다.
 
-`etl/.env.example`을 `.env`로 복사하면 `npm run dev`와 `npm start`가 Node.js의 환경변수 파일 기능으로 읽습니다. 향후 DB 사용 시 `DATABASE_URL`, `DB_POOL_MAX`, `DB_CONNECTION_TIMEOUT_MS`를 Zod로 검증하고 `pg.Pool`을 생성하는 기반이 포함되어 있습니다. 연결 정보가 실제로 사용될 때 검증하며, 연결 풀 생성만으로 DB에 접속하지 않습니다.
+Compose DB를 공유하려면 위에서 루트 `.env`를 셸에 내보낸 뒤 실행합니다. 내보낸 `DATABASE_URL`은 기존 `etl/.env`보다 우선하므로 Backend와 같은 DB를 사용합니다. ETL만 별도로 설정하려면 `etl/.env.example`을 `.env`로 복사할 수 있으며, `npm run dev`와 `npm start`가 Node.js의 환경변수 파일 기능으로 읽습니다. 향후 DB 사용 시 `DATABASE_URL`, `DB_POOL_MAX`, `DB_CONNECTION_TIMEOUT_MS`를 Zod로 검증하고 `pg.Pool`을 생성하는 기반이 포함되어 있습니다. 연결 정보가 실제로 사용될 때 검증하며, 연결 풀 생성만으로 DB에 접속하지 않습니다.
 
 ### 5. 빌드·테스트·품질 검사
 
