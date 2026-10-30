@@ -1,6 +1,16 @@
-# 기본 프로필은 DB 연결 없이 웹 서버를 실행할 수 있도록 마이그레이션을 비활성화한다.
+# 기본 실행은 DB 연결 없이 웹 서버를 구성하며 마이그레이션을 비활성화한다.
 spring:
   application:
     name: recycleyoungs
   flyway:
     enabled: false
+
+---
+# JDBC 의존성이 있어도 db 프로필이 없으면 DataSource·JdbcClient를 생성하지 않는다.
+spring:
+  config:
+    activate:
+      on-profile: "!db"
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration

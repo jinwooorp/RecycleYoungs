@@ -37,7 +37,7 @@
 
 창업 환경 점수는 실제 창업 성공 확률이나 예상 수익을 의미하지 않으며, 창업 후보지를 검토할 때 참고할 수 있는 자체 평가 지표입니다.
 
-현재 개발 환경, Flyway V1~V4 및 행정동·자치구 경계·서비스 업종·점포·추정매출·유동인구 통계 ETL을 구현했습니다. 로컬 개발 DB에는 행정동 425개·자치구 25개·서비스 업종 100개·점포 통계 211,832행·추정매출 통계 100,431행·유동인구 통계 9,350행을 적재했습니다. V4 카페 테이블은 개발 DB 적용을 완료했습니다. 카페 ETL은 실제 API 검증과 로컬 개발 DB 21,996건 게시(`PUBLISHED`)를 완료했으며, 재실행 `SKIPPED`와 기존 게시 출처 보존을 확인했습니다. 실제 서비스 기능은 아직 구현하지 않았습니다.
+현재 개발 환경, Flyway V1~V4 및 행정동·자치구 경계·서비스 업종·점포·추정매출·유동인구 통계 ETL을 구현했습니다. 로컬 개발 DB에는 행정동 425개·자치구 25개·서비스 업종 100개·점포 통계 211,832행·추정매출 통계 100,431행·유동인구 통계 9,350행을 적재했습니다. V4 카페 테이블은 개발 DB 적용을 완료했습니다. 카페 ETL은 실제 API 검증과 로컬 개발 DB 21,996건 게시(`PUBLISHED`)를 완료했으며, 재실행 `SKIPPED`와 기존 게시 출처 보존을 확인했습니다. 백엔드 행정구역 조회 API를 구현했으며, 상권 통계·주변 카페 조회·점수 기능은 후속 단계입니다.
 
 ## 화면 미리보기
 
@@ -286,7 +286,7 @@
 | UI / Styling             | Tailwind CSS, shadcn/ui                   | UI 컴포넌트 및 스타일링                  |
 | 지도                     | Kakao Maps JavaScript SDK                 | 지도 표시 및 위치 기반 기능              |
 | Backend                  | Java 21, Spring Boot 4, Spring MVC        | REST API 및 비즈니스 로직 처리           |
-| DB 조회                  | JPA, QueryDSL, JDBC, JdbcClient (검토 중) | 데이터 접근 및 조회                      |
+| DB 조회                  | Spring JDBC, JdbcClient                    | 데이터 접근 및 조회                      |
 | Database                 | PostgreSQL, PostGIS                       | 데이터 저장 및 공간 데이터 처리          |
 | DB 마이그레이션          | Flyway                                    | 데이터베이스 스키마 및 변경 이력 관리    |
 | ETL                      | TypeScript, Node.js 24 LTS                | 공공데이터 수집·검증·변환·적재           |
@@ -664,12 +664,12 @@ Flyway는 테이블, 제약조건, 인덱스 등 DB 스키마 변경을 관리�
 | 추정매출 통계 ETL                      | 구현·실제 적재 완료(100,431행) |
 | 유동인구 통계 ETL                      | 구현·실제 적재 완료(9,350행) |
 | 카페 ETL                                | 구현·실제 API 검증·적재 완료(21,996건), 재실행 SKIPPED 확인 |
-| PostGIS 기반 서비스 공간 조회          | 구현 전       |
+| PostGIS 기반 서비스 공간 조회          | 주변 행정구역 조회 구현 (`/api/v1/regions/nearby`) |
 | 창업 환경 점수 평가 알고리즘           | 구현 전       |
-| Spring Boot REST API                   | 구현 전       |
+| Spring Boot REST API                   | 행정구역 목록·GeoJSON 경계·주변 조회 구현 |
 | React 기반 실제 서비스 화면            | 구현 전       |
 
-Flyway V1~V4와 경계·서비스 업종·점포·추정매출·유동인구 통계 ETL을 구현하고, 로컬 개발 DB에 행정동 425개·자치구 25개·업종 100개·점포 통계 211,832행·추정매출 통계 100,431행·유동인구 통계 9,350행을 적재했습니다. V4 카페 테이블은 개발 DB 적용을 완료했습니다. 카페 ETL도 실제 인증 API 검증·21,996건 게시와 재실행 `SKIPPED` 확인을 완료했습니다. 서비스 기능 구현은 남아 있습니다.
+Flyway V1~V4와 경계·서비스 업종·점포·추정매출·유동인구 통계 ETL을 구현하고, 로컬 개발 DB에 행정동 425개·자치구 25개·업종 100개·점포 통계 211,832행·추정매출 통계 100,431행·유동인구 통계 9,350행을 적재했습니다. V4 카페 테이블은 개발 DB 적용을 완료했습니다. 카페 ETL도 실제 인증 API 검증·21,996건 게시와 재실행 `SKIPPED` 확인을 완료했습니다. 행정구역 조회 API를 구현했으며, 통계·주변 카페 조회와 화면 연동은 남아 있습니다.
 
 ## 배포 구조
 
@@ -769,7 +769,7 @@ RecycleYoungs/
 
 각 애플리케이션의 빌드·실행·테스트 기반이 구성되어 있습니다. 프론트엔드는 준비 화면을 표시하고, 백엔드는 웹 서버와 Flyway V1~V4 적용을 지원합니다. ETL은 인자 없이 실행하면 사용법을 표시하며, `boundaries` 명령으로 행정동·자치구 경계를, `industries` 명령으로 서비스 업종 기준 데이터를, `stores` 명령으로 점포 통계를, `sales` 명령으로 추정매출 통계를, `foot-traffic` 명령으로 유동인구 통계를 적재할 수 있습니다. `cafes` 명령은 공식 분류와 서울 전체 API 응답 검증 후 카페를 적재합니다.
 
-공공데이터 기본 검증, Flyway V1~V4 구현, Docker Compose 기반 로컬 PostgreSQL·PostGIS 환경 및 경계·업종·점포·추정매출·유동인구 통계 ETL의 실제 적재(행정동 425개·자치구 25개·업종 100개·점포 통계 211,832행·추정매출 통계 100,431행·유동인구 통계 9,350행)를 완료했습니다. V4 개발 DB 적용과 카페 ETL의 실제 API 검증·21,996건 적재·재실행 `SKIPPED` 확인도 완료했습니다. 실제 서비스 기능, 서비스 전체의 컨테이너 배포 및 CI/CD는 남아 있습니다.
+공공데이터 기본 검증, Flyway V1~V4 구현, Docker Compose 기반 로컬 PostgreSQL·PostGIS 환경 및 경계·업종·점포·추정매출·유동인구 통계 ETL의 실제 적재(행정동 425개·자치구 25개·업종 100개·점포 통계 211,832행·추정매출 통계 100,431행·유동인구 통계 9,350행)를 완료했습니다. V4 개발 DB 적용과 카페 ETL의 실제 API 검증·21,996건 적재·재실행 `SKIPPED` 확인도 완료했습니다. 행정구역 조회 API를 구현했으며, 나머지 서비스 기능·전체 컨테이너 배포·CI/CD는 남아 있습니다.
 
 ## 실행 방법
 
@@ -839,7 +839,7 @@ npm run dev
 
 [http://localhost:5173](http://localhost:5173)에서 준비 화면을 확인합니다. `npm run build`는 타입 검사 후 정적 파일을 `dist/`에 생성하고, `npm run preview`로 빌드 결과를 확인할 수 있습니다.
 
-`frontend/.env.example`을 `.env`로 복사하면 API 프록시 대상을 바꿀 수 있습니다. 생략하면 `/api` 요청을 `http://localhost:8080`으로 전달합니다. 현재 API 호출이나 서비스 엔드포인트는 구현하지 않았습니다. `API_PROXY_TARGET`은 Vite 개발 서버 전용입니다. 프론트엔드의 `VITE_*` 변수는 브라우저에 공개되므로 비밀정보를 넣지 않습니다.
+`frontend/.env.example`을 `.env`로 복사하면 API 프록시 대상을 바꿀 수 있습니다. 생략하면 `/api` 요청을 `http://localhost:8080`으로 전달합니다. 프론트엔드의 실제 API 호출은 아직 구현하지 않았습니다. `API_PROXY_TARGET`은 Vite 개발 서버 전용입니다. 프론트엔드의 `VITE_*` 변수는 브라우저에 공개되므로 비밀정보를 넣지 않습니다.
 
 Tailwind CSS 4와 shadcn/ui 설정 및 기본 Button 컴포넌트가 포함되어 있습니다. 추가 UI는 `frontend/`에서 `npx shadcn@latest add <컴포넌트>`로 설치할 수 있습니다.
 
@@ -850,7 +850,7 @@ cd backend
 ./gradlew bootRun
 ```
 
-기본 포트는 **8080**입니다. 기본 실행은 DB 없이 가능하며, 서비스 API는 없으므로 루트 경로의 **404 응답은 정상**입니다. DB 접근 기술(JPA, QueryDSL, JDBC/JdbcClient 등)은 아직 선택하지 않았습니다. Flyway는 마이그레이션 전용 연결을 사용합니다.
+기본 포트는 **8080**입니다. 기본 실행은 DataSource·JdbcClient·Flyway 없이 가능하며, 행정구역 API는 `db` 프로필에서만 활성화됩니다. 루트 경로의 **404 응답은 정상**입니다. DB 조회 기반은 Spring JDBC·JdbcClient로 구성했습니다.
 
 Compose DB를 사용할 때는 위에서 루트 `.env`를 셸에 내보낸 뒤 실행합니다. Spring Boot는 `.env`를 자동으로 읽지 않습니다.
 
@@ -859,7 +859,39 @@ cd backend
 ./gradlew bootRun --args='--spring.profiles.active=db'
 ```
 
-`application-db.yaml`은 기존 `DB_JDBC_URL`, `DB_USER`, `DB_PASSWORD`를 사용합니다. `db` 프로필 시작 시 Flyway가 V1·V2·V3·V4를 순서대로 적용하고, 이미 적용된 마이그레이션은 다시 실행하지 않습니다. Compose DB는 PostGIS 확장을 포함합니다. 외부 로컬 DB를 직접 준비하는 경우에는 `backend/.env.example`을 참고하고 PostGIS 설치 및 확장 생성 권한을 확인합니다.
+`application-db.yaml`은 기존 `DB_JDBC_URL`, `DB_USER`, `DB_PASSWORD`로 서비스용 Hikari DataSource와 JdbcClient를 구성합니다. Flyway는 같은 DB 설정을 별도의 전용 연결로 사용합니다. 운영에서 계정을 분리하려면 `spring.datasource.*`와 `spring.flyway.*`를 각각 외부 설정으로 지정합니다. `db` 프로필 시작 시 Flyway가 V1·V2·V3·V4를 순서대로 적용하고, 이미 적용된 마이그레이션은 다시 실행하지 않습니다. Compose DB는 PostGIS 확장을 포함합니다. 외부 로컬 DB를 직접 준비하는 경우에는 `backend/.env.example`을 참고하고 PostGIS 설치 및 확장 생성 권한을 확인합니다.
+
+공통 오류 응답은 `application/problem+json`의 ProblemDetail이며 `type`, `title`, `status`, `detail`, `instance`와 서비스 오류 `code`를 제공합니다. 예외 원문·SQL·접속 정보와 거부된 입력값은 포함하지 않습니다.
+
+| 오류 코드 | HTTP 상태 | 처리 대상 |
+| --- | --- | --- |
+| `INVALID_PARAMETER` | 400 | 필수 파라미터 누락·형식·본문 오류, 명시적인 입력 검증 실패 |
+| `REGION_NOT_FOUND` | 404 | 서비스에서 명시적으로 판정한 지역 미존재 |
+| `DATA_NOT_READY` | 503 | 서비스에서 명시적으로 판정한 데이터 준비 전 상태 |
+| `DATABASE_UNAVAILABLE` | 503 | DB 연결·자원 접근 실패, 조회 시간 초과 |
+| `INTERNAL_ERROR` | 500 | SQL 문법·매핑·무결성 오류 및 예상하지 못한 구현 오류 |
+
+미등록 경로의 404와 지원하지 않는 HTTP 메서드의 405 등은 MVC 상태·헤더를 유지하고 서비스 오류 코드는 붙이지 않습니다. 행정구역 조회 API는 아래 계약을 사용합니다.
+
+| GET 엔드포인트 | 응답 |
+| --- | --- |
+| `/api/v1/districts` | `{items:[{districtCode,districtName}]}` |
+| `/api/v1/districts/{districtCode}/dongs` | `{items:[{dongCode,districtCode,dongName,labelPoint}]}` |
+| `/api/v1/districts/{districtCode}/boundary` | 자치구 GeoJSON Feature |
+| `/api/v1/dongs/{dongCode}/boundary` | 행정동 GeoJSON Feature |
+| `/api/v1/regions/nearby` | `{boundaryBatch,districts:[{districtCode,districtName,containsCenter}],dongs:[{dongCode,districtCode,dongName,containsCenter}]}` |
+
+- 목록은 코드 오름차순입니다. 구 코드는 ASCII 숫자 5자리, 동 코드는 8자리 문자열로 검증하며 선행 0을 보존합니다.
+- 행정동 목록의 `labelPoint`는 저장된 `administrative_dong.label_point`를 PostGIS에서 생성한 WGS84 GeoJSON Point 객체(`{type:"Point",coordinates:[경도,위도]}`)입니다. 경계 중심으로 재계산하지 않습니다.
+- `SEOUL_DONG_BOUNDARY`, `SHAPEFILE`, `SEOUL`, `scope_code IS NULL`, `PUBLISHED`, `published_at IS NOT NULL`을 모두 충족하는 배치 중 `published_at → started_at → batch_id` 내림차순의 첫 배치를 사용합니다. 그 배치를 참조하는 구·동만 노출하며, 동의 부모 구도 같은 게시본이어야 합니다. `SKIPPED`·실패·과거 출처는 제외합니다.
+- 경계 응답은 `application/geo+json`이며 `type="Feature"`, 문자열 `id`, PostGIS에서 생성한 WGS84(EPSG:4326) `geometry`를 제공합니다. `properties`에는 `regionType`, `regionCode`, `regionName`, `districtCode`, `boundaryBatch:{batchId,publishedAt}`을 포함합니다. 좌표는 경도·위도 순서이고 게시 시각은 ISO 8601 형식입니다.
+- 형식 오류는 DB 접근 전에 400, 현재 게시본에 없는 지역은 404, 정상 게시 배치가 없으면 503입니다. 최신 게시 배치를 참조하는 구·동 경계 행이 모두 없을 때도 `DATA_NOT_READY`(503)로 처리하고 과거 배치로 대체하지 않습니다. 경계 행이 있는 게시본에서 존재하는 구에 현재 행정동이 없거나 검색 반경과 겹치지 않으면 정상 빈 목록입니다. 배치 선택과 지역 조회는 읽기 전용 `REPEATABLE_READ` 트랜잭션에서 처리합니다.
+
+주변 행정구역 조회는 필수 `longitude`·`latitude`에 WGS84 경도 `[-180,180]`·위도 `[-90,90]`를 받습니다. `radiusM`은 생략 시 500m이며 `1~1000` 범위의 소수를 허용합니다. 좌표·반경의 NaN·무한대·빈 값과 단일 파라미터 중복은 400입니다.
+
+`districtCodes=11110&districtCodes=11140`처럼 구 코드를 반복해 선택할 수 있습니다. 생략하면 반경 내 모든 현행 서울 지역을 검색하고 중복 코드는 제거합니다. 쉼표 목록이나 잘못된 코드는 400, 현재 게시본에 없는 지정 구는 반경과 무관하게 404입니다. 구 선택은 반경을 확장하지 않으며 행정동은 반경·선택 구·동 경계의 실제 교집합으로 판정합니다.
+
+거리는 geography 기반 미터 단위로 계산하고 반경 접촉을 포함합니다. `containsCenter`는 해당 지역 경계의 내부 또는 경계 위에 중심점이 있는지를 뜻합니다. 구·동 목록은 각각 코드순이며 응답에 최신 `boundaryBatch:{batchId,publishedAt}`을 포함합니다. 게시본이 있어도 공간적으로 겹치지 않으면 서울 밖 좌표를 포함해 200과 두 빈 목록을 반환합니다.
 
 Backend를 실행한 후 저장소 루트에서 DB에 접속해 다음을 확인합니다. V4까지 적용한 DB의 이력은 버전 `1`, `2`, `3`, `4`가 모두 `success = true`여야 하며, 테이블 조회는 8행을 반환해야 합니다. 아래 명령은 확인 방법이며 이번 카페 ETL 작업에서 개발 DB를 갱신하지 않습니다.
 
@@ -872,7 +904,7 @@ WHERE schemaname = 'public'
 ORDER BY tablename;
 ```
 
-기존 마이그레이션 파일의 수정이나 DB 초기화 없이 적용·검증합니다. 아직 서비스 조회 코드는 없습니다.
+기존 마이그레이션 파일의 수정이나 DB 초기화 없이 적용·검증합니다.
 
 ### 4. ETL
 
@@ -1138,10 +1170,12 @@ SELECT c.* FROM cafe_store c JOIN latest b ON c.source_batch_id = b.batch_id;
 | Frontend / ETL | `npm run lint`              | ESLint                                                              |
 | Frontend / ETL | `npm run format:check`      | Prettier 검사                                                       |
 | Backend        | `./gradlew build`           | Java 컴파일 · JUnit/Spring Boot Test · Spotless 검사 · 실행 JAR     |
-| Backend        | `./gradlew integrationTest` | Docker의 별도 PostgreSQL/PostGIS 컨테이너에서 Flyway·공간 확장 검증 |
+| Backend        | `./gradlew integrationTest` | 별도 PostgreSQL/PostGIS 컨테이너에서 서비스·Flyway 연결, 스키마·공간 확장 검증 |
 | ETL            | `npm run build`             | TypeScript 빌드                                                     |
 | ETL            | `npm test`                  | Vitest 환경설정·CSV/ZIP·경계·업종·통계·카페 API 검증 테스트     |
 
 `npm run test:watch`로 테스트 감시 모드를 사용합니다. 포맷 수정은 TypeScript 프로젝트의 `npm run format`, Java의 `./gradlew spotlessApply`로 수행합니다. 백엔드 통합 테스트는 일반 `build`와 분리되어 있으며 Docker가 실행 중이어야 합니다.
+
+백엔드 전체 검증은 `backend/`에서 `./gradlew build integrationTest`로 실행합니다. 단위·MVC 테스트는 기본 프로필의 DB 없는 기동, 코드 검증·응답 계약과 공통 오류를 검증합니다. 행정구역 통합 테스트는 최신 게시본·과거 출처 제외·GeoJSON·게시 중 조회 일관성과 주변 검색의 복수 구 교차·중심점 경계·반경 접촉·구 필터·빈 결과도 확인합니다. 통합 테스트는 서비스 DataSource와 Flyway 설정을 모두 일회용 PostGIS 컨테이너로 덮어쓰며, 로컬 개발 DB나 실제 공공 API에 접근하지 않습니다.
 
 환경변수 예시에는 로컬 개발용 값만 포함합니다. 실제 비밀번호가 포함된 `.env` 파일은 Git에서 제외됩니다.

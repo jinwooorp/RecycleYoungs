@@ -3,15 +3,21 @@ package kr.ac.recycleyoungs;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import javax.sql.DataSource;
+import kr.ac.recycleyoungs.region.RegionController;
+import kr.ac.recycleyoungs.region.RegionRepository;
+import kr.ac.recycleyoungs.region.RegionService;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.servlet.DispatcherServlet;
 
 /** DB 환경변수 없이도 기본 프로필의 웹 서버 기반이 시작되는지 확인한다. */
 @SpringBootTest
+@ActiveProfiles("default")
 class RecycleYoungsApplicationTests {
 
   @Autowired private ApplicationContext context;
@@ -22,5 +28,9 @@ class RecycleYoungsApplicationTests {
     assertThat(context.getBean(DispatcherServlet.class)).isNotNull();
     assertThat(context.getBeansOfType(DataSource.class)).isEmpty();
     assertThat(context.getBeansOfType(Flyway.class)).isEmpty();
+    assertThat(context.getBeansOfType(JdbcClient.class)).isEmpty();
+    assertThat(context.getBeansOfType(RegionController.class)).isEmpty();
+    assertThat(context.getBeansOfType(RegionService.class)).isEmpty();
+    assertThat(context.getBeansOfType(RegionRepository.class)).isEmpty();
   }
 }

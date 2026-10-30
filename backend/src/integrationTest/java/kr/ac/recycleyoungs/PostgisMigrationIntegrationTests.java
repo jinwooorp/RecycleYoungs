@@ -39,7 +39,10 @@ class PostgisMigrationIntegrationTests {
 
   @DynamicPropertySource
   static void configureDatabase(DynamicPropertyRegistry registry) {
-    // 외부 환경변수 대신 컨테이너 접속 정보를 db 프로필의 Flyway 연결에 주입한다.
+    // 서비스 연결도 컨테이너로 고정해 db 프로필이 개발 DB에 접근하지 않도록 한다.
+    registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
+    registry.add("spring.datasource.username", POSTGRES::getUsername);
+    registry.add("spring.datasource.password", POSTGRES::getPassword);
     registry.add("spring.flyway.url", POSTGRES::getJdbcUrl);
     registry.add("spring.flyway.user", POSTGRES::getUsername);
     registry.add("spring.flyway.password", POSTGRES::getPassword);
