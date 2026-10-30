@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import {
   parseBoundaryArguments,
+  parseFootTrafficArguments,
   parseIndustryArguments,
   parseSalesArguments,
   parseStoreArguments,
@@ -15,6 +16,7 @@ describe('CLI dispatch', () => {
     ['industries', '--expected-industries', '1'],
     ['stores', '--expected-rows', '1'],
     ['sales', '--expected-rows', '1'],
+    ['foot-traffic', '--expected-rows', '1'],
   ])(
     'dispatches %s before showing help without opening a DB connection',
     (...args) => {
@@ -263,5 +265,62 @@ describe('sales statistics CLI', () => {
       parseSalesArguments(['sales', '--expected-industries', '63']),
     ).toThrow();
     expect(() => parseSalesArguments(['unknown'])).toThrow();
+  });
+});
+
+describe('유동인구 통계 CLI', () => {
+  it('입력 버전별 경로와 전체 행 수를 받고 현재 원본 건수를 고정하지 않는다', () => {
+    expect(
+      parseFootTrafficArguments([
+        'foot-traffic',
+        '--source',
+        'population.zip',
+        '--expected-rows',
+        '9350',
+      ]),
+    ).toEqual({ source: 'population.zip', expectedRows: 9350 });
+    expect(
+      parseFootTrafficArguments([
+        'foot-traffic',
+        '--source',
+        'next.csv',
+        '--expected-rows',
+        '2',
+      ]),
+    ).toEqual({ source: 'next.csv', expectedRows: 2 });
+    expect(() =>
+      parseFootTrafficArguments(['foot-traffic', '--source', 'population.csv']),
+    ).toThrow();
+    expect(() =>
+      parseFootTrafficArguments(['foot-traffic', '--expected-rows', '2']),
+    ).toThrow();
+  });
+
+  it.each(['0', '-1', '1.1', 'NaN', '9007199254740992'])(
+    '잘못된 예상 행 수 %s를 거부한다',
+    (count) => {
+      expect(() =>
+        parseFootTrafficArguments([
+          'foot-traffic',
+          '--source',
+          'population.csv',
+          '--expected-rows',
+          count,
+        ]),
+      ).toThrow();
+    },
+  );
+
+  it('DB 설정 없이 도움말을 표시하고 다른 명령의 옵션은 거부한다', () => {
+    expect(parseFootTrafficArguments([])).toBeNull();
+    expect(parseFootTrafficArguments(['--help'])).toBeNull();
+    expect(() =>
+      parseFootTrafficArguments([
+        'foot-traffic',
+        '--expected-industries',
+        '100',
+      ]),
+    ).toThrow();
+    expect(() => parseFootTrafficArguments(['unknown'])).toThrow();
   });
 });
