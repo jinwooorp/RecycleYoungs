@@ -126,6 +126,18 @@ export function decodeCsv(bytes: Uint8Array): {
   }
 }
 
+/** UTF-16 서로게이트 쌍을 자르지 않고 CSV 문자열을 스트림에 공급할 크기로 나눕니다. */
+export function* csvTextChunks(text: string): Generator<string> {
+  for (let offset = 0; offset < text.length;) {
+    let end = Math.min(offset + 65536, text.length);
+    // 쌍을 나누면 스트림의 UTF-8 변환에서 원래 문자가 대체 문자로 손상될 수 있습니다.
+    const last = text.charCodeAt(end - 1);
+    if (last >= 0xd800 && last <= 0xdbff) end += 1;
+    yield text.slice(offset, end);
+    offset = end;
+  }
+}
+
 /** CSV 또는 CSV 한 개를 담은 ZIP의 원본 바이트와 출처를 반환합니다. 디스크에 압축을 풀지 않습니다. */
 export async function readCsvInput(path: string): Promise<{
   bytes: Uint8Array;

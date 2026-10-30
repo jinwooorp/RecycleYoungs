@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import type { Pool } from 'pg';
-import { assertLocalDatabaseUrl, safeMessage } from './database.js';
+import {
+  assertLocalDatabaseUrl,
+  rollbackOrDiscard,
+  safeMessage,
+} from './database.js';
 import {
   readStoreSource,
   StoreSourceError,
@@ -220,14 +224,7 @@ export async function importStoreStats(
     };
   } catch (error) {
     // 스테이징과 일부 성공한 Upsert를 함께 롤백해 이전 정상 데이터와 출처를 보존합니다.
-    if (transaction) {
-      try {
-        await client.query('ROLLBACK');
-      } catch {
-        client.release(true);
-        released = true;
-      }
-    }
+    if (transaction) released = await rollbackOrDiscard(client);
     if (error instanceof StoreSourceError) {
       ({
         checksum,

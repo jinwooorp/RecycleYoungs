@@ -3,7 +3,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { parse } from 'csv-parse';
 import { z } from 'zod';
-import { decodeCsv, readCsvInput } from './csv-source.js';
+import { csvTextChunks, decodeCsv, readCsvInput } from './csv-source.js';
 
 export type IndustryInput = {
   source: string;
@@ -165,18 +165,8 @@ export async function readIndustrySource(
       });
       // 전체 레코드를 배열로 만들지 않고 작은 조각으로 공급합니다. data 이벤트에서 즉시
       // 검증해 같은 조각 뒤쪽의 CSV 오류가 앞서 검증한 행 수를 지우지 않게 합니다.
-      function* chunks() {
-        for (let offset = 0; offset < text.length;) {
-          let end = Math.min(offset + 65536, text.length);
-          // UTF-16 문자열의 서로게이트 쌍을 자르면 스트림의 UTF-8 변환에서 문자가 손상됩니다.
-          const last = text.charCodeAt(end - 1);
-          if (last >= 0xd800 && last <= 0xdbff) end += 1;
-          yield text.slice(offset, end);
-          offset = end;
-        }
-      }
       try {
-        await pipeline(Readable.from(chunks()), parser);
+        await pipeline(Readable.from(csvTextChunks(text)), parser);
       } catch (error) {
         // CSV 문법·열 수 오류는 data 이벤트에 도달하지 않으므로 현재 실패 행을 따로 셉니다.
         if (columns && !rowError) {

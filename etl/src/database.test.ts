@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createDatabasePool, safeMessage } from './database.js';
+import type { PoolClient } from 'pg';
+import {
+  createDatabasePool,
+  rollbackOrDiscard,
+  safeMessage,
+} from './database.js';
 
 // 접속할 수 없는 포트를 사용해 풀 생성 단계에서는 네트워크 연결을 열지 않는지 확인합니다.
 describe('createDatabasePool', () => {
@@ -40,4 +45,24 @@ describe('createDatabasePool', () => {
     expect(message).not.toContain('secret@value');
     expect(safeMessage(new Error('x'.repeat(5000)))).toHaveLength(4000);
   });
+});
+
+describe('rollbackOrDiscard', () => {
+  it.each([false, true])(
+    'discards the connection only if rollback fails: %s',
+    async (rollbackFails) => {
+      // 연결 장애를 DB IO 경계에서 재현합니다. 반환값은 호출 측의 실패 이력 기록 경로를 결정합니다.
+      let discarded = false;
+      const client = {
+        async query() {
+          if (rollbackFails) throw new Error('connection lost during rollback');
+        },
+        release(destroy: boolean) {
+          discarded = destroy;
+        },
+      } as unknown as PoolClient;
+      expect(await rollbackOrDiscard(client)).toBe(rollbackFails);
+      expect(discarded).toBe(rollbackFails);
+    },
+  );
 });

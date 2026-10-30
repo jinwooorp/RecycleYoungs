@@ -3,7 +3,7 @@ import { Readable, Transform, Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { CsvError, parse } from 'csv-parse';
 import { z } from 'zod';
-import { decodeCsv, readCsvInput } from './csv-source.js';
+import { csvTextChunks, decodeCsv, readCsvInput } from './csv-source.js';
 
 export type StoreStatRow = {
   dongCode: string;
@@ -213,17 +213,13 @@ export async function readStoreSource(
         void flush().then(() => done(), done);
       },
     });
-    function* chunks() {
-      for (let offset = 0; offset < text.length;) {
-        let end = Math.min(offset + 65536, text.length);
-        const last = text.charCodeAt(end - 1);
-        if (last >= 0xd800 && last <= 0xdbff) end += 1;
-        yield text.slice(offset, end);
-        offset = end;
-      }
-    }
     try {
-      await pipeline(Readable.from(chunks()), parser, validator, sink);
+      await pipeline(
+        Readable.from(csvTextChunks(text)),
+        parser,
+        validator,
+        sink,
+      );
     } catch (error) {
       // CSV 구조 오류는 검증 Transform에 도달하지 않으므로 실패 행을 한 번만 별도로 셉니다.
       // DB 콜백 실패는 검증을 마친 원본 행을 거부 행으로 바꾸지 않습니다.

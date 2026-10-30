@@ -99,12 +99,14 @@ if (
 ) {
   try {
     const args = process.argv.slice(2);
-    const options =
-      args[0] === 'stores'
-        ? parseStoreArguments(args)
-        : args[0] === 'industries'
-          ? parseIndustryArguments(args)
-          : parseBoundaryArguments(args);
+    let options: StoreOptions | IndustryOptions | BoundaryOptions | null;
+    if (args[0] === 'stores') {
+      options = parseStoreArguments(args);
+    } else if (args[0] === 'industries') {
+      options = parseIndustryArguments(args);
+    } else {
+      options = parseBoundaryArguments(args);
+    }
     if (!options) {
       console.log(
         '사용법:\n  npm run dev -- boundaries --source /절대경로/경계.zip --expected-dongs 425 --expected-districts 25\n  npm run dev -- industries --source /절대경로/점포.csv --sales-source /절대경로/매출.csv --expected-industries 100\n  npm run dev -- stores --source /절대경로/점포.csv --expected-rows 211832\n.shp 입력은 같은 이름의 .dbf/.prj/.cpg가 필요합니다. 업종·점포 통계 입력은 CSV 또는 CSV 한 개를 담은 ZIP이며 --sales-source는 업종 명령의 선택 인자입니다. 건수는 입력 버전에 맞게 지정하세요.',
@@ -112,12 +114,14 @@ if (
     } else {
       const pool = createDatabasePool();
       try {
-        const result =
-          'expectedRows' in options
-            ? await importStoreStats(pool, options)
-            : 'expectedIndustries' in options
-              ? await importIndustries(pool, options)
-              : await importBoundaries(pool, options);
+        let result;
+        if ('expectedRows' in options) {
+          result = await importStoreStats(pool, options);
+        } else if ('expectedIndustries' in options) {
+          result = await importIndustries(pool, options);
+        } else {
+          result = await importBoundaries(pool, options);
+        }
         console.log(JSON.stringify(result));
       } finally {
         // 실패해도 연결 풀을 닫아 CLI 프로세스가 연결을 붙잡고 남지 않게 합니다.

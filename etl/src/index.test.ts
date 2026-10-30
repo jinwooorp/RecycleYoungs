@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import {
   parseBoundaryArguments,
@@ -5,6 +6,35 @@ import {
   parseStoreArguments,
 } from './index.js';
 import { assertLocalDatabaseUrl } from './boundaries.js';
+
+// 실제 진입점을 실행해 명령별 전용 옵션이 올바른 파서에 전달되는지 확인합니다.
+describe('CLI dispatch', () => {
+  it.each([
+    ['boundaries', '--expected-dongs', '1', '--expected-districts', '1'],
+    ['industries', '--expected-industries', '1'],
+    ['stores', '--expected-rows', '1'],
+  ])(
+    'dispatches %s before showing help without opening a DB connection',
+    (...args) => {
+      const result = spawnSync(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          'src/index.ts',
+          ...args,
+          '--source',
+          'unused.csv',
+          '--help',
+        ],
+        { encoding: 'utf8', env: { ...process.env, DATABASE_URL: undefined } },
+      );
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('사용법:');
+      expect(result.stderr).toBe('');
+    },
+  );
+});
 
 // 명령 해석과 DB 주소 제한만 검사하며 실제 파일 적재나 DB 접속은 수행하지 않습니다.
 describe('boundary CLI', () => {

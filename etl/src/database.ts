@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { loadDatabaseConfig } from './config.js';
 
 /**
@@ -47,4 +47,18 @@ export function safeMessage(error: unknown, connectionString?: string): string {
     }
   }
   return message.slice(0, 4000);
+}
+
+/**
+ * 실패한 반영을 롤백하고, 롤백마저 실패한 연결은 풀에서 폐기합니다.
+ * true는 이미 연결을 반환·폐기했다는 뜻이며, 호출 측은 풀의 새 연결로 실패 이력을 기록해야 합니다.
+ */
+export async function rollbackOrDiscard(client: PoolClient): Promise<boolean> {
+  try {
+    await client.query('ROLLBACK');
+    return false;
+  } catch {
+    client.release(true);
+    return true;
+  }
 }

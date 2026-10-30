@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import type { Pool } from 'pg';
-import { assertLocalDatabaseUrl, safeMessage } from './database.js';
+import {
+  assertLocalDatabaseUrl,
+  rollbackOrDiscard,
+  safeMessage,
+} from './database.js';
 
 // 기존 호출부도 같은 로컬 DB 제한을 계속 사용할 수 있도록 공개 경로를 유지합니다.
 export { assertLocalDatabaseUrl } from './database.js';
@@ -271,15 +275,7 @@ export async function importBoundaries(
     };
   } catch (error) {
     // 실패 이력을 기록하기 전에 데이터 반영을 되돌려 이전 정상 경계를 보존합니다.
-    if (transaction) {
-      try {
-        await client.query('ROLLBACK');
-      } catch {
-        // 되돌리기마저 실패한 연결은 풀에 재사용하지 않고 새 연결로 이력 기록을 시도합니다.
-        client.release(true);
-        released = true;
-      }
-    }
+    if (transaction) released = await rollbackOrDiscard(client);
     if (error instanceof BoundarySourceError) {
       // 파일 판독 중 중단된 경우 실제 확인한 건수만 전달하며 미검증 행을 유효로 세지 않습니다.
       fetchedRows = error.fetchedRows;

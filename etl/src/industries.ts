@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import type { Pool } from 'pg';
-import { assertLocalDatabaseUrl, safeMessage } from './database.js';
+import {
+  assertLocalDatabaseUrl,
+  rollbackOrDiscard,
+  safeMessage,
+} from './database.js';
 import {
   IndustrySourceError,
   readIndustrySource,
@@ -140,14 +144,7 @@ export async function importIndustries(
     };
   } catch (error) {
     // 성공 이력과 업종 변경을 함께 되돌린 뒤 실패 이력만 별도 트랜잭션으로 확정합니다.
-    if (transaction) {
-      try {
-        await client.query('ROLLBACK');
-      } catch {
-        client.release(true);
-        released = true;
-      }
-    }
+    if (transaction) released = await rollbackOrDiscard(client);
     if (error instanceof IndustrySourceError) {
       ({ fetchedRows, validRows, rejectedRows, checksum } = error);
     }
