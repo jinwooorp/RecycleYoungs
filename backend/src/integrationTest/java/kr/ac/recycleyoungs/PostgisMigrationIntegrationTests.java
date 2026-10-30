@@ -75,7 +75,7 @@ class PostgisMigrationIntegrationTests {
     // 버전 적용 여부뿐 아니라 실제 공간 질의와 재실행 시 중복 적용 방지도 확인한다.
     assertThat(flyway.info().applied())
         .extracting(migration -> migration.getVersion().getVersion())
-        .containsExactly("1", "2", "3");
+        .containsExactly("1", "2", "3", "4");
     assertThat(flyway.info().pending()).isEmpty();
     try (var connection = flyway.getConfiguration().getDataSource().getConnection();
         var statement = connection.createStatement();
@@ -90,8 +90,8 @@ class PostgisMigrationIntegrationTests {
   }
 
   @Test
-  void upgradesThroughV2AndV3WithoutChangingExistingData() throws Exception {
-    // 전용 스키마에서 V1 → V2 → V3 경로를 따라 기존 체크섬과 데이터의 보존을 확인한다.
+  void upgradesThroughV2V3AndV4WithoutChangingExistingData() throws Exception {
+    // 전용 스키마에서 V1 → V2 → V3 → V4 경로의 체크섬과 기존 데이터를 확인한다.
     var v1 =
         Flyway.configure()
             .configuration(flyway.getConfiguration())
@@ -153,6 +153,79 @@ class PostgisMigrationIntegrationTests {
         .containsExactlyInAnyOrderElementsOf(coreDataBeforeUpgrade);
     v3.validate();
     assertThat(v3.migrate().migrationsExecuted).isZero();
+
+    insertStat("dong_store_stat");
+    insertStat("dong_sales_stat");
+    insertStat("dong_foot_traffic_stat");
+    // NULL뿐인 행으로는 측정값 손실을 발견하지 못하므로 모든 기존 지표를 채운다.
+    execute(
+        """
+        UPDATE dong_store_stat SET store_count = 123, general_store_count = 100,
+          franchise_store_count = 23, opened_store_count = 4, closed_store_count = 2,
+          opening_rate = 3.25, closure_rate = 1.75
+        """);
+    execute(
+        """
+        UPDATE dong_sales_stat SET monthly_sales_amount = 9000000000000,
+          monthly_sales_count = 3000000000,
+          weekday_sales_amount = 4000000000000, weekend_sales_amount = 5000000000000
+        """);
+    execute(
+        """
+        UPDATE dong_foot_traffic_stat SET total_foot_traffic = 123.456789,
+          male_foot_traffic = 12.345678, female_foot_traffic = 111.111111
+        """);
+    var statDataBeforeUpgrade =
+        queryStrings(
+            """
+            SELECT 'store:' || to_jsonb(s)::text FROM dong_store_stat s
+            UNION ALL SELECT 'sales:' || to_jsonb(s)::text FROM dong_sales_stat s
+            UNION ALL SELECT 'foot:' || to_jsonb(s)::text FROM dong_foot_traffic_stat s
+            """);
+    var checksumsBeforeV4 =
+        Arrays.stream(v3.info().applied())
+            .filter(migration -> migration.getVersion() != null)
+            .map(migration -> migration.getChecksum())
+            .toList();
+    // V4 적용 연결이 기존 데이터 조회의 잠금을 기다리지 않도록 먼저 확정한다.
+    connection.commit();
+
+    var v4 = Flyway.configure().configuration(v3.getConfiguration()).target("4").load();
+    assertThat(v4.migrate().migrationsExecuted).isEqualTo(1);
+    assertThat(
+            Arrays.stream(v4.info().applied())
+                .filter(migration -> migration.getVersion() != null)
+                .map(migration -> migration.getVersion().getVersion())
+                .toList())
+        .containsExactly("1", "2", "3", "4");
+    assertThat(
+            Arrays.stream(v4.info().applied())
+                .filter(migration -> migration.getVersion() != null)
+                .limit(3)
+                .map(migration -> migration.getChecksum())
+                .toList())
+        .containsExactlyElementsOf(checksumsBeforeV4);
+    assertThat(
+            queryStrings(
+                """
+                SELECT 'etl_batch:' || to_jsonb(b)::text FROM etl_batch b
+                UNION ALL SELECT 'district:' || to_jsonb(d)::text FROM district d
+                UNION ALL SELECT 'administrative_dong:' || to_jsonb(a)::text FROM administrative_dong a
+                UNION ALL SELECT 'service_industry:' || to_jsonb(s)::text FROM service_industry s
+                """))
+        .containsExactlyInAnyOrderElementsOf(coreDataBeforeUpgrade);
+    assertThat(
+            queryStrings(
+                """
+                SELECT 'store:' || to_jsonb(s)::text FROM dong_store_stat s
+                UNION ALL SELECT 'sales:' || to_jsonb(s)::text FROM dong_sales_stat s
+                UNION ALL SELECT 'foot:' || to_jsonb(s)::text FROM dong_foot_traffic_stat s
+                """))
+        .containsExactlyInAnyOrderElementsOf(statDataBeforeUpgrade);
+    assertThat(queryStrings("SELECT count(*)::text FROM cafe_store")).containsExactly("0");
+    v4.validate();
+    assertThat(v4.info().pending()).isEmpty();
+    assertThat(v4.migrate().migrationsExecuted).isZero();
   }
 
   @Test
@@ -653,6 +726,385 @@ class PostgisMigrationIntegrationTests {
         .containsExactly("9000000000000:3000000000");
     assertThat(queryStrings("SELECT total_foot_traffic::text FROM dong_foot_traffic_stat"))
         .containsExactly("3000000000.123456");
+  }
+
+  @Test
+  void definesCafeColumnTypesLengthsNullabilityAndNoDefaults() throws Exception {
+    // 식별자·원천 코드의 문자열 길이와 선택 필드의 NULL 계약을 빠짐없이 확인한다.
+    assertThat(
+            queryStrings(
+                """
+                SELECT column_name || ':' || data_type || ':' ||
+                       COALESCE(character_maximum_length::text, '-') || ':' ||
+                       is_nullable || ':' || COALESCE(column_default, '-')
+                FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'cafe_store'
+                """))
+        .containsExactlyInAnyOrder(
+            "bizes_id:character varying:20:NO:-",
+            "store_name:text:-:NO:-",
+            "branch_name:text:-:YES:-",
+            "semas_industry_code:character varying:8:NO:-",
+            "semas_industry_name:text:-:NO:-",
+            "ksic_code:character varying:6:YES:-",
+            "ksic_name:text:-:YES:-",
+            "source_dong_code:character varying:20:YES:-",
+            "dong_code:character varying:8:YES:-",
+            "road_address:text:-:YES:-",
+            "lot_address:text:-:YES:-",
+            "geom:USER-DEFINED:-:YES:-",
+            "source_batch_id:uuid:-:NO:-");
+    assertThat(
+            queryStrings(
+                """
+                SELECT type || ':' || srid || ':' || coord_dimension
+                FROM geometry_columns
+                WHERE f_table_schema = 'public' AND f_table_name = 'cafe_store'
+                  AND f_geometry_column = 'geom'
+                """))
+        .containsExactly("POINT:4326:2");
+  }
+
+  @Test
+  void createsCafePrimaryForeignKeysAndOnlyThreeSearchIndexes() throws Exception {
+    // 소진공 업종은 서울시 서비스 업종과 별개이며 삭제 연쇄 없이 배치·행정동만 참조한다.
+    assertThat(
+            queryStrings(
+                """
+                SELECT pg_get_constraintdef(oid)
+                FROM pg_constraint
+                WHERE conrelid = 'public.cafe_store'::regclass AND contype IN ('p', 'f')
+                """))
+        .containsExactlyInAnyOrder(
+            "PRIMARY KEY (bizes_id)",
+            "FOREIGN KEY (dong_code) REFERENCES administrative_dong(dong_code)",
+            "FOREIGN KEY (source_batch_id) REFERENCES etl_batch(batch_id)");
+    assertThat(
+            queryStrings(
+                """
+                SELECT am.amname || ':' ||
+                       regexp_replace(pg_get_indexdef(i.indexrelid, 1, true), '[() ]', '', 'g') ||
+                       CASE WHEN i.indnatts > 1
+                            THEN ',' || pg_get_indexdef(i.indexrelid, 2, true) ELSE '' END ||
+                       ':' || i.indisunique || ':' || (i.indpred IS NULL)
+                FROM pg_index i
+                JOIN pg_class idx ON idx.oid = i.indexrelid
+                JOIN pg_am am ON am.oid = idx.relam
+                WHERE i.indrelid = 'public.cafe_store'::regclass AND NOT i.indisprimary
+                """))
+        .containsExactlyInAnyOrder(
+            "btree:source_batch_id,dong_code:false:true",
+            "gist:geom:false:true",
+            "gist:geom::geography:false:true");
+  }
+
+  @Test
+  void acceptsFullCafeWithoutSeoulIndustryOrSpatialMembershipChecks() throws Exception {
+    insertCoreData();
+    insertCafe();
+    // 임의 소진공 코드와 경계 밖 좌표도 보존한다. 카페 대상·공간 소속 판정은 ETL 책임이다.
+    assertThat(
+            queryStrings(
+                """
+                SELECT bizes_id || ':' || store_name || ':' || branch_name || ':' ||
+                       semas_industry_code || ':' || semas_industry_name || ':' ||
+                       ksic_code || ':' || ksic_name || ':' || source_dong_code || ':' ||
+                       dong_code || ':' || road_address || ':' || lot_address || ':' ||
+                       ST_AsText(geom) || ':' || source_batch_id
+                FROM cafe_store
+                """))
+        .containsExactly(
+            "000001-opaque/a:테스트카페:테스트지점:Q9A7:합성업종:A12345:합성표준업종:11110101:11110101:"
+                + "테스트로 1:테스트동 1:POINT(127.02 37.005):"
+                + BATCH_ID);
+    assertThat(queryStrings("SELECT status FROM etl_batch")).containsExactly("RUNNING");
+    execute(
+        """
+        INSERT INTO cafe_store
+        SELECT 'another-store', store_name, branch_name, semas_industry_code,
+               semas_industry_name, ksic_code, ksic_name, source_dong_code,
+               dong_code, road_address, lot_address, geom, source_batch_id
+        FROM cafe_store
+        """);
+    assertThat(queryStrings("SELECT count(*)::text FROM cafe_store")).containsExactly("2");
+    assertRejected("INSERT INTO cafe_store SELECT * FROM cafe_store", "23505");
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "NULL",
+        "'0'",
+        "'1111010100'",
+        "'0000100100'",
+        "'99999999'",
+        "'00000000000000000001'"
+      })
+  void acceptsUnlinkedCafeAndPreservesRawDongCode(String sourceDongCode) throws Exception {
+    // 누락·구형 10자리·미등록 8자리 코드를 자르거나 연결하지 않고 원문으로 보관한다.
+    insertBatch();
+    execute(
+        """
+        INSERT INTO cafe_store
+          (bizes_id, store_name, semas_industry_code, semas_industry_name,
+           source_dong_code, source_batch_id)
+        VALUES ('plain-id', '테스트카페', 'A1B2C3D4', '합성업종', %s, '%s')
+        """
+            .formatted(sourceDongCode, BATCH_ID));
+    assertThat(
+            queryStrings(
+                """
+                SELECT (branch_name IS NULL) AND (ksic_code IS NULL) AND (ksic_name IS NULL)
+                  AND (dong_code IS NULL) AND (road_address IS NULL) AND (lot_address IS NULL)
+                  AND (geom IS NULL) FROM cafe_store
+                """))
+        .containsExactly("t");
+    assertThat(
+            queryStrings(
+                "SELECT source_dong_code IS NOT DISTINCT FROM "
+                    + sourceDongCode
+                    + " FROM cafe_store"))
+        .containsExactly("t");
+  }
+
+  @Test
+  void preservesLeadingZerosInCafeIdAndLinkedDongCodes() throws Exception {
+    insertCoreData();
+    execute(
+        """
+        INSERT INTO district
+        SELECT '00001', district_name, geom, boundary_batch_id FROM district
+        """);
+    execute(
+        """
+        INSERT INTO administrative_dong
+        SELECT '00001001', '00001', dong_name, geom, label_point, area_m2, boundary_batch_id
+        FROM administrative_dong
+        """);
+    insertCafe();
+    execute(
+        """
+        UPDATE cafe_store SET bizes_id = '00000000000000000001',
+          source_dong_code = '00001001', dong_code = '00001001'
+        """);
+    assertThat(
+            queryStrings(
+                "SELECT bizes_id || ':' || source_dong_code || ':' || dong_code FROM cafe_store"))
+        .containsExactly("00000000000000000001:00001001:00001001");
+  }
+
+  @Test
+  void acceptsArbitraryUppercaseAlphanumericIndustryCodesAndIndependentOptionalText()
+      throws Exception {
+    insertCoreData();
+    insertCafe();
+    // 업종 코드는 접두사·최소 자릿수를 가정하지 않고 표준업종 이름과도 독립적으로 보관한다.
+    for (var code : List.of("A", "1", "Z9", "A12345")) {
+      execute(
+          "UPDATE cafe_store SET semas_industry_code = '" + code + "', ksic_code = '" + code + "'");
+      assertThat(queryStrings("SELECT semas_industry_code || ':' || ksic_code FROM cafe_store"))
+          .containsExactly(code + ":" + code);
+    }
+    execute(
+        "UPDATE cafe_store SET ksic_code = NULL, store_name = E' \\t테스트카페\\n ', branch_name = NULL");
+    assertThat(queryStrings("SELECT ksic_name FROM cafe_store")).containsExactly("합성표준업종");
+    execute("UPDATE cafe_store SET ksic_code = 'A', ksic_name = NULL");
+    assertThat(queryStrings("SELECT ksic_code FROM cafe_store")).containsExactly("A");
+  }
+
+  @Test
+  void supportsMeterRadiusAndViewportQueriesAndCoordinateLimits() throws Exception {
+    insertCoreData();
+    insertCafe();
+    // geography의 미터 반경과 geometry의 경위도 뷰포트를 서로 다른 연산으로 검증한다.
+    assertThat(
+            queryStrings(
+                """
+                SELECT ST_DWithin(geom::geography,
+                         ST_SetSRID(ST_MakePoint(127.02,37.0051),4326)::geography, 20)
+                       AND NOT ST_DWithin(geom::geography,
+                         ST_SetSRID(ST_MakePoint(127.02,37.006),4326)::geography, 20)
+                       AND geom && ST_MakeEnvelope(127.019,37.004,127.021,37.006,4326)
+                FROM cafe_store
+                """))
+        .containsExactly("t");
+    for (var coordinates : List.of("180,90", "180,-90", "-180,90", "-180,-90", "0,0")) {
+      execute("UPDATE cafe_store SET geom = ST_SetSRID(ST_MakePoint(" + coordinates + "),4326)");
+      assertThat(queryStrings("SELECT ST_IsValid(geom) AND NOT ST_IsEmpty(geom) FROM cafe_store"))
+          .containsExactly("t");
+    }
+    execute("UPDATE cafe_store SET geom = NULL");
+    assertThat(queryStrings("SELECT geom IS NULL FROM cafe_store")).containsExactly("t");
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "bizes_id",
+        "store_name",
+        "semas_industry_code",
+        "semas_industry_name",
+        "source_batch_id"
+      })
+  void rejectsMissingRequiredCafeValues(String column) throws Exception {
+    insertCoreData();
+    insertCafe();
+    assertRejected("UPDATE cafe_store SET " + column + " = NULL", "23502");
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "bizes_id",
+        "store_name",
+        "branch_name",
+        "semas_industry_name",
+        "ksic_name",
+        "road_address",
+        "lot_address"
+      })
+  void rejectsBlankCafeTextIncludingTabsAndNewlines(String column) throws Exception {
+    insertCoreData();
+    insertCafe();
+    for (var blank : List.of("''", "' '", "E'\\t\\n\\r'")) {
+      assertRejected("UPDATE cafe_store SET " + column + " = " + blank, "23514");
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"'with space'", "E'with\\ttab'", "E'with\\nline'"})
+  void rejectsWhitespaceWithinOpaqueCafeId(String value) throws Exception {
+    insertCoreData();
+    insertCafe();
+    assertRejected("UPDATE cafe_store SET bizes_id = " + value, "23514");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"semas_industry_code", "ksic_code"})
+  void rejectsInvalidCafeIndustryCodeFormats(String column) throws Exception {
+    insertCoreData();
+    insertCafe();
+    for (var value : List.of("''", "' '", "'lower'", "'A-12'", "'가'", "'Ａ12'", "E'ABC\\n'")) {
+      assertRejected("UPDATE cafe_store SET " + column + " = " + value, "23514");
+    }
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "bizes_id, 21",
+    "semas_industry_code, 9",
+    "ksic_code, 7",
+    "source_dong_code, 21",
+    "dong_code, 9"
+  })
+  void rejectsCafeValuesBeyondDeclaredStringLengths(String column, int length) throws Exception {
+    insertCoreData();
+    insertCafe();
+    assertRejected("UPDATE cafe_store SET " + column + " = repeat('1', " + length + ")", "22001");
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "''",
+        "' '",
+        "'11110A01'",
+        "'1111１001'",
+        "'-11110101'",
+        "'111.10101'",
+        "E'11110101\\n'"
+      })
+  void rejectsNondigitRawCafeDongCodes(String value) throws Exception {
+    insertCoreData();
+    insertCafe();
+    assertRejected("UPDATE cafe_store SET dong_code = NULL, source_dong_code = " + value, "23514");
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {"''", "'1111010'", "'11110A01'", "'1111１001'", "'1111010 '", "E'1111010\\n'"})
+  void rejectsMalformedCanonicalCafeDongCodes(String value) throws Exception {
+    insertCoreData();
+    insertCafe();
+    assertRejected(
+        "UPDATE cafe_store SET dong_code = " + value + ", source_dong_code = " + value, "23514");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"NULL", "'11110102'", "'1111010100'"})
+  void rejectsLinkedCafeWithoutExactRawDongCode(String sourceDongCode) throws Exception {
+    insertCoreData();
+    insertCafe();
+    // 원천 10자리 코드의 앞 8자리만 같아도 정규 행정동 코드로 연결하지 않는다.
+    assertRejected("UPDATE cafe_store SET source_dong_code = " + sourceDongCode, "23514");
+  }
+
+  @Test
+  void rejectsMissingCafeDongAndBatchReferences() throws Exception {
+    insertCoreData();
+    insertCafe();
+    assertRejected(
+        "UPDATE cafe_store SET source_dong_code = '99999999', dong_code = '99999999'", "23503");
+    assertRejected("UPDATE cafe_store SET source_batch_id = '" + MISSING_BATCH_ID + "'", "23503");
+    assertRejected("DELETE FROM administrative_dong", "23503");
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "POINT EMPTY",
+        "POINT(NaN 37)",
+        "POINT(127 NaN)",
+        "POINT(180.001 37)",
+        "POINT(-180.001 37)",
+        "POINT(127 90.001)",
+        "POINT(127 -90.001)"
+      })
+  void rejectsEmptyNonfiniteAndOutOfRangeCafeLocations(String geometry) throws Exception {
+    insertCoreData();
+    insertCafe();
+    assertRejected(
+        "UPDATE cafe_store SET geom = ST_GeomFromText('" + geometry + "',4326)", "23514");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"'Infinity',37", "'-Infinity',37", "127,'Infinity'", "127,'-Infinity'"})
+  void rejectsInfiniteCafeCoordinates(String coordinates) throws Exception {
+    insertCoreData();
+    insertCafe();
+    // Infinity 문자열은 WKT 파서가 먼저 거부하므로 실제 무한대 Point를 만들어 CHECK를 검증한다.
+    assertRejected(
+        "UPDATE cafe_store SET geom = ST_SetSRID(ST_MakePoint(" + coordinates + "),4326)", "23514");
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "ST_SetSRID(ST_MakePoint(127,37),5181)",
+        "ST_GeomFromText('LINESTRING(127 37,128 38)',4326)",
+        "ST_GeomFromText('MULTIPOINT((127 37))',4326)",
+        "ST_GeomFromText('POINT Z(127 37 1)',4326)",
+        "ST_GeomFromText('POINT M(127 37 1)',4326)"
+      })
+  void rejectsWrongCafeGeometryTypeSridAndDimensions(String geometry) throws Exception {
+    insertCoreData();
+    insertCafe();
+    assertRejected("UPDATE cafe_store SET geom = " + geometry, "22023");
+  }
+
+  /** 서로 다른 원천 업종 코드와 경계 밖 좌표를 포함한 합성 카페를 준비한다. */
+  private void insertCafe() throws SQLException {
+    execute(
+        """
+        INSERT INTO cafe_store
+          (bizes_id, store_name, branch_name, semas_industry_code, semas_industry_name,
+           ksic_code, ksic_name, source_dong_code, dong_code, road_address, lot_address,
+           geom, source_batch_id)
+        VALUES ('000001-opaque/a', '테스트카페', '테스트지점', 'Q9A7', '합성업종',
+                'A12345', '합성표준업종', '11110101', '11110101', '테스트로 1', '테스트동 1',
+                ST_SetSRID(ST_MakePoint(127.02,37.005),4326), '%s')
+        """
+            .formatted(BATCH_ID));
   }
 
   /** 측정값은 지정하지 않고 필수 키와 원천 배치만 갖춘 통계 행을 준비한다. */
