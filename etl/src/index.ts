@@ -6,6 +6,7 @@ import { importBoundaries, type BoundaryOptions } from './boundaries.js';
 import { createDatabasePool } from './database.js';
 import { importIndustries, type IndustryOptions } from './industries.js';
 import { importStoreStats, type StoreOptions } from './stores.js';
+import { importSalesStats, type SalesOptions } from './sales.js';
 
 // 원본 버전별 기대 건수는 양의 안전한 정수로 제한합니다. 업종 수와 원본 행 수를 혼동하지 않습니다.
 const count = z
@@ -63,6 +64,25 @@ export function parseStoreArguments(args: string[]): StoreOptions | null {
     .parse({ source: values.source, expectedRows: values['expected-rows'] });
 }
 
+/** 추정매출 원본의 경로와 입력 버전별 전체 행 수를 검증합니다. */
+export function parseSalesArguments(args: string[]): SalesOptions | null {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      source: { type: 'string' },
+      'expected-rows': { type: 'string' },
+      help: { type: 'boolean', short: 'h' },
+    },
+  });
+  if (values.help || args.length === 0) return null;
+  if (positionals.length !== 1 || positionals[0] !== 'sales')
+    throw new Error('지원 명령은 sales입니다. --help를 확인하세요.');
+  return z
+    .object({ source: z.string().min(1), expectedRows: count })
+    .parse({ source: values.source, expectedRows: values['expected-rows'] });
+}
+
 /** 점포 CSV를 필수 원본으로 받고 매출 원본은 선택적으로 교차 검증합니다. */
 export function parseIndustryArguments(args: string[]): IndustryOptions | null {
   const { values, positionals } = parseArgs({
@@ -99,8 +119,11 @@ if (
 ) {
   try {
     const args = process.argv.slice(2);
-    let options: StoreOptions | IndustryOptions | BoundaryOptions | null;
-    if (args[0] === 'stores') {
+    let options:
+      SalesOptions | StoreOptions | IndustryOptions | BoundaryOptions | null;
+    if (args[0] === 'sales') {
+      options = parseSalesArguments(args);
+    } else if (args[0] === 'stores') {
       options = parseStoreArguments(args);
     } else if (args[0] === 'industries') {
       options = parseIndustryArguments(args);
@@ -109,13 +132,15 @@ if (
     }
     if (!options) {
       console.log(
-        '사용법:\n  npm run dev -- boundaries --source /절대경로/경계.zip --expected-dongs 425 --expected-districts 25\n  npm run dev -- industries --source /절대경로/점포.csv --sales-source /절대경로/매출.csv --expected-industries 100\n  npm run dev -- stores --source /절대경로/점포.csv --expected-rows 211832\n.shp 입력은 같은 이름의 .dbf/.prj/.cpg가 필요합니다. 업종·점포 통계 입력은 CSV 또는 CSV 한 개를 담은 ZIP이며 --sales-source는 업종 명령의 선택 인자입니다. 건수는 입력 버전에 맞게 지정하세요.',
+        '사용법:\n  npm run dev -- boundaries --source /절대경로/경계.zip --expected-dongs 425 --expected-districts 25\n  npm run dev -- industries --source /절대경로/점포.csv --sales-source /절대경로/매출.csv --expected-industries 100\n  npm run dev -- stores --source /절대경로/점포.csv --expected-rows 211832\n  npm run dev -- sales --source /절대경로/매출.csv --expected-rows 100431\n.shp 입력은 같은 이름의 .dbf/.prj/.cpg가 필요합니다. 업종·점포·추정매출 입력은 CSV 또는 CSV 한 개를 담은 ZIP이며 --sales-source는 업종 명령의 선택 인자입니다. 건수는 입력 버전에 맞게 지정하세요.',
       );
     } else {
       const pool = createDatabasePool();
       try {
         let result;
-        if ('expectedRows' in options) {
+        if (args[0] === 'sales' && 'expectedRows' in options) {
+          result = await importSalesStats(pool, options);
+        } else if ('expectedRows' in options) {
           result = await importStoreStats(pool, options);
         } else if ('expectedIndustries' in options) {
           result = await importIndustries(pool, options);

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseBoundaryArguments,
   parseIndustryArguments,
+  parseSalesArguments,
   parseStoreArguments,
 } from './index.js';
 import { assertLocalDatabaseUrl } from './boundaries.js';
@@ -13,6 +14,7 @@ describe('CLI dispatch', () => {
     ['boundaries', '--expected-dongs', '1', '--expected-districts', '1'],
     ['industries', '--expected-industries', '1'],
     ['stores', '--expected-rows', '1'],
+    ['sales', '--expected-rows', '1'],
   ])(
     'dispatches %s before showing help without opening a DB connection',
     (...args) => {
@@ -208,5 +210,58 @@ describe('store statistics CLI', () => {
     expect(() => parseStoreArguments(['unknown'])).toThrow();
     expect(parseStoreArguments(['--help'])).toBeNull();
     expect(parseStoreArguments([])).toBeNull();
+  });
+});
+
+describe('sales statistics CLI', () => {
+  it('accepts version-specific source counts instead of fixing the current row count', () => {
+    expect(
+      parseSalesArguments([
+        'sales',
+        '--source',
+        'sales.zip',
+        '--expected-rows',
+        '100431',
+      ]),
+    ).toEqual({ source: 'sales.zip', expectedRows: 100431 });
+    expect(
+      parseSalesArguments([
+        'sales',
+        '--source',
+        'next.csv',
+        '--expected-rows',
+        '2',
+      ]),
+    ).toEqual({ source: 'next.csv', expectedRows: 2 });
+    expect(() =>
+      parseSalesArguments(['sales', '--source', 'sales.csv']),
+    ).toThrow();
+    expect(() =>
+      parseSalesArguments(['sales', '--expected-rows', '2']),
+    ).toThrow();
+  });
+
+  it.each(['0', '-1', '1.1', 'NaN', '9007199254740992'])(
+    'rejects invalid expected rows: %s',
+    (count) => {
+      expect(() =>
+        parseSalesArguments([
+          'sales',
+          '--source',
+          'sales.csv',
+          '--expected-rows',
+          count,
+        ]),
+      ).toThrow();
+    },
+  );
+
+  it('supports help and rejects foreign command options', () => {
+    expect(parseSalesArguments([])).toBeNull();
+    expect(parseSalesArguments(['--help'])).toBeNull();
+    expect(() =>
+      parseSalesArguments(['sales', '--expected-industries', '63']),
+    ).toThrow();
+    expect(() => parseSalesArguments(['unknown'])).toThrow();
   });
 });
