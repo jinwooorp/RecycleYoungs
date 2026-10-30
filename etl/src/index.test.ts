@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { parseBoundaryArguments, parseIndustryArguments } from './index.js';
+import {
+  parseBoundaryArguments,
+  parseIndustryArguments,
+  parseStoreArguments,
+} from './index.js';
 import { assertLocalDatabaseUrl } from './boundaries.js';
 
 // 명령 해석과 DB 주소 제한만 검사하며 실제 파일 적재나 DB 접속은 수행하지 않습니다.
@@ -120,5 +124,59 @@ describe('industry CLI', () => {
       parseIndustryArguments(['other', '--source', 'a.csv']),
     ).toThrow();
     expect(parseIndustryArguments(['--help'])).toBeNull();
+  });
+});
+
+// 전체 행 수는 입력 버전에 맞춰 지정하며 업종 수나 행정동 수로 대신하지 않습니다.
+describe('store statistics CLI', () => {
+  it('requires the input path and a version-specific expected row count', () => {
+    expect(
+      parseStoreArguments([
+        'stores',
+        '--source',
+        'stores.zip',
+        '--expected-rows',
+        '211832',
+      ]),
+    ).toEqual({ source: 'stores.zip', expectedRows: 211832 });
+    expect(
+      parseStoreArguments([
+        'stores',
+        '--source',
+        'next.csv',
+        '--expected-rows',
+        '3',
+      ]),
+    ).toEqual({ source: 'next.csv', expectedRows: 3 });
+    expect(() =>
+      parseStoreArguments(['stores', '--expected-rows', '3']),
+    ).toThrow();
+    expect(() =>
+      parseStoreArguments(['stores', '--source', 'a.csv']),
+    ).toThrow();
+  });
+
+  it.each(['0', '-1', '1.5', 'NaN', '9007199254740992'])(
+    'rejects invalid expected rows: %s',
+    (count) => {
+      expect(() =>
+        parseStoreArguments([
+          'stores',
+          '--source',
+          'a.csv',
+          '--expected-rows',
+          count,
+        ]),
+      ).toThrow();
+    },
+  );
+
+  it('rejects options belonging to other import commands and supports help', () => {
+    expect(() =>
+      parseStoreArguments(['stores', '--expected-industries', '100']),
+    ).toThrow();
+    expect(() => parseStoreArguments(['unknown'])).toThrow();
+    expect(parseStoreArguments(['--help'])).toBeNull();
+    expect(parseStoreArguments([])).toBeNull();
   });
 });
