@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseBoundaryArguments } from './index.js';
+import { parseBoundaryArguments, parseIndustryArguments } from './index.js';
 import { assertLocalDatabaseUrl } from './boundaries.js';
 
 // 명령 해석과 DB 주소 제한만 검사하며 실제 파일 적재나 DB 접속은 수행하지 않습니다.
@@ -71,5 +71,54 @@ describe('boundary CLI', () => {
     'postgresql://localhost/db?service=production',
   ])('rejects a nonlocal database or host override: %s', (url) => {
     expect(() => assertLocalDatabaseUrl(url)).toThrow();
+  });
+});
+
+// 고유 업종 수는 원본 행 수와 다르며, 입력 버전에 맞는 기준을 명시해야 합니다.
+describe('industry CLI', () => {
+  it('accepts stores and optional sales with a version-specific unique count', () => {
+    expect(
+      parseIndustryArguments([
+        'industries',
+        '--source',
+        'stores.zip',
+        '--sales-source',
+        'sales.csv',
+        '--expected-industries',
+        '101',
+      ]),
+    ).toEqual({
+      source: 'stores.zip',
+      salesSource: 'sales.csv',
+      expectedIndustries: 101,
+    });
+    expect(
+      parseIndustryArguments([
+        'industries',
+        '--source',
+        'stores.csv',
+        '--expected-industries',
+        '2',
+      ]),
+    ).toEqual({ source: 'stores.csv', expectedIndustries: 2 });
+  });
+
+  it.each([undefined, '0', '-1', '1.5', '9007199254740992'])(
+    'rejects a missing or invalid unique count: %s',
+    (count) => {
+      const args = ['industries', '--source', 'stores.csv'];
+      if (count !== undefined) args.push('--expected-industries', count);
+      expect(() => parseIndustryArguments(args)).toThrow();
+    },
+  );
+
+  it('does not accept boundary-specific or misspelled options', () => {
+    expect(() =>
+      parseIndustryArguments(['industries', '--expected-dongs', '425']),
+    ).toThrow();
+    expect(() =>
+      parseIndustryArguments(['other', '--source', 'a.csv']),
+    ).toThrow();
+    expect(parseIndustryArguments(['--help'])).toBeNull();
   });
 });
