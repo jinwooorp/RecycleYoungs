@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import {
   parseBoundaryArguments,
+  parseCafeArguments,
   parseFootTrafficArguments,
   parseIndustryArguments,
   parseSalesArguments,
@@ -38,6 +39,171 @@ describe('CLI dispatch', () => {
       expect(result.stderr).toBe('');
     },
   );
+});
+
+describe('카페 수집 CLI', () => {
+  it('확인 전용 probe를 명시적으로 선택한다', () => {
+    expect(
+      parseCafeArguments([
+        'cafes',
+        '--probe',
+        '--industry-code',
+        'I21201',
+        '--industry-name',
+        '카페',
+      ]),
+    ).toMatchObject({
+      probe: true,
+      industryCode: 'I21201',
+      industryName: '카페',
+    });
+  });
+
+  it('probe는 잘못된 DB 설정이 있어도 인증키 검사까지 DB 없이 진행한다', () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--import',
+        'tsx',
+        'src/index.ts',
+        'cafes',
+        '--probe',
+        '--industry-code',
+        'I21201',
+        '--industry-name',
+        '카페',
+      ],
+      {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          DATABASE_URL: 'invalid-database-url',
+          SEMAS_API_KEY: undefined,
+        },
+      },
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('SEMAS_API_KEY');
+    expect(result.stderr).not.toContain('DATABASE_URL');
+  });
+
+  it('probe CLI는 모의 인증 응답을 DB 없이 확인하고 첫 페이지에서 종료한다', () => {
+    // 메모리 내 preload로 fetch만 대체합니다. DB 설정이 잘못되어도 성공해야 하며,
+    // 두 번째 업소 페이지를 요청하면 실패하게 해 전체 수집으로 넘어가는 회귀를 잡습니다.
+    const mock = `globalThis.fetch = async (input) => {
+      const url = new URL(input);
+      if (url.pathname.endsWith('/smallUpjongList')) return Response.json({
+        header: { resultCode: '00' }, body: { items: [{ indsSclsCd: 'I21201', indsSclsNm: '카페', stdrDt: '2026-10-01' }] }
+      });
+      if (url.searchParams.get('pageNo') !== '1' || url.searchParams.get('numOfRows') !== '5') throw new Error('unexpected page');
+      return Response.json({ header: { resultCode: '00', stdrYm: '202610' }, body: {
+        numOfRows: 5, pageNo: 1, totalCount: 1001,
+        items: Array.from({ length: 5 }, (_, i) => ({ bizesId: String(i), bizesNm: '모의 카페', indsSclsCd: 'I21201', indsSclsNm: '카페', ctprvnCd: '11', signguCd: '11110' }))
+      }});
+    };`;
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--import',
+        `data:text/javascript,${encodeURIComponent(mock)}`,
+        '--import',
+        'tsx',
+        'src/index.ts',
+        'cafes',
+        '--probe',
+        '--industry-code',
+        'I21201',
+        '--industry-name',
+        '카페',
+      ],
+      {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          DATABASE_URL: 'invalid-database-url',
+          SEMAS_API_KEY: 'synthetic-probe-key/+==',
+        },
+        timeout: 10000,
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      mode: 'PROBE',
+      databaseChecked: false,
+      fetchedRows: 5,
+      reference: { complete: false, pages: 1, totalCount: 1001 },
+    });
+    expect(result.stdout).not.toContain('synthetic-probe-key');
+  });
+  it('분류 검증 대상 코드와 명칭을 받으며 예상 전체 건수는 선택한다', () => {
+    expect(
+      parseCafeArguments([
+        'cafes',
+        '--industry-code',
+        'I21201',
+        '--industry-name',
+        '커피전문점',
+      ]),
+    ).toEqual({ industryCode: 'I21201', industryName: '커피전문점' });
+    expect(
+      parseCafeArguments([
+        'cafes',
+        '--industry-code',
+        'I21201',
+        '--industry-name',
+        '커피전문점',
+        '--expected-rows',
+        '2',
+      ]),
+    ).toMatchObject({ expectedRows: 2 });
+  });
+
+  it('인증키 CLI 인자와 분류 누락·잘못된 건수를 거부한다', () => {
+    for (const args of [
+      [],
+      ['--expected-rows', '0'],
+      ['--api-key', 'never-a-real-key'],
+    ]) {
+      expect(() => parseCafeArguments(['cafes', ...args])).toThrow();
+    }
+    expect(parseCafeArguments(['cafes', '--help'])).toBeNull();
+  });
+
+  it.each(['', '0', '-1', '1.5', '9007199254740992'])(
+    '잘못된 예상 전체 건수 %s를 거부한다',
+    (value) => {
+      expect(() =>
+        parseCafeArguments([
+          'cafes',
+          '--industry-code',
+          'I21201',
+          '--industry-name',
+          '커피전문점',
+          '--expected-rows',
+          value,
+        ]),
+      ).toThrow();
+    },
+  );
+
+  it('카페 도움말은 DB와 인증키 없이 표시한다', () => {
+    const result = spawnSync(
+      process.execPath,
+      ['--import', 'tsx', 'src/index.ts', 'cafes', '--help'],
+      {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          DATABASE_URL: undefined,
+          SEMAS_API_KEY: undefined,
+        },
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('cafes [--probe]');
+    expect(result.stderr).toBe('');
+  });
 });
 
 // 명령 해석과 DB 주소 제한만 검사하며 실제 파일 적재나 DB 접속은 수행하지 않습니다.

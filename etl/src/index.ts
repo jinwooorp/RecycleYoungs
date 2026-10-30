@@ -7,6 +7,8 @@ import { createDatabasePool } from './database.js';
 import { importIndustries, type IndustryOptions } from './industries.js';
 import { importStoreStats, type StoreOptions } from './stores.js';
 import { importSalesStats, type SalesOptions } from './sales.js';
+import { importCafes, type CafeOptions } from './cafes.js';
+import { probeCafeSource } from './cafe-source.js';
 import {
   importFootTrafficStats,
   type FootTrafficOptions,
@@ -18,6 +20,39 @@ const count = z
   .regex(/^[1-9][0-9]*$/)
   .transform(Number)
   .pipe(z.number().int().positive().max(Number.MAX_SAFE_INTEGER));
+
+/** 인증정보는 CLI로 받지 않고 검증 대상 분류와 선택적인 전체 건수만 받습니다. */
+export function parseCafeArguments(
+  args: string[],
+): (CafeOptions & { probe?: boolean }) | null {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      'industry-code': { type: 'string' },
+      'industry-name': { type: 'string' },
+      probe: { type: 'boolean' },
+      'expected-rows': { type: 'string' },
+      help: { type: 'boolean', short: 'h' },
+    },
+  });
+  if (values.help || args.length === 0) return null;
+  if (positionals.length !== 1 || positionals[0] !== 'cafes')
+    throw new Error('지원 명령은 cafes입니다. --help를 확인하세요.');
+  return z
+    .object({
+      industryCode: z.string().regex(/^[A-Z0-9]{1,8}$/),
+      industryName: z.string().trim().min(1),
+      expectedRows: count.optional(),
+      probe: z.boolean().optional(),
+    })
+    .parse({
+      industryCode: values['industry-code'],
+      industryName: values['industry-name'],
+      expectedRows: values['expected-rows'],
+      ...(values.probe ? { probe: true } : {}),
+    });
+}
 
 /** CLI 인자를 적재 옵션으로 변환하며, 인자가 없거나 도움말을 요청하면 null을 반환합니다. */
 export function parseBoundaryArguments(args: string[]): BoundaryOptions | null {
@@ -150,8 +185,11 @@ if (
       | StoreOptions
       | IndustryOptions
       | BoundaryOptions
+      | (CafeOptions & { probe?: boolean })
       | null;
-    if (args[0] === 'foot-traffic') {
+    if (args[0] === 'cafes') {
+      options = parseCafeArguments(args);
+    } else if (args[0] === 'foot-traffic') {
       options = parseFootTrafficArguments(args);
     } else if (args[0] === 'sales') {
       options = parseSalesArguments(args);
@@ -164,13 +202,18 @@ if (
     }
     if (!options) {
       console.log(
-        '사용법:\n  npm run dev -- boundaries --source /절대경로/경계.zip --expected-dongs 425 --expected-districts 25\n  npm run dev -- industries --source /절대경로/점포.csv --sales-source /절대경로/매출.csv --expected-industries 100\n  npm run dev -- stores --source /절대경로/점포.csv --expected-rows 211832\n  npm run dev -- sales --source /절대경로/매출.csv --expected-rows 100431\n  npm run dev -- foot-traffic --source /절대경로/유동인구.csv --expected-rows 9350\n.shp 입력은 같은 이름의 .dbf/.prj/.cpg가 필요합니다. 업종·점포·추정매출·유동인구 입력은 CSV 또는 CSV 한 개를 담은 ZIP이며 --sales-source는 업종 명령의 선택 인자입니다. 건수는 입력 버전에 맞게 지정하세요.',
+        '사용법:\n  npm run dev -- cafes [--probe] --industry-code <공식 카페 코드> --industry-name <공식 명칭> [--expected-rows <전체 건수>]\n  npm run dev -- boundaries --source /절대경로/경계.zip --expected-dongs 425 --expected-districts 25\n  npm run dev -- industries --source /절대경로/점포.csv --sales-source /절대경로/매출.csv --expected-industries 100\n  npm run dev -- stores --source /절대경로/점포.csv --expected-rows 211832\n  npm run dev -- sales --source /절대경로/매출.csv --expected-rows 100431\n  npm run dev -- foot-traffic --source /절대경로/유동인구.csv --expected-rows 9350\n.shp 입력은 같은 이름의 .dbf/.prj/.cpg가 필요합니다. 업종·점포·추정매출·유동인구 입력은 CSV 또는 CSV 한 개를 담은 ZIP이며 --sales-source는 업종 명령의 선택 인자입니다. 건수는 입력 버전에 맞게 지정하세요.',
       );
+    } else if ('industryCode' in options && options.probe) {
+      // 확인 모드는 DB 설정·연결 풀 생성 자체를 건너뛰므로 배치 이력도 만들지 않습니다.
+      console.log(JSON.stringify(await probeCafeSource(options)));
     } else {
       const pool = createDatabasePool();
       try {
         let result;
-        if (args[0] === 'foot-traffic' && 'expectedRows' in options) {
+        if ('industryCode' in options) {
+          result = await importCafes(pool, options);
+        } else if (args[0] === 'foot-traffic' && 'expectedRows' in options) {
           result = await importFootTrafficStats(pool, options);
         } else if (args[0] === 'sales' && 'expectedRows' in options) {
           result = await importSalesStats(pool, options);
