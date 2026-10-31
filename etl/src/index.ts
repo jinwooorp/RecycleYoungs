@@ -10,6 +10,10 @@ import { importSalesStats, type SalesOptions } from './sales.js';
 import { importCafes, type CafeOptions } from './cafes.js';
 import { probeCafeSource } from './cafe-source.js';
 import {
+  probeDistrictStoreSource,
+  type DistrictStoreProbeOptions,
+} from './district-store-source.js';
+import {
   importFootTrafficStats,
   type FootTrafficOptions,
 } from './foot-traffic.js';
@@ -20,6 +24,52 @@ const count = z
   .regex(/^[1-9][0-9]*$/)
   .transform(Number)
   .pipe(z.number().int().positive().max(Number.MAX_SAFE_INTEGER));
+
+/** 자치구 점포는 읽기 전용 probe만 허용하며, 적재 모드로 묵시적으로 전환하지 않습니다. */
+export function parseDistrictStoreArguments(
+  args: string[],
+): DistrictStoreProbeOptions | null {
+  const { values, positionals, tokens } = parseArgs({
+    args,
+    allowPositionals: true,
+    tokens: true,
+    options: {
+      source: { type: 'string' },
+      'expected-rows': { type: 'string' },
+      probe: { type: 'boolean' },
+      help: { type: 'boolean', short: 'h' },
+    },
+  });
+  if (values.help || args.length === 0) return null;
+  if (positionals.length !== 1 || positionals[0] !== 'district-stores')
+    throw new Error('지원 명령은 district-stores입니다. --help를 확인하세요.');
+  for (const name of ['source', 'expected-rows', 'probe']) {
+    if (
+      tokens.filter((token) => token.kind === 'option' && token.name === name)
+        .length > 1
+    )
+      throw new Error('자치구 점포 probe 옵션은 중복해서 전달할 수 없습니다.');
+  }
+  if (values.probe !== true)
+    throw new Error('district-stores는 --probe 읽기 전용 검증만 지원합니다.');
+  return z
+    .object({
+      source: z
+        .string()
+        .min(1)
+        .refine((value) => value.trim().length > 0),
+      expectedRows: z
+        .string()
+        .regex(/^[1-9][0-9]*(?![\s\S])/)
+        .pipe(count),
+      probe: z.literal(true),
+    })
+    .parse({
+      source: values.source,
+      expectedRows: values['expected-rows'],
+      probe: values.probe,
+    });
+}
 
 /** 인증정보는 CLI로 받지 않고 검증 대상 분류와 선택적인 전체 건수만 받습니다. */
 export function parseCafeArguments(
@@ -172,7 +222,7 @@ export function parseIndustryArguments(args: string[]): IndustryOptions | null {
     });
 }
 
-// 다른 모듈이나 테스트에서 가져올 때는 실행하지 않고, CLI로 직접 호출했을 때만 적재합니다.
+// 다른 모듈이나 테스트에서 가져올 때는 실행하지 않고, CLI로 직접 호출했을 때만 명령을 실행합니다.
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
@@ -186,8 +236,11 @@ if (
       | IndustryOptions
       | BoundaryOptions
       | (CafeOptions & { probe?: boolean })
+      | DistrictStoreProbeOptions
       | null;
-    if (args[0] === 'cafes') {
+    if (args[0] === 'district-stores') {
+      options = parseDistrictStoreArguments(args);
+    } else if (args[0] === 'cafes') {
       options = parseCafeArguments(args);
     } else if (args[0] === 'foot-traffic') {
       options = parseFootTrafficArguments(args);
@@ -204,6 +257,12 @@ if (
       console.log(
         '사용법:\n  npm run dev -- cafes [--probe] --industry-code <공식 카페 코드> --industry-name <공식 명칭> [--expected-rows <전체 건수>]\n  npm run dev -- boundaries --source /절대경로/경계.zip --expected-dongs 425 --expected-districts 25\n  npm run dev -- industries --source /절대경로/점포.csv --sales-source /절대경로/매출.csv --expected-industries 100\n  npm run dev -- stores --source /절대경로/점포.csv --expected-rows 211832\n  npm run dev -- sales --source /절대경로/매출.csv --expected-rows 100431\n  npm run dev -- foot-traffic --source /절대경로/유동인구.csv --expected-rows 9350\n.shp 입력은 같은 이름의 .dbf/.prj/.cpg가 필요합니다. 업종·점포·추정매출·유동인구 입력은 CSV 또는 CSV 한 개를 담은 ZIP이며 --sales-source는 업종 명령의 선택 인자입니다. 건수는 입력 버전에 맞게 지정하세요.',
       );
+      console.log(
+        '  npm run dev -- district-stores --probe --source /절대경로/자치구점포.csv --expected-rows <원본 전체 행 수>\n자치구 점포는 CSV/단일 CSV ZIP의 로컬 입력 검증만 지원하며 DB 설정·접속·배치 생성·적재를 하지 않습니다.',
+      );
+    } else if ('probe' in options && 'source' in options) {
+      // --probe가 없는 실행은 인자 검증에서 거부하며 DB 풀 생성 분기에 진입하지 않는다.
+      console.log(JSON.stringify(await probeDistrictStoreSource(options)));
     } else if ('industryCode' in options && options.probe) {
       // 확인 모드는 DB 설정·연결 풀 생성 자체를 건너뛰므로 배치 이력도 만들지 않습니다.
       console.log(JSON.stringify(await probeCafeSource(options)));

@@ -12,6 +12,27 @@ import { assertLocalDatabaseUrl } from './boundaries.js';
 
 // 실제 진입점을 실행해 명령별 전용 옵션이 올바른 파서에 전달되는지 확인합니다.
 describe('CLI dispatch', () => {
+  it('자치구 점포 probe 도움말은 DB 없이 전용 명령을 안내한다', () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--import',
+        'tsx',
+        'src/index.ts',
+        'district-stores',
+        '--probe',
+        '--help',
+      ],
+      {
+        encoding: 'utf8',
+        env: { ...process.env, DATABASE_URL: 'invalid-database-url' },
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('district-stores --probe');
+    expect(result.stderr).toBe('');
+  });
+
   it.each([
     ['boundaries', '--expected-dongs', '1', '--expected-districts', '1'],
     ['industries', '--expected-industries', '1'],

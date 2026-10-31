@@ -81,7 +81,7 @@ const rate = z
   }, '비율이 PostgreSQL NUMERIC의 정수부·소수부 범위를 벗어났습니다.');
 const nullable = (schema: typeof count | typeof rate) =>
   z.preprocess((value) => (value === '' ? null : value), schema.nullable());
-const rowSchema = z.object({
+export const rowSchema = z.object({
   dongCode: z
     .string()
     .length(8)

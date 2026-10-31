@@ -61,7 +61,7 @@ export class SalesSourceError extends Error {
  * 십진수의 소수점 위치를 문자열로 옮겨 정확한 BIGINT 정수 문자열을 만듭니다.
  * Number로 원래 값을 읽지 않아 .0·지수 표기에서도 큰 정수의 끝자리를 잃지 않습니다.
  */
-function normalizeInteger(value: string): string {
+export function normalizeInteger(value: string): string {
   const match =
     /^\+?(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:[eE]([+-]?\d+))?(?![\s\S])/.exec(
       value,
