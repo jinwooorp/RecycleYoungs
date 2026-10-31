@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
+import { parseDistrictSalesArguments } from './index.js';
 
 const header =
   'STDR_YYQU_CD,SIGNGU_CD,SVC_INDUTY_CD,THSMON_SELNG_AMT,THSMON_SELNG_CO,MDWK_SELNG_AMT,WKEND_SELNG_AMT';
@@ -100,24 +101,35 @@ describe('자치구 추정매출 읽기 전용 CLI', () => {
     },
   );
 
-  it('probe 생략은 DB 설정·파일 판독 전에 명시적으로 거부한다', () => {
-    const result = runProbe(
-      syntheticCsv,
-      validArgs.slice(1),
-      'invalid-database-url',
-    );
+  it('probe와 적재가 같은 원본·예상 건수 계약을 사용한다', () => {
+    expect(
+      parseDistrictSalesArguments(['district-sales', ...validArgs]),
+    ).toEqual({
+      source: '/virtual/district-sales.csv',
+      expectedRows: 7,
+      probe: true,
+    });
+    expect(
+      parseDistrictSalesArguments(['district-sales', ...validArgs.slice(1)]),
+    ).toEqual({
+      source: '/virtual/district-sales.csv',
+      expectedRows: 7,
+      probe: false,
+    });
+  });
+
+  it('probe 없는 적재 모드는 DB 설정이 필요하고 probe 성공을 반환하지 않는다', () => {
+    const result = runProbe(syntheticCsv, validArgs.slice(1));
     expect(result.status).toBe(1);
     expect(result.stdout).toBe('');
-    expect(result.stderr).toContain('--probe');
-    expect(result.stderr).not.toMatch(
-      /DB_POOL_FORBIDDEN|NETWORK_FORBIDDEN|DATABASE_URL/,
-    );
+    expect(result.stderr).toContain('DATABASE_URL');
+    expect(result.stderr).not.toMatch(/DB_POOL_FORBIDDEN|NETWORK_FORBIDDEN/);
   });
 
   it('도움말은 DB 없이 읽기 전용 명령을 안내한다', () => {
     const result = runProbe('', ['--help'], 'invalid-database-url');
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain('district-sales --probe');
+    expect(result.stdout).toContain('district-sales [--probe]');
     expect(result.stderr).toBe('');
   });
 

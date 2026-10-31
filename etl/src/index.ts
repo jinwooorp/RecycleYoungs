@@ -10,10 +10,11 @@ import { importSalesStats, type SalesOptions } from './sales.js';
 import { importCafes, type CafeOptions } from './cafes.js';
 import { probeCafeSource } from './cafe-source.js';
 import { probeDistrictStoreSource } from './district-store-source.js';
+import { probeDistrictSalesSource } from './district-sales-source.js';
 import {
-  probeDistrictSalesSource,
-  type DistrictSalesProbeOptions,
-} from './district-sales-source.js';
+  importDistrictSalesStats,
+  type DistrictSalesOptions,
+} from './district-sales.js';
 import {
   importDistrictStoreStats,
   type DistrictStoreOptions,
@@ -30,10 +31,10 @@ const count = z
   .transform(Number)
   .pipe(z.number().int().positive().max(Number.MAX_SAFE_INTEGER));
 
-/** 자치구 추정매출은 명시적 probe만 허용하며 모든 인자를 DB 분기 전에 검증한다. */
+/** 자치구 추정매출 적재·probe의 모든 인자를 DB 분기 전에 검증한다. */
 export function parseDistrictSalesArguments(
   args: string[],
-): DistrictSalesProbeOptions | null {
+): (DistrictSalesOptions & { probe: boolean }) | null {
   let parsed;
   try {
     parsed = parseArgs({
@@ -57,10 +58,6 @@ export function parseDistrictSalesArguments(
   if (values.help || args.length === 0) return null;
   if (positionals.length !== 1 || positionals[0] !== 'district-sales')
     throw new Error('지원 명령은 district-sales입니다. --help를 확인하세요.');
-  if (values.probe !== true)
-    throw new Error(
-      '자치구 추정매출은 --probe가 필수이며 적재를 지원하지 않습니다.',
-    );
   for (const name of ['source', 'expected-rows', 'probe']) {
     if (
       tokens.filter((token) => token.kind === 'option' && token.name === name)
@@ -78,12 +75,12 @@ export function parseDistrictSalesArguments(
         .string()
         .regex(/^[1-9][0-9]*(?![\s\S])/)
         .pipe(count),
-      probe: z.literal(true),
+      probe: z.boolean(),
     })
     .safeParse({
       source: values.source,
       expectedRows: values['expected-rows'],
-      probe: values.probe,
+      probe: values.probe ?? false,
     });
   if (!options.success)
     throw new Error(
@@ -302,7 +299,7 @@ if (
       | BoundaryOptions
       | (CafeOptions & { probe?: boolean })
       | (DistrictStoreOptions & { probe: boolean })
-      | DistrictSalesProbeOptions
+      | (DistrictSalesOptions & { probe: boolean })
       | null;
     if (args[0] === 'district-sales') {
       options = parseDistrictSalesArguments(args);
@@ -329,7 +326,7 @@ if (
         '  npm run dev -- district-stores [--probe] --source /절대경로/자치구점포.csv --expected-rows <원본 전체 행 수>\n자치구 점포는 CSV/단일 CSV ZIP을 적재하며 --probe에서는 DB 설정·접속·배치 생성·적재를 하지 않습니다.',
       );
       console.log(
-        '  npm run dev -- district-sales --probe --source /절대경로/자치구매출.csv --expected-rows <원본 전체 행 수>\n자치구 추정매출은 읽기 전용 검증만 지원하며 --probe 생략 시 거부합니다. DB·배치·적재·네트워크 요청은 사용하지 않습니다.',
+        '  npm run dev -- district-sales [--probe] --source /절대경로/자치구매출.csv --expected-rows <원본 전체 행 수>\n자치구 추정매출은 CSV/단일 CSV ZIP을 적재하며 --probe에서는 DB 설정·접속·배치 생성·적재·네트워크 요청을 하지 않습니다.',
       );
     } else if (
       args[0] === 'district-sales' &&
@@ -337,7 +334,7 @@ if (
       'probe' in options &&
       options.probe
     ) {
-      // 자치구 매출은 기존 점포 probe나 모든 DB 적재 분기에 진입하지 않는다.
+      // 자치구 매출 probe는 기존 점포 probe와 DB 적재 분기에 진입하지 않는다.
       console.log(
         JSON.stringify(
           await probeDistrictSalesSource({ ...options, probe: true }),
@@ -358,6 +355,12 @@ if (
       try {
         let result;
         if (
+          args[0] === 'district-sales' &&
+          'source' in options &&
+          'expectedRows' in options
+        ) {
+          result = await importDistrictSalesStats(pool, options);
+        } else if (
           args[0] === 'district-stores' &&
           'source' in options &&
           'expectedRows' in options

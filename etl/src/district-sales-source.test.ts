@@ -2,7 +2,10 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { zipSync } from 'fflate';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { probeDistrictSalesSource } from './district-sales-source.js';
+import {
+  readDistrictSalesSource,
+  probeDistrictSalesSource,
+} from './district-sales-source.js';
 
 // 공식 헤더에 맞춘 합성 CSV·ZIP을 메모리로 공급하고 실제 판독·검증기를 실행한다.
 vi.mock('node:fs/promises', () => ({ readFile: vi.fn() }));
@@ -259,5 +262,62 @@ describe('자치구 추정매출 로컬 파일 probe', () => {
       } as never),
     ).rejects.toThrow(/probe 모드/);
     expect(readFile).not.toHaveBeenCalled();
+  });
+});
+
+// 콜백의 backpressure와 오류 카운터는 파일 전체 성공 전에 공개하지 않는 적재 계약이다.
+describe('자치구 매출 staging 원본', () => {
+  it('1000행 이하 묶음을 순차 전달하고 전체 메타데이터를 반환한다', async () => {
+    files.set('district-sales.csv', csv(distinctRows(2001)));
+    const chunks: number[] = [];
+    let total = 0;
+    let active = false;
+    const source = await readDistrictSalesSource(
+      'district-sales.csv',
+      async (rows) => {
+        expect(active).toBe(false);
+        active = true;
+        expect(rows[0]!.districtCode).toBe(String(11000 + total));
+        expect(rows[0]!.monthlySalesAmount).toBe('101');
+        chunks.push(rows.length);
+        total += rows.length;
+        await Promise.resolve();
+        active = false;
+      },
+    );
+    expect(chunks).toEqual([1000, 1000, 1]);
+    expect(source).toMatchObject({
+      fetchedRows: 2001,
+      validRows: 2001,
+      rejectedRows: 0,
+      periodFrom: '20262',
+      periodTo: '20262',
+      encoding: 'UTF-8',
+    });
+  });
+
+  it('마지막 행 오류는 실제 검증 건수와 체크섬을 유지하고 전체 성공을 거부한다', async () => {
+    const rows = distinctRows(1001);
+    rows.push('20262,15000,CS100010,-1,0,0,0');
+    files.set('district-sales.csv', csv(rows));
+    await expect(
+      readDistrictSalesSource('district-sales.csv', async () => {}),
+    ).rejects.toMatchObject({
+      fetchedRows: 1002,
+      validRows: 1001,
+      rejectedRows: 1,
+    });
+  });
+
+  it('staging 콜백 실패는 유효 원본을 거부 행으로 바꾸거나 DB 오류 원문을 노출하지 않는다', async () => {
+    files.set('district-sales.csv', csv(distinctRows(2)));
+    const error = await readDistrictSalesSource(
+      'district-sales.csv',
+      async () => {
+        throw new Error('postgresql://user:password@private/db');
+      },
+    ).catch((e: unknown) => e);
+    expect(error).toMatchObject({ validRows: 2, rejectedRows: 0 });
+    expect((error as Error).message).not.toMatch(/password|private|postgresql/);
   });
 });

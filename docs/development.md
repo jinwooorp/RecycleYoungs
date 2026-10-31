@@ -146,13 +146,13 @@ cd backend
 
 - `application-db.yaml`은 `DB_JDBC_URL`, `DB_USER`, `DB_PASSWORD`로 서비스용 Hikari DataSource(조회 연결 풀)와 JdbcClient를 구성합니다. Flyway는 같은 DB 설정을 별도의 전용 연결로 사용합니다.
 - 운영에서 계정을 분리하려면 `spring.datasource.*`와 `spring.flyway.*`를 각각 외부 설정으로 지정합니다.
-- `db` 프로필 시작 시 Flyway가 V1~V5를 순서대로 적용하고 이미 적용된 마이그레이션은 다시 실행하지 않습니다. Flyway는 DB 스키마 변경 이력을 관리하는 도구입니다.
+- `db` 프로필 시작 시 Flyway가 V1~V6 중 미적용 버전을 순서대로 적용하고 이미 적용된 마이그레이션은 다시 실행하지 않습니다. 현재 개발 DB는 V5 상태이며 이번 작업에서 V6는 적용하지 않았습니다. 이 코드로 `db` 프로필을 기동하면 V6도 자동 적용되므로 대상 DB·백업·적용 권한을 먼저 확인합니다. Flyway는 DB 스키마 변경 이력을 관리하는 도구입니다.
 - Compose DB는 공간 연산용 PostGIS 확장을 포함합니다. 외부 로컬 DB는 `backend/.env.example`을 참고하고 PostGIS 설치 및 확장 생성 권한을 확인합니다.
 - 스키마 적용만으로 조회 데이터가 생기지 않습니다. 행정구역 API는 [경계 ETL](etl-guide.md#행정동자치구-경계-적재)의 정상 게시본이 필요합니다.
 
 ### 마이그레이션 적용 상태 확인
 
-Backend를 실행한 후 위의 `docker compose exec db …` 명령으로 DB에 접속해 다음을 확인합니다. V5까지 적용한 DB의 이력은 버전 `1`~`5`가 모두 `success = true`여야 하며, 테이블 조회는 9행을 반환해야 합니다. 아래는 마이그레이션 적용 상태를 확인하는 읽기 전용 SQL입니다.
+Backend를 실행한 후 위의 `docker compose exec db …` 명령으로 DB에 접속해 다음을 확인합니다. V6까지 적용한 DB의 이력은 버전 `1`~`6`이 모두 `success = true`여야 하며, 테이블 조회는 10행을 반환해야 합니다. 기존 개발 DB의 V5 적용 기록과 V6 미적용 상태는 아래에 별도로 구분합니다. 아래는 마이그레이션 적용 상태를 확인하는 읽기 전용 SQL입니다.
 
 ```sql
 SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;
@@ -160,7 +160,7 @@ SELECT tablename FROM pg_tables
 WHERE schemaname = 'public'
   AND tablename IN ('etl_batch', 'district', 'administrative_dong', 'service_industry',
                     'dong_store_stat', 'dong_sales_stat', 'dong_foot_traffic_stat', 'cafe_store',
-                    'district_store_stat')
+                    'district_store_stat', 'district_sales_stat')
 ORDER BY tablename;
 ```
 

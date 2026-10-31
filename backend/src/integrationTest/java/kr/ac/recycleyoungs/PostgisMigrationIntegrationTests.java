@@ -78,7 +78,7 @@ class PostgisMigrationIntegrationTests {
     // 버전 적용 여부뿐 아니라 실제 공간 질의와 재실행 시 중복 적용 방지도 확인한다.
     assertThat(flyway.info().applied())
         .extracting(migration -> migration.getVersion().getVersion())
-        .containsExactly("1", "2", "3", "4", "5");
+        .containsExactly("1", "2", "3", "4", "5", "6");
     assertThat(flyway.info().pending()).isEmpty();
     try (var connection = flyway.getConfiguration().getDataSource().getConnection();
         var statement = connection.createStatement();
@@ -229,6 +229,172 @@ class PostgisMigrationIntegrationTests {
     v4.validate();
     assertThat(v4.info().pending()).isEmpty();
     assertThat(v4.migrate().migrationsExecuted).isZero();
+  }
+
+  @Test
+  void upgradesV5ToV6WithoutChangingExistingDataOrChecksums() throws Exception {
+    // V5까지 게시한 기준·행정동·카페·자치구 점포 데이터와 기존 체크섬을 그대로 보존한다.
+    var v5 =
+        Flyway.configure()
+            .configuration(flyway.getConfiguration())
+            .schemas("v6_upgrade")
+            .defaultSchema("v6_upgrade")
+            .target("5")
+            .load();
+    assertThat(v5.migrate().migrationsExecuted).isEqualTo(5);
+    execute("SET search_path TO v6_upgrade, public");
+    insertCoreData();
+    insertStat("dong_store_stat");
+    insertStat("dong_sales_stat");
+    insertStat("dong_foot_traffic_stat");
+    insertCafe();
+    execute("INSERT INTO service_industry VALUES ('CS100010', '커피-음료', '" + BATCH_ID + "')");
+    execute(
+        """
+        INSERT INTO district_store_stat
+          (district_code, industry_code, quarter_code, store_count, general_store_count,
+           franchise_store_count, opened_store_count, closed_store_count,
+           opening_rate, closure_rate, source_batch_id)
+        VALUES ('11110', 'CS100010', '20262', 9007199254740993, 2, NULL, 0, NULL,
+                123.456789, 0, '%s')
+        """
+            .formatted(BATCH_ID));
+    var snapshotSql =
+        """
+        SELECT 'etl_batch:' || to_jsonb(b)::text FROM etl_batch b
+        UNION ALL SELECT 'district:' || to_jsonb(d)::text FROM district d
+        UNION ALL SELECT 'dong:' || to_jsonb(d)::text FROM administrative_dong d
+        UNION ALL SELECT 'industry:' || to_jsonb(i)::text FROM service_industry i
+        UNION ALL SELECT 'dong_store:' || to_jsonb(s)::text FROM dong_store_stat s
+        UNION ALL SELECT 'dong_sales:' || to_jsonb(s)::text FROM dong_sales_stat s
+        UNION ALL SELECT 'dong_foot:' || to_jsonb(s)::text FROM dong_foot_traffic_stat s
+        UNION ALL SELECT 'cafe:' || to_jsonb(c)::text FROM cafe_store c
+        UNION ALL SELECT 'district_store:' || to_jsonb(s)::text FROM district_store_stat s
+        """;
+    var before = queryStrings(snapshotSql);
+    var checksums =
+        Arrays.stream(v5.info().applied())
+            .filter(migration -> migration.getVersion() != null)
+            .map(migration -> migration.getChecksum())
+            .toList();
+    connection.commit();
+
+    var v6 = Flyway.configure().configuration(v5.getConfiguration()).target("6").load();
+    assertThat(v6.migrate().migrationsExecuted).isEqualTo(1);
+    assertThat(v6.info().current().getVersion().getVersion()).isEqualTo("6");
+    assertThat(
+            Arrays.stream(v6.info().applied())
+                .filter(migration -> migration.getVersion() != null)
+                .limit(5)
+                .map(migration -> migration.getChecksum())
+                .toList())
+        .containsExactlyElementsOf(checksums);
+    assertThat(queryStrings(snapshotSql)).containsExactlyInAnyOrderElementsOf(before);
+    assertThat(queryStrings("SELECT count(*)::text FROM district_sales_stat")).containsExactly("0");
+    v6.validate();
+    assertThat(v6.info().pending()).isEmpty();
+    assertThat(v6.migrate().migrationsExecuted).isZero();
+  }
+
+  @Test
+  void definesDistrictSalesColumnsForeignKeysAndOnlyPrimaryKeyIndex() throws Exception {
+    assertThat(
+            queryStrings(
+                """
+                SELECT column_name || ':' || data_type || ':' ||
+                       COALESCE(character_maximum_length::text, '-') || ':' ||
+                       is_nullable || ':' || COALESCE(column_default, '-')
+                FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'district_sales_stat'
+                """))
+        .containsExactlyInAnyOrder(
+            "district_code:character varying:5:NO:-",
+            "industry_code:character varying:8:NO:-",
+            "quarter_code:character varying:5:NO:-",
+            "monthly_sales_amount:bigint:-:YES:-",
+            "monthly_sales_count:bigint:-:YES:-",
+            "weekday_sales_amount:bigint:-:YES:-",
+            "weekend_sales_amount:bigint:-:YES:-",
+            "source_batch_id:uuid:-:NO:-");
+    assertThat(
+            queryStrings(
+                """
+                SELECT pg_get_constraintdef(oid) FROM pg_constraint
+                WHERE conrelid = 'public.district_sales_stat'::regclass AND contype IN ('p', 'f')
+                """))
+        .containsExactlyInAnyOrder(
+            "PRIMARY KEY (district_code, industry_code, quarter_code)",
+            "FOREIGN KEY (district_code) REFERENCES district(district_code)",
+            "FOREIGN KEY (industry_code) REFERENCES service_industry(industry_code)",
+            "FOREIGN KEY (source_batch_id) REFERENCES etl_batch(batch_id)");
+    assertThat(
+            queryStrings(
+                """
+                SELECT indisprimary::text FROM pg_index
+                WHERE indrelid = 'public.district_sales_stat'::regclass
+                """))
+        .containsExactly("true");
+  }
+
+  @Test
+  void acceptsDistrictSalesNullZeroAndExactBigintWithoutForcingSums() throws Exception {
+    insertCoreData();
+    execute("INSERT INTO service_industry VALUES ('CS100010', '커피-음료', '" + BATCH_ID + "')");
+    execute(
+        """
+        INSERT INTO district_sales_stat
+          (district_code, industry_code, quarter_code, source_batch_id)
+        VALUES ('11110', 'CS100010', '20261', '%s')
+        """
+            .formatted(BATCH_ID));
+    assertThat(
+            queryStrings(
+                """
+                SELECT monthly_sales_amount IS NULL AND monthly_sales_count IS NULL
+                  AND weekday_sales_amount IS NULL AND weekend_sales_amount IS NULL
+                FROM district_sales_stat
+                """))
+        .containsExactly("t");
+    execute(
+        """
+        UPDATE district_sales_stat SET monthly_sales_amount = 9007199254740993,
+          monthly_sales_count = 0, weekday_sales_amount = 9223372036854775807,
+          weekend_sales_amount = 1
+        """);
+    assertThat(
+            queryStrings(
+                """
+                SELECT monthly_sales_amount || ':' || monthly_sales_count || ':' ||
+                       weekday_sales_amount || ':' || weekend_sales_amount
+                FROM district_sales_stat
+                """))
+        .containsExactly("9007199254740993:0:9223372036854775807:1");
+    assertRejected("INSERT INTO district_sales_stat SELECT * FROM district_sales_stat", "23505");
+    assertRejected("UPDATE district_sales_stat SET source_batch_id = NULL", "23502");
+    assertRejected(
+        "UPDATE district_sales_stat SET source_batch_id = '" + MISSING_BATCH_ID + "'", "23503");
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "monthly_sales_amount",
+        "monthly_sales_count",
+        "weekday_sales_amount",
+        "weekend_sales_amount"
+      })
+  void rejectsNegativeAndOverflowDistrictSalesValues(String column) throws Exception {
+    insertCoreData();
+    execute("INSERT INTO service_industry VALUES ('CS100010', '커피-음료', '" + BATCH_ID + "')");
+    execute(
+        """
+        INSERT INTO district_sales_stat
+          (district_code, industry_code, quarter_code, source_batch_id)
+        VALUES ('11110', 'CS100010', '20261', '%s')
+        """
+            .formatted(BATCH_ID));
+    assertRejected("UPDATE district_sales_stat SET " + column + " = -1", "23514");
+    assertRejected("UPDATE district_sales_stat SET " + column + " = 9223372036854775808", "22003");
   }
 
   @Test
