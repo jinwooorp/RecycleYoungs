@@ -2,7 +2,7 @@
 
 - [README의 상세 기술 문서 안내](../README.md#상세-기술-문서)
 
-아래 검증 결과·수치·배치 ID는 기존 README에 기록된 2026년 10월 기준 검증 및 로컬 개발 DB 적재 이력입니다. 이번 문서 정리에서 DB나 외부 API를 재조회한 결과가 아닙니다. 입력 버전별 기대 건수와 공식 분류는 재실행 시 다시 확인합니다. DB 준비·환경변수·공통 품질 검사는 [개발 가이드](development.md)를 참고하세요.
+아래 검증 결과·수치·배치 ID는 기존 README에 기록된 2026년 10월 기준 검증 및 로컬 개발 DB 적재 이력입니다. 이번 문서 정리에서 DB나 외부 API를 재조회한 결과가 아닙니다. 입력 버전별 기대 건수와 공식 분류는 재실행 시 다시 확인합니다. 자치구 점포의 실제 CSV 전체 probe 결과는 이 문서의 별도 절에 기록하며, 이번 작업에서 개발 DB는 변경하지 않았습니다. DB 준비·환경변수·공통 품질 검사는 [개발 가이드](development.md)를 참고하세요.
 
 ETL(수집·검증·변환·적재)의 원본 동일성은 체크섬(원본 내용에서 계산한 식별값)과 실제 DB 값·출처를 함께 대조합니다. 스테이징은 최종 반영 전에 데이터를 검증하는 임시 적재 영역이며, Upsert는 기본키 기준 추가·갱신을 뜻합니다.
 
@@ -199,7 +199,7 @@ npm start
 
 `npm run dev`와 `npm start`를 연속 실행할 필요는 없습니다. 실제 적재는 아래에서 선택한 명령에 같은 인자를 전달하며, 개발 방식이면 `npm run dev -- …`, 빌드 방식이면 `npm start -- …`를 사용합니다.
 
-인자 없는 실행은 DB에 접속하지 않습니다. 현재 구현된 적재 명령은 행정동·자치구 경계용 `boundaries`, 서비스 업종용 `industries`, 점포 통계용 `stores`, 추정매출 통계용 `sales`, 유동인구 통계용 `foot-traffic`, 카페용 `cafes`입니다.
+인자 없는 실행은 DB에 접속하지 않습니다. 현재 구현된 적재 명령은 행정동·자치구 경계용 `boundaries`, 서비스 업종용 `industries`, 점포 통계용 `stores`, 추정매출 통계용 `sales`, 유동인구 통계용 `foot-traffic`, 카페용 `cafes`, 공식 자치구 점포용 `district-stores`입니다.
 
 Compose DB를 공유하려면 [개발 가이드](development.md#로컬-db-준비)에 따라 같은 터미널에서 루트 `.env`를 먼저 내보냅니다. 내보낸 `DATABASE_URL`은 `etl/.env`보다 우선하므로 Backend와 같은 DB를 사용합니다.
 
@@ -211,7 +211,7 @@ Compose DB를 공유하려면 [개발 가이드](development.md#로컬-db-준비
 
 ### 사전 조건과 실행 명령
 
-Node.js·의존성 설치 후 **`etl/`에서** 실행합니다. `district-stores`는 `--probe`가 필수이며 적재 모드는 지원하지 않습니다. DB 설정이 없거나 잘못되어도 DB 풀 생성·접속·배치 생성·적재를 하지 않습니다. 로컬 원본의 경로와 해당 판본의 전체 데이터 행 수(헤더 제외)를 준비합니다. 아래 `EXPECTED_DISTRICT_STORE_ROWS`는 확인한 행 수를 담는 셸 변수이며 인증정보가 아닙니다.
+Node.js·의존성 설치 후 **`etl/`에서** 실행합니다. `district-stores --probe`는 읽기 전용이고, `--probe` 없이 실행하면 적재 모드입니다. probe는 DB 설정이 없거나 잘못되어도 DB 풀 생성·접속·배치 생성·적재를 하지 않습니다. 로컬 원본의 경로와 해당 판본의 전체 데이터 행 수(헤더 제외)를 준비합니다. 아래 `EXPECTED_DISTRICT_STORE_ROWS`는 확인한 행 수를 담는 셸 변수이며 인증정보가 아닙니다.
 
 ```bash
 # etl/에서 실행. 실제 원본의 확인한 전체 행 수를 변수에 먼저 지정합니다.
@@ -220,12 +220,12 @@ npm run dev -- district-stores --probe \
   --expected-rows "$EXPECTED_DISTRICT_STORE_ROWS"
 ```
 
-CSV 하나를 담은 ZIP도 `--source /절대경로/자치구점포.zip`으로 검증합니다. 빌드 결과를 선택하면 `npm run build` 후 같은 인자를 `npm start -- district-stores --probe …`로 전달합니다. 기존 적재 명령과 달리 `.env` 내보내기·API 인증키는 필요하지 않습니다. 옵션 중복·probe 생략·누락된 경로·양의 안전한 정수가 아닌 예상 건수는 실행 전에 거부합니다.
+CSV 하나를 담은 ZIP도 `--source /절대경로/자치구점포.zip`으로 검증합니다. 빌드 결과를 선택하면 `npm run build` 후 같은 인자를 `npm start -- district-stores --probe …`로 전달합니다. 기존 적재 명령과 달리 `.env` 내보내기·API 인증키는 필요하지 않습니다. 옵션 중복·누락된 경로·양의 안전한 정수가 아닌 예상 건수는 실행 전에 거부합니다. `--probe` 생략은 적재를 선택하므로 읽기 전용 확인에는 반드시 붙입니다.
 
 ### 입력·검증 규칙
 
 - 공식 [점포-자치구 OA-22173](https://data.seoul.go.kr/dataList/OA-22173/A/1/datasetView.do)의 Open API 출력항목·Sheet label에 대응하는 3개 코드와 7개 측정값을 요구합니다. [전체 컬럼 대응과 원천 조사](district-statistics-policy.md#점포의-7개-측정값)를 참고하세요. 한글 또는 영문 헤더를 받되 누락·중복·모호한 두 별칭·잘못된 행 길이를 거부합니다. 명칭 컬럼은 키가 아닙니다.
-- 분기 `YYYYQ`(분기 1~4), 자치구 ASCII 5자리, 업종 `CS`+ASCII 6자리를 문자열로 검증합니다. 동일 분기·구·업종의 복합키 중복과 빈 데이터도 오류입니다. 서울 구·업종 기준 테이블의 실제 존재는 조회하지 않습니다.
+- 분기 `YYYYQ`(분기 1~4), 자치구 ASCII 5자리, 업종 `CS`+ASCII 6자리를 문자열로 검증합니다. 동일 분기·구·업종의 복합키 중복과 빈 데이터도 오류입니다. probe는 서울 구·업종 기준 테이블의 실제 존재를 조회하지 않으며, 적재 모드에서 FK를 별도로 대조합니다.
 - 점포 수 5개는 BIGINT 범위의 0 이상 정수 의미를 검증합니다. 공개 API 표본의 `749.0`이나 정수 의미 지수 표기를 정확한 정수 문자열로 정규화하며 `Number`로 변환하지 않습니다. 소수 의미·음수·범위 초과는 거부합니다.
 - 개·폐업률은 기존 점포 계약의 일반 십진수 문자열로 검증합니다(지수 표기 제외). NUMERIC 정수부 131072자리·소수부 16383자리 한계를 적용하고 긴 소수부·끝의 0을 보존합니다. 100% 상한·합계 일치·비율 재계산은 강제하지 않습니다.
 - 빈 셀만 `null`이며 실제 `0`과 구분합니다. 공백·문자 `NULL`·NaN·Infinity를 대체하지 않습니다. UTF-8·CP949 및 단일 CSV ZIP 판독·CRC·512 MiB 제한은 기존 CSV 처리기를 재사용하며 디스크에 압축을 풀지 않습니다.
@@ -235,9 +235,48 @@ CSV 하나를 담은 ZIP도 `--source /절대경로/자치구점포.zip`으로 �
 
 성공 출력은 `mode=PROBE`, `datasetId=OA-22173`, `validationScope=LOCAL_FILE_FORMAT`, `databaseChecked=false`, `batchCreated=false`, `loadedRows=0`입니다. 판독·유효·거부 건수, 예상 건수, 관찰된 최소·최대 분기, CSV 바이트의 SHA-256 체크섬, 인코딩과 최대 5행의 `sample`을 포함합니다. ZIP 포장이 달라도 내부 CSV가 같으면 같은 체크섬입니다. 원본 경로·ZIP entry·구별 커버리지·NULL별 집계는 출력하지 않습니다.
 
-공식 메타데이터·공개 API 표본은 확인했지만 **실제 자치구 CSV 전체 검증은 아직 하지 않았습니다.** 테스트 입력은 합성 데이터입니다. probe 성공은 지정 로컬 파일의 형식 검증이며 공식 원본의 진위·완전성·FK·게시 준비 완료를 뜻하지 않습니다. 자치구 테이블·ETL 적재·REST API는 [후속 정책](district-statistics-policy.md#후속-저장게시api-방향)이며 이번 구현에 포함하지 않습니다.
+2026-10-31에 제공된 `서울시 상권분석서비스(점포-자치구).csv` 전체를 `--expected-rows 54765`로 검증했습니다. CP949, 판독·유효 54,765행, 거부 0행, `20211`~`20262` 22개 분기이며 25개 구·100개 업종을 확인했습니다. 복합키 중복·수치 형식 오류가 없고 7개 측정값 모두 소수 표기였습니다. 이 파일에는 빈 수치 셀이 없고 실제 0이 존재하며, 폐업률 `200.0`인 1행이 있습니다. 관찰 차원의 곱 55,000개 중 235개 조합은 원본에 없으므로 전체 조합을 강제하거나 0으로 채우지 않습니다.
 
-검증 로직과 실제 CLI의 DB 미접속 회귀는 `etl/`에서 `npm test -- src/district-store-source.test.ts src/district-store-cli.test.ts src/index.test.ts`로 실행합니다. 테스트는 메모리 CSV·ZIP과 모의 파일 읽기·DB/네트워크 차단을 사용하며 개발 DB·공공 API에 접속하지 않습니다.
+원본 CSV SHA-256은 `84702068872a5ab8c6c824f11294a16f8b306afb6c19a25689af4c135bf377fd`입니다. 구·업종 수·없는 조합·NULL·비율 범위는 같은 파일을 별도로 읽어 대조한 결과이며 probe 출력에 새 집계 필드를 추가하지 않았습니다. probe 성공은 지정 로컬 파일의 형식 검증이고 공식 원본의 진위·DB FK·게시 준비 완료를 뜻하지 않습니다. 실제 개발 DB에는 V5 적용이나 자치구 점포 적재를 하지 않았습니다. 실제 CSV 54,765행을 일회용 PostGIS에 적재해 7개 측정값을 전수 문자열 대조했고 재실행 `SKIPPED`와 정상 게시 출처 보존을 확인했습니다. 이 시험의 FK 기준 행은 관찰 코드로 만든 합성 기준 데이터이며 실제 개발 DB 기준 데이터와 대조한 것은 아닙니다.
+
+API는 [후속 정책](district-statistics-policy.md#후속-저장게시api-방향)이며 점포 테이블·적재 ETL과 구분합니다.
+
+### 적재 사전 조건과 실행
+
+V5 `district_store_stat`, V2의 `district`·`service_industry`·`etl_batch`와 검증할 자치구·업종 기준 데이터가 필요합니다. 적재용 `DATABASE_URL`은 기존 ETL처럼 loopback 주소만 허용합니다. 명령을 실행하면 대상 DB에 변경이 생기므로 먼저 대상과 적용 권한을 확인합니다. 이번 개발 검증은 일회용 PostGIS 컨테이너만 사용하며 실제 개발 DB 적용·적재는 수행하지 않았습니다.
+
+```bash
+# etl/에서 실행. 적재 대상 DB 설정과 V5·기준 데이터를 별도로 준비한 경우만 사용합니다.
+npm run dev -- district-stores \
+  --source "$HOME/Downloads/서울시 상권분석서비스(점포-자치구).csv" \
+  --expected-rows 54765
+```
+
+`54765`는 위에서 검증한 파일 판본의 전체 행 수이며 다른 판본에 고정 적용하지 않습니다. ZIP과 빌드 결과 실행도 probe와 같은 입력 옵션을 사용합니다. 인증키·외부 API 호출은 없습니다.
+
+### staging·게시·재실행
+
+- CSV·ZIP 전체를 검증하며 중복키를 확인하고 수치를 문자열 또는 NULL로 유지해 최대 1,000행씩 staging합니다. 실제 staging 행 수를 유효·예상 건수와 비교하고 `district`·`service_industry`의 실제 코드를 대조합니다. 일부 분기·구·업종 조합이 없어도 임의 행이나 0을 생성하지 않습니다.
+- 공개 직전에 같은 데이터셋·대상 쓰기를 직렬화하고 FK 기준 데이터 변경을 잠근 뒤 Upsert와 `PUBLISHED` 배치를 같은 트랜잭션으로 반영합니다. 신규 파일에 없는 이전 키는 삭제하거나 출처를 변경하지 않습니다. 전체·세부 합계나 개·폐업률도 보정하지 않습니다.
+- 데이터셋은 `SEOUL_DISTRICT_STORE_STAT`, `CSV`·`SEOUL`·`scope_code=NULL`, ETL 버전은 `district-store-stat-v1`입니다. `source_reference` JSON에는 `datasetId=OA-22173`, `serviceName=VwsmSignguStorW`, `path`, 선택적 ZIP `entry`, `encoding`을 남기며 CSV 내용 체크섬·분기 범위는 배치 컬럼에 기록합니다.
+- 같은 체크섬·ETL 버전의 정상 `PUBLISHED` 이력(`CSV`·`SEOUL`·범위 코드 NULL·게시 시각 존재)과 모든 대상 측정값(비율의 소수 자릿수 포함)·`source_batch_id`가 실제 저장값과 일치해야 `SKIPPED`입니다. 이때 새 SKIPPED 배치로 통계 행 출처를 덮어쓰지 않습니다. 원본이나 저장값·출처가 달라지면 새 `PUBLISHED`로 복구·게시합니다.
+- 파일·FK·DB 오류에서는 staging과 일부 성공한 Upsert도 함께 롤백하고 기존 정상 게시 데이터·출처를 보존합니다. 시작 배치가 생성된 실행은 `FAILED`를 기록하며 DB 연결 자체가 불가능하면 이력도 남길 수 없습니다. `--probe`는 이 모든 DB 처리 전에 분기합니다.
+
+### 확인 SQL·테스트
+
+아래 SQL은 의도한 대상 DB를 별도로 선택한 경우의 읽기 전용 확인 예시이며 이번 작업에서 실제 개발 DB에 실행하지 않았습니다.
+
+```sql
+SELECT batch_id, status, source_checksum, expected_rows, fetched_rows,
+       valid_rows, rejected_rows, period_from, period_to, published_at
+FROM etl_batch
+WHERE dataset_code = 'SEOUL_DISTRICT_STORE_STAT'
+ORDER BY started_at DESC;
+SELECT count(*), min(quarter_code), max(quarter_code)
+FROM district_store_stat;
+```
+
+검증 로직과 실제 CLI의 DB 미접속 회귀는 `etl/`에서 `npm test -- src/district-store-source.test.ts src/district-store-cli.test.ts src/index.test.ts`로 실행합니다. 단위 테스트는 메모리 CSV·ZIP과 모의 파일 읽기·DB/네트워크 차단을 사용합니다. `RUN_DISTRICT_STORE_DB_TESTS=1 npm test -- src/district-stores.integration.test.ts`는 기존 ETL 방식대로 새 일회용 PostGIS 컨테이너에만 V1~V5와 합성 기준·통계를 적용해 실제 SQL·트랜잭션·실패 보존을 검증합니다. 개발 DB·공공 API에는 접속하지 않습니다.
 
 ## 행정동·자치구 경계 적재
 

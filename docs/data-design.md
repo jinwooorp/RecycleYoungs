@@ -2,19 +2,19 @@
 
 - [README의 상세 기술 문서 안내](../README.md#상세-기술-문서)
 
-현재 구현된 Flyway V1~V4 및 ETL·API 데이터 계약을 정리합니다. Flyway는 SQL 마이그레이션의 적용 이력을 관리하는 도구입니다. 8개 테이블은 구현되었고 `region_score`는 계획입니다. 적용된 마이그레이션은 수정하지 않으며 후속 스키마는 새 버전으로 관리합니다.
+현재 구현된 Flyway V1~V5 및 ETL·API 데이터 계약을 정리합니다. Flyway는 SQL 마이그레이션의 적용 이력을 관리하는 도구입니다. 9개 테이블은 구현되었고 `region_score`는 계획입니다. 적용된 마이그레이션은 수정하지 않으며 후속 스키마는 새 버전으로 관리합니다.
 
 이 문서의 구현 계약과 향후 계획을 다음과 같이 구분합니다.
 
 | 구분                  | 범위                                                                                                                                             |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 구현 완료·확정된 계약 | Flyway V1~V4의 8개 테이블·제약조건, 구현된 ETL의 검증·게시 규칙, 행정구역 API 5개와 행정동 점포·추정매출·유동인구·주변 카페 API의 입력·응답·오류 |
-| 구현 예정             | 공식 자치구 통계 적재·API·점수 API와 `region_score`                                                                                              |
+| 구현 완료·확정된 계약 | Flyway V1~V5의 9개 테이블·제약조건, 구현된 ETL의 검증·게시 규칙, 행정구역 API 5개와 행정동 점포·추정매출·유동인구·주변 카페 API의 입력·응답·오류 |
+| 구현 예정             | 자치구 추정매출·유동인구 적재와 구 통계·점수 API, `region_score`                                                                                 |
 | 확정 전               | 점수 알고리즘·계산 시점·결과 저장 스키마, 후속 API의 상세 계약                                                                                   |
 
 V3 점포·추정매출·유동인구 통계와 V4 카페의 주변 반경·지도 영역 조회 API를 구현했습니다. [현재 개발 현황](../README.md#현재-개발-현황)과 같이 실제 화면·구 단위 집계·점수는 후속 구현 대상입니다. 아래 점수 관련 설계 원칙은 향후 구현의 요구사항이며 현재 동작이 아닙니다.
 
-자치구 점포 원본의 읽기 전용 `district-stores --probe`를 구현했습니다. 공식 점포·매출·길단위인구의 자치구 차원과 집계 제한은 [자치구 통계 정책](district-statistics-policy.md), 실행법은 [ETL 가이드](etl-guide.md#자치구-점포-읽기-전용-검증)를 따릅니다. 실제 자치구 CSV 검증과 자치구 테이블·적재·REST API는 아직 제공하지 않으며 기존 행정동 V3 계약은 유지합니다.
+공식 자치구 점포의 실제 CSV 54,765행을 `district-stores --probe`로 검증했고, V5 테이블과 적재 ETL을 추가했습니다. 공식 점포·매출·길단위인구의 자치구 차원과 집계 제한은 [자치구 통계 정책](district-statistics-policy.md), 실행법은 [ETL 가이드](etl-guide.md#자치구-점포-읽기-전용-검증)를 따릅니다. 실제 개발 DB는 변경하지 않았으며 구 통계 REST API와 자치구 매출·인구 적재는 후속 범위입니다. 기존 행정동 V3 계약은 유지합니다.
 
 ## 목차
 
@@ -24,6 +24,7 @@ V3 점포·추정매출·유동인구 통계와 V4 카페의 주변 반경·지�
 - [DB 마이그레이션 방향](#db-마이그레이션-방향)
   - [V3 통계 컬럼과 저장 정책](#v3-통계-컬럼과-저장-정책)
   - [V4 카페 컬럼과 ETL 계약](#v4-카페-컬럼과-etl-계약)
+  - [V5 자치구 점포 컬럼과 ETL 계약](#v5-자치구-점포-컬럼과-etl-계약)
 - [행정구역 REST API 계약](#행정구역-rest-api-계약)
 - [행정동 점포 통계 REST API 계약](#행정동-점포-통계-rest-api-계약)
 - [행정동 추정매출 통계 REST API 계약](#행정동-추정매출-통계-rest-api-계약)
@@ -33,19 +34,20 @@ V3 점포·추정매출·유동인구 통계와 V4 카페의 주변 반경·지�
 
 ## 데이터 모델
 
-다음 9개 테이블을 중심으로 설계하고 있으며, V1~V4에서 `cafe_store`를 포함한 8개 테이블을 구현했습니다. `region_score`는 후속 구현 대상입니다. V4는 격리 DB 검증과 개발 DB 적용을 완료했습니다.
+다음 10개 테이블을 중심으로 설계하고 있으며, V1~V4의 8개 테이블에 V5 `district_store_stat`을 추가해 9개를 구현했습니다. `region_score`는 후속 구현 대상입니다. V4까지 개발 DB 적용을 완료했으며 이번 V5는 실제 개발 DB에 적용하지 않았습니다.
 
-| 테이블                   | 역할                            | 주요 식별 기준       |
-| ------------------------ | ------------------------------- | -------------------- |
-| `district`               | 서울시 자치구 정보 및 공간 경계 | 자치구 코드          |
-| `administrative_dong`    | 행정동 정보 및 공간 경계        | 행정동 코드          |
-| `service_industry`       | 서울시 서비스 업종 코드         | 업종 코드            |
-| `dong_store_stat`        | 행정동별 점포 수·개업·폐업 통계 | 분기 + 행정동 + 업종 |
-| `dong_sales_stat`        | 행정동별 추정매출 및 소비 통계  | 분기 + 행정동 + 업종 |
-| `dong_foot_traffic_stat` | 행정동별 유동인구 통계          | 분기 + 행정동        |
-| `cafe_store`             | 개별 카페 정보 및 위치          | 소진공 상가업소번호  |
-| `etl_batch`              | 공공데이터 수집·검증·적재 이력  | ETL 배치 ID          |
-| `region_score`           | 창업 환경 점수와 계산 근거      | 평가 결과 ID         |
+| 테이블                   | 역할                                 | 주요 식별 기준       |
+| ------------------------ | ------------------------------------ | -------------------- |
+| `district`               | 서울시 자치구 정보 및 공간 경계      | 자치구 코드          |
+| `administrative_dong`    | 행정동 정보 및 공간 경계             | 행정동 코드          |
+| `service_industry`       | 서울시 서비스 업종 코드              | 업종 코드            |
+| `dong_store_stat`        | 행정동별 점포 수·개업·폐업 통계      | 분기 + 행정동 + 업종 |
+| `district_store_stat`    | 공식 자치구별 점포 수·개업·폐업 통계 | 분기 + 자치구 + 업종 |
+| `dong_sales_stat`        | 행정동별 추정매출 및 소비 통계       | 분기 + 행정동 + 업종 |
+| `dong_foot_traffic_stat` | 행정동별 유동인구 통계               | 분기 + 행정동        |
+| `cafe_store`             | 개별 카페 정보 및 위치               | 소진공 상가업소번호  |
+| `etl_batch`              | 공공데이터 수집·검증·적재 이력       | ETL 배치 ID          |
+| `region_score`           | 창업 환경 점수와 계산 근거           | 평가 결과 ID         |
 
 `region_score`는 평가 알고리즘을 확정한 뒤 구체적인 스키마와 저장 방식을 결정할 예정입니다.
 
@@ -54,6 +56,7 @@ V3 점포·추정매출·유동인구 통계와 V4 카페의 주변 반경·지�
 ```mermaid
 erDiagram
     DISTRICT ||--o{ ADMINISTRATIVE_DONG : contains
+    DISTRICT ||--o{ DISTRICT_STORE_STAT : has
 
     ADMINISTRATIVE_DONG ||--o{ DONG_STORE_STAT : has
     ADMINISTRATIVE_DONG ||--o{ DONG_SALES_STAT : has
@@ -61,15 +64,17 @@ erDiagram
     ADMINISTRATIVE_DONG |o--o{ CAFE_STORE : located_in
 
     SERVICE_INDUSTRY ||--o{ DONG_STORE_STAT : classifies
+    SERVICE_INDUSTRY ||--o{ DISTRICT_STORE_STAT : classifies
     SERVICE_INDUSTRY ||--o{ DONG_SALES_STAT : classifies
 
     ETL_BATCH ||--o{ DONG_STORE_STAT : imports
+    ETL_BATCH ||--o{ DISTRICT_STORE_STAT : imports
     ETL_BATCH ||--o{ DONG_SALES_STAT : imports
     ETL_BATCH ||--o{ DONG_FOOT_TRAFFIC_STAT : imports
     ETL_BATCH ||--o{ CAFE_STORE : imports
 ```
 
-위 ERD는 주요 테이블 관계를 나타낸 1차 설계입니다. V1~V4의 컬럼·제약조건과 경계·서비스 업종·점포·추정매출·유동인구 통계 ETL의 배치 이력 연결은 구현했으며, 미구현 테이블과 정기 갱신·후속 서비스 조회의 상세 설계는 후속 단계에서 확정할 예정입니다.
+위 ERD는 주요 테이블 관계를 나타낸 1차 설계입니다. V1~V5의 컬럼·제약조건과 경계·서비스 업종·행정동 통계·자치구 점포 ETL의 배치 이력 연결은 구현했으며, 미구현 테이블과 정기 갱신·후속 서비스 조회의 상세 설계는 후속 단계에서 확정할 예정입니다.
 
 ## 주요 설계 원칙
 
@@ -82,7 +87,7 @@ erDiagram
 
 ### 2. 통계 데이터
 
-- 점포·추정매출은 `분기 + 행정동 + 업종` 단위로 저장합니다.
+- 행정동 점포·추정매출은 `분기 + 행정동 + 업종`, 공식 자치구 점포는 `분기 + 자치구 + 업종` 단위로 별도 저장합니다.
 - 길단위인구는 `분기 + 행정동` 단위로 저장합니다.
 - 개업률·폐업률은 원본 집계 방식에 따라 100%를 초과할 수 있으므로 일률적인 상한을 적용하지 않습니다.
 - V3의 점포 수·매출액·매출 건수는 `BIGINT`, 비율·추정 유동인구는 정밀도 손실을 피하기 위해 `NUMERIC`으로 저장합니다.
@@ -121,7 +126,7 @@ PostGIS는 PostgreSQL의 공간 연산 확장입니다. EPSG:4326은 WGS84 경�
 
 DB 스키마는 Flyway를 이용해 관리합니다.
 
-`V1__enable_postgis.sql`은 PostGIS 확장을 활성화하고, `V2__create_core_tables.sql`은 ETL 이력·자치구·행정동·서비스 업종 테이블과 제약조건·인덱스를 생성합니다. `V3__create_dong_stat_tables.sql`은 행정동별 점포·추정매출·유동인구 통계 테이블을 생성하고, `V4__create_cafe_store.sql`은 개별 카페 테이블과 조회 인덱스를 생성합니다.
+`V1__enable_postgis.sql`은 PostGIS 확장을 활성화하고, `V2__create_core_tables.sql`은 ETL 이력·자치구·행정동·서비스 업종 테이블과 제약조건·인덱스를 생성합니다. `V3__create_dong_stat_tables.sql`은 행정동별 점포·추정매출·유동인구 통계 테이블을 생성하고, `V4__create_cafe_store.sql`은 개별 카페 테이블과 조회 인덱스를 생성합니다. `V5__create_district_store_stat.sql`은 공식 자치구 점포 통계를 추가하며 기존 V1~V4는 변경하지 않습니다.
 
 현재 마이그레이션 구성과 후속 구현 계획은 다음과 같습니다.
 
@@ -131,7 +136,8 @@ DB 스키마는 Flyway를 이용해 관리합니다.
 | V2   | ETL 이력 및 행정구역·업종 기준 테이블 (구현 완료)                   |
 | V3   | 점포·추정매출·길단위인구 통계 테이블 (구현 완료)                    |
 | V4   | 개별 카페 및 공간 검색 인덱스 (구현·격리 DB 검증·개발 DB 적용 완료) |
-| 이후 | 평가 알고리즘 확정 후 점수 관련 테이블                              |
+| V5   | 공식 자치구 점포 통계 (구현, 실제 개발 DB 미적용)                   |
+| 이후 | 자치구 추정매출·유동인구 및 평가 알고리즘 확정 후 점수 관련 테이블  |
 
 Flyway는 테이블, 제약조건, 인덱스 등 DB 스키마 변경을 관리합니다. 경계 파일·서비스 업종 기준 데이터·점포·추정매출·유동인구 통계 적재는 별도 ETL로 구현했으며, 카페 데이터도 별도 API ETL로 실제 인증 검증·수집·21,996건 적재를 완료했습니다.
 
@@ -272,6 +278,29 @@ PK 외에 생성하는 조회 인덱스입니다.
    - 입력에서 누락된 기존 업소는 삭제하거나 폐업으로 단정하지 않으며, 이전 배치의 행으로 보존하고 최신 목록과 구분합니다.
 
 이 계약의 수집·검증·게시·재실행은 카페 ETL이 담당합니다. V4의 FK·CHECK가 배치 상태까지 강제하지는 않으며, [주변 카페 API](#주변-카페-rest-api-계약)는 위 최신 목록 조건과 아래의 배치 준비 상태를 함께 확인합니다.
+
+### V5 자치구 점포 컬럼과 ETL 계약
+
+`district_store_stat`은 [점포-자치구 OA-22173](https://data.seoul.go.kr/dataList/OA-22173/S/1/datasetView.do)의 공식 값을 저장하며 행정동 통계의 합산 결과가 아닙니다. 기본키는 `(district_code, industry_code, quarter_code)`이고 자치구·업종·게시 배치는 각각 `district`·`service_industry`·`etl_batch`를 참조합니다. 자치구는 ASCII 5자리, 업종은 `CS`+ASCII 6자리, 분기는 `YYYYQ`(1~4)이며 필수 문자열입니다.
+
+| DB 컬럼                 | 원천 필드               | 저장 정책                     |
+| ----------------------- | ----------------------- | ----------------------------- |
+| `store_count`           | `SIMILR_INDUTY_STOR_CO` | 전체 점포 수 · `BIGINT`       |
+| `general_store_count`   | `STOR_CO`               | 일반 점포 수 · `BIGINT`       |
+| `franchise_store_count` | `FRC_STOR_CO`           | 프랜차이즈 점포 수 · `BIGINT` |
+| `opened_store_count`    | `OPBIZ_STOR_CO`         | 개업 점포 수 · `BIGINT`       |
+| `closed_store_count`    | `CLSBIZ_STOR_CO`        | 폐업 점포 수 · `BIGINT`       |
+| `opening_rate`          | `OPBIZ_RT`              | 개업률(%) · `NUMERIC`         |
+| `closure_rate`          | `CLSBIZ_RT`             | 폐업률(%) · `NUMERIC`         |
+
+- 7개 측정값은 기본값 없이 NULL을 허용하고 실제 0과 구분합니다. 유한한 0 이상 값만 저장하며 비율에 100% 상한이나 고정 소수 자릿수를 두지 않습니다. 전체·일반·프랜차이즈 합계나 비율을 재계산하지 않습니다.
+- 실제 CP949 CSV는 54,765행, `20211`~`20262` 연속 22분기·25구·100업종이며 복합키 중복과 수치 형식 오류가 없었습니다. 모든 수치는 소수 표기였고 폐업률 `200.0`이 1행 존재했습니다. `749.0` 같은 점포 수는 정확한 BIGINT 정수 문자열로 변환하고 비율의 소수 정밀도는 유지합니다.
+- 관찰한 전체 차원의 곱 55,000개 중 235개 조합은 원본에 없습니다. 없는 조합을 0으로 생성하거나 원본에 없는 이전 분기·업종 키를 삭제하지 않습니다. 이 파일의 NULL 셀은 없었지만 스키마·ETL은 NULL을 허용합니다.
+- `district-stores` 적재는 전체 CSV·ZIP 검증과 1,000행 이하 staging, 실제 staging 건수·자치구/업종 FK 대조 후 Upsert와 `PUBLISHED` 배치를 한 트랜잭션으로 확정합니다. 별도 데이터셋은 `SEOUL_DISTRICT_STORE_STAT`, 출처는 `CSV`·`SEOUL`·`scope_code=NULL`, ETL 버전은 `district-store-stat-v1`입니다.
+- 동일 체크섬·ETL 버전의 정상 게시 이력과 모든 대상 측정값·`source_batch_id`가 일치해야 `SKIPPED`이며 기존 정상 게시 출처를 유지합니다. 파일이 변경되거나 실제 저장값·출처가 다르면 새로 게시합니다. 오류는 rollback 후 `FAILED`로 기록하며 기존 데이터를 보존합니다.
+- `--probe`는 계속 DB 설정·접속·배치 생성 없이 같은 파일 검증만 수행합니다. 실제 CSV 형식 검증과 격리 DB 적재 테스트는 구분하며, 이번 작업에서 실제 개발 DB는 변경하지 않았습니다. 자치구 통계 REST API는 아직 없습니다.
+
+체크섬·전체 입력 검증 결과와 실행·확인 SQL은 [ETL 가이드](etl-guide.md#자치구-점포-읽기-전용-검증), 지표별 집계 제한은 [자치구 정책](district-statistics-policy.md)에 기록합니다.
 
 ## 행정구역 REST API 계약
 

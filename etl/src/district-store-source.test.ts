@@ -1,7 +1,9 @@
+import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { zipSync } from 'fflate';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as districtSource from './district-store-source.js';
 import { probeDistrictStoreSource } from './district-store-source.js';
 
 // 공식 컬럼 명세에 맞춘 합성 입력입니다. 원본 다운로드 파일을 검증했다는 뜻은 아닙니다.
@@ -332,5 +334,59 @@ describe('자치구 점포 로컬 파일 probe', () => {
         probe: false,
       } as never),
     ).rejects.toThrow(/probe 모드/);
+  });
+});
+
+// 1000행을 넘는 입력도 일괄 보관하지 않고 원본 순서·정밀도를 유지해 전달해야 합니다.
+describe('자치구 점포 staging 입력', () => {
+  it('1000행 이하로 순차 전달하고 검증 출처와 전체 건수를 반환한다', async () => {
+    files.set('district.csv', csv(distinctRows(2001)));
+    const batches: number[] = [];
+    let previous = '10999';
+    const source = await districtSource.readDistrictStoreSource(
+      'district.csv',
+      async (rows) => {
+        batches.push(rows.length);
+        expect(rows[0]!.districtCode > previous).toBe(true);
+        previous = rows.at(-1)!.districtCode;
+        expect(rows[0]!.storeCount).toBe('749');
+        await Promise.resolve();
+      },
+    );
+    expect(batches).toEqual([1000, 1000, 1]);
+    expect(source).toMatchObject({
+      fetchedRows: 2001,
+      validRows: 2001,
+      rejectedRows: 0,
+      path: resolve('district.csv'),
+      encoding: 'UTF-8',
+      periodFrom: '20262',
+      periodTo: '20262',
+    });
+  });
+
+  it('후반부 입력 오류에도 실패 시점 검증 건수를 보존하고 부분 입력을 성공으로 반환하지 않는다', async () => {
+    const rows = distinctRows(1001);
+    rows.push('20262,15000,CS100010,-1,0,0,0,0,0,0');
+    files.set('district.csv', csv(rows));
+    await expect(
+      districtSource.readDistrictStoreSource('district.csv', async () => {}),
+    ).rejects.toMatchObject({
+      fetchedRows: 1002,
+      validRows: 1001,
+      rejectedRows: 1,
+    });
+  });
+
+  it('DB 콜백 실패를 원본 거부 행으로 세지 않고 원문을 CLI 메시지에 노출하지 않는다', async () => {
+    files.set('district.csv', csv(distinctRows(1001)));
+    const error = await districtSource
+      .readDistrictStoreSource('district.csv', async () => {
+        throw new Error('postgresql://user:secret@private.example');
+      })
+      .catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toMatch(/postgresql|secret|private/);
+    expect(error).toMatchObject({ rejectedRows: 0 });
   });
 });

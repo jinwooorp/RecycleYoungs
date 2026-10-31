@@ -29,7 +29,7 @@ describe('CLI dispatch', () => {
       },
     );
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain('district-stores --probe');
+    expect(result.stdout).toContain('district-stores [--probe]');
     expect(result.stderr).toBe('');
   });
 

@@ -57,7 +57,16 @@ function runProbe(contents: string, args: string[] = [], databaseUrl?: string) {
 }
 
 describe('자치구 점포 읽기 전용 CLI', () => {
-  it('명시적 probe와 입력 버전의 전체 행 수만 허용한다', () => {
+  it('적재와 probe 모두 입력 버전의 전체 행 수를 요구한다', () => {
+    expect(
+      parseDistrictStoreArguments([
+        'district-stores',
+        '--source',
+        'input.csv',
+        '--expected-rows',
+        '7',
+      ]),
+    ).toEqual({ source: 'input.csv', expectedRows: 7, probe: false });
     expect(
       parseDistrictStoreArguments([
         'district-stores',
@@ -78,7 +87,6 @@ describe('자치구 점포 읽기 전용 CLI', () => {
   });
 
   it.each([
-    ['district-stores', '--source', 'input.csv', '--expected-rows', '7'],
     ['district-stores', '--probe', '--expected-rows', '7'],
     ['district-stores', '--probe', '--source', 'input.csv'],
     ['district-stores', '--probe', '--source', '', '--expected-rows', '7'],
@@ -223,7 +231,7 @@ describe('자치구 점포 읽기 전용 CLI', () => {
     expect(result.stderr).not.toContain('DB_POOL_FORBIDDEN');
   });
 
-  it('probe를 빼면 입력 판독이나 DB 생성으로 넘어가지 않는다', () => {
+  it('적재 모드는 DB 설정을 요구하고 probe 성공으로 오인시키지 않는다', () => {
     const result = runProbe(syntheticCsv, [
       '--source',
       '/virtual/district-stores.csv',
@@ -232,7 +240,7 @@ describe('자치구 점포 읽기 전용 CLI', () => {
     ]);
     expect(result.status).toBe(1);
     expect(result.stdout).toBe('');
-    expect(result.stderr).toContain('--probe');
+    expect(result.stderr).toContain('DATABASE_URL');
     expect(result.stderr).not.toContain('DB_POOL_FORBIDDEN');
   });
 });
