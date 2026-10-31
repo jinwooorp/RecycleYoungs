@@ -78,7 +78,7 @@ class PostgisMigrationIntegrationTests {
     // 버전 적용 여부뿐 아니라 실제 공간 질의와 재실행 시 중복 적용 방지도 확인한다.
     assertThat(flyway.info().applied())
         .extracting(migration -> migration.getVersion().getVersion())
-        .containsExactly("1", "2", "3", "4");
+        .containsExactly("1", "2", "3", "4", "5");
     assertThat(flyway.info().pending()).isEmpty();
     try (var connection = flyway.getConfiguration().getDataSource().getConnection();
         var statement = connection.createStatement();
