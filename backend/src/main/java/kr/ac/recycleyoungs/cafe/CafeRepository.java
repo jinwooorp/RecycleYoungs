@@ -16,6 +16,12 @@ import org.springframework.stereotype.Repository;
 @Profile("db")
 public class CafeRepository {
 
+  private static final String DISTRICT_FILTER =
+      """
+        AND EXISTS (SELECT 1 FROM district d WHERE d.boundary_batch_id = :boundaryBatch
+          AND d.district_code IN (:districtCodes) AND ST_Covers(d.geom,s.geom))
+        """;
+
   private final JdbcClient jdbc;
 
   public CafeRepository(JdbcClient jdbc) {
@@ -105,6 +111,96 @@ public class CafeRepository {
         .list();
   }
 
+  public long countViewport(
+      UUID cafeBatch,
+      @Nullable UUID boundaryBatch,
+      double west,
+      double south,
+      double east,
+      double north,
+      List<String> districtCodes) {
+    return viewportMatching(
+            "count(*)", cafeBatch, boundaryBatch, west, south, east, north, districtCodes, "")
+        .query(Long.class)
+        .single();
+  }
+
+  public List<CafeViewportResponse.Cafe> findViewport(
+      UUID cafeBatch,
+      @Nullable UUID boundaryBatch,
+      double west,
+      double south,
+      double east,
+      double north,
+      List<String> districtCodes,
+      int limit,
+      int offset) {
+    return viewportMatching(
+            """
+        s.bizes_id, s.store_name, s.branch_name, s.semas_industry_code, s.semas_industry_name,
+        s.road_address, s.lot_address, ST_X(s.geom) AS longitude, ST_Y(s.geom) AS latitude
+        """,
+            cafeBatch,
+            boundaryBatch,
+            west,
+            south,
+            east,
+            north,
+            districtCodes,
+            " ORDER BY s.bizes_id LIMIT :limit OFFSET :offset")
+        .param("limit", limit)
+        .param("offset", offset)
+        .query(
+            (rs, row) ->
+                new CafeViewportResponse.Cafe(
+                    rs.getString("bizes_id"),
+                    rs.getString("store_name"),
+                    rs.getString("branch_name"),
+                    rs.getString("semas_industry_code"),
+                    rs.getString("semas_industry_name"),
+                    rs.getString("road_address"),
+                    rs.getString("lot_address"),
+                    rs.getDouble("longitude"),
+                    rs.getDouble("latitude")))
+        .list();
+  }
+
+  private JdbcClient.StatementSpec viewportMatching(
+      String select,
+      UUID cafeBatch,
+      @Nullable UUID boundaryBatch,
+      double west,
+      double south,
+      double east,
+      double north,
+      List<String> districtCodes,
+      String suffix) {
+    // geography 반경과 분리해 geometry GiST를 활용한다. Covers는 네 변·꼭짓점도 포함한다.
+    var filter = districtCodes.isEmpty() ? "" : DISTRICT_FILTER;
+    var query =
+        jdbc.sql(
+                """
+        WITH viewport AS (SELECT ST_MakeEnvelope(:west,:south,:east,:north,4326) AS geom)
+        SELECT
+        """
+                    + select
+                    + " FROM cafe_store s CROSS JOIN viewport v "
+                    + """
+        WHERE s.source_batch_id = :cafeBatch AND s.geom IS NOT NULL
+          AND s.geom && v.geom AND ST_Covers(v.geom,s.geom)
+        """
+                    + filter
+                    + suffix)
+            .param("cafeBatch", cafeBatch)
+            .param("west", west)
+            .param("south", south)
+            .param("east", east)
+            .param("north", north);
+    if (!districtCodes.isEmpty())
+      query.param("boundaryBatch", boundaryBatch).param("districtCodes", districtCodes);
+    return query;
+  }
+
   private JdbcClient.StatementSpec matching(
       String select,
       UUID cafeBatch,
@@ -116,13 +212,7 @@ public class CafeRepository {
       String suffix) {
     // 개수와 페이지에 같은 조건을 적용한다. geography 식은 V4의 GiST 인덱스와 일치한다.
     // 카페 점이 반경과 선택 구 안에 모두 있어야 한다. EXISTS는 경계의 중복과 동 FK 의존을 피한다.
-    var filter =
-        districtCodes.isEmpty()
-            ? ""
-            : """
-        AND EXISTS (SELECT 1 FROM district d WHERE d.boundary_batch_id = :boundaryBatch
-          AND d.district_code IN (:districtCodes) AND ST_Covers(d.geom,s.geom))
-        """;
+    var filter = districtCodes.isEmpty() ? "" : DISTRICT_FILTER;
     var query =
         jdbc.sql(
                 """

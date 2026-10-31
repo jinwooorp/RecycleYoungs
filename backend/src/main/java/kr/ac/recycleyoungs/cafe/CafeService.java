@@ -34,21 +34,7 @@ public class CafeService {
       List<String> districtCodes,
       int limit,
       int offset) {
-    @Nullable UUID boundaryBatch = null;
-    // 필터 없는 카페 검색은 경계·행정동 FK의 준비 상태에 의존하지 않는다.
-    if (!districtCodes.isEmpty()) {
-      var boundary =
-          regions
-              .findLatestPublishedBatch()
-              .orElseThrow(() -> new ApiException(ApiErrorCode.DATA_NOT_READY));
-      var currentCodes =
-          regions.findDistricts(boundary.batchId()).stream()
-              .map(District::districtCode)
-              .collect(Collectors.toSet());
-      if (!currentCodes.containsAll(districtCodes))
-        throw new ApiException(ApiErrorCode.REGION_NOT_FOUND);
-      boundaryBatch = boundary.batchId();
-    }
+    var boundaryBatch = boundaryBatch(districtCodes);
     var batch =
         repository
             .findLatestPublishedBatch()
@@ -68,5 +54,47 @@ public class CafeService {
             offset);
     return new CafeResponse(
         items, total, limit, offset, (long) offset + items.size() < total, batch);
+  }
+
+  public CafeViewportResponse getViewport(
+      double west,
+      double south,
+      double east,
+      double north,
+      List<String> districtCodes,
+      int limit,
+      int offset) {
+    var boundaryBatch = boundaryBatch(districtCodes);
+    var batch =
+        repository
+            .findLatestPublishedBatch()
+            .orElseThrow(() -> new ApiException(ApiErrorCode.DATA_NOT_READY));
+    var total =
+        repository.countViewport(
+            batch.batchId(), boundaryBatch, west, south, east, north, districtCodes);
+    var items =
+        repository.findViewport(
+            batch.batchId(), boundaryBatch, west, south, east, north, districtCodes, limit, offset);
+    return new CafeViewportResponse(
+        items, total, limit, offset, (long) offset + items.size() < total, batch);
+  }
+
+  private @Nullable UUID boundaryBatch(List<String> districtCodes) {
+    @Nullable UUID boundaryBatch = null;
+    // 필터 없는 카페 검색은 경계·행정동 FK의 준비 상태에 의존하지 않는다.
+    if (!districtCodes.isEmpty()) {
+      var boundary =
+          regions
+              .findLatestPublishedBatch()
+              .orElseThrow(() -> new ApiException(ApiErrorCode.DATA_NOT_READY));
+      var currentCodes =
+          regions.findDistricts(boundary.batchId()).stream()
+              .map(District::districtCode)
+              .collect(Collectors.toSet());
+      if (!currentCodes.containsAll(districtCodes))
+        throw new ApiException(ApiErrorCode.REGION_NOT_FOUND);
+      boundaryBatch = boundary.batchId();
+    }
+    return boundaryBatch;
   }
 }

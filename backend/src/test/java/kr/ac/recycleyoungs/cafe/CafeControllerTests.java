@@ -196,4 +196,165 @@ class CafeControllerTests {
   private MockHttpServletRequestBuilder request() {
     return get("/api/v1/cafes/nearby").param("longitude", "127").param("latitude", "37");
   }
+
+  @Test
+  void returnsViewportDefaultsAndDedicatedItemsWithoutDistance() throws Exception {
+    var batch = new PublishedBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"));
+    var item =
+        new CafeViewportResponse.Cafe(
+            "000001", "예시카페", null, "I21201", "카페", null, "예시주소", 127, 37);
+    when(service.getViewport(126.99, 36.99, 127.01, 37.01, List.of(), 100, 0))
+        .thenReturn(new CafeViewportResponse(List.of(item), 1, 100, 0, false, batch));
+    mvc.perform(viewport())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items[0].length()").value(9))
+        .andExpect(jsonPath("$.items[0].bizesId").value("000001"))
+        .andExpect(jsonPath("$.items[0].distanceM").doesNotExist())
+        .andExpect(jsonPath("$.items[0].branchName").value(org.hamcrest.Matchers.nullValue()))
+        .andExpect(jsonPath("$.items[0].lotAddress").value("예시주소"))
+        .andExpect(jsonPath("$.limit").value(100))
+        .andExpect(jsonPath("$.offset").value(0))
+        .andExpect(jsonPath("$.hasMore").value(false))
+        .andExpect(jsonPath("$.sourceBatch.batchId").value(batch.batchId().toString()));
+  }
+
+  @Test
+  void reusesRepeatedDistrictAndPagingValidationForViewport() throws Exception {
+    var batch = new PublishedBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"));
+    when(service.getViewport(126.99, 36.99, 127.01, 37.01, List.of("00110", "00140"), 500, 100000))
+        .thenReturn(new CafeViewportResponse(List.of(), 2, 500, 100000, false, batch));
+    mvc.perform(
+            viewport()
+                .param("districtCodes", "00140", "00110", "00140")
+                .param("limit", "500")
+                .param("offset", "100000")
+                .param("longitude", "0")
+                .param("latitude", "0")
+                .param("radiusM", "1"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.offset").value(100000));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"west", "south", "east", "north"})
+  void requiresEachViewportCoordinate(String missing) throws Exception {
+    var request = get("/api/v1/cafes/viewport");
+    for (var name : List.of("west", "south", "east", "north")) {
+      if (!name.equals(missing)) request.param(name, viewportValue(name));
+    }
+    mvc.perform(request)
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+    verifyNoInteractions(service);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"west", "south", "east", "north", "limit", "offset"})
+  void rejectsDuplicateViewportScalars(String name) throws Exception {
+    var request = viewport();
+    if (name.equals("limit") || name.equals("offset")) request.param(name, "1", "1");
+    else request.param(name, viewportValue(name));
+    mvc.perform(request)
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+    verifyNoInteractions(service);
+  }
+
+  @ParameterizedTest
+  @MethodSource("invalidViewportParameters")
+  void rejectsInvalidViewportValuesBeforeService(String name, String value) throws Exception {
+    var request = get("/api/v1/cafes/viewport");
+    for (var coordinate : List.of("west", "south", "east", "north")) {
+      request.param(coordinate, coordinate.equals(name) ? value : viewportValue(coordinate));
+    }
+    if (!List.of("west", "south", "east", "north").contains(name)) request.param(name, value);
+    mvc.perform(request)
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+    verifyNoInteractions(service);
+  }
+
+  static Stream<Arguments> invalidViewportParameters() {
+    return Stream.concat(
+        Stream.of("west", "south", "east", "north")
+            .flatMap(
+                name ->
+                    Stream.of(
+                            "",
+                            " ",
+                            "NaN",
+                            "Infinity",
+                            "-Infinity",
+                            "1e309",
+                            "1,2",
+                            "0x1p0",
+                            "37d",
+                            "１２７")
+                        .map(value -> Arguments.of(name, value))),
+        Stream.of(
+            Arguments.of("west", "-180.1"),
+            Arguments.of("east", "180.1"),
+            Arguments.of("south", "-90.1"),
+            Arguments.of("north", "90.1"),
+            Arguments.of("west", "127.01"),
+            Arguments.of("west", "127.02"),
+            Arguments.of("south", "37.01"),
+            Arguments.of("south", "37.02"),
+            Arguments.of("limit", ""),
+            Arguments.of("limit", "0"),
+            Arguments.of("limit", "501"),
+            Arguments.of("offset", "-1"),
+            Arguments.of("offset", "100001"),
+            Arguments.of("offset", "1.0"),
+            Arguments.of("districtCodes", ""),
+            Arguments.of("districtCodes", "1111"),
+            Arguments.of("districtCodes", "１１１１０"),
+            Arguments.of("districtCodes", "11110,11140")));
+  }
+
+  @Test
+  void acceptsFullWgs84ViewportWithDecimalExponentInput() throws Exception {
+    var batch = new PublishedBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"));
+    when(service.getViewport(-180, -90, 180, 90, List.of(), 100, 0))
+        .thenReturn(new CafeViewportResponse(List.of(), 0, 100, 0, false, batch));
+    mvc.perform(
+            get("/api/v1/cafes/viewport")
+                .param("west", "-1.8e2")
+                .param("south", "-90")
+                .param("east", "180")
+                .param("north", "90"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items").isEmpty());
+  }
+
+  @Test
+  void reusesViewportPublicationAndRegionProblems() throws Exception {
+    when(service.getViewport(126.99, 36.99, 127.01, 37.01, List.of(), 100, 0))
+        .thenThrow(new ApiException(ApiErrorCode.DATA_NOT_READY));
+    mvc.perform(viewport())
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(jsonPath("$.code").value("DATA_NOT_READY"));
+    when(service.getViewport(126.99, 36.99, 127.01, 37.01, List.of("99999"), 100, 0))
+        .thenThrow(new ApiException(ApiErrorCode.REGION_NOT_FOUND));
+    mvc.perform(viewport().param("districtCodes", "99999"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("REGION_NOT_FOUND"));
+  }
+
+  private MockHttpServletRequestBuilder viewport() {
+    return get("/api/v1/cafes/viewport")
+        .param("west", "126.99")
+        .param("south", "36.99")
+        .param("east", "127.01")
+        .param("north", "37.01");
+  }
+
+  private String viewportValue(String name) {
+    return switch (name) {
+      case "west" -> "126.99";
+      case "south" -> "36.99";
+      case "east" -> "127.01";
+      default -> "37.01";
+    };
+  }
 }
