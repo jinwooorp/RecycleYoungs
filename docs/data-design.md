@@ -6,13 +6,13 @@
 
 이 문서의 구현 계약과 향후 계획을 다음과 같이 구분합니다.
 
-| 구분                  | 범위                                                                                                                                   |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| 구현 완료·확정된 계약 | Flyway V1~V4의 8개 테이블·제약조건, 구현된 ETL의 검증·게시 규칙, 행정구역 API 5개와 행정동 점포·추정매출·유동인구 API의 입력·응답·오류 |
-| 구현 예정             | 구 단위 합산·주변 카페·점수 API와 `region_score`                                                                                       |
-| 확정 전               | 점수 알고리즘·계산 시점·결과 저장 스키마, 후속 API의 상세 계약                                                                         |
+| 구분                  | 범위                                                                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 구현 완료·확정된 계약 | Flyway V1~V4의 8개 테이블·제약조건, 구현된 ETL의 검증·게시 규칙, 행정구역 API 5개와 행정동 점포·추정매출·유동인구·주변 카페 API의 입력·응답·오류 |
+| 구현 예정             | 구 단위 합산·지도 영역 조회·점수 API와 `region_score`                                                                                            |
+| 확정 전               | 점수 알고리즘·계산 시점·결과 저장 스키마, 후속 API의 상세 계약                                                                                   |
 
-V3 점포·추정매출·유동인구 통계 조회 API를 구현했습니다. V4 카페는 저장·ETL 계약까지 구현했으며 조회 API는 아직 제공하지 않습니다. 아래 점수 관련 설계 원칙은 향후 구현의 요구사항이며 현재 동작이 아닙니다.
+V3 점포·추정매출·유동인구 통계와 V4 카페의 주변 반경 조회 API를 구현했습니다. [현재 개발 현황](../README.md#현재-개발-현황)과 같이 실제 화면·구 단위 집계·지도 영역 조회·점수는 후속 구현 대상입니다. 아래 점수 관련 설계 원칙은 향후 구현의 요구사항이며 현재 동작이 아닙니다.
 
 ## 목차
 
@@ -26,6 +26,7 @@ V3 점포·추정매출·유동인구 통계 조회 API를 구현했습니다. V
 - [행정동 점포 통계 REST API 계약](#행정동-점포-통계-rest-api-계약)
 - [행정동 추정매출 통계 REST API 계약](#행정동-추정매출-통계-rest-api-계약)
 - [행정동 유동인구 통계 REST API 계약](#행정동-유동인구-통계-rest-api-계약)
+- [주변 카페 REST API 계약](#주변-카페-rest-api-계약)
 
 ## 데이터 모델
 
@@ -180,7 +181,7 @@ Flyway는 테이블, 제약조건, 인덱스 등 DB 스키마 변경을 관리�
 
 ### V4 카페 컬럼과 ETL 계약
 
-`cafe_store`는 소진공 원본 식별자와 위치를 저장합니다. V4 스키마는 개발 DB 적용을 완료했습니다. 카페 ETL은 모의 API·격리 DB 테스트와 실제 API 검증을 거쳐 개발 DB에 21,996건을 적재했습니다. 재실행 `SKIPPED`와 기존 게시 출처 보존도 확인했습니다. 조회 API는 아직 구현하지 않았습니다.
+`cafe_store`는 소진공 원본 식별자와 위치를 저장합니다. V4 스키마는 개발 DB 적용을 완료했습니다. 카페 ETL은 모의 API·격리 DB 테스트와 실제 API 검증을 거쳐 개발 DB에 21,996건을 적재했습니다. 재실행 `SKIPPED`와 기존 게시 출처 보존도 확인했습니다. [주변 카페 API](#주변-카페-rest-api-계약)는 최신 완전 수집 게시본에서 반경·선택 구 조건에 맞는 카페를 조회합니다.
 
 #### 업소 식별자와 명칭
 
@@ -238,7 +239,7 @@ PK 외에 생성하는 조회 인덱스입니다.
 | 지도 영역 검색        | GiST        | `(geom)`                       |
 | 미터 반경 검색        | GiST        | `((geom::geography))`          |
 
-반경은 `ST_DWithin(geom::geography, 중심점::geography, 미터)`로 판정하며 geometry 인덱스만으로 geography 조회까지 지원한다고 가정하지 않습니다. 실제 성능 검증은 후속 조회 구현에서 진행합니다.
+반경은 `ST_DWithin(geom::geography, 중심점::geography, 미터)`로 판정하며 geometry 인덱스만으로 geography 조회까지 지원한다고 가정하지 않습니다. 주변 카페 API는 V4의 geography GiST 인덱스를 활용할 수 있는 식을 사용합니다. 실행 계획 검증은 격리 PostGIS 통합 테스트에서 다루며, 운영 데이터의 전반적인 성능을 보장하지 않습니다.
 
 #### 서울 전체 최신 목록을 위한 ETL 계약
 
@@ -267,7 +268,7 @@ PK 외에 생성하는 조회 인덱스입니다.
    - `SKIPPED`, `RUNNING`, `FAILED`는 최신 목록 기준 배치를 대체하지 않습니다.
    - 입력에서 누락된 기존 업소는 삭제하거나 폐업으로 단정하지 않으며, 이전 배치의 행으로 보존하고 최신 목록과 구분합니다.
 
-이 계약의 수집·검증·게시·재실행은 카페 ETL이 담당합니다. V4의 FK·CHECK가 배치 상태까지 강제하지는 않으며, 향후 조회 코드도 위 최신 목록 조건을 준수해야 합니다.
+이 계약의 수집·검증·게시·재실행은 카페 ETL이 담당합니다. V4의 FK·CHECK가 배치 상태까지 강제하지는 않으며, [주변 카페 API](#주변-카페-rest-api-계약)는 위 최신 목록 조건과 아래의 배치 준비 상태를 함께 확인합니다.
 
 ## 행정구역 REST API 계약
 
@@ -651,3 +652,102 @@ FootTrafficStatResponse
 - 위 조건을 충족하는 실제 `dong_foot_traffic_stat` 행이 전체에 하나도 없으면 `DATA_NOT_READY`(503)입니다. 정상 게시 이력만 있는 경우도 포함합니다. 판정 순서는 경계 준비 → 현행 행정동 → 유동인구 데이터셋 준비입니다.
 - 데이터셋이 준비됐지만 요청 동·분기의 유효 행이 없으면 식별자와 `data: null`을 `200`으로 반환합니다. 다른 분기·0·임의 값으로 대체하지 않습니다.
 - 전체 조회는 읽기 전용 `REPEATABLE_READ` 트랜잭션이며 [공통 ProblemDetail](#공통-오류-응답)을 재사용합니다. `sourceBatch`에는 통계 행의 실제 정상 게시 ID·시각을 포함하고 원본 경로·인증정보를 공개하지 않습니다.
+
+## 주변 카페 REST API 계약
+
+`GET /api/v1/cafes/nearby`는 `db` 프로필에서 Controller → Service → JdbcClient Repository → Response 구조로 제공합니다. 최신 서울 전체 완전 수집 게시본의 개별 카페를 반경으로 조회하며, 행정동 전체 통계·구 단위 합산·지도 영역 조회·점수나 화면 연동은 포함하지 않습니다. 서울시 업종 `CS100010`과 소진공 업종을 연결하거나 업종 코드를 조회 SQL에 고정하지 않습니다.
+
+### 주변 카페 요청 조건
+
+| 파라미터        | 필수 여부 | 허용 범위·기본값                                                             |
+| --------------- | --------- | ---------------------------------------------------------------------------- |
+| `longitude`     | 필수      | 유한한 WGS84 경도 `[-180,180]`                                               |
+| `latitude`      | 필수      | 유한한 WGS84 위도 `[-90,90]`                                                 |
+| `radiusM`       | 선택      | 유한한 double, 기본 500m, 양 끝을 포함한 `1~1000`m, 소수 허용                |
+| `districtCodes` | 선택      | ASCII 숫자 5자리 구 코드 반복, 예: `districtCodes=11110&districtCodes=11140` |
+| `limit`         | 선택      | ASCII 숫자로 된 정수, 기본 100, `1~500`                                      |
+| `offset`        | 선택      | ASCII 숫자로 된 정수, 기본 0, `0~100000`                                     |
+
+- 좌표·반경은 십진수와 지수 표기를 허용하고 Java 16진수 표기·타입 접미사·공백·NaN·무한대를 거부합니다. 필수 좌표 누락, 빈 값과 형식·범위 오류도 `INVALID_PARAMETER`(400)입니다.
+- `longitude`·`latitude`·`radiusM`·`limit`·`offset`은 동일 값이라도 반복하면 400입니다. 선택 파라미터를 빈 값으로 전달해도 기본값을 적용하지 않고 400으로 처리합니다.
+- `limit`·`offset`은 부호·소수·지수·공백을 허용하지 않습니다. 구 코드는 문자열로 유지하며 반복 값의 중복을 제거하고 코드순으로 정규화합니다. 쉼표 목록·빈 항목·공백·ASCII 5자리 외 형식은 400입니다.
+- 모든 형식 검증은 DB 조회 전에 수행합니다. 구를 지정했다면 [최신 정상 경계 게시본](#게시-배치-선택과-상태-판정)을 확인하며, 경계 미준비는 `DATA_NOT_READY`(503), 현행 게시본에 없는 구는 반경과 무관하게 `REGION_NOT_FOUND`(404)입니다.
+- 구를 생략하면 경계 배치를 요구하지 않습니다. `dong_code` FK가 NULL인 카페도 유효 좌표와 카페 게시 출처가 있으면 조회 대상입니다.
+
+### 주변 카페 응답과 페이징
+
+| 필드                        | JSON 타입        | 의미                                     |
+| --------------------------- | ---------------- | ---------------------------------------- |
+| `items`                     | array            | 거리순·업소번호순으로 페이징한 카페 목록 |
+| `items[].bizesId`           | string           | 원본 업소번호, 숫자로 변환하지 않음      |
+| `items[].storeName`         | string           | 상호명                                   |
+| `items[].branchName`        | string 또는 null | 지점명                                   |
+| `items[].semasIndustryCode` | string           | 소진공 업종 코드                         |
+| `items[].semasIndustryName` | string           | 소진공 업종 명칭                         |
+| `items[].roadAddress`       | string 또는 null | 도로명주소                               |
+| `items[].lotAddress`        | string 또는 null | 지번주소                                 |
+| `items[].longitude`         | number           | WGS84 경도                               |
+| `items[].latitude`          | number           | WGS84 위도                               |
+| `items[].distanceM`         | number           | 중심점과 카페의 geography 거리, 미터     |
+| `totalCount`                | number           | 페이징 전 조건 일치 건수, Java long      |
+| `limit`                     | number           | 적용된 페이지 크기, Java int             |
+| `offset`                    | number           | 적용된 건너뛰기 건수, Java int           |
+| `hasMore`                   | boolean          | `offset + items.size() < totalCount`     |
+| `sourceBatch.batchId`       | string           | 조회에 사용한 카페 정상 게시 배치 UUID   |
+| `sourceBatch.publishedAt`   | string           | 해당 배치의 게시 시각                    |
+
+응답에는 위 필드만 포함하고 ETL 메타데이터·원본 경로·인증키는 노출하지 않습니다. 주소·지점명의 NULL을 빈 문자열로 대체하지 않습니다. 검색 조건에 맞는 카페가 없으면 `200`, `items: []`, `totalCount: 0`, `hasMore: false`를 반환합니다. `offset`이 결과 범위를 넘으면 목록은 비고 전체 건수는 유지됩니다.
+
+다음은 `GET /api/v1/cafes/nearby?longitude=126.978&latitude=37.5665&radiusM=500&limit=100&offset=0`의 **합성 데이터 예시**입니다. 실제 업소나 개발 DB 조회 결과를 뜻하지 않습니다.
+
+```json
+{
+  "items": [
+    {
+      "bizesId": "SYNTHETIC-CAFE-001",
+      "storeName": "예시 카페",
+      "branchName": null,
+      "semasIndustryCode": "I21201",
+      "semasIndustryName": "카페",
+      "roadAddress": "서울특별시 예시로 1",
+      "lotAddress": null,
+      "longitude": 126.9781,
+      "latitude": 37.5665,
+      "distanceM": 8.834
+    }
+  ],
+  "totalCount": 1,
+  "limit": 100,
+  "offset": 0,
+  "hasMore": false,
+  "sourceBatch": {
+    "batchId": "00000000-0000-0000-0000-000000000004",
+    "publishedAt": "2026-10-02T00:00:00Z"
+  }
+}
+```
+
+### 주변 카페 게시본 선택과 준비 상태
+
+1. `etl_batch`의 `dataset_code='SEMAS_CAFE_STORE'`, `source_type='API'`, `scope_type='SEOUL'`, `scope_code IS NULL`, `status='PUBLISHED'`, `published_at IS NOT NULL`을 모두 충족해야 합니다. `source_reference`는 TEXT이므로 아래처럼 JSON 파싱 가능 여부를 확인한 `CASE` 안에서만 `jsonb`로 변환하며, 완전 수집·분류 검증의 boolean true를 확인합니다.
+
+   ```sql
+   CASE
+       WHEN pg_input_is_valid(source_reference, 'jsonb')
+       THEN source_reference::jsonb @>
+           '{"collection_mode":"FULL_SEOUL","complete":true,"classification_verified":true}'::jsonb
+       ELSE FALSE
+   END
+   ```
+
+2. 적격 배치 중 `published_at`, `started_at`, `batch_id` 내림차순의 첫 배치를 **먼저 선택**합니다. 잘못된 JSON·표본·부분 수집·분류 미검증·다른 범위·게시 시각 없는 배치와 `SKIPPED`·`RUNNING`·`FAILED`는 후보에서 제외합니다.
+3. 적격 배치가 없거나 선택한 최신 배치의 실제 `cafe_store` 행이 하나도 없으면 `DATA_NOT_READY`(503)입니다. 행 존재 여부를 기준 배치 선택 조건에 넣거나 과거 배치로 대체하지 않습니다.
+4. 실제 행이 있다면 좌표가 전부 NULL이어도 데이터셋은 준비된 상태이며 `200`과 빈 목록을 반환합니다. 실제 조회는 선택한 배치의 `geom IS NOT NULL` 행으로 한정합니다. 이전 배치에 남은 업소는 최신 목록에 포함하지 않습니다.
+5. 배치 선택·선택 구 확인·준비 판정·전체 건수·페이지 조회·출처 구성을 모두 읽기 전용 `REPEATABLE_READ` 트랜잭션에서 처리합니다. 별도 ETL의 게시·행 변경 중에도 한 응답은 동일한 스냅샷을 사용합니다. 오류는 [공통 ProblemDetail](#공통-오류-응답)을 재사용합니다.
+
+### 주변 카페 공간 판정과 정렬
+
+- `ST_DWithin(cafe.geom::geography, 중심점::geography, radiusM)`으로 미터 반경을 판정하며 반경 접촉을 포함합니다. 거리는 `ST_Distance`의 geography 연산 결과를 사용합니다.
+- 선택 구가 있으면 최신 경계 게시본의 지정 구 중 `ST_Covers(district.geom, cafe.geom)`인 행이 존재하는지 `EXISTS`로 검사합니다. 구 경계 위의 카페도 포함하며, 행정동 FK 조인이나 대표점으로 소속을 판정하지 않습니다. 여러 선택 구와 접촉해도 카페가 중복되지 않습니다.
+- 반경과 구 조건은 함께 적용하며 선택 구 때문에 반경을 확장하지 않습니다. 조건에 맞는 행이 없다면 서울 밖 좌표도 `200`과 빈 목록입니다.
+- geography 거리 오름차순, 거리 동률이면 `bizes_id` 오름차순으로 정렬한 뒤 `limit`·`offset`을 적용합니다. 정렬 전에 거리를 반올림하지 않습니다. `totalCount`는 같은 공간·게시 조건을 적용한 페이징 전 건수입니다.

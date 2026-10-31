@@ -3,6 +3,9 @@ package kr.ac.recycleyoungs;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import javax.sql.DataSource;
+import kr.ac.recycleyoungs.cafe.CafeController;
+import kr.ac.recycleyoungs.cafe.CafeRepository;
+import kr.ac.recycleyoungs.cafe.CafeService;
 import kr.ac.recycleyoungs.foottraffic.FootTrafficStatController;
 import kr.ac.recycleyoungs.foottraffic.FootTrafficStatRepository;
 import kr.ac.recycleyoungs.foottraffic.FootTrafficStatService;
@@ -50,5 +53,8 @@ class RecycleYoungsApplicationTests {
     assertThat(context.getBeansOfType(FootTrafficStatController.class)).isEmpty();
     assertThat(context.getBeansOfType(FootTrafficStatService.class)).isEmpty();
     assertThat(context.getBeansOfType(FootTrafficStatRepository.class)).isEmpty();
+    assertThat(context.getBeansOfType(CafeController.class)).isEmpty();
+    assertThat(context.getBeansOfType(CafeService.class)).isEmpty();
+    assertThat(context.getBeansOfType(CafeRepository.class)).isEmpty();
   }
 }
