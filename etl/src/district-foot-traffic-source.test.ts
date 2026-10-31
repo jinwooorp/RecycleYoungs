@@ -2,7 +2,11 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { zipSync } from 'fflate';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { probeDistrictFootTrafficSource } from './district-foot-traffic-source.js';
+import {
+  readDistrictFootTrafficSource,
+  DistrictFootTrafficSourceError,
+  probeDistrictFootTrafficSource,
+} from './district-foot-traffic-source.js';
 
 // 공식 헤더에 맞춘 합성 CSV·ZIP을 메모리로 공급하고 실제 판독·검증기를 실행한다.
 vi.mock('node:fs/promises', () => ({ readFile: vi.fn() }));
@@ -313,5 +317,50 @@ describe('자치구 길단위인구 로컬 파일 probe', () => {
       } as never),
     ).rejects.toThrow(/probe 모드/);
     expect(readFile).not.toHaveBeenCalled();
+  });
+});
+
+describe('자치구 길단위인구 적재용 전체 판독', () => {
+  it('최대 1000행씩 전달하며 콜백 완료 후 다음 묶음을 처리한다', async () => {
+    files.set('rows.csv', csv(distinctRows(1001)));
+    const sizes: number[] = [];
+    let active = false;
+    const source = await readDistrictFootTrafficSource(
+      'rows.csv',
+      async (rows) => {
+        expect(active).toBe(false);
+        active = true;
+        sizes.push(rows.length);
+        await Promise.resolve();
+        active = false;
+      },
+    );
+    expect(sizes).toEqual([1000, 1]);
+    expect(source).toMatchObject({
+      fetchedRows: 1001,
+      validRows: 1001,
+      rejectedRows: 0,
+    });
+  });
+
+  it('앞선 묶음 전달 후 마지막 오류도 실패하며 카운터를 보존한다', async () => {
+    files.set('rows.csv', csv([...distinctRows(1000), '20262,99999,-1,0,0']));
+    await expect(
+      readDistrictFootTrafficSource('rows.csv', async () => {}),
+    ).rejects.toMatchObject({
+      fetchedRows: 1001,
+      validRows: 1000,
+      rejectedRows: 1,
+    });
+  });
+
+  it('staging 콜백 오류는 민감한 원문을 감추고 오류 메타데이터를 전달한다', async () => {
+    files.set('rows.csv', csv([values.join(',')]));
+    const error = await readDistrictFootTrafficSource('rows.csv', async () => {
+      throw new Error('postgresql://secret:password@host/database');
+    }).catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(DistrictFootTrafficSourceError);
+    expect((error as Error).message).toMatch(/staging/);
+    expect((error as Error).message).not.toMatch(/secret|password|postgresql/);
   });
 });

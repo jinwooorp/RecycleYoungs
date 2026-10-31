@@ -108,7 +108,7 @@ describe('자치구 길단위인구 읽기 전용 CLI', () => {
     },
   );
 
-  it('프로그램 인자 파서도 명시적 probe만 허용한다', () => {
+  it('프로그램 인자 파서는 probe와 명시적 적재 모드를 구분한다', () => {
     expect(
       parseDistrictFootTrafficArguments([
         'district-foot-traffic',
@@ -119,36 +119,37 @@ describe('자치구 길단위인구 읽기 전용 CLI', () => {
       expectedRows: 7,
       probe: true,
     });
-    expect(() =>
+    expect(
       parseDistrictFootTrafficArguments([
         'district-foot-traffic',
         ...validArgs.slice(1),
       ]),
-    ).toThrow(/--probe/);
+    ).toEqual({
+      source: '/virtual/district-foot-traffic.csv',
+      expectedRows: 7,
+      probe: false,
+    });
   });
 
-  it.each([undefined, 'invalid-database-url'])(
-    'probe 생략은 파일 판독과 모든 DB 분기보다 먼저 거부한다: %s',
-    (databaseUrl) => {
-      const result = runProbe(
-        syntheticCsv,
-        validArgs.slice(1),
-        databaseUrl,
-        true,
-      );
-      expect(result.status).toBe(1);
-      expect(result.stdout).toBe('');
-      expect(result.stderr).toContain('--probe');
-      expect(result.stderr).not.toMatch(
-        /DB_POOL_FORBIDDEN|NETWORK_FORBIDDEN|PUBLIC_API_FORBIDDEN|SOURCE_READ_FORBIDDEN|DATABASE_URL|파일/,
-      );
-    },
-  );
+  it('probe 생략은 적재 분기로 진입하고 잘못된 DB 설정에서 파일 판독 전에 실패한다', () => {
+    const result = runProbe(
+      syntheticCsv,
+      validArgs.slice(1),
+      'invalid-database-url',
+      true,
+    );
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('DATABASE_URL');
+    expect(result.stderr).not.toMatch(
+      /SOURCE_READ_FORBIDDEN|invalid-database-url/,
+    );
+  });
 
   it('도움말은 DB 없이 읽기 전용 명령을 안내한다', () => {
     const result = runProbe('', ['--help'], 'invalid-database-url');
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain('district-foot-traffic --probe');
+    expect(result.stdout).toContain('district-foot-traffic [--probe]');
     expect(result.stderr).toBe('');
   });
 

@@ -167,7 +167,7 @@ class DistrictSalesStatApiIntegrationTests {
 
   @Test
   void appliesV6InDisposablePostgis() {
-    assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("6");
+    assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("7");
     assertThat(flyway.info().pending()).isEmpty();
   }
 

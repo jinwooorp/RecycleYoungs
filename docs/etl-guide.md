@@ -15,6 +15,7 @@ ETL(수집·검증·변환·적재)의 원본 동일성은 체크섬(원본 내�
   - [작업 디렉터리와 환경변수](#작업-디렉터리와-환경변수)
   - [설치와 도움말](#설치와-도움말)
 - [자치구 길단위인구 읽기 전용 검증](#자치구-길단위인구-읽기-전용-검증)
+- [자치구 길단위인구 적재와 게시](#자치구-길단위인구-적재와-게시)
 - [자치구 추정매출 읽기 전용 검증](#자치구-추정매출-읽기-전용-검증)
 - [자치구 점포 읽기 전용 검증](#자치구-점포-읽기-전용-검증)
 - [행정동·자치구 경계 적재](#행정동자치구-경계-적재)
@@ -158,6 +159,7 @@ ETL(수집·검증·변환·적재)의 원본 동일성은 체크섬(원본 내�
 - **적재 모드 필수:** 실행할 ETL의 사전 조건에 맞는 Flyway·기준 데이터와 DB 설정을 준비합니다. 명령별 검증 SQL·테스트는 각 절의 마지막에 있습니다.
 - **카페 `--probe`:** DB 준비를 건너뛸 수 있지만 API 인증키와 공식 카페 분류 변수는 필요합니다.
 - **자치구 매출 `district-sales --probe`:** 로컬 CSV·ZIP만 검증하며 DB·인증키·네트워크가 필요 없습니다. `--probe` 없이 실행하면 V6와 DB·기준 데이터가 필요한 적재 모드입니다.
+- **자치구 인구 `district-foot-traffic --probe`:** 로컬 CSV·ZIP만 검증하며 DB·인증키·네트워크가 필요 없습니다. `--probe` 생략은 V7·DB·실제 자치구 기준 데이터가 필요한 적재 모드입니다.
 - **자치구 점포 `district-stores --probe`:** 로컬 CSV·ZIP만 검증합니다. DB 준비·환경변수·인증키·네트워크 요청은 필요하지 않습니다.
 - **선택 설정:** ETL 전용 `.env`와 빌드 결과 실행은 필요할 때만 사용합니다. 공통 DB 설정을 쓰면 루트 `.env` 내보내기를 우선합니다.
 
@@ -170,7 +172,7 @@ source .env
 set +a
 ```
 
-`--probe`만 실행할 때는 DB 준비와 위 DB 환경변수 내보내기가 필요하지 않습니다. 카페 probe에만 API 인증키·카페 분류 변수를 별도로 준비합니다. 자치구 점포·매출 probe에는 인증키도 필요하지 않습니다.
+`--probe`만 실행할 때는 DB 준비와 위 DB 환경변수 내보내기가 필요하지 않습니다. 카페 probe에만 API 인증키·카페 분류 변수를 별도로 준비합니다. 자치구 점포·매출·인구 probe에는 인증키도 필요하지 않습니다.
 
 ### 설치와 도움말
 
@@ -202,7 +204,7 @@ npm start
 
 `npm run dev`와 `npm start`를 연속 실행할 필요는 없습니다. 실제 적재는 아래에서 선택한 명령에 같은 인자를 전달하며, 개발 방식이면 `npm run dev -- …`, 빌드 방식이면 `npm start -- …`를 사용합니다.
 
-인자 없는 실행은 DB에 접속하지 않습니다. 현재 구현된 적재 명령은 행정동·자치구 경계용 `boundaries`, 서비스 업종용 `industries`, 점포 통계용 `stores`, 추정매출 통계용 `sales`, 유동인구 통계용 `foot-traffic`, 카페용 `cafes`, 공식 자치구 점포용 `district-stores`, 공식 자치구 추정매출용 `district-sales`입니다. 자치구 점포·매출의 `--probe`는 DB 없는 읽기 전용 분기로 유지합니다. 별도 명령 `district-foot-traffic`은 `--probe`만 지원하며 생략하면 적재 없이 거부합니다. 기존 8개 적재 명령에 자치구 인구 적재가 추가된 것은 아닙니다.
+인자 없는 실행은 DB에 접속하지 않습니다. 현재 구현된 적재 명령은 행정동·자치구 경계용 `boundaries`, 서비스 업종용 `industries`, 점포 통계용 `stores`, 추정매출 통계용 `sales`, 유동인구 통계용 `foot-traffic`, 카페용 `cafes`, 공식 자치구 점포용 `district-stores`, 공식 자치구 추정매출용 `district-sales`, 공식 자치구 길단위인구용 `district-foot-traffic`의 9개입니다. 자치구 점포·매출·인구의 `--probe`는 DB 없는 읽기 전용 분기로 유지하며 생략하면 각 적재 모드를 실행합니다.
 
 Compose DB를 공유하려면 [개발 가이드](development.md#로컬-db-준비)에 따라 같은 터미널에서 루트 `.env`를 먼저 내보냅니다. 내보낸 `DATABASE_URL`은 `etl/.env`보다 우선하므로 Backend와 같은 DB를 사용합니다.
 
@@ -214,7 +216,7 @@ Compose DB를 공유하려면 [개발 가이드](development.md#로컬-db-준비
 
 ### 사전 조건과 실행
 
-Node.js·ETL 의존성만 준비하고 **`etl/`에서** 실행합니다. DB 시작·환경변수 내보내기·API 인증키는 필요 없습니다. 공식 OA-22179·`VwsmSignguFlpopW`의 로컬 원본만 읽으며 `--probe`를 생략하면 파일 판독·DB 처리 전에 명시적으로 거부합니다.
+Node.js·ETL 의존성만 준비하고 **`etl/`에서** 실행합니다. DB 시작·환경변수 내보내기·API 인증키는 필요 없습니다. 공식 OA-22179·`VwsmSignguFlpopW`의 로컬 원본만 읽습니다. 아래 읽기 전용 명령에는 `--probe`를 반드시 지정합니다. 생략하면 [별도 적재 모드](#자치구-길단위인구-적재와-게시)를 실행하므로 DB 준비가 필요합니다.
 
 ```bash
 # etl/에서 실행. 실제 제공 파일의 행 수이며 다른 판본에는 확인한 전체 건수를 지정합니다.
@@ -231,7 +233,7 @@ npm run dev -- district-foot-traffic --probe \
 - 기존 CSV/단일 CSV ZIP·UTF-8/CP949 판독기를 재사용합니다. 필수·중복·빈·모호한 헤더, 행 길이, 자치구 ASCII 5자리·분기 `[0-9]{4}[1-4]`, 자치구+분기 중복키를 검증합니다. 추가 컬럼의 개수나 25구×22분기 완전성을 강제하지 않습니다.
 - 행정동 유동인구 행 스키마의 NUMERIC 규칙을 그대로 공유합니다. 정수·소수·표현 가능한 지수는 수치를 Number로 바꾸거나 반올림하지 않고 정규화하며 소수 자릿수와 실제 0을 보존합니다. 빈 셀만 NULL이고 공백·문자 NULL·음수(-0 포함)·NaN·Infinity와 NUMERIC 범위 초과는 거부합니다. 기존 0의 지수 표기 처리도 유지합니다.
 - 전체 파일 검증 후 예상 건수를 대조하고 최대 5행 표본·인코딩·SHA-256·분기 범위·판독/유효/거부 건수를 반환합니다. 표본 제한 뒤 마지막 행까지 검증하며 실패 시 안전한 오류와 종료 코드 1만 출력합니다. 원본 값·경로·부분 성공 JSON·접속정보는 오류에 포함하지 않습니다.
-- `--probe`는 DB 설정·풀 생성·FK 조회·배치 생성·적재·네트워크를 호출하지 않습니다. 총인구와 성별·연령대·시간대·요일 합계 일치를 강제하거나 원본 값을 보정하지 않습니다. 자치구 인구 V7·테이블·적재 ETL·REST API는 미구현입니다.
+- `--probe`는 DB 설정·풀 생성·FK 조회·배치 생성·적재·네트워크를 호출하지 않습니다. 총인구와 성별·연령대·시간대·요일 합계 일치를 강제하거나 원본 값을 보정하지 않습니다. 별도 V7·적재 ETL은 구현했으며 실제 개발 DB 적용·적재와 자치구 인구 REST API는 미완료입니다.
 
 ### 실제 CSV 검증 결과 (2026-11-01)
 
@@ -248,7 +250,73 @@ probe는 위 세 측정값만 검증합니다. 같은 파일을 별도 CSV 파�
 npm test -- src/district-foot-traffic-source.test.ts src/district-foot-traffic-cli.test.ts
 ```
 
-기존 행정동 유동인구와 다른 적재 명령의 회귀는 [전체 ETL 테스트](#유동인구-통계-적재)의 8개 일회용 DB 플래그와 빌드·린트·포맷 검사로 확인합니다. 이 probe의 확인 SQL은 없으며 실제 개발 DB를 조회하지 않습니다.
+기존 행정동 유동인구와 다른 적재 명령의 회귀는 [전체 ETL 테스트](#유동인구-통계-적재)의 9개 일회용 DB 플래그와 빌드·린트·포맷 검사로 확인합니다. 이 probe의 확인 SQL은 없으며 실제 개발 DB를 조회하지 않습니다.
+
+## 자치구 길단위인구 적재와 게시
+
+### 사전 조건과 실행 위치
+
+이 절은 `--probe`와 달리 DB를 변경하는 적재 모드입니다. 대상이 의도한 로컬 DB인지 확인하고 백업·마이그레이션 적용 권한을 확보한 뒤 V7까지 적용해야 합니다. 실제 `district` 기준 데이터도 먼저 적재되어 있어야 합니다. 이번 구현 검증은 일회용 PostGIS만 사용하며 실제 개발 DB의 V7 적용·인구 적재는 수행하지 않았습니다.
+
+[공통 준비](#작업-디렉터리와-환경변수)대로 새 터미널의 저장소 루트에서 DB 환경변수를 내보낸 뒤 `etl/`로 이동합니다. 아래 명령의 기준은 **`etl/`**이며 루트 `.env`와 인증정보·원본 파일은 커밋하지 않습니다.
+
+```bash
+# etl/에서 실행. 사전에 대상 DB·백업·V7·자치구 기준 데이터를 확인합니다.
+npm run dev -- district-foot-traffic \
+  --source "$HOME/Downloads/서울시 상권분석서비스(길단위인구-자치구).csv" \
+  --expected-rows 550
+```
+
+빌드 방식은 `npm run build` 후 `npm start -- district-foot-traffic …`로 선택할 수 있습니다. `npm run dev`와 연속 실행할 필요는 없습니다. 입력은 CSV 또는 단일 CSV ZIP이며 UTF-8·CP949와 한글·영문 헤더를 지원합니다. `550`·22분기·25구 완전성은 제공 판본의 관찰 결과이며 다른 판본에는 실제 전체 행 수를 지정합니다.
+
+### 입력 검증·적재 결과
+
+읽기 전용 probe와 같은 전체 입력·자치구+분기 중복키·세 NUMERIC 검증을 수행합니다. 행정동·업종 키나 나머지 19개 수치를 저장하지 않고, 원본의 소수 자릿수·NULL·실제 0을 유지합니다. 측정값은 문자열 또는 NULL로 전달하며 Number 변환·반올림·합계 보정은 하지 않습니다.
+
+최대 1,000행씩 staging하고 원본 유효 행 수·예상 행 수·실제 staging 건수를 대조합니다. 모든 자치구 FK를 실제 기준 테이블과 확인한 뒤 게시 직전 쓰기를 직렬화하고 대상 Upsert와 `PUBLISHED`를 단일 트랜잭션으로 확정합니다. 결과에는 배치 ID·상태·판독/유효/거부 건수·관찰 분기 범위를 반환합니다.
+
+데이터셋은 `SEOUL_DISTRICT_FOOT_TRAFFIC_STAT`, 출처는 `CSV`·`SEOUL`·`scope_code=NULL`, ETL 버전은 `district-foot-traffic-stat-v1`입니다. 출처 JSON은 `datasetId=OA-22179`, `serviceName=VwsmSignguFlpopW`, 로컬 `path`, 선택적 ZIP `entry`, `encoding`을 기록합니다. 원본 경로나 인증정보를 공개 문서·커밋에 복사하지 않습니다.
+
+### 재실행·오류 처리
+
+동일 체크섬·ETL 버전의 정상 게시 이력(`CSV`·`SEOUL`·범위 코드 NULL·게시 시각 존재)을 찾은 뒤 모든 대상 측정값·소수 자릿수·`source_batch_id`까지 일치해야 `SKIPPED`입니다. 이때 기존 정상 게시 출처를 유지하고 SKIPPED에는 게시 시각을 부여하지 않습니다. 동일 원본이어도 저장값·자릿수·출처가 달라지면 새로 게시합니다.
+
+입력에 없는 이전 키·게시 출처는 삭제하지 않고, 누락 조합을 0으로 만들지 않습니다. FK 불일치·중복키·건수 불일치·DB 오류·게시 실패는 부분 변경을 rollback하고 가능한 경우 `FAILED` 이력을 남깁니다. DB 연결 자체가 실패하면 이력 기록도 불가능합니다. 총인구와 남녀·시간대·요일·연령대 합계 차이는 검증 실패나 자동 보정 사유가 아닙니다.
+
+### 확인 SQL·격리 테스트
+
+아래 SQL은 `psql`에서 실행하는 읽기 전용 예시입니다. 이번 작업에서 실제 개발 DB에 실행하거나 적재를 수행한 기록은 아닙니다.
+
+```sql
+SELECT count(*) AS rows, min(quarter_code) AS period_from,
+       max(quarter_code) AS period_to,
+       count(DISTINCT district_code) AS districts
+FROM district_foot_traffic_stat;
+
+SELECT b.batch_id, b.status, b.published_at, count(s.district_code) AS referenced_rows
+FROM etl_batch b
+LEFT JOIN district_foot_traffic_stat s ON s.source_batch_id = b.batch_id
+WHERE b.dataset_code = 'SEOUL_DISTRICT_FOOT_TRAFFIC_STAT'
+  AND b.source_type = 'CSV' AND b.scope_type = 'SEOUL'
+  AND b.scope_code IS NULL
+GROUP BY b.batch_id, b.status, b.published_at
+ORDER BY b.started_at;
+```
+
+```bash
+# etl/에서 실행. 일회용 PostGIS만 생성하며 개발 DB 설정은 사용하지 않습니다.
+RUN_DISTRICT_FOOT_TRAFFIC_DB_TESTS=1 npm test -- src/district-foot-traffic.integration.test.ts
+
+# 실제 제공 CSV 전체 적재·측정값 대조도 선택적으로 실행합니다.
+DISTRICT_FOOT_TRAFFIC_REAL_CSV="$HOME/Downloads/서울시 상권분석서비스(길단위인구-자치구).csv" \
+RUN_DISTRICT_FOOT_TRAFFIC_DB_TESTS=1 npm test -- src/district-foot-traffic.integration.test.ts
+```
+
+2026-11-01 검증에서 신규 격리 DB 통합 테스트 48개와 기존 행정동 유동인구·자치구 점포·매출을 포함한 **ETL 전체 24개 스위트·939개 테스트가 모두 통과**했습니다. 위 9개 DB 플래그와 실제 CSV 환경변수를 함께 사용했으며 건너뛴 테스트는 없습니다. ETL 빌드·린트(TypeScript 검사 포함)·포맷 검사도 통과했습니다. 실제 CLI의 `--probe` 생략 적재·재실행 분기도 일회용 DB에서 확인했습니다. Backend는 V6→V7 보존 검증을 포함한 마이그레이션 190개·자치구 매출 API 53개 통합 테스트와 단위·MVC 394개, 빌드·Spotless 검사를 통과했습니다. 합성 CSV/ZIP·격리 DB로 NUMERIC 정밀도·소수 자릿수·NULL/0·합계 차이·FK·중복키·staging 건수·롤백·동시 실행·게시 실패와 probe의 DB·네트워크 미접속을 확인했습니다.
+
+같은 SHA-256의 실제 CP949 CSV **550행을 일회용 PostGIS에 PUBLISHED**로 적재하고, 채택한 세 측정값 **1,650개를 원본 문자열과 전수 대조해 불일치 0건**을 확인했습니다. `20211`~`20262`의 22분기·25구·복합키 550개만 저장했고, 총인구와 남녀 합계가 다른 269행 및 차이 -3~+3을 원본대로 유지했습니다. 같은 파일 재실행은 `SKIPPED`였으며 전체 측정값·기존 `source_batch_id`가 그대로 보존되었습니다.
+
+이 시험의 자치구 FK 25개는 원본 관찰 코드로 **일회용 테스트 스키마에만 합성한 기준 행**입니다. 개발 DB의 실제 FK·경계 판본을 검증한 것이 아니며, 실제 개발 DB의 V7 적용·인구 적재는 수행하지 않았습니다. 실제 ZIP·다른 판본 검증이나 자치구 인구 API 구현으로도 확대하지 않습니다. 위 읽기 전용 probe·22개 수치 독립 조사와 이번 채택 세 수치의 격리 DB 적재 검증을 구분합니다.
 
 ## 자치구 추정매출 읽기 전용 검증
 
@@ -381,7 +449,7 @@ CSV 하나를 담은 ZIP도 `--source /절대경로/자치구점포.zip`으로 �
 
 원본 CSV SHA-256은 `84702068872a5ab8c6c824f11294a16f8b306afb6c19a25689af4c135bf377fd`입니다. 구·업종 수·없는 조합·NULL·비율 범위는 같은 파일을 별도로 읽어 대조한 결과이며 probe 출력에 새 집계 필드를 추가하지 않았습니다. probe 성공은 지정 로컬 파일의 형식 검증이고 공식 원본의 진위·DB FK·게시 준비 완료를 뜻하지 않습니다. 최초 구현 검증 당시에는 실제 개발 DB에 V5 적용이나 자치구 점포 적재를 하지 않았습니다. 실제 CSV 54,765행을 일회용 PostGIS에 적재해 7개 측정값을 전수 문자열 대조했고 재실행 `SKIPPED`와 정상 게시 출처 보존을 확인했습니다. 이 시험의 FK 기준 행은 관찰 코드로 만든 합성 기준 데이터이며 실제 개발 DB 기준 데이터와 대조한 것은 아닙니다.
 
-공식 자치구 점포 조회 API는 구현됐습니다. [API 계약](data-design.md#자치구-점포-통계-rest-api-계약)과 아래 실제 개발 DB 검증 기록을 참고하세요. 자치구 매출·인구는 [후속 정책](district-statistics-policy.md#후속-저장게시api-방향)으로 구분합니다.
+공식 자치구 점포 조회 API는 구현됐습니다. [API 계약](data-design.md#자치구-점포-통계-rest-api-계약)과 아래 실제 개발 DB 검증 기록을 참고하세요. 자치구 매출 조회와 인구 V7·적재는 구현했고, 인구 조회는 [후속 정책](district-statistics-policy.md#후속-저장게시api-방향)으로 구분합니다.
 
 ### 적재 사전 조건과 실행
 
@@ -712,7 +780,7 @@ SELECT quarter_code, count(*) FROM dong_foot_traffic_stat GROUP BY quarter_code 
 유동인구 DB 통합 테스트는 `etl/`에서 `RUN_FOOT_TRAFFIC_DB_TESTS=1 npm test -- src/foot-traffic.integration.test.ts`로 실행합니다. 전체 ETL 단위·격리 DB 통합 테스트는 다음 명령으로 실행합니다. 합성 테스트 데이터는 새 일회용 PostGIS 컨테이너에만 적재하며 실제 개발 DB는 변경하지 않습니다.
 
 ```bash
-RUN_DISTRICT_SALES_DB_TESTS=1 RUN_DISTRICT_STORE_DB_TESTS=1 RUN_CAFE_DB_TESTS=1 RUN_FOOT_TRAFFIC_DB_TESTS=1 RUN_SALES_DB_TESTS=1 RUN_STORE_DB_TESTS=1 RUN_INDUSTRY_DB_TESTS=1 RUN_BOUNDARY_DB_TESTS=1 npm test
+RUN_DISTRICT_FOOT_TRAFFIC_DB_TESTS=1 RUN_DISTRICT_SALES_DB_TESTS=1 RUN_DISTRICT_STORE_DB_TESTS=1 RUN_CAFE_DB_TESTS=1 RUN_FOOT_TRAFFIC_DB_TESTS=1 RUN_SALES_DB_TESTS=1 RUN_STORE_DB_TESTS=1 RUN_INDUSTRY_DB_TESTS=1 RUN_BOUNDARY_DB_TESTS=1 npm test
 ```
 
 ## 카페 API 수집·적재

@@ -11,10 +11,11 @@ import { importCafes, type CafeOptions } from './cafes.js';
 import { probeCafeSource } from './cafe-source.js';
 import { probeDistrictStoreSource } from './district-store-source.js';
 import { probeDistrictSalesSource } from './district-sales-source.js';
+import { probeDistrictFootTrafficSource } from './district-foot-traffic-source.js';
 import {
-  probeDistrictFootTrafficSource,
-  type DistrictFootTrafficProbeOptions,
-} from './district-foot-traffic-source.js';
+  importDistrictFootTrafficStats,
+  type DistrictFootTrafficOptions,
+} from './district-foot-traffic.js';
 import {
   importDistrictSalesStats,
   type DistrictSalesOptions,
@@ -35,10 +36,10 @@ const count = z
   .transform(Number)
   .pipe(z.number().int().positive().max(Number.MAX_SAFE_INTEGER));
 
-/** 자치구 길단위인구의 명시적 probe 인자를 파일·DB 처리 전에 검증합니다. */
+/** 자치구 길단위인구의 적재·probe 인자를 파일·DB 처리 전에 검증합니다. */
 export function parseDistrictFootTrafficArguments(
   args: string[],
-): DistrictFootTrafficProbeOptions | null {
+): (DistrictFootTrafficOptions & { probe: boolean }) | null {
   let parsed;
   try {
     parsed = parseArgs({
@@ -60,10 +61,6 @@ export function parseDistrictFootTrafficArguments(
   }
   const { values, positionals, tokens } = parsed;
   if (values.help || args.length === 0) return null;
-  if (values.probe !== true)
-    throw new Error(
-      '자치구 길단위인구는 --probe가 필수이며 적재를 지원하지 않습니다.',
-    );
   if (positionals.length !== 1 || positionals[0] !== 'district-foot-traffic')
     throw new Error(
       '지원 명령은 district-foot-traffic입니다. --help를 확인하세요.',
@@ -85,12 +82,12 @@ export function parseDistrictFootTrafficArguments(
         .string()
         .regex(/^[1-9][0-9]*(?![\s\S])/)
         .pipe(count),
-      probe: z.literal(true),
+      probe: z.boolean(),
     })
     .safeParse({
       source: values.source,
       expectedRows: values['expected-rows'],
-      probe: values.probe,
+      probe: values.probe ?? false,
     });
   if (!options.success)
     throw new Error(
@@ -360,7 +357,7 @@ if (
   try {
     const args = process.argv.slice(2);
     let options:
-      | DistrictFootTrafficProbeOptions
+      | (DistrictFootTrafficOptions & { probe: boolean })
       | FootTrafficOptions
       | SalesOptions
       | StoreOptions
@@ -400,7 +397,7 @@ if (
         '  npm run dev -- district-sales [--probe] --source /절대경로/자치구매출.csv --expected-rows <원본 전체 행 수>\n자치구 추정매출은 CSV/단일 CSV ZIP을 적재하며 --probe에서는 DB 설정·접속·배치 생성·적재·네트워크 요청을 하지 않습니다.',
       );
       console.log(
-        '  npm run dev -- district-foot-traffic --probe --source /절대경로/자치구인구.csv --expected-rows <원본 전체 행 수>\n자치구 길단위인구는 읽기 전용 검증만 지원하며 --probe 생략 시 거부합니다. DB·배치·적재·네트워크 요청은 사용하지 않습니다.',
+        '  npm run dev -- district-foot-traffic [--probe] --source /절대경로/자치구인구.csv --expected-rows <원본 전체 행 수>\n자치구 길단위인구는 CSV/단일 CSV ZIP을 적재하며 --probe에서는 DB·배치·적재·네트워크 요청을 사용하지 않습니다.',
       );
     } else if (
       args[0] === 'district-foot-traffic' &&
@@ -441,6 +438,12 @@ if (
       try {
         let result;
         if (
+          args[0] === 'district-foot-traffic' &&
+          'source' in options &&
+          'expectedRows' in options
+        ) {
+          result = await importDistrictFootTrafficStats(pool, options);
+        } else if (
           args[0] === 'district-sales' &&
           'source' in options &&
           'expectedRows' in options

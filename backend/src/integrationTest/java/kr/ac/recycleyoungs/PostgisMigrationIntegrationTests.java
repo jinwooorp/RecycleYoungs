@@ -78,7 +78,7 @@ class PostgisMigrationIntegrationTests {
     // 버전 적용 여부뿐 아니라 실제 공간 질의와 재실행 시 중복 적용 방지도 확인한다.
     assertThat(flyway.info().applied())
         .extracting(migration -> migration.getVersion().getVersion())
-        .containsExactly("1", "2", "3", "4", "5", "6");
+        .containsExactly("1", "2", "3", "4", "5", "6", "7");
     assertThat(flyway.info().pending()).isEmpty();
     try (var connection = flyway.getConfiguration().getDataSource().getConnection();
         var statement = connection.createStatement();
@@ -294,6 +294,222 @@ class PostgisMigrationIntegrationTests {
     v6.validate();
     assertThat(v6.info().pending()).isEmpty();
     assertThat(v6.migrate().migrationsExecuted).isZero();
+  }
+
+  @Test
+  void upgradesV6ToV7WithoutChangingExistingDataOrChecksums() throws Exception {
+    // V7은 새 테이블만 만들며 이전 통계·경계·출처와 V1~V6 체크섬을 바꾸지 않는다.
+    var v6 =
+        Flyway.configure()
+            .configuration(flyway.getConfiguration())
+            .schemas("v7_upgrade")
+            .defaultSchema("v7_upgrade")
+            .target("6")
+            .load();
+    assertThat(v6.migrate().migrationsExecuted).isEqualTo(6);
+    execute("SET search_path TO v7_upgrade, public");
+    insertCoreData();
+    insertStat("dong_store_stat");
+    insertStat("dong_sales_stat");
+    insertStat("dong_foot_traffic_stat");
+    insertCafe();
+    execute("INSERT INTO service_industry VALUES ('CS100010', '커피-음료', '" + BATCH_ID + "')");
+    execute(
+        """
+        UPDATE dong_store_stat SET store_count = 9007199254740993, general_store_count = 0,
+          opening_rate = 123.456789000
+        """);
+    execute("UPDATE dong_sales_stat SET monthly_sales_amount = 9223372036854775807");
+    execute("UPDATE dong_foot_traffic_stat SET total_foot_traffic = 123.456789000");
+    execute(
+        """
+        INSERT INTO district_store_stat
+          (district_code, industry_code, quarter_code, store_count, general_store_count,
+           franchise_store_count, opened_store_count, closed_store_count,
+           opening_rate, closure_rate, source_batch_id)
+        VALUES ('11110', 'CS100010', '20262', 9007199254740993, 2, NULL, 0, NULL,
+                123.456789000, 0, '%s')
+        """
+            .formatted(BATCH_ID));
+    execute(
+        """
+        INSERT INTO district_sales_stat
+          (district_code, industry_code, quarter_code, monthly_sales_amount,
+           monthly_sales_count, weekday_sales_amount, weekend_sales_amount, source_batch_id)
+        VALUES ('11110', 'CS100010', '20262', 9223372036854775807, 0, NULL, 1, '%s')
+        """
+            .formatted(BATCH_ID));
+    var snapshotSql =
+        """
+        SELECT 'etl_batch:' || to_jsonb(b)::text FROM etl_batch b
+        UNION ALL SELECT 'district:' || to_jsonb(d)::text FROM district d
+        UNION ALL SELECT 'dong:' || to_jsonb(d)::text FROM administrative_dong d
+        UNION ALL SELECT 'industry:' || to_jsonb(i)::text FROM service_industry i
+        UNION ALL SELECT 'dong_store:' || to_jsonb(s)::text FROM dong_store_stat s
+        UNION ALL SELECT 'dong_sales:' || to_jsonb(s)::text FROM dong_sales_stat s
+        UNION ALL SELECT 'dong_foot:' || to_jsonb(s)::text FROM dong_foot_traffic_stat s
+        UNION ALL SELECT 'cafe:' || to_jsonb(c)::text FROM cafe_store c
+        UNION ALL SELECT 'district_store:' || to_jsonb(s)::text FROM district_store_stat s
+        UNION ALL SELECT 'district_sales:' || to_jsonb(s)::text FROM district_sales_stat s
+        """;
+    var before = queryStrings(snapshotSql);
+    var checksums =
+        Arrays.stream(v6.info().applied())
+            .filter(migration -> migration.getVersion() != null)
+            .map(migration -> migration.getChecksum())
+            .toList();
+    connection.commit();
+
+    var v7 = Flyway.configure().configuration(v6.getConfiguration()).target("7").load();
+    assertThat(v7.migrate().migrationsExecuted).isEqualTo(1);
+    assertThat(v7.info().current().getVersion().getVersion()).isEqualTo("7");
+    assertThat(
+            Arrays.stream(v7.info().applied())
+                .filter(migration -> migration.getVersion() != null)
+                .limit(6)
+                .map(migration -> migration.getChecksum())
+                .toList())
+        .containsExactlyElementsOf(checksums);
+    assertThat(queryStrings(snapshotSql)).containsExactlyInAnyOrderElementsOf(before);
+    assertThat(queryStrings("SELECT count(*)::text FROM district_foot_traffic_stat"))
+        .containsExactly("0");
+    v7.validate();
+    assertThat(v7.info().pending()).isEmpty();
+    assertThat(v7.migrate().migrationsExecuted).isZero();
+  }
+
+  @Test
+  void definesDistrictFootTrafficColumnsForeignKeysAndOnlyPrimaryKeyIndex() throws Exception {
+    assertThat(
+            queryStrings(
+                """
+                SELECT column_name || ':' || data_type || ':' ||
+                       COALESCE(character_maximum_length::text, '-') || ':' ||
+                       is_nullable || ':' || COALESCE(column_default, '-') || ':' ||
+                       COALESCE(numeric_precision::text, '-') || ':' ||
+                       COALESCE(numeric_scale::text, '-')
+                FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'district_foot_traffic_stat'
+                """))
+        .containsExactlyInAnyOrder(
+            "district_code:character varying:5:NO:-:-:-",
+            "quarter_code:character varying:5:NO:-:-:-",
+            "total_foot_traffic:numeric:-:YES:-:-:-",
+            "male_foot_traffic:numeric:-:YES:-:-:-",
+            "female_foot_traffic:numeric:-:YES:-:-:-",
+            "source_batch_id:uuid:-:NO:-:-:-");
+    assertThat(
+            queryStrings(
+                """
+                SELECT pg_get_constraintdef(oid) FROM pg_constraint
+                WHERE conrelid = 'public.district_foot_traffic_stat'::regclass AND contype IN ('p', 'f')
+                """))
+        .containsExactlyInAnyOrder(
+            "PRIMARY KEY (district_code, quarter_code)",
+            "FOREIGN KEY (district_code) REFERENCES district(district_code)",
+            "FOREIGN KEY (source_batch_id) REFERENCES etl_batch(batch_id)");
+    assertThat(
+            queryStrings(
+                """
+                SELECT indisprimary::text FROM pg_index
+                WHERE indrelid = 'public.district_foot_traffic_stat'::regclass
+                """))
+        .containsExactly("true");
+  }
+
+  @Test
+  void acceptsDistrictFootTrafficNullZeroAndExactNumericScaleWithoutForcingSums() throws Exception {
+    insertCoreData();
+    insertDistrictFootTraffic();
+    assertThat(
+            queryStrings(
+                """
+                SELECT total_foot_traffic IS NULL AND male_foot_traffic IS NULL
+                  AND female_foot_traffic IS NULL FROM district_foot_traffic_stat
+                """))
+        .containsExactly("t");
+    execute(
+        """
+        UPDATE district_foot_traffic_stat SET
+          total_foot_traffic = 900719925474099312345678901234567890.1234567890123456789000,
+          male_foot_traffic = 0.000, female_foot_traffic = 1.2300e-3
+        """);
+    assertThat(
+            queryStrings(
+                """
+                SELECT total_foot_traffic::text || ':' || male_foot_traffic::text || ':' ||
+                       female_foot_traffic::text FROM district_foot_traffic_stat
+                """))
+        .containsExactly(
+            "900719925474099312345678901234567890.1234567890123456789000:0.000:0.0012300");
+    // 원천 판본별 완전성을 스키마 제약으로 두지 않고 임의의 과거 분기와 선행 0 코드를 허용한다.
+    execute(
+        "INSERT INTO district SELECT '00001', district_name, geom, boundary_batch_id FROM district");
+    execute(
+        """
+        INSERT INTO district_foot_traffic_stat
+          (district_code, quarter_code, total_foot_traffic, source_batch_id)
+        VALUES ('00001', '19011', 0, '%s')
+        """
+            .formatted(BATCH_ID));
+    assertThat(
+            queryStrings(
+                "SELECT district_code FROM district_foot_traffic_stat ORDER BY district_code"))
+        .containsExactly("00001", "11110");
+    assertRejected(
+        "INSERT INTO district_foot_traffic_stat SELECT * FROM district_foot_traffic_stat", "23505");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"total_foot_traffic", "male_foot_traffic", "female_foot_traffic"})
+  void rejectsNegativeAndNonfiniteDistrictFootTrafficValues(String column) throws Exception {
+    insertCoreData();
+    insertDistrictFootTraffic();
+    for (var value : List.of("-1", "'-0.00001'", "'NaN'", "'Infinity'", "'-Infinity'")) {
+      assertRejected("UPDATE district_foot_traffic_stat SET " + column + " = " + value, "23514");
+    }
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "district_code, '1111'",
+    "district_code, '1111A'",
+    "district_code, '１１１１０'",
+    "district_code, '1111 '",
+    "quarter_code, '20260'",
+    "quarter_code, '20265'",
+    "quarter_code, '2026'",
+    "quarter_code, '２０２６1'",
+    "quarter_code, '2026 '"
+  })
+  void rejectsMalformedDistrictFootTrafficKeys(String column, String value) throws Exception {
+    insertCoreData();
+    insertDistrictFootTraffic();
+    assertRejected(
+        "UPDATE district_foot_traffic_stat SET " + column + " = '" + value + "'", "23514");
+  }
+
+  @Test
+  void rejectsMissingDistrictFootTrafficRequiredKeysAndForeignReferences() throws Exception {
+    insertCoreData();
+    insertDistrictFootTraffic();
+    for (var column : List.of("district_code", "quarter_code", "source_batch_id")) {
+      assertRejected("UPDATE district_foot_traffic_stat SET " + column + " = NULL", "23502");
+    }
+    assertRejected("UPDATE district_foot_traffic_stat SET district_code = '99999'", "23503");
+    assertRejected(
+        "UPDATE district_foot_traffic_stat SET source_batch_id = '" + MISSING_BATCH_ID + "'",
+        "23503");
+  }
+
+  /** 세 측정값을 생략한 공식 자치구·분기 통계를 준비해 NULL 기본 상태를 검증한다. */
+  private void insertDistrictFootTraffic() throws SQLException {
+    execute(
+        """
+        INSERT INTO district_foot_traffic_stat (district_code, quarter_code, source_batch_id)
+        VALUES ('11110', '20262', '%s')
+        """
+            .formatted(BATCH_ID));
   }
 
   @Test
