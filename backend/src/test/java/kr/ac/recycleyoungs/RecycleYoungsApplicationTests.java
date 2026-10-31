@@ -6,6 +6,9 @@ import javax.sql.DataSource;
 import kr.ac.recycleyoungs.region.RegionController;
 import kr.ac.recycleyoungs.region.RegionRepository;
 import kr.ac.recycleyoungs.region.RegionService;
+import kr.ac.recycleyoungs.sales.SalesStatController;
+import kr.ac.recycleyoungs.sales.SalesStatRepository;
+import kr.ac.recycleyoungs.sales.SalesStatService;
 import kr.ac.recycleyoungs.store.StoreStatController;
 import kr.ac.recycleyoungs.store.StoreStatRepository;
 import kr.ac.recycleyoungs.store.StoreStatService;
@@ -38,5 +41,8 @@ class RecycleYoungsApplicationTests {
     assertThat(context.getBeansOfType(StoreStatController.class)).isEmpty();
     assertThat(context.getBeansOfType(StoreStatService.class)).isEmpty();
     assertThat(context.getBeansOfType(StoreStatRepository.class)).isEmpty();
+    assertThat(context.getBeansOfType(SalesStatController.class)).isEmpty();
+    assertThat(context.getBeansOfType(SalesStatService.class)).isEmpty();
+    assertThat(context.getBeansOfType(SalesStatRepository.class)).isEmpty();
   }
 }
