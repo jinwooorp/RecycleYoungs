@@ -117,7 +117,8 @@ const nullableNumeric = z.preprocess(
   (value) => (value === '' ? null : value),
   numeric.nullable(),
 );
-const rowSchema = z.object({
+// 자치구 probe도 측정값·NULL 정밀도 규칙을 공유하고 지역 식별자만 바꿔 사용합니다.
+export const rowSchema = z.object({
   dongCode: z
     .string()
     .length(8)

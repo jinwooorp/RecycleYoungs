@@ -14,7 +14,7 @@
 
 V3 점포·추정매출·유동인구 통계와 V4 카페의 주변 반경·지도 영역 조회 API를 구현했습니다. [현재 개발 현황](../README.md#현재-개발-현황)과 같이 실제 화면·구 단위 집계·점수는 후속 구현 대상입니다. 아래 점수 관련 설계 원칙은 향후 구현의 요구사항이며 현재 동작이 아닙니다.
 
-공식 자치구 점포의 실제 CSV 54,765행을 `district-stores --probe`로 검증했고, V5 테이블과 적재 ETL을 추가했습니다. 공식 점포·매출·길단위인구의 자치구 차원과 집계 제한은 [자치구 통계 정책](district-statistics-policy.md), 실행법은 [ETL 가이드](etl-guide.md#자치구-점포-읽기-전용-검증)를 따릅니다. 공식 자치구 점포 REST API도 구현했습니다. 자치구 점포의 이후 실제 개발 DB 적용·적재 결과는 [ETL 가이드의 검증 기록](etl-guide.md#실제-개발-db-적용적재-검증-2026-10-31)에 구분합니다. 자치구 추정매출은 DB 없는 원본 probe를 유지하면서 V6와 적재 ETL을 추가했습니다. 자치구 매출 조회 API도 구현했습니다. 실제 개발 DB는 V5 상태로 자치구 매출은 미적재이며, 인구 적재·API는 후속 범위입니다. 기존 행정동 V3 계약은 유지합니다.
+공식 자치구 점포의 실제 CSV 54,765행을 `district-stores --probe`로 검증했고, V5 테이블과 적재 ETL을 추가했습니다. 공식 점포·매출·길단위인구의 자치구 차원과 집계 제한은 [자치구 통계 정책](district-statistics-policy.md), 실행법은 [ETL 가이드](etl-guide.md#자치구-점포-읽기-전용-검증)를 따릅니다. 공식 자치구 점포 REST API도 구현했습니다. 자치구 점포의 이후 실제 개발 DB 적용·적재 결과는 [ETL 가이드의 검증 기록](etl-guide.md#실제-개발-db-적용적재-검증-2026-10-31)에 구분합니다. 자치구 추정매출은 DB 없는 원본 probe를 유지하면서 V6와 적재 ETL을 추가했습니다. 자치구 매출 조회 API도 구현했습니다. 실제 개발 DB의 V6 적용·자치구 매출 적재는 [개발 DB 검증 기록](etl-guide.md#자치구-추정매출-개발-db-적용적재-검증-2026-10-31)으로 관리합니다. 자치구 인구의 DB·적재·API는 후속 범위입니다. 기존 행정동 V3 계약은 유지합니다.
 
 ## 목차
 
@@ -27,6 +27,7 @@ V3 점포·추정매출·유동인구 통계와 V4 카페의 주변 반경·지�
   - [V5 자치구 점포 컬럼과 ETL 계약](#v5-자치구-점포-컬럼과-etl-계약)
   - [V6 자치구 추정매출 컬럼과 ETL 계약](#v6-자치구-추정매출-컬럼과-etl-계약)
 - [자치구 추정매출 원본 probe 계약](#자치구-추정매출-원본-probe-계약)
+- [자치구 길단위인구 원본 probe 계약](#자치구-길단위인구-원본-probe-계약)
 - [행정구역 REST API 계약](#행정구역-rest-api-계약)
 - [행정동 점포 통계 REST API 계약](#행정동-점포-통계-rest-api-계약)
 - [자치구 점포 통계 REST API 계약](#자치구-점포-통계-rest-api-계약)
@@ -134,7 +135,7 @@ PostGIS는 PostgreSQL의 공간 연산 확장입니다. EPSG:4326은 WGS84 경�
 
 DB 스키마는 Flyway를 이용해 관리합니다.
 
-`V1__enable_postgis.sql`은 PostGIS 확장을 활성화하고, `V2__create_core_tables.sql`은 ETL 이력·자치구·행정동·서비스 업종 테이블과 제약조건·인덱스를 생성합니다. `V3__create_dong_stat_tables.sql`은 행정동별 점포·추정매출·유동인구 통계 테이블을 생성하고, `V4__create_cafe_store.sql`은 개별 카페 테이블과 조회 인덱스를 생성합니다. `V5__create_district_store_stat.sql`은 공식 자치구 점포 통계를, `V6__create_district_sales_stat.sql`은 공식 자치구 추정매출 통계를 추가합니다. 기존 V1~V5는 변경하지 않으며 V6는 실제 개발 DB에 적용하지 않았습니다.
+`V1__enable_postgis.sql`은 PostGIS 확장을 활성화하고, `V2__create_core_tables.sql`은 ETL 이력·자치구·행정동·서비스 업종 테이블과 제약조건·인덱스를 생성합니다. `V3__create_dong_stat_tables.sql`은 행정동별 점포·추정매출·유동인구 통계 테이블을 생성하고, `V4__create_cafe_store.sql`은 개별 카페 테이블과 조회 인덱스를 생성합니다. `V5__create_district_store_stat.sql`은 공식 자치구 점포 통계를, `V6__create_district_sales_stat.sql`은 공식 자치구 추정매출 통계를 추가합니다. 기존 V1~V6는 변경하지 않으며 실제 개발 DB의 V6 적용 결과는 [개발 DB 검증 기록](etl-guide.md#자치구-추정매출-개발-db-적용적재-검증-2026-10-31)을 따릅니다.
 
 현재 마이그레이션 구성과 후속 구현 계획은 다음과 같습니다.
 
@@ -145,7 +146,7 @@ DB 스키마는 Flyway를 이용해 관리합니다.
 | V3   | 점포·추정매출·길단위인구 통계 테이블 (구현 완료)                    |
 | V4   | 개별 카페 및 공간 검색 인덱스 (구현·격리 DB 검증·개발 DB 적용 완료) |
 | V5   | 공식 자치구 점포 통계 (구현·개발 DB 적용 완료)                      |
-| V6   | 공식 자치구 추정매출 통계 (구현·개발 DB 미적용)                     |
+| V6   | 공식 자치구 추정매출 통계 (구현·개발 DB 적용 완료)                  |
 | 이후 | 자치구 유동인구 및 평가 알고리즘 확정 후 점수 관련 테이블           |
 
 Flyway는 테이블, 제약조건, 인덱스 등 DB 스키마 변경을 관리합니다. 경계 파일·서비스 업종 기준 데이터·점포·추정매출·유동인구 통계 적재는 별도 ETL로 구현했으며, 카페 데이터도 별도 API ETL로 실제 인증 검증·수집·21,996건 적재를 완료했습니다.
@@ -327,7 +328,7 @@ PK 외에 생성하는 조회 인덱스입니다.
 - 데이터셋은 `SEOUL_DISTRICT_SALES_STAT`, 출처는 `CSV`·`SEOUL`·`scope_code=NULL`, ETL 버전은 `district-sales-stat-v1`입니다. `source_reference` JSON은 `datasetId=OA-22176`, `serviceName=VwsmSignguSelngW`, `path`, 선택적 ZIP `entry`, `encoding`을 기록합니다.
 - 동일 체크섬·ETL 버전의 정상 `PUBLISHED` 이력(위 출처 조건·게시 시각 존재)과 대상의 실제 4개 측정값·`source_batch_id`가 모두 일치해야 `SKIPPED`입니다. 기존 게시 출처를 유지하며, 저장값·출처가 다르면 새로 게시합니다. 오류는 전체 반영을 롤백한 뒤 `FAILED`로 기록하고 이전 정상 데이터를 보존합니다. DB 연결 자체가 불가능하면 실패 이력도 남길 수 없습니다.
 - 실제 CP949 CSV 33,803행을 일회용 PostGIS에 적재해 4개 측정값 135,212개 전수 문자열 대조·불일치 0건과 재실행 `SKIPPED`·기존 게시 출처 보존을 확인했습니다. FK 기준 행은 관찰 코드로 구성한 합성 데이터이며 실제 개발 DB FK 대조는 아닙니다.
-- `--probe`는 아래 JSON 계약과 DB 미접속을 유지합니다. V6는 실제 개발 DB에 미적용이며 매출 데이터도 미적재입니다. 자치구 추정매출 REST API는 [아래 조회 계약](#자치구-추정매출-통계-rest-api-계약)으로 구현했습니다. 실행과 검증 범위는 [ETL 가이드](etl-guide.md#자치구-추정매출-읽기-전용-검증)를 따릅니다.
+- `--probe`는 아래 JSON 계약과 DB 미접속을 유지합니다. 실제 개발 DB의 V6 적용·매출 적재는 [개발 DB 검증 기록](etl-guide.md#자치구-추정매출-개발-db-적용적재-검증-2026-10-31)에 기록했습니다. 자치구 추정매출 REST API는 [아래 조회 계약](#자치구-추정매출-통계-rest-api-계약)으로 구현했습니다. 실행과 검증 범위는 [ETL 가이드](etl-guide.md#자치구-추정매출-읽기-전용-검증)를 따릅니다.
 
 ## 자치구 추정매출 원본 probe 계약
 
@@ -382,6 +383,58 @@ PK 외에 생성하는 조회 인덱스입니다.
 ```
 
 예시 체크섬은 형식을 보여주는 자리표시자입니다. 실제 제공 CSV는 33,803행·CP949·22분기·25구·63업종으로 검증했고, `33803`은 해당 판본의 행 수이지 구현 상수가 아닙니다. probe가 검증하는 4개 수치와 별도 독립 조사에서 확인한 전체 48개 수치의 결과를 구분합니다. 체크섬·847개 누락 조합·39개 합계 차이·실행 방법은 [ETL 가이드](etl-guide.md#자치구-추정매출-읽기-전용-검증)에 기록합니다.
+
+## 자치구 길단위인구 원본 probe 계약
+
+`district-foot-traffic --probe`는 OA-22179·`VwsmSignguFlpopW`의 로컬 CSV/단일 CSV ZIP을 검증하는 읽기 전용 명령입니다. 자치구·분기와 아래 세 측정값만 채택하며 업종·행정동 코드로 대체하거나 연결하지 않습니다. V7·자치구 인구 테이블·적재 ETL·REST API는 이번 계약에 포함하지 않습니다.
+
+| 한글 헤더          | 영문 헤더      | 표본 필드                               |
+| ------------------ | -------------- | --------------------------------------- |
+| `자치구_코드`      | `SIGNGU_CD`    | `districtCode`: ASCII 숫자 5자리 문자열 |
+| `기준_년분기_코드` | `STDR_YYQU_CD` | `quarterCode`: `[0-9]{4}[1-4]` 문자열   |
+| `총_유동인구_수`   | `TOT_FLPOP_CO` | `totalFootTraffic`: 문자열 또는 null    |
+| `남성_유동인구_수` | `ML_FLPOP_CO`  | `maleFootTraffic`: 문자열 또는 null     |
+| `여성_유동인구_수` | `FML_FLPOP_CO` | `femaleFootTraffic`: 문자열 또는 null   |
+
+- 필수·빈·중복·모호한 헤더, 행 길이·코드 형식과 자치구+분기 복합키 중복을 검증합니다. 한글·영문 별칭이 동시에 있어도 모호한 입력으로 거부합니다. 미채택 컬럼의 수치 형식은 probe 검증 대상이 아닙니다.
+- 기존 행정동 유동인구의 행 검증 스키마를 재사용합니다. 세 수치는 정수·소수·허용 범위의 지수 표기를 정확한 NUMERIC 문자열로 정규화하며 Number·double 변환이나 반올림을 하지 않습니다. 정수부 131,072자리·소수부 16,383자리 한계와 표현 가능한 소수부 끝의 0을 유지합니다. 범위를 벗어난 지수 표기의 0은 기존 규칙대로 전개 없이 `"0"`으로 보존합니다.
+- 빈 셀만 NULL입니다. 실제 0은 문자열로 유지하며 공백·문자 NULL·음수(-0 포함)·NaN·Infinity는 거부합니다. 총인구와 성별·연령·시간대·요일 합계 일치를 강제하거나 값을 보정하지 않습니다.
+- 전체 파일을 검증한 뒤 양의 안전한 정수인 `--expected-rows`와 비교합니다. 표본은 최대 5행이며 제한 이후에도 끝까지 검증합니다. 550행·25구×22분기 완전성·컬럼 25개를 모든 판본의 고정 요건으로 두지 않습니다.
+- 출력은 `mode=PROBE`, `datasetId=OA-22179`, `serviceName=VwsmSignguFlpopW`, `validationScope=LOCAL_FILE_FORMAT`, `databaseChecked=false`, `batchCreated=false`, `loadedRows=0`, `expectedRows`·`fetchedRows`·`validRows`·`rejectedRows=0`, `periodFrom`·`periodTo`, `checksum`·`encoding`·`sample`입니다. 측정값은 sample의 위 세 필드만 포함하며 원본 경로·ZIP entry·배치 ID는 출력하지 않습니다. ZIP 체크섬은 내부 CSV 바이트 기준입니다.
+- `--probe` 생략은 명시적으로 거부합니다. DB 설정 검증·풀 생성·FK 조회·배치·적재·네트워크 호출 없이 실행하며 오류 시 원본 값·접속정보·라이브러리 오류 원문과 부분 성공 JSON을 출력하지 않습니다.
+
+실제 제공 파일의 22개 수치 12,100개에 대한 독립 조사와 probe가 채택한 세 수치의 검증은 [ETL 가이드](etl-guide.md#자치구-길단위인구-읽기-전용-검증)에서 구분합니다. 이 출력 계약은 후속 DB 스키마나 API 응답 계약을 확정한 것이 아닙니다.
+
+다음은 **합성 CSV 1행의 출력 예시**이며 실제 CSV 표본이나 API 응답이 아닙니다. 체크섬은 자리표시자입니다.
+
+```json
+{
+  "mode": "PROBE",
+  "datasetId": "OA-22179",
+  "serviceName": "VwsmSignguFlpopW",
+  "validationScope": "LOCAL_FILE_FORMAT",
+  "databaseChecked": false,
+  "batchCreated": false,
+  "loadedRows": 0,
+  "expectedRows": 1,
+  "fetchedRows": 1,
+  "validRows": 1,
+  "rejectedRows": 0,
+  "periodFrom": "20262",
+  "periodTo": "20262",
+  "checksum": "0000000000000000000000000000000000000000000000000000000000000000",
+  "encoding": "UTF-8",
+  "sample": [
+    {
+      "districtCode": "00111",
+      "quarterCode": "20262",
+      "totalFootTraffic": "9007199254740993.12345678901234567890",
+      "maleFootTraffic": "0",
+      "femaleFootTraffic": null
+    }
+  ]
+}
+```
 
 ## 행정구역 REST API 계약
 
@@ -774,7 +827,7 @@ SalesStatResponse
 
 `GET /api/v1/districts/{districtCode}/stats/sales?quarterCode=20262&industryCode=CS100010`
 
-`db` 프로필에서 Controller → Service → JdbcClient Repository → Response 구조로 제공합니다. V6 `district_sales_stat`을 직접 조회하며 행정동 매출 합산·누락 조합 생성·값 보정을 하지 않습니다. 기존 행정동 추정매출·자치구 점포 API의 계약은 유지합니다. 실제 개발 DB의 V6 적용·매출 적재는 미완료이며 이 API는 일회용 PostGIS로 검증합니다.
+`db` 프로필에서 Controller → Service → JdbcClient Repository → Response 구조로 제공합니다. V6 `district_sales_stat`을 직접 조회하며 행정동 매출 합산·누락 조합 생성·값 보정을 하지 않습니다. 기존 행정동 추정매출·자치구 점포 API의 계약은 유지합니다. 일회용 PostGIS 검증과 이후 [개발 DB 검증 기록](etl-guide.md#자치구-추정매출-개발-db-적용적재-검증-2026-10-31)의 실제 API 대조를 구분합니다.
 
 ### 자치구 추정매출 요청
 
