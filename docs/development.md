@@ -92,7 +92,7 @@ docker compose up -d --wait db # 다시 실행
 docker compose restart db     # 재시작, 데이터 유지
 ```
 
-일반적인 종료·재시작에는 볼륨을 삭제하는 옵션을 사용하지 않습니다. 아래 Backend의 `db` 프로필을 실행하면 V1·V2·V3·V4가 적용됩니다. V4의 개발 DB 적용은 완료된 상태입니다. 재시작 전후에 `flyway_schema_history`를 조회하면 마이그레이션 이력의 유지를 확인할 수 있습니다. 기존 Testcontainers 통합 테스트는 Compose와 독립된 일회용 DB를 계속 사용합니다.
+일반적인 종료·재시작에는 볼륨을 삭제하는 옵션을 사용하지 않습니다. 아래 Backend의 `db` 프로필을 실행하면 미적용 Flyway 마이그레이션만 적용됩니다. 2026-10-31 기준 V1~V5의 개발 DB 적용을 완료했습니다. 재시작 전후에 `flyway_schema_history`를 조회하면 마이그레이션 이력의 유지를 확인할 수 있습니다. 기존 Testcontainers 통합 테스트는 Compose와 독립된 일회용 DB를 계속 사용합니다.
 
 ## 2. Frontend
 
@@ -146,24 +146,29 @@ cd backend
 
 - `application-db.yaml`은 `DB_JDBC_URL`, `DB_USER`, `DB_PASSWORD`로 서비스용 Hikari DataSource(조회 연결 풀)와 JdbcClient를 구성합니다. Flyway는 같은 DB 설정을 별도의 전용 연결로 사용합니다.
 - 운영에서 계정을 분리하려면 `spring.datasource.*`와 `spring.flyway.*`를 각각 외부 설정으로 지정합니다.
-- `db` 프로필 시작 시 Flyway가 V1·V2·V3·V4를 순서대로 적용하고 이미 적용된 마이그레이션은 다시 실행하지 않습니다. Flyway는 DB 스키마 변경 이력을 관리하는 도구입니다.
+- `db` 프로필 시작 시 Flyway가 V1~V5를 순서대로 적용하고 이미 적용된 마이그레이션은 다시 실행하지 않습니다. Flyway는 DB 스키마 변경 이력을 관리하는 도구입니다.
 - Compose DB는 공간 연산용 PostGIS 확장을 포함합니다. 외부 로컬 DB는 `backend/.env.example`을 참고하고 PostGIS 설치 및 확장 생성 권한을 확인합니다.
 - 스키마 적용만으로 조회 데이터가 생기지 않습니다. 행정구역 API는 [경계 ETL](etl-guide.md#행정동자치구-경계-적재)의 정상 게시본이 필요합니다.
 
 ### 마이그레이션 적용 상태 확인
 
-Backend를 실행한 후 위의 `docker compose exec db …` 명령으로 DB에 접속해 다음을 확인합니다. V4까지 적용한 DB의 이력은 버전 `1`, `2`, `3`, `4`가 모두 `success = true`여야 하며, 테이블 조회는 8행을 반환해야 합니다. 아래는 마이그레이션 적용 상태를 확인하는 읽기 전용 SQL입니다.
+Backend를 실행한 후 위의 `docker compose exec db …` 명령으로 DB에 접속해 다음을 확인합니다. V5까지 적용한 DB의 이력은 버전 `1`~`5`가 모두 `success = true`여야 하며, 테이블 조회는 9행을 반환해야 합니다. 아래는 마이그레이션 적용 상태를 확인하는 읽기 전용 SQL입니다.
 
 ```sql
 SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;
 SELECT tablename FROM pg_tables
 WHERE schemaname = 'public'
   AND tablename IN ('etl_batch', 'district', 'administrative_dong', 'service_industry',
-                    'dong_store_stat', 'dong_sales_stat', 'dong_foot_traffic_stat', 'cafe_store')
+                    'dong_store_stat', 'dong_sales_stat', 'dong_foot_traffic_stat', 'cafe_store',
+                    'district_store_stat')
 ORDER BY tablename;
 ```
 
 기존 마이그레이션 파일의 수정이나 DB 초기화 없이 적용·검증합니다.
+
+2026-10-31 실제 개발 DB 검증에서는 Compose·ETL·Backend의 연결 대상이 같은 로컬 인스턴스임을 확인하고, 저장소 밖 `$HOME/Downloads/RecycleYoungs-backups/`에 적용 전 custom-format 백업을 생성했습니다. `pg_dump` 성공, `pg_restore --list`와 전체 아카이브 SQL 판독을 확인했으며 백업 권한은 `600`입니다. 백업을 실제 DB에 복원하는 작업은 수행하지 않았습니다. 원본 CSV와 백업은 Git에 포함하지 않습니다.
+
+기존 V1~V4 이력은 그대로 유지되고 `db` 프로필이 V5 한 건만 신규 적용했습니다. 공식 자치구 점포 CSV 54,765행 적재·재실행과 실제 API 대조도 완료했습니다. 적용 전후 기존 7개 데이터 테이블 및 기존 배치 14건의 건수·전체 행 지문을 대조해 보존을 확인했습니다. [적재·API 검증 결과](etl-guide.md#실제-개발-db-적용적재-검증-2026-10-31)를 참고하세요. 이후 변경을 적용할 때도 대상 확인·백업·기존 데이터 보존 절차를 따르며 초기화·볼륨 삭제로 대체하지 않습니다.
 
 행정구역 API의 파라미터·DTO·오류·게시 배치 계약은 [데이터 설계](data-design.md#행정구역-rest-api-계약)를 참고하세요. ETL 설치·적재·재실행 명령은 [ETL 가이드](etl-guide.md#설치-및-공통-실행)에서 관리합니다.
 
