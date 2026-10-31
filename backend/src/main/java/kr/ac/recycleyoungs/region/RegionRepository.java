@@ -135,6 +135,21 @@ public class RegionRepository {
         .optional();
   }
 
+  /** 통계 조회의 지역 검증에서도 동과 부모 구가 모두 같은 현행 게시본인지 확인한다. */
+  public boolean existsDong(UUID batchId, String dongCode) {
+    return jdbc.sql(
+            """
+        SELECT EXISTS (SELECT 1 FROM administrative_dong a
+          JOIN district d ON d.district_code = a.district_code
+          WHERE a.boundary_batch_id = :batch AND d.boundary_batch_id = :batch
+            AND a.dong_code = :code)
+        """)
+        .param("batch", batchId)
+        .param("code", dongCode)
+        .query(Boolean.class)
+        .single();
+  }
+
   public List<NearbyDistrict> findNearbyDistricts(
       UUID batchId, double longitude, double latitude, double radiusM, List<String> districtCodes) {
     // geography 거리는 미터 단위다. geometry GiST가 이 캐스팅까지 지원한다고 가정하지 않는다.

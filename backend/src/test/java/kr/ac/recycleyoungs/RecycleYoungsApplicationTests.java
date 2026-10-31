@@ -6,6 +6,9 @@ import javax.sql.DataSource;
 import kr.ac.recycleyoungs.region.RegionController;
 import kr.ac.recycleyoungs.region.RegionRepository;
 import kr.ac.recycleyoungs.region.RegionService;
+import kr.ac.recycleyoungs.store.StoreStatController;
+import kr.ac.recycleyoungs.store.StoreStatRepository;
+import kr.ac.recycleyoungs.store.StoreStatService;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,5 +35,8 @@ class RecycleYoungsApplicationTests {
     assertThat(context.getBeansOfType(RegionController.class)).isEmpty();
     assertThat(context.getBeansOfType(RegionService.class)).isEmpty();
     assertThat(context.getBeansOfType(RegionRepository.class)).isEmpty();
+    assertThat(context.getBeansOfType(StoreStatController.class)).isEmpty();
+    assertThat(context.getBeansOfType(StoreStatService.class)).isEmpty();
+    assertThat(context.getBeansOfType(StoreStatRepository.class)).isEmpty();
   }
 }
