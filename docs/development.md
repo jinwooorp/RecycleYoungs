@@ -2,7 +2,14 @@
 
 - [README의 상세 기술 문서 안내](../README.md#상세-기술-문서)
 
-현재 저장소의 개발 도구·Docker Compose·프로필·실행·검증 방법입니다. 명령은 안내한 디렉터리에서 실행합니다. 실제 운영 배포와 CI/CD는 미구성 상태입니다.
+이 문서는 로컬 개발 환경의 준비·실행·테스트 순서를 안내합니다. DB 없이 준비 화면과 웹 서버를 확인할 수 있으며, 행정구역 API·ETL을 사용하려면 DB 연결을 준비해야 합니다. 명령은 안내한 디렉터리에서 실행합니다.
+
+1. [개발 도구](#1-개발-도구)를 준비합니다.
+2. DB가 필요하면 [환경변수 설정과 로컬 DB 준비](#로컬-db-준비)를 완료합니다.
+3. 별도 터미널에서 [Frontend](#2-frontend)와 [Backend](#3-backend)를 실행합니다. Backend는 DB 사용 여부에 맞는 실행 방법을 선택합니다.
+4. 각 프로젝트 디렉터리에서 [빌드·테스트·품질 검사](#빌드테스트품질-검사)를 실행합니다.
+
+**현재는 로컬 개발 환경만 구성되어 있습니다.** 실제 운영 배포와 CI/CD는 미구성이며, [배포 검토 항목](#배포-검토-항목)은 향후 계획입니다.
 
 ## 목차
 
@@ -12,6 +19,7 @@
 - [3. Backend](#3-backend)
   - [DB 없는 기본 실행](#db-없는-기본-실행)
   - [DB를 사용하는 `db` 프로필 실행](#db를-사용하는-db-프로필-실행)
+  - [마이그레이션 적용 상태와 V5~V7 검증 기록](#마이그레이션-적용-상태-확인)
 - [빌드·테스트·품질 검사](#빌드테스트품질-검사)
 - [배포 검토 항목](#배포-검토-항목)
 
@@ -21,21 +29,27 @@
 
 네이티브 Windows(PowerShell·CMD)는 현재 지원하지 않습니다. **프로젝트의 전체 기능 구현이 완료된 이후 지원할 예정**이며, 구체적인 지원 시점은 확정하지 않았습니다.
 
-DB 없이 준비 화면과 웹 서버만 확인하려면 개발 도구 설치 후 Frontend와 Backend의 기본 실행으로 진행합니다. 행정구역 API·ETL을 사용할 때는 로컬 DB와 환경변수 준비를 먼저 완료합니다.
-
 - Node.js **24 LTS**, npm **11**: `frontend/`, `etl/`에서 각각 `nvm use`와 `npm ci`를 실행합니다. 두 프로젝트는 독립적인 잠금 파일을 사용합니다.
 - Java **21**: 백엔드는 포함된 Gradle Wrapper(`./gradlew`)를 사용합니다.
 - Docker와 Docker Compose: 로컬 PostgreSQL/PostGIS DB 및 백엔드 DB 통합 테스트에 사용합니다. Backend·ETL은 호스트에서 실행합니다.
+
+| 확인할 대상               | 필요한 준비                                        | 다음 단계                               |
+| ------------------------- | -------------------------------------------------- | --------------------------------------- |
+| 준비 화면·DB 없는 웹 서버 | Node.js·npm, Java                                  | Frontend와 Backend 기본 실행            |
+| 행정구역 API·ETL          | 위 도구와 로컬 DB·환경변수, 해당 ETL의 기준 데이터 | DB 준비 후 Backend `db` 프로필·ETL 실행 |
+| DB 통합 테스트            | 해당 프로젝트의 도구·의존성과 실행 중인 Docker     | 개발 DB와 분리된 일회용 DB에서 테스트   |
 
 ### 로컬 DB 준비
 
 #### 환경변수 파일 준비
 
-기본 로컬 개발 환경에서는 저장소 루트의 `.env.example`로 `.env`를 준비합니다. `cp -n`은 기존 `.env`를 덮어쓰지 않습니다. 루트 `.env`는 Docker Compose·Backend·ETL의 공통 DB 설정에 사용합니다.
+기본 로컬 개발 환경에서는 저장소 루트의 `.env.example`로 `.env`를 준비합니다. 루트 `.env`는 Docker Compose·Backend·ETL의 공통 DB 설정이며, 아래 DB 시작 절차의 `cp -n`은 기존 파일을 덮어쓰지 않습니다.
 
-- `backend/.env.example`: Backend를 독립적인 DB 환경에서 실행할 때 참고합니다. 기본 환경에서는 복사할 필요가 없습니다.
-- `etl/.env.example`: ETL을 별도로 설정할 때만 사용합니다. `etl/.env`가 별도로 있으면 Node.js가 해당 파일도 읽으므로, 공통 DB 설정을 사용할 때는 불필요한 중복 설정을 피합니다.
-- `frontend/.env.example`: Vite의 API 프록시 주소를 기본값인 `http://localhost:8080`과 다르게 설정할 때만 `frontend/.env`로 복사합니다.
+| 예시 파일               | 사용할 때                                                                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `backend/.env.example`  | Backend를 독립적인 DB 환경에서 실행할 때 참고합니다. 기본 환경에서는 복사할 필요가 없습니다.                                         |
+| `etl/.env.example`      | ETL을 별도로 설정할 때만 사용합니다. `etl/.env`가 있으면 Node.js가 해당 파일도 읽으므로 공통 DB 설정과 불필요하게 중복하지 않습니다. |
+| `frontend/.env.example` | Vite의 API 프록시 주소를 기본값인 `http://localhost:8080`과 다르게 설정할 때만 `frontend/.env`로 복사합니다.                         |
 
 #### DB 시작
 
@@ -49,7 +63,9 @@ docker compose up -d --wait db
 docker compose ps db
 ```
 
-DB 이미지는 Testcontainers와 동일한 `postgis/postgis:17-3.5`입니다. `DB_PORT`의 기본값은 `5432`이며 `127.0.0.1`에만 공개합니다. 이미 사용 중인 포트이면 `.env`의 `DB_PORT`를 변경합니다. 실제 `.env`는 Git에서 제외되며, 예시 비밀번호는 로컬 개발용입니다.
+DB 이미지는 Testcontainers와 동일한 `postgis/postgis:17-3.5`입니다. `DB_PORT`의 기본값은 `5432`이며 `127.0.0.1`에만 공개합니다. 이미 사용 중인 포트이면 `.env`의 `DB_PORT`를 변경합니다.
+
+실제 `.env`는 Git에서 제외되며, 예시 비밀번호는 로컬 개발용입니다.
 
 #### 실행 터미널에 환경변수 적용
 
@@ -80,7 +96,9 @@ SELECT version(), PostGIS_Version();
 SELECT ST_SRID(ST_SetSRID(ST_MakePoint(127, 37), 4326));
 ```
 
-`\q`로 접속을 종료합니다. DB 데이터는 named volume `recycleyoungs_postgres_data`에 유지됩니다. 초기화된 볼륨에서는 `.env`의 DB 이름·사용자·비밀번호를 바꿔도 기존 DB 계정과 데이터가 자동 변경되지 않습니다.
+`\q`로 접속을 종료합니다.
+
+DB 데이터는 named volume `recycleyoungs_postgres_data`에 유지됩니다. **초기화된 볼륨에서는 `.env`의 DB 이름·사용자·비밀번호를 바꿔도 기존 DB 계정과 데이터가 자동 변경되지 않습니다.**
 
 #### 종료·재시작과 데이터 보존
 
@@ -92,7 +110,9 @@ docker compose up -d --wait db # 다시 실행
 docker compose restart db     # 재시작, 데이터 유지
 ```
 
-일반적인 종료·재시작에는 볼륨을 삭제하는 옵션을 사용하지 않습니다. 아래 Backend의 `db` 프로필을 실행하면 미적용 Flyway 마이그레이션만 적용됩니다. 2026-11-01 기준 V1~V7의 개발 DB 적용을 완료했습니다. 재시작 전후에 `flyway_schema_history`를 조회하면 마이그레이션 이력의 유지를 확인할 수 있습니다. 기존 Testcontainers 통합 테스트는 Compose와 독립된 일회용 DB를 계속 사용합니다.
+**일반적인 종료·재시작에는 볼륨을 삭제하는 옵션을 사용하지 않습니다.** 아래 Backend의 `db` 프로필은 미적용 Flyway 마이그레이션만 적용합니다. 2026-11-01 기준 V1~V7의 개발 DB 적용을 완료했으며, 재시작 전후 `flyway_schema_history`를 조회해 이력 유지를 확인할 수 있습니다.
+
+기존 Testcontainers 통합 테스트는 Compose와 독립된 일회용 DB를 계속 사용합니다.
 
 ## 2. Frontend
 
@@ -128,11 +148,15 @@ cd backend
 ./gradlew bootRun
 ```
 
-기본 포트는 **8080**입니다. 기본 실행은 DataSource·JdbcClient·Flyway 없이 가능하며, 행정구역 API는 `db` 프로필에서만 활성화됩니다. 루트 경로의 **404 응답은 정상**입니다. DB 조회 기반은 Spring JDBC·JdbcClient로 구성했습니다.
+기본 포트는 **8080**이며 루트 경로의 **404 응답은 정상**입니다. 기본 실행에는 DataSource·JdbcClient·Flyway가 필요 없습니다.
+
+행정구역 API는 `db` 프로필에서만 활성화됩니다. DB 조회 기반은 Spring JDBC·JdbcClient로 구성했습니다.
 
 ### DB를 사용하는 `db` 프로필 실행
 
-로컬 DB를 먼저 실행합니다. 다음 블록은 **새 터미널의 저장소 루트**에서 환경변수를 내보내고 `backend/`로 이동합니다. Spring Boot는 `.env`를 자동으로 읽지 않습니다. 이미 `backend/`에 있다면 `set -a`, `source ../.env`, `set +a` 후 마지막 Gradle 명령만 실행합니다.
+로컬 DB를 먼저 실행하고 **대상 DB·백업·마이그레이션 적용 권한을 확인합니다.** `db` 프로필을 시작하면 미적용 Flyway 마이그레이션이 자동 적용됩니다.
+
+다음 블록은 **새 터미널의 저장소 루트**에서 환경변수를 내보내고 `backend/`로 이동합니다. Spring Boot는 `.env`를 자동으로 읽지 않습니다. 이미 `backend/`에 있다면 `set -a`, `source ../.env`, `set +a` 후 마지막 Gradle 명령만 실행합니다.
 
 ```bash
 set -a
@@ -146,13 +170,18 @@ cd backend
 
 - `application-db.yaml`은 `DB_JDBC_URL`, `DB_USER`, `DB_PASSWORD`로 서비스용 Hikari DataSource(조회 연결 풀)와 JdbcClient를 구성합니다. Flyway는 같은 DB 설정을 별도의 전용 연결로 사용합니다.
 - 운영에서 계정을 분리하려면 `spring.datasource.*`와 `spring.flyway.*`를 각각 외부 설정으로 지정합니다.
-- `db` 프로필 시작 시 Flyway가 V1~V7 중 미적용 버전을 순서대로 적용하고 이미 적용된 마이그레이션은 다시 실행하지 않습니다. 현재 개발 DB는 V7까지 적용했습니다. 다른 DB에서 기동하면 해당 DB의 미적용 버전도 자동 적용되므로 대상 DB·백업·적용 권한을 먼저 확인합니다. Flyway는 DB 스키마 변경 이력을 관리하는 도구입니다.
+- Flyway는 DB 스키마 변경 이력을 관리합니다. `db` 프로필 시작 시 V1~V7 중 미적용 버전을 순서대로 적용하고 이미 적용된 마이그레이션은 다시 실행하지 않습니다. 현재 개발 DB는 V7까지 적용했습니다. 다른 DB에서도 미적용 버전이 자동 적용되므로 위 사전 확인이 필요합니다.
 - Compose DB는 공간 연산용 PostGIS 확장을 포함합니다. 외부 로컬 DB는 `backend/.env.example`을 참고하고 PostGIS 설치 및 확장 생성 권한을 확인합니다.
 - 스키마 적용만으로 조회 데이터가 생기지 않습니다. 행정구역 API는 [경계 ETL](etl-guide.md#행정동자치구-경계-적재)의 정상 게시본이 필요합니다.
 
 ### 마이그레이션 적용 상태 확인
 
-Backend를 실행한 후 위의 `docker compose exec db …` 명령으로 DB에 접속해 다음을 확인합니다. V7까지 적용한 DB의 이력은 버전 `1`~`7`이 모두 `success = true`여야 하며, 프로젝트 모델 테이블 조회는 11행(데이터 테이블 10개와 `etl_batch`)을 반환해야 합니다. 기존 개발 DB의 V5·V6·V7 적용 기록은 아래에 별도로 구분합니다. 아래는 마이그레이션 적용 상태를 확인하는 읽기 전용 SQL입니다.
+Backend를 실행한 후 위의 `docker compose exec db …` 명령으로 DB에 접속합니다. 아래 읽기 전용 SQL의 기대 결과는 다음과 같습니다.
+
+- V7까지 적용한 DB: 버전 `1`~`7`이 모두 `success = true`.
+- 프로젝트 모델 테이블 조회: 11행(데이터 테이블 10개와 `etl_batch`).
+
+SQL 사용 예시와 아래의 과거 V5·V6·V7 실제 개발 DB 검증 기록을 구분합니다.
 
 ```sql
 SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;
@@ -166,26 +195,42 @@ ORDER BY tablename;
 
 기존 마이그레이션 파일의 수정이나 DB 초기화 없이 적용·검증합니다.
 
-2026-10-31 실제 개발 DB 검증에서는 Compose·ETL·Backend의 연결 대상이 같은 로컬 인스턴스임을 확인하고, 저장소 밖 `$HOME/Downloads/RecycleYoungs-backups/`에 적용 전 custom-format 백업을 생성했습니다. `pg_dump` 성공, `pg_restore --list`와 전체 아카이브 SQL 판독을 확인했으며 백업 권한은 `600`입니다. 백업을 실제 DB에 복원하는 작업은 수행하지 않았습니다. 원본 CSV와 백업은 Git에 포함하지 않습니다.
+**V5 자치구 점포 — 2026-10-31 실제 개발 DB 검증**
 
-기존 V1~V4 이력은 그대로 유지되고 `db` 프로필이 V5 한 건만 신규 적용했습니다. 공식 자치구 점포 CSV 54,765행 적재·재실행과 실제 API 대조도 완료했습니다. 적용 전후 기존 7개 데이터 테이블 및 기존 배치 14건의 건수·전체 행 지문을 대조해 보존을 확인했습니다. [적재·API 검증 결과](etl-guide.md#실제-개발-db-적용적재-검증-2026-10-31)를 참고하세요. 이후 변경을 적용할 때도 대상 확인·백업·기존 데이터 보존 절차를 따르며 초기화·볼륨 삭제로 대체하지 않습니다.
+Compose·ETL·Backend의 연결 대상이 같은 로컬 인스턴스임을 확인하고, 저장소 밖 `$HOME/Downloads/RecycleYoungs-backups/`에 적용 전 custom-format 백업을 생성했습니다. `pg_dump` 성공, `pg_restore --list`와 전체 아카이브 SQL 판독을 확인했으며 백업 권한은 `600`입니다.
+
+백업을 실제 DB에 복원하는 작업은 수행하지 않았습니다. 원본 CSV와 백업은 Git에 포함하지 않습니다.
+
+기존 V1~V4 이력은 그대로 유지되고 `db` 프로필이 V5 한 건만 신규 적용했습니다. 공식 자치구 점포 CSV 54,765행 적재·재실행과 실제 API 대조도 완료했습니다. 적용 전후 기존 7개 데이터 테이블 및 기존 배치 14건의 건수·전체 행 지문을 대조해 보존을 확인했습니다. [적재·API 검증 결과](etl-guide.md#실제-개발-db-적용적재-검증-2026-10-31)를 참고하세요.
+
+이후 변경을 적용할 때도 대상 확인·백업·기존 데이터 보존 절차를 따르며 초기화·볼륨 삭제로 대체하지 않습니다.
+
+**V6 자치구 추정매출 — 2026-10-31 실제 개발 DB 검증**
 
 2026-10-31의 후속 자치구 추정매출 적용에서는 Compose·Backend·ETL이 같은 로컬 인스턴스임을 다시 확인하고 신규 백업을 생성했습니다.
 
 - 백업: `$HOME/Downloads/RecycleYoungs-backups/recycleyoungs-before-v6-20261031T144432Z.dump`, 8,751,707바이트, 권한 `600`.
 - SHA-256: `1fe19fb2b95a2cd926a234bef492dbded845bbd01d4ad35a3df2103b62976a14`.
 - `pg_dump` 성공 및 `pg_restore --list`·전체 아카이브 SQL 판독을 확인했습니다. 목록 판독의 조기 종료로 발생한 입력 파이프 오류는 백업 파일을 직접 표준입력에 연결해 재검증했습니다. 실제 DB 복원 테스트는 수행하지 않았습니다.
+
+**스키마 적용·적재·보존 결과**
+
 - 기존 `db` 프로필이 V6 한 건만 신규 적용했고 V1~V6 모두 `success=true`입니다. V1~V5의 전체 이력·체크섬을 보존했으며 V6의 테이블·복합키·FK 3개·CHECK 7개와 측정값의 NULL 허용·기본값 없음도 확인했습니다.
 - 실제 CP949 CSV 33,803행의 자치구 25개·업종 63개를 개발 DB 기준 코드와 전수 대조해 FK 불일치 0건을 확인한 뒤 적재했습니다. 135,212개 측정값 전수 대조·재실행 `SKIPPED`·기존 출처 보존·실제 API 대조를 완료했습니다.
 - 적용 전후 기존 8개 데이터 테이블 및 배치 16건의 건수·전체 행 지문이 동일합니다. 자치구 매출의 `PUBLISHED`·`SKIPPED` 각 1건이 추가돼 전체 배치는 18건입니다. 초기화·볼륨 삭제·DROP/TRUNCATE나 기존 데이터셋 재적재는 하지 않았습니다.
 
 배치 ID·게시 시각·실제 API 응답은 [자치구 추정매출 개발 DB 검증 기록](etl-guide.md#자치구-추정매출-개발-db-적용적재-검증-2026-10-31)에 있습니다. 코드·Flyway 파일·ETL·API 구현은 수정하지 않았습니다.
 
-2026-11-01에는 공식 자치구 길단위인구의 V7 적용·550행 적재·실제 API 검증도 완료했습니다.
+**V7 자치구 길단위인구 — 2026-11-01 실제 개발 DB 검증**
+
+공식 자치구 길단위인구의 V7 적용·550행 적재·실제 API 검증도 완료했습니다.
 
 - Compose·Backend·ETL의 DB 연결을 실제 인스턴스 식별자·DB·사용자로 대조해 같은 의도된 로컬 개발 DB임을 확인했습니다. 접속정보·식별자 원문은 공개하지 않습니다.
 - 신규 백업: `$HOME/Downloads/RecycleYoungs-backups/recycleyoungs-before-v7-20261101T040416Z.dump`, 9,579,979바이트, 권한 `600`, custom-format.
 - 백업 SHA-256: `b4cf4041275809ae1de61b58cdbe5261ab4a7f081984ec48dc6e6dbbee2437eb`. `pg_dump`·`pg_restore --list`·전체 아카이브 SQL 판독을 통과했으며 **실제 DB 복원 테스트는 미실시**입니다.
+
+**스키마 적용·적재·보존 결과**
+
 - 기존 `db` 프로필로 V7 한 건만 신규 적용했습니다. V1~V7 모두 `success=true`, V7 체크섬은 `194220786`이며 V1~V6 파일·전체 이력·체크섬은 보존했습니다. 신규 테이블 6개 컬럼·구/분기 PK·FK 2개·CHECK 5개, 세 NUMERIC의 NULL 허용·정밀도/scale 제한과 기본값 없음·유한 비음수 제약을 확인했습니다.
 - 실제 CP949 CSV 550행·자치구 25개를 개발 DB 기준 코드와 전수 대조해 FK 불일치 0건을 확인한 뒤 적재했습니다. 세 측정값 1,650개 전수 문자열 대조·불일치 0건, 성별 합계 차이 269행 보존, 재실행 `SKIPPED`·수치·최초 게시 출처·전체 행 지문 보존과 실제 API 대조를 완료했습니다.
 - 기존 데이터 테이블 9개와 배치 18건의 건수·전체 행 지문을 보존했습니다. 신규 인구의 `PUBLISHED`·`SKIPPED` 각 1건만 추가해 전체 배치는 20건이며 프로젝트 모델 테이블은 11개입니다. 검증용 Backend는 정상 종료했고 Compose DB·볼륨은 유지했습니다.
@@ -198,6 +243,8 @@ ORDER BY tablename;
 
 Frontend 명령은 **`frontend/`**, Backend 명령은 **`backend/`**, ETL 명령은 **`etl/`**에서 실행합니다. 이 표의 명령에는 추가 `cd`가 필요하지 않습니다.
 
+각 프로젝트의 도구·의존성을 준비한 뒤 필요한 검사를 선택합니다. Backend DB 통합 테스트는 일반 `build`와 분리되어 있으므로, 전체 검증 시에는 아래의 통합 실행 명령을 사용합니다.
+
 | 프로젝트       | 명령                        | 검증 내용                                                                      |
 | -------------- | --------------------------- | ------------------------------------------------------------------------------ |
 | Frontend       | `npm run build`             | TypeScript 타입 검사 · Vite 빌드                                               |
@@ -209,9 +256,14 @@ Frontend 명령은 **`frontend/`**, Backend 명령은 **`backend/`**, ETL 명령
 | ETL            | `npm run build`             | TypeScript 빌드                                                                |
 | ETL            | `npm test`                  | Vitest 환경설정·CSV/ZIP·경계·업종·통계·카페 API 검증 테스트                    |
 
-`npm run test:watch`로 테스트 감시 모드를 사용합니다. 포맷 수정은 TypeScript 프로젝트의 `npm run format`, Java의 `./gradlew spotlessApply`로 수행합니다. 백엔드 통합 테스트는 일반 `build`와 분리되어 있으며 Docker가 실행 중이어야 합니다.
+**실행 전제:** 백엔드 통합 테스트에는 실행 중인 Docker가 필요합니다. 로컬 Compose DB는 필요하지 않으며, 통합 테스트는 서비스 DataSource와 Flyway 설정을 모두 일회용 PostGIS 컨테이너로 덮어씁니다. 로컬 개발 DB나 실제 공공 API에 접근하지 않습니다.
 
-백엔드 전체 검증은 `backend/`에서 `./gradlew build integrationTest`로 실행합니다. 단위·MVC 테스트는 기본 프로필의 DB 없는 기동, 코드 검증·응답 계약과 공통 오류를 검증합니다. 행정구역 통합 테스트는 최신 게시본·과거 출처 제외·GeoJSON·게시 중 조회 일관성과 주변 검색의 복수 구 교차·중심점 경계·반경 접촉·구 필터·빈 결과도 확인합니다. 통합 테스트는 서비스 DataSource와 Flyway 설정을 모두 일회용 PostGIS 컨테이너로 덮어쓰며, 로컬 개발 DB나 실제 공공 API에 접근하지 않습니다.
+백엔드 전체 검증은 `backend/`에서 `./gradlew build integrationTest`로 실행합니다.
+
+- 단위·MVC 테스트: 기본 프로필의 DB 없는 기동, 코드 검증·응답 계약과 공통 오류를 검증합니다.
+- 행정구역 통합 테스트: 최신 게시본·과거 출처 제외·GeoJSON·게시 중 조회 일관성과 주변 검색의 복수 구 교차·중심점 경계·반경 접촉·구 필터·빈 결과도 확인합니다.
+
+**선택 실행:** `npm run test:watch`로 테스트 감시 모드를 사용합니다. 포맷 수정은 TypeScript 프로젝트의 `npm run format`, Java의 `./gradlew spotlessApply`로 수행합니다.
 
 환경변수 예시에는 로컬 개발용 값만 포함합니다. 실제 비밀번호가 포함된 `.env` 파일은 Git에서 제외됩니다.
 
