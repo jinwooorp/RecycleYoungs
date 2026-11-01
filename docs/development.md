@@ -92,7 +92,7 @@ docker compose up -d --wait db # 다시 실행
 docker compose restart db     # 재시작, 데이터 유지
 ```
 
-일반적인 종료·재시작에는 볼륨을 삭제하는 옵션을 사용하지 않습니다. 아래 Backend의 `db` 프로필을 실행하면 미적용 Flyway 마이그레이션만 적용됩니다. 2026-10-31 기준 V1~V6의 개발 DB 적용을 완료했습니다. 재시작 전후에 `flyway_schema_history`를 조회하면 마이그레이션 이력의 유지를 확인할 수 있습니다. 기존 Testcontainers 통합 테스트는 Compose와 독립된 일회용 DB를 계속 사용합니다.
+일반적인 종료·재시작에는 볼륨을 삭제하는 옵션을 사용하지 않습니다. 아래 Backend의 `db` 프로필을 실행하면 미적용 Flyway 마이그레이션만 적용됩니다. 2026-11-01 기준 V1~V7의 개발 DB 적용을 완료했습니다. 재시작 전후에 `flyway_schema_history`를 조회하면 마이그레이션 이력의 유지를 확인할 수 있습니다. 기존 Testcontainers 통합 테스트는 Compose와 독립된 일회용 DB를 계속 사용합니다.
 
 ## 2. Frontend
 
@@ -146,13 +146,13 @@ cd backend
 
 - `application-db.yaml`은 `DB_JDBC_URL`, `DB_USER`, `DB_PASSWORD`로 서비스용 Hikari DataSource(조회 연결 풀)와 JdbcClient를 구성합니다. Flyway는 같은 DB 설정을 별도의 전용 연결로 사용합니다.
 - 운영에서 계정을 분리하려면 `spring.datasource.*`와 `spring.flyway.*`를 각각 외부 설정으로 지정합니다.
-- `db` 프로필 시작 시 Flyway가 V1~V6 중 미적용 버전을 순서대로 적용하고 이미 적용된 마이그레이션은 다시 실행하지 않습니다. 현재 개발 DB는 V6까지 적용했습니다. 다른 DB에서 기동하면 해당 DB의 미적용 버전도 자동 적용되므로 대상 DB·백업·적용 권한을 먼저 확인합니다. Flyway는 DB 스키마 변경 이력을 관리하는 도구입니다.
+- `db` 프로필 시작 시 Flyway가 V1~V7 중 미적용 버전을 순서대로 적용하고 이미 적용된 마이그레이션은 다시 실행하지 않습니다. 현재 개발 DB는 V7까지 적용했습니다. 다른 DB에서 기동하면 해당 DB의 미적용 버전도 자동 적용되므로 대상 DB·백업·적용 권한을 먼저 확인합니다. Flyway는 DB 스키마 변경 이력을 관리하는 도구입니다.
 - Compose DB는 공간 연산용 PostGIS 확장을 포함합니다. 외부 로컬 DB는 `backend/.env.example`을 참고하고 PostGIS 설치 및 확장 생성 권한을 확인합니다.
 - 스키마 적용만으로 조회 데이터가 생기지 않습니다. 행정구역 API는 [경계 ETL](etl-guide.md#행정동자치구-경계-적재)의 정상 게시본이 필요합니다.
 
 ### 마이그레이션 적용 상태 확인
 
-Backend를 실행한 후 위의 `docker compose exec db …` 명령으로 DB에 접속해 다음을 확인합니다. V6까지 적용한 DB의 이력은 버전 `1`~`6`이 모두 `success = true`여야 하며, 테이블 조회는 10행을 반환해야 합니다. 기존 개발 DB의 V5·V6 적용 기록은 아래에 별도로 구분합니다. 아래는 마이그레이션 적용 상태를 확인하는 읽기 전용 SQL입니다.
+Backend를 실행한 후 위의 `docker compose exec db …` 명령으로 DB에 접속해 다음을 확인합니다. V7까지 적용한 DB의 이력은 버전 `1`~`7`이 모두 `success = true`여야 하며, 프로젝트 모델 테이블 조회는 11행(데이터 테이블 10개와 `etl_batch`)을 반환해야 합니다. 기존 개발 DB의 V5·V6·V7 적용 기록은 아래에 별도로 구분합니다. 아래는 마이그레이션 적용 상태를 확인하는 읽기 전용 SQL입니다.
 
 ```sql
 SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;
@@ -160,7 +160,7 @@ SELECT tablename FROM pg_tables
 WHERE schemaname = 'public'
   AND tablename IN ('etl_batch', 'district', 'administrative_dong', 'service_industry',
                     'dong_store_stat', 'dong_sales_stat', 'dong_foot_traffic_stat', 'cafe_store',
-                    'district_store_stat', 'district_sales_stat')
+                    'district_store_stat', 'district_sales_stat', 'district_foot_traffic_stat')
 ORDER BY tablename;
 ```
 
@@ -180,6 +180,17 @@ ORDER BY tablename;
 - 적용 전후 기존 8개 데이터 테이블 및 배치 16건의 건수·전체 행 지문이 동일합니다. 자치구 매출의 `PUBLISHED`·`SKIPPED` 각 1건이 추가돼 전체 배치는 18건입니다. 초기화·볼륨 삭제·DROP/TRUNCATE나 기존 데이터셋 재적재는 하지 않았습니다.
 
 배치 ID·게시 시각·실제 API 응답은 [자치구 추정매출 개발 DB 검증 기록](etl-guide.md#자치구-추정매출-개발-db-적용적재-검증-2026-10-31)에 있습니다. 코드·Flyway 파일·ETL·API 구현은 수정하지 않았습니다.
+
+2026-11-01에는 공식 자치구 길단위인구의 V7 적용·550행 적재·실제 API 검증도 완료했습니다.
+
+- Compose·Backend·ETL의 DB 연결을 실제 인스턴스 식별자·DB·사용자로 대조해 같은 의도된 로컬 개발 DB임을 확인했습니다. 접속정보·식별자 원문은 공개하지 않습니다.
+- 신규 백업: `$HOME/Downloads/RecycleYoungs-backups/recycleyoungs-before-v7-20261101T040416Z.dump`, 9,579,979바이트, 권한 `600`, custom-format.
+- 백업 SHA-256: `b4cf4041275809ae1de61b58cdbe5261ab4a7f081984ec48dc6e6dbbee2437eb`. `pg_dump`·`pg_restore --list`·전체 아카이브 SQL 판독을 통과했으며 **실제 DB 복원 테스트는 미실시**입니다.
+- 기존 `db` 프로필로 V7 한 건만 신규 적용했습니다. V1~V7 모두 `success=true`, V7 체크섬은 `194220786`이며 V1~V6 파일·전체 이력·체크섬은 보존했습니다. 신규 테이블 6개 컬럼·구/분기 PK·FK 2개·CHECK 5개, 세 NUMERIC의 NULL 허용·정밀도/scale 제한과 기본값 없음·유한 비음수 제약을 확인했습니다.
+- 실제 CP949 CSV 550행·자치구 25개를 개발 DB 기준 코드와 전수 대조해 FK 불일치 0건을 확인한 뒤 적재했습니다. 세 측정값 1,650개 전수 문자열 대조·불일치 0건, 성별 합계 차이 269행 보존, 재실행 `SKIPPED`·수치·최초 게시 출처·전체 행 지문 보존과 실제 API 대조를 완료했습니다.
+- 기존 데이터 테이블 9개와 배치 18건의 건수·전체 행 지문을 보존했습니다. 신규 인구의 `PUBLISHED`·`SKIPPED` 각 1건만 추가해 전체 배치는 20건이며 프로젝트 모델 테이블은 11개입니다. 검증용 Backend는 정상 종료했고 Compose DB·볼륨은 유지했습니다.
+
+배치 ID·게시 시각·실제 API 및 예외 응답은 [자치구 길단위인구 개발 DB 검증 기록](etl-guide.md#자치구-길단위인구-개발-db-적용적재-검증-2026-11-01)에 있습니다. 기존 데이터 재적재·초기화·DROP/TRUNCATE나 코드·설정·Flyway·ETL 변경은 하지 않았습니다. 원본 CSV·백업·`.env`는 저장소에 포함하지 않습니다.
 
 행정구역 API의 파라미터·DTO·오류·게시 배치 계약은 [데이터 설계](data-design.md#행정구역-rest-api-계약)를 참고하세요. ETL 설치·적재·재실행 명령은 [ETL 가이드](etl-guide.md#설치-및-공통-실행)에서 관리합니다.
 
