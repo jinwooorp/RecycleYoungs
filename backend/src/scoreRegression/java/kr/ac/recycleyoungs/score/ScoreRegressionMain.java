@@ -176,14 +176,14 @@ public final class ScoreRegressionMain {
     }
   }
 
-  private static String required(Map<String, String> environment, String name) {
+  static String required(Map<String, String> environment, String name) {
     String value = environment.get(name);
     if (value == null || value.isBlank()) throw new IllegalArgumentException("필수 환경변수 없음");
     return value;
   }
 
   /** JDBC URL이 연결 속성의 쓰기 방지를 덮어쓰거나 인증정보·추가 설정 파일을 지정하지 못하게 한다. */
-  private static void validateUrl(String url) {
+  static void validateUrl(String url) {
     if (!url.startsWith("jdbc:postgresql://"))
       throw new IllegalArgumentException("PostgreSQL URL 필요");
     URI uri = URI.create(url.substring(5));
@@ -200,7 +200,11 @@ public final class ScoreRegressionMain {
     }
   }
 
-  private static DataSource dataSource(String url, String user, String password) {
+  static DataSource dataSource(String url, String user, String password) {
+    return dataSource(url, user, password, "score-r03-regression");
+  }
+
+  static DataSource dataSource(String url, String user, String password, String applicationName) {
     var source = new DriverManagerDataSource(url, user, password);
     var properties = new Properties();
     properties.setProperty(
@@ -212,12 +216,12 @@ public final class ScoreRegressionMain {
     properties.setProperty("readOnlyMode", "transaction");
     properties.setProperty("connectTimeout", "5");
     properties.setProperty("socketTimeout", "45");
-    properties.setProperty("ApplicationName", "score-r03-regression");
+    properties.setProperty("ApplicationName", applicationName);
     source.setConnectionProperties(properties);
     return source;
   }
 
-  private static AnnotationConfigApplicationContext context(DataSource source) {
+  static AnnotationConfigApplicationContext context(DataSource source) {
     var context = new AnnotationConfigApplicationContext();
     context.getEnvironment().setActiveProfiles("db", "score-regression-tool");
     context.register(ToolTransactions.class);

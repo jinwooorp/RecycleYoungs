@@ -71,6 +71,8 @@ logs/
 tmp/
 temp/
 *.tmp
+*.score-snapshot.json
+.score-snapshot-*.part
 
 # ==========================================
 # Testing

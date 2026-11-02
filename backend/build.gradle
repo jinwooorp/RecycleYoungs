@@ -69,6 +69,33 @@ tasks.register('scoreRegression', JavaExec) {
 	}
 }
 
+// 파일 저장·DB 조회는 별도 CLI에서만 한다. 일반 test/build/check에 연결하지 않는다.
+tasks.register('scoreSnapshotExport', JavaExec) {
+	description = 'Exports an opt-in read-only district/dong snapshot bundle outside the repository.'
+	group = 'verification'
+	classpath = sourceSets.scoreRegression.runtimeClasspath
+	mainClass = 'kr.ac.recycleyoungs.score.ScoreSnapshotExportMain'
+	systemProperty 'score.snapshot.repositoryRoot', rootProject.projectDir.parentFile.canonicalPath
+	doFirst {
+		if (System.getenv('SCORE_SNAPSHOT_EXPORT_ENABLED') != '1') {
+			throw new GradleException('SCORE_SNAPSHOT_EXPORT_ENABLED=1 명시가 필요합니다. DB·파일 접근 없음.')
+		}
+	}
+}
+
+tasks.register('scoreSnapshotVerify', JavaExec) {
+	description = 'Verifies one explicitly selected snapshot bundle without DB or Spring Context.'
+	group = 'verification'
+	classpath = sourceSets.scoreRegression.runtimeClasspath
+	mainClass = 'kr.ac.recycleyoungs.score.ScoreSnapshotVerifyMain'
+	systemProperty 'score.snapshot.repositoryRoot', rootProject.projectDir.parentFile.canonicalPath
+	doFirst {
+		if (!System.getenv('SCORE_SNAPSHOT_INPUT_PATH')) {
+			throw new GradleException('SCORE_SNAPSHOT_INPUT_PATH 명시가 필요합니다.')
+		}
+	}
+}
+
 tasks.named('test') {
 	useJUnitPlatform()
 }

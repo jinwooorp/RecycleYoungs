@@ -12,7 +12,7 @@
 | [ScoreSnapshotCodec](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreSnapshotCodec.java)       | 정규 JSON 바이트·SHA-256 생성, 엄격한 역직렬화·해시·재현 검증                                          |
 | [ScoreCohortEvaluator](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreCohortEvaluator.java)   | 기존 Service의 입력 검증·집단 계산만 추출한 공통 순수 로직. 기존 A 계산기 재사용                       |
 
-이 클래스들은 파일·DB·HTTP·Spring Context를 사용하지 않습니다. Service의 요청 검증·트랜잭션·경계→지역→데이터셋 준비 순서와 상태·오류 처리는 그대로입니다. 스냅샷 생성은 Service 호출에 자동 연결하지 않았습니다. 파일 내보내기·덮어쓰기·manifest 생성·자동 실행 작업도 없습니다.
+이 클래스들은 파일·DB·HTTP·Spring Context를 사용하지 않습니다. Service의 요청 검증·트랜잭션·경계→지역→데이터셋 준비 순서와 상태·오류 처리는 그대로입니다. 스냅샷 생성은 Service 호출에 자동 연결하지 않았습니다. 코어에는 파일 저장·manifest 발급·자동 실행 기능이 없습니다. 별도 명시 도구는 [외부 보존 및 오프라인 검증](score-snapshot-tools.md)을 참고합니다.
 
 ## 2. 스키마와 전체 집단 검증
 
@@ -99,7 +99,7 @@ String hash = restored.inputSnapshotId();
 
 ## 5. 검증 범위와 후속 승인 작업
 
-2026-11-02 검증 결과: 신규 스냅샷 테스트 **44개**, 전체 단위 **526개**, 일회용 DB 통합 **828개**가 모두 통과했고 실패·건너뜀은 없습니다. 빌드·Spotless, 문서 Prettier·링크·표, 신규 파일을 포함한 공백 검사도 확인했습니다. 실제 개발 DB 회귀 도구는 실행하지 않았습니다.
+2026-11-02 R01·R02 코어 구현 당시 검증 결과(내보내기 도구 추가 전): 신규 스냅샷 테스트 **44개**, 전체 단위 **526개**, 일회용 DB 통합 **828개**가 모두 통과했고 실패·건너뜀은 없습니다. 빌드·Spotless, 문서 Prettier·링크·표, 신규 파일을 포함한 공백 검사도 확인했습니다. 실제 개발 DB 회귀 도구는 실행하지 않았습니다.
 
 - **R01:** 합성 전체 payload의 순서·시각 불변성, 변경 탐지, 고정 해시, JSON 왕복 및 손상 거부를 검증합니다.
 - **R02:** 합성 전체 집단과 원본 표현을 보존하고, DB 없이 기존 계산기의 정확한 결과·제외/보류를 재현합니다. 현재 구현은 승인된 실데이터 보존본의 재현 성공을 뜻하지 않습니다.
