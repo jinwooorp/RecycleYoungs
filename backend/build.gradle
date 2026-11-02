@@ -33,16 +33,40 @@ dependencies {
 
 // Docker가 필요한 통합 테스트를 일반 단위 테스트와 분리하고 애플리케이션 출력을 함께 사용한다.
 sourceSets {
-	integrationTest {
+	// 명시 실행용 회귀 도구는 제품 JAR에서 분리하고 테스트에는 검산 코드만 제공한다.
+	scoreRegression {
 		compileClasspath += sourceSets.main.output
 		runtimeClasspath += sourceSets.main.output
+	}
+	test {
+		compileClasspath += sourceSets.scoreRegression.output
+		runtimeClasspath += sourceSets.scoreRegression.output
+	}
+	integrationTest {
+		compileClasspath += sourceSets.main.output + sourceSets.scoreRegression.output
+		runtimeClasspath += sourceSets.main.output + sourceSets.scoreRegression.output
 	}
 }
 
 // 통합 테스트에서도 기존 테스트 라이브러리와 런타임 의존성을 재사용한다.
 configurations {
+	scoreRegressionImplementation.extendsFrom implementation
+	scoreRegressionRuntimeOnly.extendsFrom runtimeOnly
 	integrationTestImplementation.extendsFrom testImplementation
 	integrationTestRuntimeOnly.extendsFrom testRuntimeOnly
+}
+
+// test/build/check는 이 작업을 실행하지 않는다. JDBC 인증정보는 환경변수로만 전달한다.
+tasks.register('scoreRegression', JavaExec) {
+	description = 'Runs opt-in read-only score regression diagnostics against the configured development DB.'
+	group = 'verification'
+	classpath = sourceSets.scoreRegression.runtimeClasspath
+	mainClass = 'kr.ac.recycleyoungs.score.ScoreRegressionMain'
+	doFirst {
+		if (System.getenv('SCORE_REGRESSION_ENABLED') != '1') {
+			throw new GradleException('SCORE_REGRESSION_ENABLED=1 명시가 필요합니다. DB에는 연결하지 않았습니다.')
+		}
+	}
 }
 
 tasks.named('test') {
