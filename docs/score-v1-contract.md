@@ -1,6 +1,6 @@
 # MVP v1 창업 환경 점수 정책·계산 계약 제안
 
-**상태: 승인 전 권장안, 미구현.** 기존 A를 어떤 규칙으로 계산하고 설명할지 구체화한 명세입니다. 새 모델이나 실제 점수 실험을 추가하지 않았습니다. 여기서 정한 API 경로·필드·예외·정밀도·저장 제안도 아직 확정된 서비스 계약이 아닙니다.
+**상태: 승인 전 권장안. 내부 계산·재현 검증과 REST API의 미승인 차단 경로만 구현했습니다.** 기존 A를 어떤 규칙으로 계산하고 설명할지 구체화한 명세이며 새 모델이나 실제 점수 실험을 추가하지 않았습니다. 공개 점수의 성공 응답·승인 게이트는 미구현이고, 필드·예외·정밀도·저장 제안은 아직 확정된 서비스 계약이 아닙니다.
 
 **현재 적재 판본의 분기·공간·업종별 비교 가능성을 확인하기 전에는 공개 점수 제공을 승인하지 않습니다.** 정책 승인과 데이터 승인은 별도 조건이며, 이 문서 작성으로 어느 쪽도 승인되지 않습니다. 승인 전에도 순수 계산기의 합성 테스트와 계약 구현 준비는 할 수 있습니다.
 
@@ -60,7 +60,7 @@ n은 완비 비교 지역 수, N은 한 지역의 점포 수입니다. 점포 10
 - [점포 Repository](../backend/src/main/java/kr/ac/recycleyoungs/store/DistrictStoreStatRepository.java), [매출 Repository](../backend/src/main/java/kr/ac/recycleyoungs/sales/DistrictSalesStatRepository.java), [인구 Repository](../backend/src/main/java/kr/ac/recycleyoungs/foottraffic/DistrictFootTrafficStatRepository.java): 행별 출처 검사와 수치 문자열 조회.
 - [공통 오류 처리](../backend/src/main/java/kr/ac/recycleyoungs/api/ApiExceptionHandler.java): ProblemDetail, DB 연결·자원·시간 초과와 내부 오류 구분, SQL·인증정보 비노출.
 
-**제안하는 책임:** 점수 Controller는 요청만 검증하고, 점수 Service는 단일 스냅샷·승인 상태·응답 상태를 조정합니다. 점수 입력 Repository는 단위별 전체 경계와 세 통계를 일괄 조회합니다. 순수 A 계산기는 DB·HTTP·시각·표시 문자열에 의존하지 않고 완비 입력 목록만 받아 순위·기여·점수를 반환합니다. 이는 역할 설계이며 클래스·메서드를 이번에 추가하지 않았습니다.
+**제안하는 책임:** 점수 Controller는 요청만 검증하고, 점수 Service는 단일 스냅샷·승인 상태·응답 상태를 조정합니다. 점수 입력 Repository는 단위별 전체 경계와 세 통계를 일괄 조회합니다. 순수 A 계산기는 DB·HTTP·시각·표시 문자열에 의존하지 않고 완비 입력 목록만 받아 순위·기여·점수를 반환합니다. 내부 계산기·Repository·ScoreService는 구현돼 있지만, 현재 [ScoreController](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreController.java)는 이들을 호출하지 않고 요청 검증 후 즉시 503으로 차단합니다. 실제 승인·철회 게이트와 현재 DB 대조는 후속 구현입니다.
 
 ### 3.2 입력 조회 계약
 
@@ -80,6 +80,8 @@ n은 완비 비교 지역 수, N은 한 지역의 점포 수입니다. 점포 10
 전체 경계 목록을 기준으로 통계를 연결해 **행 없음·부적격 출처·행은 있으나 측정값 NULL**을 구분합니다. 필수 값만 inner join해서 제외 지역이 조용히 사라지는 구현은 하지 않습니다. 부적격 출처의 측정값은 공개 입력으로 쓰지 않고, 해당 사실과 제외 사유만 기록합니다. 선택 지역별로 기존 통계 HTTP API를 반복 호출하거나 지역 수만큼 단건 조회하지 않습니다.
 
 ### 3.3 한 요청의 처리 순서
+
+아래는 **후속 공개 게이트 연결 후의 목표 순서**입니다. 현재는 1단계 검증 직후 DB 조회 없이 503 `DATA_NOT_READY`를 반환합니다. 따라서 형식이 유효하면 미존재 지역 코드도 임시로 503이며, 최종 지역 미존재 404·데이터 준비 판단은 아직 연결하지 않았습니다.
 
 1. Controller에서 문법·지원 분기·업종을 검증합니다. 사용자에게 비중·방향·비교 집단·승인 상태를 바꾸는 파라미터를 받지 않습니다.
 2. Service의 한 읽기 전용 REPEATABLE_READ 트랜잭션에서 최신 경계와 요청 지역을 확인합니다. 경계 미준비는 503, 현행 지역 미존재는 404가 우선입니다.
@@ -133,16 +135,18 @@ n은 완비 비교 지역 수, N은 한 지역의 점포 수입니다. 점포 10
 
 ## 5. 점수 REST API 제안
 
-**미구현 경로·응답입니다.** 기존 통계 API는 경로·응답·오류·과거 분기 지원을 그대로 유지합니다. 점수 API만 아래 지원 범위와 산출 불가 표현을 추가하는 안입니다.
+**현재는 `db` 프로필의 미승인 차단 경로만 구현했습니다.** 두 GET 경로는 잘못된 요청에 400 `INVALID_PARAMETER`, 유효한 요청에 항상 503 `DATA_NOT_READY`를 반환합니다. 점수·순위·원본값·기여·내부 진단은 공개하지 않으며, 요청·헤더·환경변수로 승인을 허용하는 분기도 없습니다. 기본 프로필에서는 경로를 등록하지 않습니다. 기존 통계·카페 API의 계약은 그대로 유지합니다.
 
 ### 5.1 요청
 
 - `GET /api/v1/districts/{districtCode}/score?quarterCode=20262&industryCode=CS100010`
 - `GET /api/v1/dongs/{dongCode}/score?quarterCode=20262&industryCode=CS100010`
 
-지역 코드는 ASCII 숫자 5자리·8자리, quarterCode는 `[0-9]{4}[1-4]`, industryCode는 `CS[0-9]{6}`이어야 합니다. 필수 query는 각 1개만 허용하고 동일 값 중복도 400입니다. trim·쉼표 분할·다른 분기 대체는 하지 않습니다. 형식이 맞아도 v1 지원 값이 아니면 400 `INVALID_PARAMETER`입니다. **새 제안으로 점수 경로는 이 두 query 외 파라미터를 400으로 거부**합니다. 기존 Controller의 다른 파라미터 처리 정책을 바꾸는 것은 아닙니다.
+지역 코드는 ASCII 숫자 5자리·8자리, quarterCode는 `[0-9]{4}[1-4]`, industryCode는 `CS[0-9]{6}`이어야 합니다. 필수 query는 각 1개만 허용하고 동일 값 중복도 400입니다. trim·쉼표 분할·다른 분기 대체는 하지 않습니다. 형식이 맞아도 `20262`·`CS100010`이 아니면 400 `INVALID_PARAMETER`입니다. **점수 경로는 이 두 query 외 파라미터도 400으로 거부하도록 구현했습니다.** 기존 Controller의 다른 파라미터 처리 정책을 바꾸는 것은 아닙니다.
 
 ### 5.2 상태와 오류
+
+현재 응답은 기존 `ApiException`·`ApiErrorCode`·`ProblemDetail`을 사용한 400/503뿐이며 별도 `reason`을 추가하지 않습니다. **아래 표의 200·404와 DB 조회 오류는 승인 게이트 연결 후의 목표 계약**입니다. 현재의 고정 503을 지역·통계 준비 상태를 조회한 결과로 해석하지 않습니다.
 
 | HTTP·상태                  | 조건                                                         | 표현                                                           |
 | -------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------- |
@@ -304,7 +308,7 @@ n은 완비 비교 지역 수, N은 한 지역의 점포 수입니다. 점포 10
 }
 ```
 
-미승인은 200 산출 불가가 아닙니다. 예를 들어 판본 비교 가능성을 확인하지 못한 경우의 **제안된** 응답은 다음과 같습니다. instance는 요청 경로이고 다른 ProblemDetail 필드는 기존 패턴을 따릅니다.
+미승인은 200 산출 불가가 아닙니다. 예를 들어 판본 비교 가능성을 확인하지 못한 경우의 **후속 제안** 응답은 다음과 같습니다. 현재 차단 응답에는 아래 `reason` 필드를 넣지 않습니다. instance는 요청 경로이고 다른 ProblemDetail 필드는 기존 패턴을 따릅니다.
 
 ```json
 {
@@ -355,7 +359,7 @@ n은 완비 비교 지역 수, N은 한 지역의 점포 수입니다. 점포 10
 
 ## 7. 구현할 테스트 계약
 
-**아래는 향후 테스트 명세이며 이번에 Spring Boot 테스트를 구현·실행한 결과가 아닙니다.** 기존 [단위·MockMvc 테스트](../backend/src/test/java/kr/ac/recycleyoungs/store/DistrictStoreStatServiceTests.java)와 [일회용 PostGIS 통합 테스트](../backend/src/integrationTest/java/kr/ac/recycleyoungs/DistrictStoreStatApiIntegrationTests.java)의 분리를 따릅니다. 개발 DB·실제 ETL·기존 데이터 변경을 테스트 전제로 삼지 않습니다.
+**아래는 전체 테스트 계약이며 모든 항목이 구현됐다는 뜻은 아닙니다.** 내부 계산·재현 검증에 더해 [미승인 차단 MockMvc 테스트](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreControllerTests.java)를 구현했으며, 승인 후 200·404와 운영 게이트 연결 검증은 후속입니다. 기존 [단위·MockMvc 테스트](../backend/src/test/java/kr/ac/recycleyoungs/store/DistrictStoreStatServiceTests.java)와 [일회용 PostGIS 통합 테스트](../backend/src/integrationTest/java/kr/ac/recycleyoungs/DistrictStoreStatApiIntegrationTests.java)의 분리를 따릅니다. 개발 DB·실제 ETL·기존 데이터 변경을 테스트 전제로 삼지 않습니다.
 
 ### 7.1 순수 계산·정밀도
 
@@ -401,7 +405,7 @@ C06은 실제 지역 실험이 아니라 표현 계층에 주입하는 분수 fi
 | A07 | DB 연결·자원·시간 초과 / SQL·매핑 오류                                         | 각각 기존 503 DATABASE_UNAVAILABLE / 500 INTERNAL_ERROR. NULL 점수나 정상 0점으로 변환하지 않음                  |
 | A08 | CALCULATED·NOT_CALCULABLE·503 응답 직렬화                                      | 정확한 분수·원본 수치 문자열, data의 명시적 null, sourceBatch NULL/유지, 고정 사유. 예외 원문·경로·인증정보 없음 |
 
-출처·재게시 통합 테스트는 기존 integrationTest 방식의 일회용 DB에서 수행할 계획입니다. 실제 개발 DB에서 재게시해 검증하지 않습니다. 이번 작업은 어떤 DB에도 연결하지 않았습니다.
+출처·재게시 통합 검증은 기존 integrationTest 방식의 일회용 DB에 한정합니다. 실제 개발 DB에서 재게시해 검증하지 않습니다. 현재 점수 Controller의 요청 처리는 DB에 연결하지 않습니다.
 
 ### 7.4 재현·기존 결과 회귀
 
@@ -425,6 +429,6 @@ R03의 현재 근거는 [기존 실험 기록](archive/score-mvp-criteria-valida
 1. **정책 승인:** 1~2절의 감소 방향·비중·보상·입력 및 동일값 예외·커버리지·표시·지원 범위를 하나의 버전으로 결정합니다. 보상을 허용하지 않는다면 A를 먼저 구현하고 임의 하한을 덧붙이지 말고 정책부터 다시 정합니다.
 2. **데이터 승인:** [원천 조사](archive/score-source-verification.md)의 미확인 범위를 인정하되, 실제 사용할 판본의 같은 분기·공간·업종 비교 가능성을 확인합니다. 확인 전에는 공개 점수 제공 불가입니다. 과거 분기·성공 예측은 승인 범위에서 제외합니다.
 3. **구현 계약 승인:** 요청·응답·새 예외 사유·정밀도·아티팩트의 보존 위치와 책임을 확정합니다. 기존 [데이터 계약](data-design.md#5-평가-결과의-재현성)과 [서비스 요구사항](service-spec.md#3-창업-환경-점수-확인)의 후속 변경은 실제 구현 단계에서 함께 검토합니다.
-4. **구현 후 공개 조건:** 합성 단위·MockMvc·일회용 DB 통합 테스트, 승인 입력 fixture의 회귀·재현 검증을 통과해야 합니다. 현재 `region_score`, API, 계산기, 승인 아티팩트는 만들지 않았습니다.
+4. **구현 후 공개 조건:** 합성 단위·MockMvc·일회용 DB 통합 테스트, 승인 입력 fixture의 회귀·재현 검증을 통과해야 합니다. 현재 내부 계산·입력 조회·재현/결합 검증과 REST의 미승인 차단 경로만 구현했습니다. `region_score`·공개 200 응답·운영 승인/철회 게이트·실제 승인 아티팩트는 미구현입니다. 내부 상태는 계속 `NOT_APPROVED`, `sourceTrust=NOT_ESTABLISHED`이며 과거 R03 완전 재현도 미완료입니다.
 
-현재 가능한 다음 작업은 위 정책 선택의 승인과 계산기·조회 계약 구현 준비입니다. 이 문서는 승인 전 명세이며 공개 제공 허가·창업 적합성 검증을 대신하지 않습니다.
+다음 작업은 위 정책 선택의 승인, 실제 원천 판본 비교 가능성 확인, 보호된 신뢰 기록 로더와 승인·철회·현재 DB 대조 게이트 구현입니다. 이 문서는 승인 전 명세이며 공개 제공 허가·창업 적합성 검증을 대신하지 않습니다.

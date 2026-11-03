@@ -1,11 +1,14 @@
 package kr.ac.recycleyoungs.score;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigInteger;
@@ -315,20 +318,27 @@ class ScoreServiceIntegrationTests {
   }
 
   @Test
-  void doesNotRegisterPublicScoreRouteOrChangeExistingStatisticsApi() throws Exception {
+  void blocksPublicScoreEvenWithCalculableInputsAndPreservesStatisticsApi() throws Exception {
     var internal = service.diagnoseDistrict("00140", "20262", "CS100010");
     assertThat(internal.publicationState())
         .isEqualTo(InternalScoreResult.PublicationState.NOT_APPROVED);
+    // 내부 계산 성공 후에도 공개 요청은 Repository를 다시 호출하지 않고 차단돼야 한다.
+    clearInvocations(repositoryTarget());
     mvc.perform(
             get("/api/v1/districts/00140/score")
                 .param("quarterCode", "20262")
                 .param("industryCode", "CS100010"))
-        .andExpect(status().isNotFound());
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(jsonPath("$.code").value("DATA_NOT_READY"))
+        .andExpect(jsonPath("$.length()").value(5));
     mvc.perform(
             get("/api/v1/dongs/00120001/score")
                 .param("quarterCode", "20262")
                 .param("industryCode", "CS100010"))
-        .andExpect(status().isNotFound());
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(jsonPath("$.code").value("DATA_NOT_READY"))
+        .andExpect(jsonPath("$.length()").value(5));
+    verifyNoInteractions(repositoryTarget());
     mvc.perform(
             get("/api/v1/districts/00140/stats/stores")
                 .param("quarterCode", "20262")
