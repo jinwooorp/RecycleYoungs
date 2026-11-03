@@ -2,40 +2,13 @@ import { ChevronDown, MapPin, Store, TrendingUp, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ReactNode } from 'react';
 import type { CafeExplorer } from '@/hooks/use-cafe-explorer';
-import { cafeAddress } from '@/lib/cafes';
+import { cafeAddress, formatCafeDistance } from '@/lib/cafes';
 import type {
   RegionExplorer,
   RegionResource,
 } from '@/hooks/use-region-explorer';
 
 export type ExploreMenu = 'region' | 'cafes' | 'analysis' | 'compare';
-
-function PreparedSelect({
-  label,
-  describedBy,
-}: {
-  label: string;
-  describedBy: string;
-}) {
-  return (
-    <label className="flex min-w-0 flex-col gap-2 text-xs font-medium">
-      {label}
-      <span className="relative block">
-        <select
-          disabled
-          aria-describedby={describedBy}
-          className="h-11 w-full min-w-0 appearance-none rounded-lg border bg-muted/50 pr-10 pl-3 text-sm disabled:cursor-not-allowed disabled:text-muted-foreground disabled:opacity-100"
-        >
-          <option>준비 중</option>
-        </select>
-        <ChevronDown
-          aria-hidden="true"
-          className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground"
-        />
-      </span>
-    </label>
-  );
-}
 
 function RegionSelect({
   label,
@@ -209,20 +182,88 @@ function RegionPanel({ region }: { region: RegionExplorer }) {
 }
 
 function CafePanel({ cafes }: { cafes: CafeExplorer }) {
+  const nearby = cafes.mode === 'nearby';
   return (
     <div className="flex flex-col gap-6 p-5 break-keep text-pretty">
       <section aria-labelledby="nearby-heading" className="flex flex-col gap-4">
+        <div
+          role="group"
+          aria-label="카페 탐색 방식"
+          className="grid grid-cols-2 gap-2"
+        >
+          <Button
+            variant={nearby ? 'outline' : 'default'}
+            size="sm"
+            aria-pressed={!nearby}
+            onClick={() => cafes.setMode('viewport')}
+          >
+            지도 영역
+          </Button>
+          <Button
+            variant={nearby ? 'default' : 'outline'}
+            size="sm"
+            aria-pressed={nearby}
+            onClick={() => cafes.setMode('nearby')}
+          >
+            선택 지점 주변
+          </Button>
+        </div>
         <h3 id="nearby-heading" className="text-sm font-semibold">
-          현재 지도 영역 카페
+          {nearby ? '선택 지점 주변 카페' : '현재 지도 영역 카페'}
         </h3>
         <p className="text-sm leading-6 text-muted-foreground">
-          지도 사각 영역과 선택한 구·동 경계에 포함된 카페입니다. 반경 검색
-          결과는 아닙니다.
+          {nearby
+            ? '선택 지점의 실제 반경으로 조회합니다. 구·동 필터를 적용하지 않습니다.'
+            : '지도 사각 영역과 선택한 구·동 경계에 포함된 카페입니다. 반경 검색 결과는 아닙니다.'}
         </p>
-        <PreparedSelect label="탐색 반경" describedBy="radius-help" />
-        <p id="radius-help" className="text-xs leading-5 text-muted-foreground">
-          반경 설정은 준비 중입니다. 기본 500m, 최대 1km를 지원할 예정입니다.
-        </p>
+        {nearby && (
+          <>
+            <label className="flex min-w-0 flex-col gap-2 text-xs font-medium">
+              탐색 반경
+              <span className="relative block">
+                <select
+                  value={cafes.radiusM}
+                  onChange={(event) =>
+                    cafes.setRadiusM(event.target.value === '1000' ? 1000 : 500)
+                  }
+                  className="h-11 w-full appearance-none rounded-lg border bg-muted/50 pr-10 pl-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="500">500m</option>
+                  <option value="1000">1km</option>
+                </select>
+                <ChevronDown
+                  aria-hidden="true"
+                  className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground"
+                />
+              </span>
+            </label>
+            <p className="text-xs leading-5 text-muted-foreground">
+              지도를 클릭해 중심점을 지정하세요. 다시 클릭하면 위치를
+              변경합니다.
+            </p>
+            <div className="flex flex-col gap-2 rounded-xl border bg-muted/30 p-3 text-xs leading-5">
+              <p className="font-medium">임시 관심 위치 · 저장되지 않습니다.</p>
+              {cafes.center ? (
+                <p>
+                  위도 {cafes.center.latitude.toFixed(5)} · 경도{' '}
+                  {cafes.center.longitude.toFixed(5)}
+                  <br />
+                  반경 {cafes.radiusM === 500 ? '500m' : '1km'}
+                </p>
+              ) : (
+                <p>중심점이 선택되지 않았습니다.</p>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!cafes.center}
+                onClick={cafes.clearCenter}
+              >
+                중심점 해제
+              </Button>
+            </div>
+          </>
+        )}
       </section>
       <section
         aria-labelledby="cafe-list-heading"
@@ -233,26 +274,34 @@ function CafePanel({ cafes }: { cafes: CafeExplorer }) {
         </h3>
         {cafes.status === 'idle' && (
           <p role="status" className="text-xs leading-5 text-muted-foreground">
-            {cafes.needsZoom
-              ? '자치구를 선택하거나 지도를 확대하면 카페를 조회합니다. 아직 카페를 조회하지 않았습니다.'
-              : '지도 준비 또는 지역 이동 후 현재 영역을 조회합니다.'}
+            {nearby
+              ? '중심점을 선택하면 반경 내 카페를 조회합니다.'
+              : cafes.needsZoom
+                ? '자치구를 선택하거나 지도를 확대하면 카페를 조회합니다. 아직 카페를 조회하지 않았습니다.'
+                : '지도 준비 또는 지역 이동 후 현재 영역을 조회합니다.'}
           </p>
         )}
         <ResourceNotice resource={cafes} label="카페 목록" />
         {cafes.status === 'ready' && cafes.data && (
           <>
             <p role="status" className="text-sm font-medium">
-              전체 {cafes.data.totalCount.toLocaleString('ko-KR')}곳 중{' '}
+              {nearby ? '반경 내 전체 ' : '전체 '}
+              {cafes.data.totalCount.toLocaleString('ko-KR')}곳 중{' '}
               {cafes.items.length.toLocaleString('ko-KR')}곳 표시
             </p>
             {cafes.data.hasMore && (
               <p className="text-xs leading-5 text-muted-foreground">
-                최대 200곳만 표시합니다. 지도를 확대해 범위를 좁혀 보세요.
+                최대 200곳만 표시합니다.{' '}
+                {nearby
+                  ? '반경 내 결과의 거리순 일부입니다.'
+                  : '지도를 확대해 범위를 좁혀 보세요.'}
               </p>
             )}
             {cafes.items.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                현재 지도 영역에 조회된 카페가 없습니다.
+                {nearby
+                  ? '선택한 반경 내에 조회된 카페가 없습니다.'
+                  : '현재 지도 영역에 조회된 카페가 없습니다.'}
               </p>
             )}
             {cafes.items.length > 0 && (
@@ -269,6 +318,13 @@ function CafePanel({ cafes }: { cafes: CafeExplorer }) {
                         {cafe.storeName}
                         {cafe.branchName ? ` · ${cafe.branchName}` : ''}
                       </span>
+                      {nearby && (
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          {cafe.semasIndustryName} ·{' '}
+                          {cafe.distanceM !== undefined &&
+                            formatCafeDistance(cafe.distanceM)}
+                        </span>
+                      )}
                       <span className="mt-1 block text-xs leading-5 text-muted-foreground">
                         {cafeAddress(cafe)}
                       </span>

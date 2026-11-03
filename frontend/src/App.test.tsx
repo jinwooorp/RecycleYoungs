@@ -120,7 +120,16 @@ test('미연동 장소·반경 입력과 행정구역 전체 통계를 구분한
   expect(screen.getByRole('combobox', { name: '행정동' })).toBeDisabled();
   expect(screen.getByRole('textbox', { name: '장소 검색' })).toBeDisabled();
   fireEvent.click(screen.getByRole('button', { name: '주변 카페' }));
-  expect(screen.getByRole('combobox', { name: '탐색 반경' })).toBeDisabled();
+  expect(
+    screen.queryByRole('combobox', { name: '탐색 반경' }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '선택 지점 주변' }));
+  expect(screen.getByRole('combobox', { name: '탐색 반경' })).toBeEnabled();
+  expect(screen.getByRole('combobox', { name: '탐색 반경' })).toHaveValue(
+    '500',
+  );
+  expect(screen.getByText('중심점이 선택되지 않았습니다.')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: '지도 영역' }));
   expect(screen.getByText(/자치구를 선택하거나 지도를 확대하면/)).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
   expect(

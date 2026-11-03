@@ -16,10 +16,18 @@ const cafe = {
   longitude: 126.978,
   latitude: 37.5665,
 };
-function response(id = '001', empty = false) {
+function response(id = '001', empty = false, distanceM?: number) {
   return new Response(
     JSON.stringify({
-      items: empty ? [] : [{ ...cafe, bizesId: id }],
+      items: empty
+        ? []
+        : [
+            {
+              ...cafe,
+              bizesId: id,
+              ...(distanceM === undefined ? {} : { distanceM }),
+            },
+          ],
       totalCount: empty ? 0 : 1,
       limit: 200,
       offset: 0,
@@ -152,4 +160,107 @@ test('동 선택 변경은 이전 요청을 취소하고 늦은 다른 동 결�
     'new-dong',
   ]);
   expect(fetch.mock.calls[1][0]).toContain('dongCodes=11110530');
+});
+
+test('반경 방식은 중심점 전 조회하지 않고 구·동 조건 없이 500m·1km만 요청한다', async () => {
+  const fetch = vi
+    .fn()
+    .mockImplementation(async () => response('nearby', false, 12.5));
+  vi.stubGlobal('fetch', fetch);
+  const { result } = renderHook(() =>
+    useCafeExplorer('11110', '11110515', false),
+  );
+  act(() => result.current.setMode('nearby'));
+  expect(result.current.status).toBe('idle');
+  expect(fetch).not.toHaveBeenCalled();
+  expect(result.current.radiusM).toBe(500);
+  act(() =>
+    result.current.selectCenter({ longitude: 126.978, latitude: 37.5665 }),
+  );
+  await waitFor(() => expect(result.current.status).toBe('ready'));
+  expect(fetch.mock.calls[0][0]).toContain(
+    '/nearby?longitude=126.978&latitude=37.5665&radiusM=500&limit=200&offset=0',
+  );
+  expect(fetch.mock.calls[0][0]).not.toContain('Codes');
+  act(() => result.current.onViewportChange(bounds, 7));
+  expect(fetch).toHaveBeenCalledOnce();
+  act(() => result.current.setRadiusM(1000));
+  await waitFor(() => expect(result.current.status).toBe('ready'));
+  expect(fetch.mock.calls[1][0]).toContain('radiusM=1000');
+  expect(result.current.items[0].distanceM).toBe(12.5);
+  act(() => result.current.clearCenter());
+  expect(result.current.status).toBe('idle');
+  expect(result.current.items).toEqual([]);
+  expect(result.current.center).toBeNull();
+});
+
+test('방식·중심점·반경 변경은 이전 요청과 선택을 분리하고 늦은 응답을 버린다', async () => {
+  const finishes: ((response: Response) => void)[] = [];
+  const fetch = vi.fn<(url: string, options: RequestInit) => Promise<Response>>(
+    () => new Promise((resolve) => finishes.push(resolve)),
+  );
+  vi.stubGlobal('fetch', fetch);
+  const { result, unmount } = renderHook(() =>
+    useCafeExplorer('11110', '11110515', false),
+  );
+  act(() => result.current.onViewportChange(bounds, 7));
+  act(() => result.current.setMode('nearby'));
+  expect(fetch.mock.calls[0][1].signal?.aborted).toBe(true);
+  act(() =>
+    result.current.selectCenter({ longitude: 126.978, latitude: 37.5665 }),
+  );
+  act(() =>
+    result.current.selectCenter({ longitude: 126.98, latitude: 37.57 }),
+  );
+  expect(fetch.mock.calls[1][1].signal?.aborted).toBe(true);
+  act(() => result.current.setRadiusM(1000));
+  expect(fetch.mock.calls[2][1].signal?.aborted).toBe(true);
+  await act(async () => finishes[3](response('current', false, 1000)));
+  act(() => result.current.selectCafe('current'));
+  expect(result.current.selected?.bizesId).toBe('current');
+  await act(async () => {
+    finishes[0](response('viewport'));
+    finishes[1](response('old-center', false, 100));
+    finishes[2](response('old-radius', false, 100));
+  });
+  expect(result.current.items.map((cafe) => cafe.bizesId)).toEqual(['current']);
+  act(() => result.current.setMode('viewport'));
+  expect(result.current.selected).toBeNull();
+  expect(
+    result.current.items.every((cafe) => cafe.distanceM === undefined),
+  ).toBe(true);
+  expect(fetch.mock.calls.at(-1)![0]).toContain(
+    'districtCodes=11110&dongCodes=11110515',
+  );
+  unmount();
+  expect(fetch.mock.calls.at(-1)![1].signal?.aborted).toBe(true);
+});
+
+test('반경 조회는 StrictMode에서도 오류·재시도·빈 결과를 구분한다', async () => {
+  let fail = true;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      fail
+        ? new Response(JSON.stringify({ code: 'DATA_NOT_READY' }), {
+            status: 503,
+          })
+        : response('none', true),
+    ),
+  );
+  const { result } = renderHook(() => useCafeExplorer('', '', false), {
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <StrictMode>{children}</StrictMode>
+    ),
+  });
+  act(() => {
+    result.current.setMode('nearby');
+    result.current.selectCenter({ longitude: 126.978, latitude: 37.5665 });
+  });
+  await waitFor(() => expect(result.current.status).toBe('error'));
+  fail = false;
+  act(() => result.current.retry());
+  await waitFor(() => expect(result.current.status).toBe('ready'));
+  expect(result.current.data?.totalCount).toBe(0);
+  expect(result.current.items).toEqual([]);
 });

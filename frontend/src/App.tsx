@@ -159,7 +159,11 @@ export default function App() {
             </div>
           </aside>
         </div>
-        <KakaoMapView target={region.target} cafes={cafes} />
+        <KakaoMapView
+          target={region.target}
+          cafes={cafes}
+          centerPicking={selectedMenu === 'cafes'}
+        />
       </main>
     </div>
   );

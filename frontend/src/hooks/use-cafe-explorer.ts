@@ -1,7 +1,16 @@
 import { useCallback, useMemo, useState } from 'react';
-import { fetchViewportCafes, type Cafe } from '@/lib/cafes';
+import {
+  fetchViewportCafes,
+  fetchNearbyCafes,
+  type Cafe,
+  type CafeCenter,
+  type CafeRadius,
+} from '@/lib/cafes';
+
 import type { BoundaryExtent } from '@/lib/regions';
 import { useRegionRequest } from './use-region-explorer';
+
+export type CafeMode = 'viewport' | 'nearby';
 
 const noCafes: Cafe[] = [];
 
@@ -11,6 +20,9 @@ export function useCafeExplorer(
   dongCode: string,
   regionLoading: boolean,
 ) {
+  const [mode, changeMode] = useState<CafeMode>('viewport');
+  const [center, setCenter] = useState<CafeCenter | null>(null);
+  const [radiusM, changeRadius] = useState<CafeRadius>(500);
   const regionKey = `${districtCode}:${dongCode}`;
   const [viewport, setViewport] = useState<{
     regionKey: string;
@@ -39,30 +51,41 @@ export function useCafeExplorer(
   );
   // Kakao Maps는 레벨이 작을수록 확대됩니다. 구 미선택에서는 동네 규모로 확대한 뒤 조회합니다.
   const needsZoom = !districtCode && (!viewport || viewport.level > 4);
-  const query = useMemo(
+  const viewportQuery = useMemo(
     () =>
       viewport?.regionKey === regionKey && !regionLoading && !needsZoom
         ? { bounds: viewport.bounds, districtCode, dongCode }
         : null,
     [viewport, regionKey, regionLoading, districtCode, dongCode, needsZoom],
   );
+  const nearbyQuery = useMemo(
+    () => (center ? { center, radiusM } : null),
+    [center, radiusM],
+  );
+  const scopeKey =
+    mode === 'viewport' ? regionKey : `nearby:${JSON.stringify(nearbyQuery)}`;
+  const query = mode === 'viewport' ? viewportQuery : nearbyQuery;
   const request = useCallback(
-    (signal: AbortSignal) =>
-      fetchViewportCafes(
-        query!.bounds,
-        query!.districtCode,
-        signal,
-        query!.dongCode,
-      ),
+    (signal: AbortSignal) => {
+      if (!query) throw new Error('카페 조회 조건이 없습니다.');
+      return 'bounds' in query
+        ? fetchViewportCafes(
+            query.bounds,
+            query.districtCode,
+            signal,
+            query.dongCode,
+          )
+        : fetchNearbyCafes(query.center, query.radiusM, signal);
+    },
     [query],
   );
   const resource = useRegionRequest(
-    query ? JSON.stringify(query) : null,
+    query ? `${mode}:${JSON.stringify(query)}` : null,
     request,
   );
   const items = resource.status === 'ready' ? resource.data!.items : noCafes;
   const selected =
-    selection?.scopeKey === regionKey &&
+    selection?.scopeKey === scopeKey &&
     (resource.status === 'loading' ||
       items.some((cafe) => cafe.bizesId === selection.bizesId))
       ? selection
@@ -71,20 +94,55 @@ export function useCafeExplorer(
     (bizesId: string) => {
       setSelection((previous) => ({
         bizesId,
-        scopeKey: regionKey,
+        scopeKey,
         revision: (previous?.revision ?? 0) + 1,
       }));
     },
-    [regionKey],
+    [scopeKey],
   );
+  const setMode = useCallback((next: CafeMode) => {
+    changeMode(next);
+    setSelection(null);
+  }, []);
+  const setRadiusM = useCallback((next: CafeRadius) => {
+    changeRadius(next);
+    setSelection(null);
+  }, []);
+  const selectCenter = useCallback((next: CafeCenter) => {
+    if (
+      !Number.isFinite(next.longitude) ||
+      !Number.isFinite(next.latitude) ||
+      Math.abs(next.longitude) > 180 ||
+      Math.abs(next.latitude) > 90
+    )
+      return;
+    setCenter((current) =>
+      current?.longitude === next.longitude &&
+      current.latitude === next.latitude
+        ? current
+        : next,
+    );
+    setSelection(null);
+  }, []);
+  const clearCenter = useCallback(() => {
+    setCenter(null);
+    setSelection(null);
+  }, []);
   return {
     ...resource,
-    needsZoom,
+    needsZoom: mode === 'viewport' && needsZoom,
+    mode,
+    setMode,
+    center,
+    selectCenter,
+    clearCenter,
+    radiusM,
+    setRadiusM,
     items,
     selected,
     selectCafe,
     onViewportChange,
-    scopeKey: regionKey,
+    scopeKey,
   };
 }
 

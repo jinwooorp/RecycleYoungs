@@ -4,6 +4,25 @@ export interface KakaoLatLng {
   getLng(): number;
 }
 
+export interface KakaoMouseEvent {
+  latLng: KakaoLatLng;
+}
+
+export interface KakaoCircle {
+  setMap(map: KakaoMap | null): void;
+}
+
+export interface KakaoCircleOptions {
+  center: KakaoLatLng;
+  radius: number;
+  strokeWeight: number;
+  strokeColor: string;
+  strokeOpacity: number;
+  strokeStyle: 'dashed';
+  fillColor: string;
+  fillOpacity: number;
+}
+
 export interface KakaoMap {
   setBounds(
     bounds: KakaoBounds,
@@ -56,10 +75,21 @@ export interface KakaoPolygonOptions {
 export interface KakaoMaps {
   load(callback: () => void): void;
   LatLng: new (latitude: number, longitude: number) => KakaoLatLng;
+  Circle: new (options: KakaoCircleOptions) => KakaoCircle;
+  Size: new (width: number, height: number) => object;
+  Point: new (x: number, y: number) => object;
+  MarkerImage: new (
+    src: string,
+    size: object,
+    options: { offset: object },
+  ) => object;
   Polygon: new (options: KakaoPolygonOptions) => KakaoPolygon;
   Marker: new (options: {
     position: KakaoLatLng;
     title: string;
+    image?: object;
+    zIndex?: number;
+    clickable?: boolean;
   }) => KakaoMarker;
   InfoWindow: new (options: {
     disableAutoPan: boolean;
@@ -74,15 +104,16 @@ export interface KakaoMaps {
     options: { center: KakaoLatLng; level: number },
   ) => KakaoMap;
   event: {
+    preventMap(): void;
     addListener(
       target: KakaoMap | KakaoMarker,
       type: string,
-      handler: () => void,
+      handler: (event?: KakaoMouseEvent) => void,
     ): void;
     removeListener(
       target: KakaoMap | KakaoMarker,
       type: string,
-      handler: () => void,
+      handler: (event?: KakaoMouseEvent) => void,
     ): void;
   };
 }

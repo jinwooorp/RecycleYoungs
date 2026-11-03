@@ -1067,7 +1067,7 @@ FootTrafficStatResponse
 
 ## 주변 카페 REST API 계약
 
-`GET /api/v1/cafes/nearby`는 `db` 프로필에서 Controller → Service → JdbcClient Repository → Response 구조로 제공합니다. 최신 서울 전체 완전 수집 게시본의 개별 카페를 반경으로 조회하며, 행정동 전체 통계·구 단위 합산·지도 영역 조회·점수나 화면 연동은 포함하지 않습니다. 서울시 업종 `CS100010`과 소진공 업종을 연결하거나 업종 코드를 조회 SQL에 고정하지 않습니다.
+`GET /api/v1/cafes/nearby`는 `db` 프로필에서 Controller → Service → JdbcClient Repository → Response 구조로 제공합니다. 최신 서울 전체 완전 수집 게시본의 개별 카페를 반경으로 조회하며, 행정동 전체 통계·구 단위 합산·지도 영역 조회·점수는 포함하지 않습니다. 프론트엔드의 `선택 지점 주변` 방식은 임시 지도 클릭 좌표·`radiusM=500` 또는 `1000`·`limit=200`·`offset=0`을 전달하며 `districtCodes`는 생략합니다. 서버의 거리순·`distanceM`·전체 건수를 그대로 사용하고 지도 영역 조회와 결과를 합산하지 않습니다. 서울시 업종 `CS100010`과 소진공 업종을 연결하거나 업종 코드를 조회 SQL에 고정하지 않습니다.
 
 ### 주변 카페 요청 조건
 

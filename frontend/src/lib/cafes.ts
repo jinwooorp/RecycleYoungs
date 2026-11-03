@@ -10,7 +10,14 @@ export interface Cafe {
   lotAddress: string | null;
   longitude: number;
   latitude: number;
+  distanceM?: number;
 }
+
+export interface CafeCenter {
+  longitude: number;
+  latitude: number;
+}
+export type CafeRadius = 500 | 1000;
 
 export interface CafePage {
   items: Cafe[];
@@ -68,9 +75,38 @@ export async function fetchViewportCafes(
   if (dongCode) params.set('dongCodes', dongCode);
   params.set('limit', '200');
   params.set('offset', '0');
+  return fetchCafePage('viewport', params, signal);
+}
+
+/** 임시 관심 위치의 실제 미터 반경을 조회하며 행정구역 필터는 전달하지 않습니다. */
+export async function fetchNearbyCafes(
+  center: CafeCenter,
+  radiusM: CafeRadius,
+  signal: AbortSignal,
+): Promise<CafePage> {
+  if (!coordinate(center.longitude, 180) || !coordinate(center.latitude, 90))
+    throw new Error('중심점 좌표를 확인할 수 없습니다.');
+  if (radiusM !== 500 && radiusM !== 1000)
+    throw new Error('탐색 반경을 확인할 수 없습니다.');
+  const params = new URLSearchParams({
+    longitude: String(center.longitude),
+    latitude: String(center.latitude),
+    radiusM: String(radiusM),
+    limit: '200',
+    offset: '0',
+  });
+  return fetchCafePage('nearby', params, signal);
+}
+
+/** 두 조회 방식의 공통 응답을 검증하고, 반경 조회의 서버 거리·순서를 그대로 유지합니다. */
+async function fetchCafePage(
+  kind: 'viewport' | 'nearby',
+  params: URLSearchParams,
+  signal: AbortSignal,
+): Promise<CafePage> {
   let response: Response;
   try {
-    response = await fetch(`/api/v1/cafes/viewport?${params}`, { signal });
+    response = await fetch(`/api/v1/cafes/${kind}?${params}`, { signal });
   } catch (error) {
     if (signal.aborted) throw error;
     throw new Error('네트워크 연결을 확인한 뒤 다시 시도해 주세요.', {
@@ -125,7 +161,11 @@ export async function fetchViewportCafes(
       !nullableText(item.roadAddress) ||
       !nullableText(item.lotAddress) ||
       !coordinate(item.longitude, 180) ||
-      !coordinate(item.latitude, 90)
+      !coordinate(item.latitude, 90) ||
+      (kind === 'nearby' &&
+        (typeof item.distanceM !== 'number' ||
+          !Number.isFinite(item.distanceM) ||
+          item.distanceM < 0))
     )
       return invalid();
     ids.add(item.bizesId);
@@ -139,6 +179,7 @@ export async function fetchViewportCafes(
       lotAddress: item.lotAddress,
       longitude: item.longitude,
       latitude: item.latitude,
+      ...(kind === 'nearby' ? { distanceM: item.distanceM as number } : {}),
     };
   });
   return {
@@ -160,4 +201,9 @@ export function cafeAddress(cafe: Cafe) {
     cafe.lotAddress?.trim() ||
     '주소 정보가 없습니다.'
   );
+}
+
+/** 서버 거리의 표시 자릿수만 조정하며 검색·정렬 조건으로 재사용하지 않습니다. */
+export function formatCafeDistance(distanceM: number) {
+  return `${distanceM.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}m`;
 }

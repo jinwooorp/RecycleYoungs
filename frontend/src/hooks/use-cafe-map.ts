@@ -3,10 +3,11 @@ import type {
   KakaoMapContext,
   KakaoMarker,
   KakaoInfoWindow,
+  KakaoMouseEvent,
 } from '@/lib/kakao-maps';
 import type { RegionMapTarget } from '@/lib/regions';
 import type { CafeExplorer } from './use-cafe-explorer';
-import { cafeAddress, type Cafe } from '@/lib/cafes';
+import { cafeAddress, formatCafeDistance, type Cafe } from '@/lib/cafes';
 
 /** API 문자열은 textContent로만 전달해 HTML로 해석되지 않도록 합니다. */
 function cafeContent(cafe: Cafe) {
@@ -26,6 +27,9 @@ function cafeContent(cafe: Cafe) {
   for (const text of [
     cafe.semasIndustryName,
     cafeAddress(cafe),
+    cafe.distanceM === undefined
+      ? null
+      : `중심점에서 ${formatCafeDistance(cafe.distanceM)}`,
     '브랜드 구분 정보 없음',
   ]) {
     if (!text) continue;
@@ -44,8 +48,14 @@ export function useCafeMap(
   notifyRef: RefObject<(() => void) | null>,
   target: RegionMapTarget | null | undefined,
   cafes?: CafeExplorer,
+  centerPicking = false,
 ) {
-  const onViewportChange = cafes?.onViewportChange;
+  const onViewportChange =
+    cafes?.mode === 'nearby' ? undefined : cafes?.onViewportChange;
+  const mode = cafes?.mode;
+  const center = cafes?.center;
+  const radiusM = cafes?.radiusM;
+  const selectCenter = cafes?.selectCenter;
   const items = cafes?.items;
   const selected = cafes?.selected;
   const selectCafe = cafes?.selectCafe;
@@ -61,6 +71,57 @@ export function useCafeMap(
     onSelect?: (id: string) => void;
     open: (id: string) => void;
   } | null>(null);
+
+  useEffect(() => {
+    if (!context || mode !== 'nearby' || !centerPicking || !selectCenter)
+      return;
+    const onClick = (event?: KakaoMouseEvent) => {
+      if (event?.latLng)
+        selectCenter({
+          longitude: event.latLng.getLng(),
+          latitude: event.latLng.getLat(),
+        });
+    };
+    context.maps.event.addListener(context.map, 'click', onClick);
+    return () =>
+      context.maps.event.removeListener(context.map, 'click', onClick);
+  }, [context, mode, centerPicking, selectCenter]);
+
+  useEffect(() => {
+    if (!context || mode !== 'nearby' || !center || !radiusM) return;
+    const { map, maps } = context;
+    const position = new maps.LatLng(center.latitude, center.longitude);
+    // 카페 기본 핀과 다른 고정 SVG 표식을 사용합니다. 외부 문자열을 포함하지 않습니다.
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40"><path d="M16 39C12 32 1 25 1 16a15 15 0 1 1 30 0c0 9-11 16-15 23Z" fill="#23513F" stroke="white" stroke-width="2"/><circle cx="16" cy="16" r="7" fill="none" stroke="white" stroke-width="2"/><path d="M16 6v20M6 16h20" stroke="white" stroke-width="2"/></svg>';
+    const marker = new maps.Marker({
+      position,
+      title: '임시 관심 위치',
+      clickable: false,
+      zIndex: 3,
+      image: new maps.MarkerImage(
+        `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
+        new maps.Size(32, 40),
+        { offset: new maps.Point(16, 40) },
+      ),
+    });
+    const circle = new maps.Circle({
+      center: position,
+      radius: radiusM,
+      strokeColor: '#23513F',
+      strokeOpacity: 0.9,
+      strokeWeight: 2,
+      strokeStyle: 'dashed',
+      fillColor: '#23513F',
+      fillOpacity: 0.08,
+    });
+    marker.setMap(map);
+    circle.setMap(map);
+    return () => {
+      marker.setMap(null);
+      circle.setMap(null);
+    };
+  }, [context, mode, center, radiusM]);
 
   useEffect(() => {
     if (!context || !onViewportChange) return;
@@ -128,19 +189,39 @@ export function useCafeMap(
         positionFrame = requestAnimationFrame(() => {
           positionFrame = null;
           if (!content.isConnected) return;
-          const search = document.querySelector<HTMLElement>(
-            '[role="search"][aria-label="장소 검색"]',
-          );
-          if (!search) return;
-          const obstacle = search.getBoundingClientRect();
+          const search = document
+            .querySelector<HTMLElement>(
+              '[role="search"][aria-label="장소 검색"]',
+            )
+            ?.getBoundingClientRect();
+          const area = content
+            .closest<HTMLElement>('[aria-label="Kakao Maps 지도"]')
+            ?.getBoundingClientRect();
           const bounds = content.getBoundingClientRect();
-          const top = obstacle.bottom + 12;
-          if (
-            bounds.left < obstacle.right &&
-            bounds.right > obstacle.left &&
+          const left = (area?.left ?? 0) + 12;
+          const right = (area?.right ?? window.innerWidth) - 12;
+          const x =
+            bounds.left < left
+              ? bounds.left - left
+              : bounds.right > right
+                ? bounds.right - right
+                : 0;
+          const overlapsSearch =
+            search &&
+            bounds.left - x < search.right &&
+            bounds.right - x > search.left;
+          const top = overlapsSearch
+            ? Math.max((area?.top ?? 0) + 12, search.bottom + 12)
+            : (area?.top ?? 0) + 12;
+          const bottom = (area?.bottom ?? window.innerHeight) - 24;
+          const y =
             bounds.top < top
-          )
-            map.panBy(0, bounds.top - top);
+              ? bounds.top - top
+              : bounds.bottom > bottom
+                ? bounds.bottom - bottom
+                : 0;
+          // 세로 패닝이 SDK의 가로 자동 이동을 중단할 수 있어 두 축을 한 번에 보정합니다.
+          if (x || y) map.panBy(x, y);
         });
         layer.selectedId = id;
       },
@@ -194,8 +275,12 @@ export function useCafeMap(
       const marker = new maps.Marker({
         position: new maps.LatLng(cafe.latitude, cafe.longitude),
         title: cafe.storeName,
+        clickable: true,
       });
-      const click = () => layer.onSelect?.(cafe.bizesId);
+      const click = () => {
+        maps.event.preventMap();
+        layer.onSelect?.(cafe.bizesId);
+      };
       layer.markers.set(cafe.bizesId, { marker, cafe, click });
       maps.event.addListener(marker, 'click', click);
       marker.setMap(map);

@@ -14,6 +14,8 @@ import {
   type KakaoLatLng,
   type KakaoBounds,
   type KakaoPolygonOptions,
+  type KakaoCircleOptions,
+  type KakaoMouseEvent,
 } from '@/lib/kakao-maps';
 import { KakaoMapView } from './kakao-map';
 import App from '@/App';
@@ -78,7 +80,7 @@ afterEach(() => {
 /** 지도 API 경계만 대체하고 컴포넌트의 실제 비동기 흐름과 사용자 조작을 검증합니다. */
 function createSdk() {
   let level = 5;
-  const handlers = new Map<string, () => void>();
+  const handlers = new Map<string, (event?: KakaoMouseEvent) => void>();
   let center = { getLat: () => 37.5665, getLng: () => 126.978 };
   const map = {
     getBounds: vi.fn((): KakaoBounds => ({
@@ -117,6 +119,22 @@ function createSdk() {
     LatLngBounds: vi.fn(function (sw: KakaoLatLng, ne: KakaoLatLng) {
       return { getSouthWest: () => sw, getNorthEast: () => ne };
     }),
+    Circle: vi.fn(function (options: KakaoCircleOptions) {
+      return { ...options, setMap: vi.fn() };
+    }),
+    Size: vi.fn(function (width: number, height: number) {
+      return { width, height };
+    }),
+    Point: vi.fn(function (x: number, y: number) {
+      return { x, y };
+    }),
+    MarkerImage: vi.fn(function (
+      src: string,
+      size: object,
+      options: { offset: object },
+    ) {
+      return { src, size, ...options };
+    }),
     Polygon: vi.fn(function (options: KakaoPolygonOptions) {
       return { path: options.path, setMap: vi.fn() };
     }),
@@ -130,6 +148,7 @@ function createSdk() {
       return map;
     }),
     event: {
+      preventMap: vi.fn(),
       addListener: vi.fn((_target, type, handler) =>
         handlers.set(type, handler),
       ),
@@ -978,61 +997,352 @@ test('구·동 변경은 즉시 이전 마커를 정리하고 늦은 동 응답�
   view.unmount();
 });
 
-test('긴 정보창이 고정 검색창과 겹치면 사용자 선택 시에만 아래쪽 여백을 확보한다', async () => {
-  const { map, maps } = createSdk();
-  const search = render(<div role="search" aria-label="장소 검색" />);
-  vi.spyOn(search.getByRole('search'), 'getBoundingClientRect').mockReturnValue(
-    new DOMRect(16, 16, 256, 48),
-  );
-  let content!: HTMLElement;
-  maps.InfoWindow.mockImplementation(function () {
-    return {
-      setContent: vi.fn((node: HTMLElement) => {
-        content = node;
-      }),
-      open: vi.fn(() => {
-        document.body.append(content);
-        vi.spyOn(content, 'getBoundingClientRect').mockReturnValue(
-          new DOMRect(80, 10, 240, 250),
-        );
-      }),
-      close: vi.fn(() => content?.remove()),
+test.each([
+  { left: 80, x: 0, y: -66 },
+  { left: -20, x: -32, y: -66 },
+  { left: 900, x: 128, y: -2 },
+])(
+  '정보창의 검색창·화면 가장자리 겹침을 사용자 선택 시에만 보정한다 $left',
+  async ({ left, x, y }) => {
+    vi.stubGlobal('innerWidth', 1024);
+    const { map, maps } = createSdk();
+    const search = render(<div role="search" aria-label="장소 검색" />);
+    vi.spyOn(
+      search.getByRole('search'),
+      'getBoundingClientRect',
+    ).mockReturnValue(new DOMRect(16, 16, 256, 48));
+    let content!: HTMLElement;
+    maps.InfoWindow.mockImplementation(function () {
+      return {
+        setContent: vi.fn((node: HTMLElement) => {
+          content = node;
+        }),
+        open: vi.fn(() => {
+          document.body.append(content);
+          vi.spyOn(content, 'getBoundingClientRect').mockReturnValue(
+            new DOMRect(left, 10, 240, 250),
+          );
+        }),
+        close: vi.fn(() => content?.remove()),
+      };
+    });
+    const cafe = {
+      bizesId: '001',
+      storeName: '안전한 이름',
+      branchName: null,
+      semasIndustryCode: 'I21201',
+      semasIndustryName: '카페',
+      roadAddress: '공백없는긴주소'.repeat(40),
+      lotAddress: null,
+      longitude: 126.978,
+      latitude: 37.5665,
     };
-  });
+    const cafes: CafeExplorer = {
+      status: 'ready',
+      data: null,
+      error: null,
+      retry: vi.fn(),
+      needsZoom: false,
+      items: [cafe],
+      selected: { bizesId: '001', scopeKey: ':', revision: 1 },
+      selectCafe: vi.fn(),
+      onViewportChange: vi.fn(),
+      scopeKey: ':',
+      mode: 'viewport',
+      setMode: vi.fn(),
+      center: null,
+      selectCenter: vi.fn(),
+      clearCenter: vi.fn(),
+      radiusM: 500,
+      setRadiusM: vi.fn(),
+    };
+    const context = { map, maps };
+    const moving = { current: false };
+    const notify = { current: null };
+    const view = renderHook(() =>
+      useCafeMap(context, moving, notify, undefined, cafes),
+    );
+    await waitFor(() => expect(map.panBy).toHaveBeenCalledWith(x, y));
+    expect(map.panBy).toHaveBeenCalledOnce();
+    expect(content.textContent).toContain(cafe.roadAddress);
+    view.rerender();
+    expect(map.panBy).toHaveBeenCalledOnce();
+    view.unmount();
+    expect(content.isConnected).toBe(false);
+  },
+);
+
+test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비활성화와 SDK 재시도 자원을 관리한다', async () => {
+  const { maps, map } = createSdk();
+  load.mockResolvedValue(maps);
   const cafe = {
-    bizesId: '001',
-    storeName: '안전한 이름',
-    branchName: null,
+    bizesId: 'nearby-cafe',
+    storeName: '<img src=x onerror=alert(1)>',
+    branchName: '시청점',
     semasIndustryCode: 'I21201',
     semasIndustryName: '카페',
-    roadAddress: '공백없는긴주소'.repeat(40),
+    roadAddress: '<script>주소</script>',
     lotAddress: null,
-    longitude: 126.978,
+    longitude: 126.979,
     latitude: 37.5665,
+    distanceM: 499.9,
   };
-  const cafes: CafeExplorer = {
-    status: 'ready',
-    data: null,
-    error: null,
-    retry: vi.fn(),
-    needsZoom: false,
-    items: [cafe],
-    selected: { bizesId: '001', scopeKey: ':', revision: 1 },
-    selectCafe: vi.fn(),
-    onViewportChange: vi.fn(),
-    scopeKey: ':',
-  };
-  const context = { map, maps };
-  const moving = { current: false };
-  const notify = { current: null };
-  const view = renderHook(() =>
-    useCafeMap(context, moving, notify, undefined, cafes),
+  const page = (nearby: boolean) => ({
+    items: [
+      nearby
+        ? cafe
+        : {
+            ...cafe,
+            bizesId: 'viewport-cafe',
+            storeName: '지도 카페',
+            distanceM: undefined,
+          },
+    ],
+    totalCount: nearby ? 201 : 1,
+    limit: 200,
+    offset: 0,
+    hasMore: nearby,
+    sourceBatch: {
+      batchId: '00000000-0000-0000-0000-000000000004',
+      publishedAt: '2026-10-02T00:00:00Z',
+    },
+  });
+  const fetch = vi.fn(
+    async (url: string) =>
+      new Response(
+        JSON.stringify(
+          url.startsWith('/api/v1/cafes/')
+            ? page(url.includes('/nearby'))
+            : url === '/api/v1/districts'
+              ? { items: [{ districtCode: '11110', districtName: '종로구' }] }
+              : url.endsWith('/dongs')
+                ? {
+                    items: [
+                      {
+                        districtCode: '11110',
+                        dongCode: '11110515',
+                        dongName: '청운효자동',
+                        labelPoint: { type: 'Point', coordinates: [127, 37] },
+                      },
+                    ],
+                  }
+                : {
+                    type: 'Feature',
+                    id: url.split('/')[4],
+                    properties: {
+                      regionCode: url.split('/')[4],
+                      regionType: url.includes('/dongs/') ? 'DONG' : 'DISTRICT',
+                    },
+                    geometry: polygonTarget.geometry,
+                  },
+        ),
+      ),
   );
-  await waitFor(() => expect(map.panBy).toHaveBeenCalledWith(0, -66));
-  expect(map.panBy).toHaveBeenCalledOnce();
-  expect(content.textContent).toContain(cafe.roadAddress);
-  view.rerender();
-  expect(map.panBy).toHaveBeenCalledOnce();
+  vi.stubGlobal('fetch', fetch);
+  const view = render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
+  await screen.findByRole('option', { name: '종로구' });
+  fireEvent.change(screen.getByRole('combobox', { name: '자치구' }), {
+    target: { value: '11110' },
+  });
+  await screen.findByRole('option', { name: '청운효자동' });
+  fireEvent.change(screen.getByRole('combobox', { name: '행정동' }), {
+    target: { value: '11110515' },
+  });
+  await waitFor(() => expect(maps.Marker).toHaveBeenCalled());
+  const oldMarker = maps.Marker.mock.results.at(-1)!.value;
+  fireEvent.click(screen.getByRole('button', { name: '주변 카페' }));
+  fireEvent.click(screen.getByRole('button', { name: '선택 지점 주변' }));
+  expect(oldMarker.setMap).toHaveBeenLastCalledWith(null);
+  expect(maps.Circle).not.toHaveBeenCalled();
+  expect(screen.getByText('중심점이 선택되지 않았습니다.')).toBeVisible();
+  const nearbyCalls = () =>
+    fetch.mock.calls.filter(([url]) => url.includes('/nearby'));
+  expect(nearbyCalls()).toHaveLength(0);
+  const mapClick = () =>
+    maps.event.addListener.mock.calls.findLast(
+      ([target, type]) => target === map && type === 'click',
+    )![2];
+  act(() =>
+    mapClick()({ latLng: { getLat: () => 37.5665, getLng: () => 126.978 } }),
+  );
+  await screen.findByText('반경 내 전체 201곳 중 1곳 표시');
+  expect(nearbyCalls()[0][0]).toContain(
+    'longitude=126.978&latitude=37.5665&radiusM=500&limit=200&offset=0',
+  );
+  expect(nearbyCalls()[0][0]).not.toContain('Codes');
+  expect(screen.getByText(/499.9m/)).toBeVisible();
+  expect(screen.getByText(/최대 200곳/)).toBeVisible();
+  expect(maps.Circle.mock.calls[0][0]).toMatchObject({
+    radius: 500,
+    strokeStyle: 'dashed',
+    fillOpacity: 0.08,
+  });
+  expect(maps.Circle.mock.calls[0][0].center.getLat()).toBe(37.5665);
+  const firstCircle = maps.Circle.mock.results[0].value;
+  expect(firstCircle.setMap).toHaveBeenLastCalledWith(map);
+  expect(maps.Marker).toHaveBeenCalledWith(
+    expect.objectContaining({
+      title: '임시 관심 위치',
+      image: expect.any(Object),
+      clickable: false,
+    }),
+  );
+  const markerIndex = maps.Marker.mock.calls.findLastIndex(
+    ([options]) => options.title === cafe.storeName,
+  );
+  const cafeMarker = maps.Marker.mock.results[markerIndex].value;
+  const markerClick = maps.event.addListener.mock.calls.find(
+    ([target, type]) => target === cafeMarker && type === 'click',
+  )![2];
+  act(() => markerClick());
+  expect(maps.event.preventMap).toHaveBeenCalledOnce();
+  expect(nearbyCalls()).toHaveLength(1);
+  const info = maps.InfoWindow.mock.results.at(-1)!.value;
+  const content = info.setContent.mock.calls.at(-1)![0] as HTMLElement;
+  expect(content.textContent).toContain('중심점에서 499.9m');
+  expect(content.querySelector('img,script')).toBeNull();
+  const lastCircleCount = maps.Circle.mock.calls.length;
+  act(() => {
+    map.setLevel(3);
+    maps.event.addListener.mock.calls.findLast(
+      ([target, type]) => target === map && type === 'idle',
+    )?.[2]();
+  });
+  expect(maps.Circle).toHaveBeenCalledTimes(lastCircleCount);
+  expect(nearbyCalls()).toHaveLength(1);
+  fireEvent.change(screen.getByRole('combobox', { name: '탐색 반경' }), {
+    target: { value: '1000' },
+  });
+  await waitFor(() => expect(nearbyCalls()).toHaveLength(2));
+  expect(nearbyCalls()[1][0]).toContain('radiusM=1000');
+  expect(firstCircle.setMap).toHaveBeenLastCalledWith(null);
+  expect(maps.Circle.mock.calls.at(-1)![0].radius).toBe(1000);
+  expect(cafeMarker.setMap).toHaveBeenLastCalledWith(null);
+  expect(info.close).toHaveBeenCalled();
+  const radiusCircle = maps.Circle.mock.results.at(-1)!.value;
+  act(() =>
+    mapClick()({ latLng: { getLat: () => 37.57, getLng: () => 126.98 } }),
+  );
+  await waitFor(() => expect(nearbyCalls()).toHaveLength(3));
+  expect(radiusCircle.setMap).toHaveBeenLastCalledWith(null);
+  expect(maps.Circle.mock.calls.at(-1)![0].center.getLat()).toBe(37.57);
+  expect(maps.Circle.mock.calls.at(-1)![0].center.getLng()).toBe(126.98);
+  const beforeRetryCircle = maps.Circle.mock.results.at(-1)!.value;
+  load.mockRejectedValueOnce(new Error('sdk'));
+  vi.stubEnv('VITE_KAKAO_MAP_APP_KEY', 'retry-key');
+  view.rerender(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+  await screen.findByText('지도를 불러오지 못했습니다');
+  expect(beforeRetryCircle.setMap).toHaveBeenLastCalledWith(null);
+  fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
+  await waitFor(() => expect(maps.Map).toHaveBeenCalledTimes(2));
+  await waitFor(() =>
+    expect(
+      maps.Circle.mock.results.at(-1)!.value.setMap,
+    ).toHaveBeenLastCalledWith(map),
+  );
+  expect(maps.Circle.mock.calls.at(-1)![0].radius).toBe(1000);
+  const currentClick = mapClick();
+  fireEvent.click(screen.getByRole('button', { name: '주변 카페 패널 닫기' }));
+  expect(maps.event.removeListener).toHaveBeenCalledWith(
+    map,
+    'click',
+    currentClick,
+  );
+  const clickRegistrations = maps.event.addListener.mock.calls.filter(
+    ([target, type]) => target === map && type === 'click',
+  ).length;
+  fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
+  expect(
+    maps.event.addListener.mock.calls.filter(
+      ([target, type]) => target === map && type === 'click',
+    ),
+  ).toHaveLength(clickRegistrations);
+  fireEvent.click(screen.getByRole('button', { name: '주변 카페' }));
+  fireEvent.click(screen.getByRole('button', { name: '중심점 해제' }));
+  expect(
+    maps.Circle.mock.results.at(-1)!.value.setMap,
+  ).toHaveBeenLastCalledWith(null);
+  expect(screen.getByText('중심점이 선택되지 않았습니다.')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: '지도 영역' }));
+  await screen.findByRole('button', { name: /지도 카페/ });
+  expect(screen.queryByText(/499.9m/)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
+  expect(screen.getByRole('combobox', { name: '자치구' })).toHaveValue('11110');
+  expect(screen.getByRole('combobox', { name: '행정동' })).toHaveValue(
+    '11110515',
+  );
   view.unmount();
-  expect(content.isConnected).toBe(false);
+  for (const result of maps.Circle.mock.results)
+    expect(result.value.setMap).toHaveBeenLastCalledWith(null);
+  for (const result of maps.Marker.mock.results)
+    expect(result.value.setMap).toHaveBeenLastCalledWith(null);
+});
+
+test('반경 API 실패에도 지도와 중심점을 유지하고 재시도로 빈 반경 결과를 안내한다', async () => {
+  const { maps, map } = createSdk();
+  load.mockResolvedValue(maps);
+  let fail = true;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      async (url: string) =>
+        new Response(
+          JSON.stringify(
+            url.includes('/nearby')
+              ? fail
+                ? { code: 'DATA_NOT_READY' }
+                : {
+                    items: [],
+                    totalCount: 0,
+                    limit: 200,
+                    offset: 0,
+                    hasMore: false,
+                    sourceBatch: {
+                      batchId: '00000000-0000-0000-0000-000000000004',
+                      publishedAt: '2026-10-02T00:00:00Z',
+                    },
+                  }
+              : { items: [] },
+          ),
+          { status: url.includes('/nearby') && fail ? 503 : 200 },
+        ),
+    ),
+  );
+  render(<App />);
+  fireEvent.click(screen.getByRole('button', { name: '주변 카페' }));
+  fireEvent.click(screen.getByRole('button', { name: '선택 지점 주변' }));
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: '지도 확대' })).toBeEnabled(),
+  );
+  const click = maps.event.addListener.mock.calls.findLast(
+    ([target, type]) => target === map && type === 'click',
+  )![2];
+  act(() =>
+    click({ latLng: { getLat: () => 37.5665, getLng: () => 126.978 } }),
+  );
+  await screen.findByText(/카페 데이터가 아직 준비되지/);
+  expect(
+    maps.Circle.mock.results.at(-1)!.value.setMap,
+  ).toHaveBeenLastCalledWith(map);
+  expect(screen.getByRole('button', { name: '지도 확대' })).toBeEnabled();
+  fail = false;
+  fireEvent.click(screen.getByRole('button', { name: '카페 목록 다시 시도' }));
+  expect(
+    await screen.findByText('선택한 반경 내에 조회된 카페가 없습니다.'),
+  ).toBeVisible();
+  expect(screen.getByText('반경 내 전체 0곳 중 0곳 표시')).toBeVisible();
+  expect(
+    maps.Marker.mock.calls.every(
+      ([options]) => options.title === '임시 관심 위치',
+    ),
+  ).toBe(true);
 });

@@ -23,9 +23,11 @@ type MapStatus = 'loading' | 'ready' | 'error';
 export function KakaoMapView({
   target,
   cafes,
+  centerPicking = false,
 }: {
   target?: RegionMapTarget | null;
   cafes?: CafeExplorer;
+  centerPicking?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<KakaoMap | null>(null);
@@ -225,6 +227,7 @@ export function KakaoMapView({
     viewportChangedRef,
     target,
     cafes,
+    centerPicking,
   );
 
   function retry() {
