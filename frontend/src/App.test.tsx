@@ -68,7 +68,7 @@ test('같은 메뉴를 다시 누르면 닫고 다른 메뉴를 누르면 내용
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
   expect(
     screen.getByRole('complementary', { name: '주변 카페' }),
-  ).toHaveTextContent('위치 주변 정보');
+  ).toHaveTextContent('현재 지도 영역 카페');
   expect(screen.getByRole('textbox', { name: '장소 검색' })).toBe(search);
   expect(screen.getByRole('region', { name: '서울 상권 지도' })).toBe(map);
 });
@@ -121,7 +121,7 @@ test('미연동 장소·반경 입력과 행정구역 전체 통계를 구분한
   expect(screen.getByRole('textbox', { name: '장소 검색' })).toBeDisabled();
   fireEvent.click(screen.getByRole('button', { name: '주변 카페' }));
   expect(screen.getByRole('combobox', { name: '탐색 반경' })).toBeDisabled();
-  expect(screen.getByText('주변 카페 연동 준비 중')).toBeVisible();
+  expect(screen.getByText(/자치구를 선택하거나 지도를 확대하면/)).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
   expect(
     screen.getByRole('region', { name: '행정구역 전체 통계' }),

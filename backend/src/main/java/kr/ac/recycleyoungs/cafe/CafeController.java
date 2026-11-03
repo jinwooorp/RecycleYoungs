@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** DB 조회 전에 WGS84 좌표·반경·지도 영역·반복 구 코드와 제한된 페이징을 검증한다. */
+/** DB 조회 전에 WGS84 좌표·반경·지도 영역·반복 구·동 코드와 제한된 페이징을 검증한다. */
 @RestController
 @RequestMapping("/api/v1/cafes")
 @Profile("db")
@@ -44,13 +44,22 @@ public class CafeController {
     if (west >= east || south >= north) throw invalid();
     var limit = integer(scalar(parameters, "limit", "100"), 1, 500);
     var offset = integer(scalar(parameters, "offset", "0"), 0, 100000);
-    return service.getViewport(west, south, east, north, districtCodes(parameters), limit, offset);
+    return service.getViewport(
+        west, south, east, north, districtCodes(parameters), dongCodes(parameters), limit, offset);
   }
 
   private List<String> districtCodes(MultiValueMap<String, String> parameters) {
     var codes = parameters.getOrDefault("districtCodes", List.of());
     for (var code : codes) {
       if (code == null || !code.matches("[0-9]{5}")) throw invalid();
+    }
+    return codes.stream().distinct().sorted().toList();
+  }
+
+  private List<String> dongCodes(MultiValueMap<String, String> parameters) {
+    var codes = parameters.getOrDefault("dongCodes", List.of());
+    for (var code : codes) {
+      if (code == null || !code.matches("[0-9]{8}")) throw invalid();
     }
     return codes.stream().distinct().sorted().toList();
   }

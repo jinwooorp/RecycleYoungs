@@ -150,6 +150,21 @@ public class RegionRepository {
         .single();
   }
 
+  /** 카페 공간 필터의 동 존재·부모 관계를 같은 최신 경계 게시본에서 검증한다. */
+  public Optional<String> findDongDistrict(UUID batchId, String dongCode) {
+    return jdbc.sql(
+            """
+        SELECT a.district_code FROM administrative_dong a
+        JOIN district d ON d.district_code = a.district_code
+        WHERE a.boundary_batch_id = :batch AND d.boundary_batch_id = :batch
+          AND a.dong_code = :code
+        """)
+        .param("batch", batchId)
+        .param("code", dongCode)
+        .query(String.class)
+        .optional();
+  }
+
   public List<NearbyDistrict> findNearbyDistricts(
       UUID batchId, double longitude, double latitude, double radiusM, List<String> districtCodes) {
     // geography 거리는 미터 단위다. geometry GiST가 이 캐스팅까지 지원한다고 가정하지 않는다.

@@ -14,7 +14,7 @@ export interface RegionResource<T> {
 }
 
 /** 요청 키가 바뀐 즉시 이전 자료를 숨기고, 취소를 무시하는 응답도 차단합니다. */
-function useRegionRequest<T>(
+export function useRegionRequest<T>(
   key: string | null,
   request: (signal: AbortSignal) => Promise<T>,
 ): RegionResource<T> {

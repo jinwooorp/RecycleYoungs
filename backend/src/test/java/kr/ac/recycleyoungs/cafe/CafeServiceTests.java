@@ -116,9 +116,9 @@ class CafeServiceTests {
   void viewportReturnsReadySourceForSpatiallyEmptyResult() {
     when(repository.findLatestPublishedBatch()).thenReturn(Optional.of(cafeBatch));
     when(repository.findViewport(
-            cafeBatch.batchId(), null, 126.99, 36.99, 127.01, 37.01, List.of(), 100, 0))
+            cafeBatch.batchId(), null, 126.99, 36.99, 127.01, 37.01, List.of(), List.of(), 100, 0))
         .thenReturn(List.of());
-    assertThat(service.getViewport(126.99, 36.99, 127.01, 37.01, List.of(), 100, 0))
+    assertThat(service.getViewport(126.99, 36.99, 127.01, 37.01, List.of(), List.of(), 100, 0))
         .isEqualTo(new CafeViewportResponse(List.of(), 0, 100, 0, false, cafeBatch));
     verifyNoInteractions(regions);
   }
@@ -136,7 +136,8 @@ class CafeServiceTests {
             36.99,
             127.01,
             37.01,
-            List.of("00110")))
+            List.of("00110"),
+            List.of()))
         .thenReturn(3L);
     var items =
         List.of(
@@ -150,10 +151,11 @@ class CafeServiceTests {
             127.01,
             37.01,
             List.of("00110"),
+            List.of(),
             1,
             1))
         .thenReturn(items);
-    assertThat(service.getViewport(126.99, 36.99, 127.01, 37.01, List.of("00110"), 1, 1))
+    assertThat(service.getViewport(126.99, 36.99, 127.01, 37.01, List.of("00110"), List.of(), 1, 1))
         .isEqualTo(new CafeViewportResponse(items, 3, 1, 1, true, cafeBatch));
   }
 
@@ -161,18 +163,92 @@ class CafeServiceTests {
   void viewportKeepsTotalForPageBeyondLastMatch() {
     when(repository.findLatestPublishedBatch()).thenReturn(Optional.of(cafeBatch));
     when(repository.countViewport(
-            cafeBatch.batchId(), null, 126.99, 36.99, 127.01, 37.01, List.of()))
+            cafeBatch.batchId(), null, 126.99, 36.99, 127.01, 37.01, List.of(), List.of()))
         .thenReturn(3L);
     when(repository.findViewport(
-            cafeBatch.batchId(), null, 126.99, 36.99, 127.01, 37.01, List.of(), 1, 100000))
+            cafeBatch.batchId(),
+            null,
+            126.99,
+            36.99,
+            127.01,
+            37.01,
+            List.of(),
+            List.of(),
+            1,
+            100000))
         .thenReturn(List.of());
-    assertThat(service.getViewport(126.99, 36.99, 127.01, 37.01, List.of(), 1, 100000))
+    assertThat(service.getViewport(126.99, 36.99, 127.01, 37.01, List.of(), List.of(), 1, 100000))
         .isEqualTo(new CafeViewportResponse(List.of(), 3, 1, 100000, false, cafeBatch));
   }
 
   private void expectViewportError(List<String> codes, ApiErrorCode code) {
-    assertThatThrownBy(() -> service.getViewport(126.99, 36.99, 127.01, 37.01, codes, 100, 0))
+    assertThatThrownBy(
+            () -> service.getViewport(126.99, 36.99, 127.01, 37.01, codes, List.of(), 100, 0))
         .isInstanceOfSatisfying(
             ApiException.class, error -> assertThat(error.errorCode()).isEqualTo(code));
+  }
+
+  @Test
+  void viewportValidatesDongParentAndPassesSpatialFilterBeforePaging() {
+    when(regions.findLatestPublishedBatch()).thenReturn(Optional.of(boundary));
+    when(regions.findDistricts(boundary.batchId()))
+        .thenReturn(List.of(new District("00110", "예시구")));
+    when(regions.findDongDistrict(boundary.batchId(), "00110001")).thenReturn(Optional.of("00110"));
+    when(repository.findLatestPublishedBatch()).thenReturn(Optional.of(cafeBatch));
+    when(repository.countViewport(
+            cafeBatch.batchId(),
+            boundary.batchId(),
+            126.99,
+            36.99,
+            127.01,
+            37.01,
+            List.of("00110"),
+            List.of("00110001")))
+        .thenReturn(2L);
+    when(repository.findViewport(
+            cafeBatch.batchId(),
+            boundary.batchId(),
+            126.99,
+            36.99,
+            127.01,
+            37.01,
+            List.of("00110"),
+            List.of("00110001"),
+            1,
+            2))
+        .thenReturn(List.of());
+    assertThat(
+            service.getViewport(
+                126.99, 36.99, 127.01, 37.01, List.of("00110"), List.of("00110001"), 1, 2))
+        .isEqualTo(new CafeViewportResponse(List.of(), 2, 1, 2, false, cafeBatch));
+  }
+
+  @Test
+  void viewportRejectsExistingDongOutsideSelectedDistrictBeforeCafeReadiness() {
+    when(regions.findLatestPublishedBatch()).thenReturn(Optional.of(boundary));
+    when(regions.findDistricts(boundary.batchId()))
+        .thenReturn(List.of(new District("00110", "예시구")));
+    when(regions.findDongDistrict(boundary.batchId(), "00140001")).thenReturn(Optional.of("00140"));
+    assertThatThrownBy(
+            () ->
+                service.getViewport(
+                    126.99, 36.99, 127.01, 37.01, List.of("00110"), List.of("00140001"), 100, 0))
+        .isInstanceOfSatisfying(
+            ApiException.class,
+            error -> assertThat(error.errorCode()).isEqualTo(ApiErrorCode.INVALID_PARAMETER));
+    verifyNoInteractions(repository);
+  }
+
+  @Test
+  void viewportRejectsUnknownDongEvenWithoutDistrictFilter() {
+    when(regions.findLatestPublishedBatch()).thenReturn(Optional.of(boundary));
+    assertThatThrownBy(
+            () ->
+                service.getViewport(
+                    126.99, 36.99, 127.01, 37.01, List.of(), List.of("99999001"), 100, 0))
+        .isInstanceOfSatisfying(
+            ApiException.class,
+            error -> assertThat(error.errorCode()).isEqualTo(ApiErrorCode.REGION_NOT_FOUND));
+    verifyNoInteractions(repository);
   }
 }

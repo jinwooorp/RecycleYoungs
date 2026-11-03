@@ -22,6 +22,14 @@ public class CafeRepository {
           AND d.district_code IN (:districtCodes) AND ST_Covers(d.geom,s.geom))
         """;
 
+  private static final String DONG_FILTER =
+      """
+        AND EXISTS (SELECT 1 FROM administrative_dong a
+          JOIN district d ON d.district_code = a.district_code
+          WHERE a.boundary_batch_id = :boundaryBatch AND d.boundary_batch_id = :boundaryBatch
+            AND a.dong_code IN (:dongCodes) AND ST_Covers(a.geom,s.geom))
+        """;
+
   private final JdbcClient jdbc;
 
   public CafeRepository(JdbcClient jdbc) {
@@ -118,9 +126,19 @@ public class CafeRepository {
       double south,
       double east,
       double north,
-      List<String> districtCodes) {
+      List<String> districtCodes,
+      List<String> dongCodes) {
     return viewportMatching(
-            "count(*)", cafeBatch, boundaryBatch, west, south, east, north, districtCodes, "")
+            "count(*)",
+            cafeBatch,
+            boundaryBatch,
+            west,
+            south,
+            east,
+            north,
+            districtCodes,
+            dongCodes,
+            "")
         .query(Long.class)
         .single();
   }
@@ -133,6 +151,7 @@ public class CafeRepository {
       double east,
       double north,
       List<String> districtCodes,
+      List<String> dongCodes,
       int limit,
       int offset) {
     return viewportMatching(
@@ -147,6 +166,7 @@ public class CafeRepository {
             east,
             north,
             districtCodes,
+            dongCodes,
             " ORDER BY s.bizes_id LIMIT :limit OFFSET :offset")
         .param("limit", limit)
         .param("offset", offset)
@@ -174,9 +194,13 @@ public class CafeRepository {
       double east,
       double north,
       List<String> districtCodes,
+      List<String> dongCodes,
       String suffix) {
     // geography 반경과 분리해 geometry GiST를 활용한다. Covers는 네 변·꼭짓점도 포함한다.
-    var filter = districtCodes.isEmpty() ? "" : DISTRICT_FILTER;
+    // 구·동 조건은 각각 합집합, 서로는 교집합이며 개수와 페이지 모두에 먼저 적용한다.
+    // ST_Covers는 외곽·구멍 경계를 포함하고 카페의 행정동 FK는 사용하지 않는다.
+    var filter =
+        (districtCodes.isEmpty() ? "" : DISTRICT_FILTER) + (dongCodes.isEmpty() ? "" : DONG_FILTER);
     var query =
         jdbc.sql(
                 """
@@ -196,8 +220,10 @@ public class CafeRepository {
             .param("south", south)
             .param("east", east)
             .param("north", north);
-    if (!districtCodes.isEmpty())
-      query.param("boundaryBatch", boundaryBatch).param("districtCodes", districtCodes);
+    if (!districtCodes.isEmpty() || !dongCodes.isEmpty())
+      query.param("boundaryBatch", boundaryBatch);
+    if (!districtCodes.isEmpty()) query.param("districtCodes", districtCodes);
+    if (!dongCodes.isEmpty()) query.param("dongCodes", dongCodes);
     return query;
   }
 

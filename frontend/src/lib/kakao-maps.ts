@@ -12,7 +12,9 @@ export interface KakaoMap {
     paddingBottom?: number,
     paddingLeft?: number,
   ): void;
+  panBy(x: number, y: number): void;
   getCenter(): KakaoLatLng;
+  getBounds(): KakaoBounds;
   setCenter(center: KakaoLatLng): void;
   getLevel(): number;
   setLevel(level: number): void;
@@ -26,6 +28,19 @@ export interface KakaoBounds {
 
 export interface KakaoPolygon {
   setMap(map: KakaoMap | null): void;
+}
+
+export interface KakaoMarker {
+  setMap(map: KakaoMap | null): void;
+}
+export interface KakaoInfoWindow {
+  setContent(content: HTMLElement): void;
+  open(map: KakaoMap, marker: KakaoMarker): void;
+  close(): void;
+}
+export interface KakaoMapContext {
+  map: KakaoMap;
+  maps: KakaoMaps;
 }
 
 export interface KakaoPolygonOptions {
@@ -42,6 +57,14 @@ export interface KakaoMaps {
   load(callback: () => void): void;
   LatLng: new (latitude: number, longitude: number) => KakaoLatLng;
   Polygon: new (options: KakaoPolygonOptions) => KakaoPolygon;
+  Marker: new (options: {
+    position: KakaoLatLng;
+    title: string;
+  }) => KakaoMarker;
+  InfoWindow: new (options: {
+    disableAutoPan: boolean;
+    removable: boolean;
+  }) => KakaoInfoWindow;
   LatLngBounds: new (
     southWest: KakaoLatLng,
     northEast: KakaoLatLng,
@@ -51,8 +74,16 @@ export interface KakaoMaps {
     options: { center: KakaoLatLng; level: number },
   ) => KakaoMap;
   event: {
-    addListener(target: KakaoMap, type: string, handler: () => void): void;
-    removeListener(target: KakaoMap, type: string, handler: () => void): void;
+    addListener(
+      target: KakaoMap | KakaoMarker,
+      type: string,
+      handler: () => void,
+    ): void;
+    removeListener(
+      target: KakaoMap | KakaoMarker,
+      type: string,
+      handler: () => void,
+    ): void;
   };
 }
 

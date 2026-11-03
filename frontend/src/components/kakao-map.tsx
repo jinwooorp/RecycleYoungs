@@ -11,19 +11,30 @@ import {
   loadKakaoMaps,
   type KakaoMap,
   type KakaoPolygon,
+  type KakaoMapContext,
 } from '@/lib/kakao-maps';
 import type { BoundaryGeometry, RegionMapTarget } from '@/lib/regions';
+import type { CafeExplorer } from '@/hooks/use-cafe-explorer';
+import { useCafeMap } from '@/hooks/use-cafe-map';
 
 type MapStatus = 'loading' | 'ready' | 'error';
 
 /** SDK 수명은 로더가, 지도 인스턴스와 화면 이벤트는 이 컴포넌트가 관리합니다. */
-export function KakaoMapView({ target }: { target?: RegionMapTarget | null }) {
+export function KakaoMapView({
+  target,
+  cafes,
+}: {
+  target?: RegionMapTarget | null;
+  cafes?: CafeExplorer;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<KakaoMap | null>(null);
   const moveRef = useRef<((next: RegionMapTarget | null) => void) | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<MapStatus>('loading');
-  const [mapGeneration, setMapGeneration] = useState(0);
+  const [context, setContext] = useState<KakaoMapContext | null>(null);
+  const movingRef = useRef(false);
+  const viewportChangedRef = useRef<(() => void) | null>(null);
   const [level, setLevel] = useState(5);
   const appKey = import.meta.env.VITE_KAKAO_MAP_APP_KEY?.trim() ?? '';
 
@@ -38,6 +49,7 @@ export function KakaoMapView({ target }: { target?: RegionMapTarget | null }) {
       release = undefined;
       mapRef.current = null;
       moveRef.current = null;
+      setContext(null);
       container.replaceChildren();
       setStatus('error');
     };
@@ -66,6 +78,7 @@ export function KakaoMapView({ target }: { target?: RegionMapTarget | null }) {
         moveRef.current = (next) => {
           if (fitFrame !== null) cancelAnimationFrame(fitFrame);
           fitFrame = null;
+          movingRef.current = !!next;
           const nextGeometry = next?.kind === 'boundary' ? next.geometry : null;
           if (nextGeometry !== geometry) {
             // 조회 중·실패 상태에서도 이전 지역의 강조를 즉시 제거합니다.
@@ -143,6 +156,8 @@ export function KakaoMapView({ target }: { target?: RegionMapTarget | null }) {
             // 크기 변경 알림 전 지도 이동이 끝난 경우에도 새 중심을 보존합니다.
             center = map.getCenter();
             onZoom();
+            movingRef.current = false;
+            viewportChangedRef.current?.();
           };
           fitFrame = requestAnimationFrame(fit);
         };
@@ -168,12 +183,14 @@ export function KakaoMapView({ target }: { target?: RegionMapTarget | null }) {
           }
           width = container.clientWidth;
           height = container.clientHeight;
+          viewportChangedRef.current?.();
         };
         const observer = new ResizeObserver(onResize);
         // 리스너 등록 중 실패해도 이미 연결된 자원을 정리할 수 있도록 먼저 설정합니다.
         release = () => {
           observer.disconnect();
           if (fitFrame !== null) cancelAnimationFrame(fitFrame);
+          movingRef.current = false;
           clearBoundary();
           maps.event.removeListener(map, 'zoom_changed', onZoom);
           maps.event.removeListener(map, 'center_changed', onCenterChanged);
@@ -183,7 +200,7 @@ export function KakaoMapView({ target }: { target?: RegionMapTarget | null }) {
         observer.observe(container);
         onZoom();
         // 이미 ready인 지도도 재초기화되면 현재 선택을 새 인스턴스에 적용합니다.
-        setMapGeneration((value) => value + 1);
+        setContext({ map, maps });
         setStatus('ready');
       })
       .catch(fail);
@@ -193,13 +210,22 @@ export function KakaoMapView({ target }: { target?: RegionMapTarget | null }) {
       release?.();
       mapRef.current = null;
       moveRef.current = null;
+      setContext(null);
       container.replaceChildren();
     };
   }, [appKey, attempt]);
 
   useEffect(() => {
     if (status === 'ready') moveRef.current?.(target ?? null);
-  }, [status, target, mapGeneration]);
+  }, [status, target, context]);
+
+  useCafeMap(
+    status === 'ready' ? context : null,
+    movingRef,
+    viewportChangedRef,
+    target,
+    cafes,
+  );
 
   function retry() {
     setStatus('loading');

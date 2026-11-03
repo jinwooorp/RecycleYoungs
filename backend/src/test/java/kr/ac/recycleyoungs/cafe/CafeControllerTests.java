@@ -203,7 +203,7 @@ class CafeControllerTests {
     var item =
         new CafeViewportResponse.Cafe(
             "000001", "예시카페", null, "I21201", "카페", null, "예시주소", 127, 37);
-    when(service.getViewport(126.99, 36.99, 127.01, 37.01, List.of(), 100, 0))
+    when(service.getViewport(126.99, 36.99, 127.01, 37.01, List.of(), List.of(), 100, 0))
         .thenReturn(new CafeViewportResponse(List.of(item), 1, 100, 0, false, batch));
     mvc.perform(viewport())
         .andExpect(status().isOk())
@@ -221,7 +221,8 @@ class CafeControllerTests {
   @Test
   void reusesRepeatedDistrictAndPagingValidationForViewport() throws Exception {
     var batch = new PublishedBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"));
-    when(service.getViewport(126.99, 36.99, 127.01, 37.01, List.of("00110", "00140"), 500, 100000))
+    when(service.getViewport(
+            126.99, 36.99, 127.01, 37.01, List.of("00110", "00140"), List.of(), 500, 100000))
         .thenReturn(new CafeViewportResponse(List.of(), 2, 500, 100000, false, batch));
     mvc.perform(
             viewport()
@@ -315,7 +316,7 @@ class CafeControllerTests {
   @Test
   void acceptsFullWgs84ViewportWithDecimalExponentInput() throws Exception {
     var batch = new PublishedBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"));
-    when(service.getViewport(-180, -90, 180, 90, List.of(), 100, 0))
+    when(service.getViewport(-180, -90, 180, 90, List.of(), List.of(), 100, 0))
         .thenReturn(new CafeViewportResponse(List.of(), 0, 100, 0, false, batch));
     mvc.perform(
             get("/api/v1/cafes/viewport")
@@ -329,12 +330,12 @@ class CafeControllerTests {
 
   @Test
   void reusesViewportPublicationAndRegionProblems() throws Exception {
-    when(service.getViewport(126.99, 36.99, 127.01, 37.01, List.of(), 100, 0))
+    when(service.getViewport(126.99, 36.99, 127.01, 37.01, List.of(), List.of(), 100, 0))
         .thenThrow(new ApiException(ApiErrorCode.DATA_NOT_READY));
     mvc.perform(viewport())
         .andExpect(status().isServiceUnavailable())
         .andExpect(jsonPath("$.code").value("DATA_NOT_READY"));
-    when(service.getViewport(126.99, 36.99, 127.01, 37.01, List.of("99999"), 100, 0))
+    when(service.getViewport(126.99, 36.99, 127.01, 37.01, List.of("99999"), List.of(), 100, 0))
         .thenThrow(new ApiException(ApiErrorCode.REGION_NOT_FOUND));
     mvc.perform(viewport().param("districtCodes", "99999"))
         .andExpect(status().isNotFound())
@@ -356,5 +357,36 @@ class CafeControllerTests {
       case "east" -> "127.01";
       default -> "37.01";
     };
+  }
+
+  @Test
+  void viewportNormalizesRepeatedDongCodesWhilePreservingLeadingZeros() throws Exception {
+    var batch = new PublishedBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"));
+    when(service.getViewport(
+            126.99,
+            36.99,
+            127.01,
+            37.01,
+            List.of("00110"),
+            List.of("00110001", "00110002"),
+            100,
+            0))
+        .thenReturn(new CafeViewportResponse(List.of(), 0, 100, 0, false, batch));
+    mvc.perform(
+            viewport()
+                .param("districtCodes", "00110")
+                .param("dongCodes", "00110002", "00110001", "00110002"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.totalCount").value(0));
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {"", " ", "1111051", "111105150", "１１１１０５１５", "1111051A", "11110515,11110530"})
+  void viewportRejectsMalformedDongCodesBeforeService(String code) throws Exception {
+    mvc.perform(viewport().param("dongCodes", code))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+    verifyNoInteractions(service);
   }
 }

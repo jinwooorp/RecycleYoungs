@@ -246,6 +246,127 @@ class CafeApiIntegrationTests {
   }
 
   @Test
+  void viewportDongUsesActualCoordinatesAndIncludesBoundaryBeforeCountingAndPaging()
+      throws Exception {
+    boundaries();
+    // 동 경계는 구보다 작다. FK가 없어도 내부·경계 위 점은 포함하고 FK만 일치하는 외부 점은 제외한다.
+    jdbc.sql(
+            """
+        UPDATE administrative_dong SET geom=ST_Multi(ST_MakeEnvelope(127,36.999,127.002,37.001,4326))
+        WHERE dong_code='11140001'
+        """)
+        .update();
+    cafe("000002", "동내부", 127.001, 37, CURRENT);
+    cafe("000003", "동경계", 127.002, 37, CURRENT);
+    cafe("000004", "같은구동밖", 127.003, 37, CURRENT);
+    cafe("000005", "다른구", 126.999, 37, CURRENT);
+    jdbc.sql(
+            """
+        UPDATE cafe_store SET dong_code='11140001',source_dong_code='11140001'
+        WHERE bizes_id IN ('000004','000005')
+        """)
+        .update();
+    mvc.perform(
+            viewport()
+                .param("districtCodes", "11140")
+                .param("dongCodes", "11140001")
+                .param("limit", "2"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items[*].bizesId", contains("000001", "000002")))
+        .andExpect(jsonPath("$.totalCount").value(3))
+        .andExpect(jsonPath("$.hasMore").value(true));
+    // 동만 지정해도 같은 공간 결과를 반환하며 끝을 넘은 페이지에도 정확한 개수를 유지한다.
+    mvc.perform(viewport().param("dongCodes", "11140001").param("limit", "2").param("offset", "2"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items[*].bizesId", contains("000003")))
+        .andExpect(jsonPath("$.totalCount").value(3))
+        .andExpect(jsonPath("$.hasMore").value(false));
+    mvc.perform(viewport().param("dongCodes", "11140001").param("offset", "100"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items").isEmpty())
+        .andExpect(jsonPath("$.totalCount").value(3));
+  }
+
+  @Test
+  void viewportDongCoversAllMultiPolygonPartsAndHoleBoundaryWithoutDuplicates() throws Exception {
+    boundaries();
+    jdbc.sql(
+            """
+        UPDATE administrative_dong SET geom=ST_GeomFromText(
+          'MULTIPOLYGON(((127 36.99,127.004 36.99,127.004 37.004,127 37.004,127 36.99),
+          (127.001 37.001,127.003 37.001,127.003 37.003,127.001 37.003,127.001 37.001)),
+          ((127.006 36.99,127.008 36.99,127.008 37.004,127.006 37.004,127.006 36.99)))',4326)
+        WHERE dong_code='11140001'
+        """)
+        .update();
+    cafe("000002", "구멍내부", 127.002, 37.002, CURRENT);
+    cafe("000003", "구멍경계", 127.001, 37.002, CURRENT);
+    cafe("000004", "별도영역", 127.007, 37, CURRENT);
+    cafe("000005", "분리영역사이", 127.005, 37, CURRENT);
+    mvc.perform(
+            viewport().param("districtCodes", "11140").param("dongCodes", "11140001", "11140001"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items[*].bizesId", contains("000001", "000003", "000004")))
+        .andExpect(jsonPath("$.totalCount").value(3));
+  }
+
+  @Test
+  void viewportDongRequiresCurrentParentAndValidatesEveryCodeOutsideViewport() throws Exception {
+    boundaries();
+    mvc.perform(viewport().param("districtCodes", "11110").param("dongCodes", "11140001"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+    mvc.perform(viewport("139", "35", "140", "36").param("dongCodes", "11140001", "99999001"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("REGION_NOT_FOUND"));
+    jdbc.sql("UPDATE administrative_dong SET boundary_batch_id=:old WHERE dong_code='11140001'")
+        .param("old", OLD)
+        .update();
+    mvc.perform(viewport().param("dongCodes", "11140001"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("REGION_NOT_FOUND"));
+    jdbc.sql("UPDATE administrative_dong SET boundary_batch_id=:current WHERE dong_code='11140001'")
+        .param("current", BOUNDARY)
+        .update();
+    jdbc.sql("UPDATE district SET boundary_batch_id=:old WHERE district_code='11140'")
+        .param("old", OLD)
+        .update();
+    mvc.perform(viewport().param("dongCodes", "11140001"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("REGION_NOT_FOUND"));
+  }
+
+  @Test
+  void viewportDongFilterDoesNotFallbackFromEmptyLatestBoundaryPublication() throws Exception {
+    mvc.perform(viewport().param("dongCodes", "11140001"))
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(jsonPath("$.code").value("DATA_NOT_READY"));
+    boundaries();
+    jdbc.sql(
+            """
+        INSERT INTO etl_batch(batch_id,dataset_code,source_type,scope_type,source_reference,
+          etl_version,status,published_at,started_at)
+        VALUES ('00000000-0000-0000-0000-000000000099','SEOUL_DONG_BOUNDARY',
+          'SHAPEFILE','SEOUL','synthetic fixture','test-v1','PUBLISHED',
+          '2026-10-30T00:00:00Z','2026-10-30T00:00:00Z')
+        """)
+        .update();
+    mvc.perform(viewport().param("dongCodes", "11140001"))
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(jsonPath("$.code").value("DATA_NOT_READY"));
+    mvc.perform(viewport()).andExpect(status().isOk());
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {"", " ", "1114000", "111400010", "１１１４０００１", "1114000A", "11140001,11140002"})
+  void viewportRejectsMalformedDongCodesEvenWhenDataUnprepared(String code) throws Exception {
+    mvc.perform(viewport().param("dongCodes", code))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+  }
+
+  @Test
   void viewportCountsBeforePagingAndRetainsCountBeyondLastPage() throws Exception {
     cafe("000002", "두번째카페", 127.001, 37, CURRENT);
     cafe("000003", "세번째카페", 127.002, 37, CURRENT);
@@ -441,6 +562,7 @@ class CafeApiIntegrationTests {
               anyDouble(),
               anyDouble(),
               anyDouble(),
+              anyList(),
               anyList());
     }
     var first = viewport();
