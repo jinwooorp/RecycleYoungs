@@ -72,7 +72,38 @@ export interface KakaoPolygonOptions {
   fillOpacity: number;
 }
 
+/** Services 검색 콜백은 취소 핸들을 반환하지 않으므로 호출자가 요청 세대를 구분합니다. */
+export type KakaoSearchCallback = (
+  result: unknown,
+  status: string,
+  pagination?: { hasNextPage?: boolean },
+) => void;
+
+export interface KakaoServices {
+  Status: { OK: string; ZERO_RESULT: string; ERROR: string };
+  SortBy: { ACCURACY: string };
+  Places: new () => {
+    keywordSearch(
+      keyword: string,
+      callback: KakaoSearchCallback,
+      options: {
+        size: number;
+        page: number;
+        sort: string;
+      },
+    ): void;
+  };
+  Geocoder: new () => {
+    addressSearch(
+      address: string,
+      callback: KakaoSearchCallback,
+      options: { size: number; page: number },
+    ): void;
+  };
+}
+
 export interface KakaoMaps {
+  services: KakaoServices;
   load(callback: () => void): void;
   LatLng: new (latitude: number, longitude: number) => KakaoLatLng;
   Circle: new (options: KakaoCircleOptions) => KakaoCircle;
@@ -126,12 +157,23 @@ declare global {
 
 let pending: Promise<KakaoMaps> | undefined;
 
+function servicesReady(maps: KakaoMaps | undefined): maps is KakaoMaps {
+  return !!(
+    maps?.Map &&
+    maps.LatLng &&
+    maps.services?.Places &&
+    maps.services.Geocoder &&
+    maps.services.Status &&
+    maps.services.SortBy
+  );
+}
+
 /** StrictMode와 여러 호출자가 동일한 SDK 준비 작업을 공유합니다. */
 export function loadKakaoMaps(appKey: string): Promise<KakaoMaps> {
   if (!appKey.trim())
     return Promise.reject(new Error('Kakao JavaScript 키가 필요합니다.'));
   if (pending) return pending;
-  if (window.kakao?.maps.Map && window.kakao.maps.LatLng)
+  if (servicesReady(window.kakao?.maps))
     return Promise.resolve(window.kakao.maps);
 
   const request = new Promise<KakaoMaps>((resolve, reject) => {
@@ -139,6 +181,7 @@ export function loadKakaoMaps(appKey: string): Promise<KakaoMaps> {
     const url = new URL('https://dapi.kakao.com/v2/maps/sdk.js');
     url.searchParams.set('appkey', appKey.trim());
     url.searchParams.set('autoload', 'false');
+    url.searchParams.set('libraries', 'services');
     script.src = url.toString();
     script.async = true;
     script.dataset.kakaoMapsSdk = '';
@@ -165,7 +208,7 @@ export function loadKakaoMaps(appKey: string): Promise<KakaoMaps> {
         maps.load(() => {
           // 시간 초과한 요청의 늦은 콜백은 새 재시도에 영향을 주지 않습니다.
           if (settled) return;
-          if (!maps.Map || !maps.LatLng) return onError();
+          if (!servicesReady(maps)) return onError();
           settled = true;
           cleanup();
           resolve(maps);

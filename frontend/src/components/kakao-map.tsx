@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CircleAlert,
   LoaderCircle,
@@ -16,22 +16,38 @@ import {
 import type { BoundaryGeometry, RegionMapTarget } from '@/lib/regions';
 import type { CafeExplorer } from '@/hooks/use-cafe-explorer';
 import { useCafeMap } from '@/hooks/use-cafe-map';
+import type { PlaceSelection } from '@/hooks/use-place-search';
+import type { PlaceSearchResult } from '@/lib/place-search';
 
 type MapStatus = 'loading' | 'ready' | 'error';
+export interface MapConnection {
+  status: MapStatus;
+  context: KakaoMapContext | null;
+  retry: () => void;
+}
 
 /** SDK 수명은 로더가, 지도 인스턴스와 화면 이벤트는 이 컴포넌트가 관리합니다. */
 export function KakaoMapView({
   target,
   cafes,
   centerPicking = false,
+  connectionChanged,
+  searchSelection,
+  onSearchMarkerClick,
 }: {
   target?: RegionMapTarget | null;
   cafes?: CafeExplorer;
   centerPicking?: boolean;
+  connectionChanged?: (connection: MapConnection) => void;
+  searchSelection?: PlaceSelection | null;
+  onSearchMarkerClick?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<KakaoMap | null>(null);
-  const moveRef = useRef<((next: RegionMapTarget | null) => void) | null>(null);
+  const moveRef = useRef<
+    | ((next: RegionMapTarget | null, location?: PlaceSearchResult) => void)
+    | null
+  >(null);
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<MapStatus>('loading');
   const [context, setContext] = useState<KakaoMapContext | null>(null);
@@ -39,6 +55,17 @@ export function KakaoMapView({
   const viewportChangedRef = useRef<(() => void) | null>(null);
   const [level, setLevel] = useState(5);
   const appKey = import.meta.env.VITE_KAKAO_MAP_APP_KEY?.trim() ?? '';
+  const retry = useCallback(() => {
+    setStatus('loading');
+    setAttempt((value) => value + 1);
+  }, []);
+  useEffect(() => {
+    connectionChanged?.({
+      status,
+      context: status === 'ready' ? context : null,
+      retry,
+    });
+  }, [status, context, retry, connectionChanged]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -77,10 +104,10 @@ export function KakaoMapView({
           polygons = [];
           geometry = null;
         };
-        moveRef.current = (next) => {
+        moveRef.current = (next, location) => {
           if (fitFrame !== null) cancelAnimationFrame(fitFrame);
           fitFrame = null;
-          movingRef.current = !!next;
+          movingRef.current = !!next || !!location;
           const nextGeometry = next?.kind === 'boundary' ? next.geometry : null;
           if (nextGeometry !== geometry) {
             // 조회 중·실패 상태에서도 이전 지역의 강조를 즉시 제거합니다.
@@ -118,7 +145,7 @@ export function KakaoMapView({
               }
             }
           }
-          if (!next) return;
+          if (!next && !location) return;
           let previousWidth = container.clientWidth;
           let previousHeight = container.clientHeight;
           let stableFrames = 0;
@@ -139,10 +166,15 @@ export function KakaoMapView({
               return;
             }
             fitFrame = null;
-            if (next.kind === 'default') {
+            if (location) {
+              map.setLevel(3);
+              map.setCenter(
+                new maps.LatLng(location.latitude, location.longitude),
+              );
+            } else if (next?.kind === 'default') {
               map.setLevel(5);
               map.setCenter(new maps.LatLng(37.5665, 126.978));
-            } else {
+            } else if (next?.kind === 'boundary') {
               const { west, south, east, north } = next.extent;
               map.setBounds(
                 new maps.LatLngBounds(
@@ -218,8 +250,54 @@ export function KakaoMapView({
   }, [appKey, attempt]);
 
   useEffect(() => {
-    if (status === 'ready') moveRef.current?.(target ?? null);
-  }, [status, target, context]);
+    if (status === 'ready')
+      moveRef.current?.(target ?? null, searchSelection?.place);
+  }, [status, target, context, searchSelection]);
+
+  const searchIsRadiusCenter =
+    cafes?.mode === 'nearby' &&
+    cafes.center?.latitude === searchSelection?.place.latitude &&
+    cafes.center?.longitude === searchSelection?.place.longitude;
+  useEffect(() => {
+    if (
+      status !== 'ready' ||
+      !context ||
+      !searchSelection ||
+      searchIsRadiusCenter
+    )
+      return;
+    const { map, maps } = context;
+    const place = searchSelection.place;
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40"><path d="M16 39C12 32 1 25 1 16a15 15 0 1 1 30 0c0 9-11 16-15 23Z" fill="#B45309" stroke="white" stroke-width="2"/><circle cx="14" cy="14" r="6" fill="none" stroke="white" stroke-width="2"/><path d="m19 19 6 6" stroke="white" stroke-width="3"/></svg>';
+    const marker = new maps.Marker({
+      position: new maps.LatLng(place.latitude, place.longitude),
+      title: `검색 위치: ${place.name}`,
+      clickable: true,
+      zIndex: 4,
+      image: new maps.MarkerImage(
+        `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
+        new maps.Size(32, 40),
+        { offset: new maps.Point(16, 40) },
+      ),
+    });
+    const click = () => {
+      maps.event.preventMap();
+      onSearchMarkerClick?.();
+    };
+    maps.event.addListener(marker, 'click', click);
+    marker.setMap(map);
+    return () => {
+      maps.event.removeListener(marker, 'click', click);
+      marker.setMap(null);
+    };
+  }, [
+    status,
+    context,
+    searchSelection,
+    searchIsRadiusCenter,
+    onSearchMarkerClick,
+  ]);
 
   useCafeMap(
     status === 'ready' ? context : null,
@@ -230,10 +308,6 @@ export function KakaoMapView({
     centerPicking,
   );
 
-  function retry() {
-    setStatus('loading');
-    setAttempt((value) => value + 1);
-  }
   function zoom(delta: number) {
     const map = mapRef.current;
     if (map) map.setLevel(Math.max(1, Math.min(14, map.getLevel() + delta)));

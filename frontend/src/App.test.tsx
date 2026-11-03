@@ -82,7 +82,7 @@ test('장소 검색은 패널·지도 밖에 유지하고 닫는 동안 패널 �
   fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
   const panel = screen.getByRole('complementary', { name: '지역 탐색' });
   expect(panel).not.toContainElement(search);
-  expect(search).toHaveTextContent('준비 중');
+  expect(search).toHaveTextContent('검색');
   fireEvent.click(screen.getByRole('button', { name: '지역 탐색 패널 닫기' }));
   expect(panel).toHaveAttribute('inert');
   expect(panel).toHaveAttribute('aria-hidden', 'true');

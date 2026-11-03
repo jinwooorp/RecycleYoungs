@@ -16,6 +16,7 @@ import {
   type KakaoPolygonOptions,
   type KakaoCircleOptions,
   type KakaoMouseEvent,
+  type KakaoSearchCallback,
 } from '@/lib/kakao-maps';
 import { KakaoMapView } from './kakao-map';
 import App from '@/App';
@@ -112,6 +113,26 @@ function createSdk() {
     relayout: vi.fn(),
   };
   const maps = {
+    services: {
+      Status: { OK: 'OK', ZERO_RESULT: 'ZERO_RESULT', ERROR: 'ERROR' },
+      SortBy: { ACCURACY: 'accuracy' },
+      Places: vi.fn(function () {
+        return {
+          keywordSearch: vi.fn(
+            (_query: string, callback: KakaoSearchCallback) =>
+              callback([], 'ZERO_RESULT'),
+          ),
+        };
+      }),
+      Geocoder: vi.fn(function () {
+        return {
+          addressSearch: vi.fn(
+            (_query: string, callback: KakaoSearchCallback) =>
+              callback([], 'ZERO_RESULT'),
+          ),
+        };
+      }),
+    },
     load: vi.fn(),
     LatLng: vi.fn(function (latitude: number, longitude: number) {
       return { getLat: () => latitude, getLng: () => longitude };
@@ -1345,4 +1366,276 @@ test('반경 API 실패에도 지도와 중심점을 유지하고 재시도로 �
       ([options]) => options.title === '임시 관심 위치',
     ),
   ).toBe(true);
+});
+
+test('장소 검색 이동·지역 필터 독립성·명시적 반경 연계와 지역 재선택 우선순위를 유지한다', async () => {
+  const { maps, map } = createSdk();
+  map.getBounds.mockImplementation(() => ({
+    getSouthWest: () => ({
+      getLat: () => map.getCenter().getLat() - 0.01,
+      getLng: () => map.getCenter().getLng() - 0.01,
+    }),
+    getNorthEast: () => ({
+      getLat: () => map.getCenter().getLat() + 0.01,
+      getLng: () => map.getCenter().getLng() + 0.01,
+    }),
+  }));
+  load.mockResolvedValue(maps);
+  maps.services.Places.mockImplementation(function () {
+    return {
+      keywordSearch: vi.fn((_query: string, callback: KakaoSearchCallback) =>
+        callback(
+          [
+            {
+              id: 'station',
+              place_name: '홍대입구역',
+              address_name: '서울 마포구 동교동',
+              road_address_name: '서울 마포구 양화로 160',
+              category_group_name: '지하철역',
+              x: '126.923',
+              y: '37.557',
+            },
+            {
+              id: 'cityhall',
+              place_name: '서울시청',
+              address_name: '서울 중구 태평로',
+              road_address_name: '서울 중구 세종대로 110',
+              category_group_name: '공공기관',
+              x: '126.978',
+              y: '37.5665',
+            },
+          ],
+          'OK',
+          { hasNextPage: false },
+        ),
+      ),
+    };
+  });
+  const fetch = vi.fn(
+    async (url: string) =>
+      new Response(
+        JSON.stringify(
+          url.includes('/cafes/')
+            ? {
+                items: [],
+                totalCount: 0,
+                limit: 200,
+                offset: 0,
+                hasMore: false,
+                sourceBatch: {
+                  batchId: '00000000-0000-0000-0000-000000000004',
+                  publishedAt: '2026-10-02T00:00:00Z',
+                },
+              }
+            : url === '/api/v1/districts'
+              ? {
+                  items: [
+                    { districtCode: '11110', districtName: '종로구' },
+                    { districtCode: '11140', districtName: '중구' },
+                  ],
+                }
+              : url.endsWith('/dongs')
+                ? {
+                    items: [
+                      {
+                        districtCode: url.split('/')[4],
+                        dongCode: `${url.split('/')[4]}515`,
+                        dongName: '선택동',
+                        labelPoint: { type: 'Point', coordinates: [127, 37] },
+                      },
+                    ],
+                  }
+                : {
+                    type: 'Feature',
+                    id: url.split('/')[4],
+                    properties: {
+                      regionCode: url.split('/')[4],
+                      regionType: url.includes('/dongs/') ? 'DONG' : 'DISTRICT',
+                    },
+                    geometry: polygonTarget.geometry,
+                  },
+        ),
+      ),
+  );
+  vi.stubGlobal('fetch', fetch);
+  render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
+  await screen.findByRole('option', { name: '종로구' });
+  fireEvent.change(screen.getByRole('combobox', { name: '자치구' }), {
+    target: { value: '11110' },
+  });
+  await screen.findByRole('option', { name: '선택동' });
+  fireEvent.change(screen.getByRole('combobox', { name: '행정동' }), {
+    target: { value: '11110515' },
+  });
+  await waitFor(() => expect(map.setBounds).toHaveBeenCalled());
+  const input = screen.getByRole('textbox', { name: '장소 검색' });
+  await waitFor(() => expect(input).toBeEnabled());
+  fireEvent.change(input, { target: { value: '다중 검색' } });
+  fireEvent.submit(input.closest('form')!);
+  fireEvent.click(
+    await screen.findByRole('button', { name: /서울시청.*세종대로/ }),
+  );
+  await waitFor(() =>
+    expect(map.setCenter.mock.calls.at(-1)![0].getLng()).toBe(126.978),
+  );
+  expect(map.getLevel()).toBe(3);
+  expect(screen.getByRole('combobox', { name: '자치구' })).toHaveValue('11110');
+  expect(screen.getByRole('combobox', { name: '행정동' })).toHaveValue(
+    '11110515',
+  );
+  expect(screen.getByText(/기존 구·동 필터가 유지됩니다/)).toBeVisible();
+  const searchMarker = maps.Marker.mock.results.find(
+    (_, index) =>
+      maps.Marker.mock.calls[index][0].title === '검색 위치: 서울시청',
+  )!.value;
+  expect(searchMarker.setMap).toHaveBeenLastCalledWith(map);
+  await waitFor(() =>
+    expect(
+      fetch.mock.calls.some(
+        ([url]) =>
+          url.includes('/viewport') &&
+          url.includes('districtCodes=11110') &&
+          Math.abs(
+            Number(new URL(url, 'http://localhost').searchParams.get('west')) -
+              126.968,
+          ) < 1e-7,
+      ),
+    ).toBe(true),
+  );
+  expect(
+    fetch.mock.calls.filter(([url]) => url.includes('/nearby')),
+  ).toHaveLength(0);
+  fireEvent.keyDown(
+    screen.getByRole('button', { name: '이 위치 주변 카페 보기' }),
+    { key: 'Escape' },
+  );
+  expect(screen.getByRole('button', { name: '지역 탐색' })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
+  expect(input).toHaveFocus();
+  const count = map.setCenter.mock.calls.length;
+  const markerClick = maps.event.addListener.mock.calls.find(
+    ([target, type]) => target === searchMarker && type === 'click',
+  )![2];
+  act(() => markerClick());
+  expect(map.setCenter).toHaveBeenCalledTimes(count);
+  fireEvent.click(
+    screen.getByRole('button', { name: '이 위치 주변 카페 보기' }),
+  );
+  await waitFor(() =>
+    expect(
+      fetch.mock.calls.some(([url]) =>
+        url.includes('/nearby?longitude=126.978&latitude=37.5665&radiusM=500'),
+      ),
+    ).toBe(true),
+  );
+  expect(searchMarker.setMap).toHaveBeenLastCalledWith(null);
+  expect(maps.Circle.mock.calls.at(-1)![0].radius).toBe(500);
+  fireEvent.change(screen.getByRole('combobox', { name: '탐색 반경' }), {
+    target: { value: '1000' },
+  });
+  await waitFor(() =>
+    expect(
+      fetch.mock.calls.filter(([url]) => url.includes('/nearby')),
+    ).toHaveLength(2),
+  );
+  fireEvent.change(input, { target: { value: '다른 위치' } });
+  fireEvent.submit(input.closest('form')!);
+  fireEvent.click(
+    await screen.findByRole('button', { name: /홍대입구역.*양화로/ }),
+  );
+  await waitFor(() => expect(map.getCenter().getLng()).toBe(126.923));
+  expect(
+    fetch.mock.calls.filter(([url]) => url.includes('/nearby')),
+  ).toHaveLength(2);
+  fireEvent.click(
+    screen.getByRole('button', { name: '이 위치 주변 카페 보기' }),
+  );
+  await waitFor(() =>
+    expect(
+      fetch.mock.calls.some(([url]) =>
+        url.includes('/nearby?longitude=126.923&latitude=37.557&radiusM=1000'),
+      ),
+    ).toBe(true),
+  );
+  expect(
+    fetch.mock.calls
+      .filter(([url]) => url.includes('/nearby'))
+      .every(([url]) => !url.includes('Codes')),
+  ).toBe(true);
+  fireEvent.change(input, { target: { value: '서울시청' } });
+  fireEvent.submit(input.closest('form')!);
+  fireEvent.click(
+    await screen.findByRole('button', { name: /서울시청.*세종대로/ }),
+  );
+  await waitFor(() => expect(map.getCenter().getLng()).toBe(126.978));
+  const lastMarker = maps.Marker.mock.results.at(-1)!.value;
+  fireEvent.click(screen.getByRole('button', { name: '검색 결과 닫기' }));
+  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
+  fireEvent.change(screen.getByRole('combobox', { name: '자치구' }), {
+    target: { value: '11140' },
+  });
+  expect(lastMarker.setMap).toHaveBeenLastCalledWith(null);
+  await waitFor(() => expect(map.getLevel()).toBe(7));
+  expect(map.getCenter().getLng()).toBe(127);
+  const markers = maps.Marker.mock.calls.length;
+  fireEvent.change(screen.getByRole('combobox', { name: '자치구' }), {
+    target: { value: '11110' },
+  });
+  await waitFor(() => expect(map.getLevel()).toBe(7));
+  expect(maps.Marker).toHaveBeenCalledTimes(markers);
+  expect(maps.Map).toHaveBeenCalledOnce();
+});
+
+test('선택 검색 마커와 카메라를 SDK 재시도에서 복원하고 언마운트 시 리스너를 정리한다', async () => {
+  const { maps, map } = createSdk();
+  load.mockResolvedValue(maps);
+  const selection = {
+    place: {
+      id: 'place',
+      name: '서울시청',
+      address: '서울 중구 세종대로 110',
+      kind: '공공기관',
+      longitude: 126.978,
+      latitude: 37.5665,
+      isSeoul: true,
+    },
+    scope: 0,
+    revision: 1,
+  };
+  const view = render(
+    <StrictMode>
+      <KakaoMapView target={polygonTarget} searchSelection={selection} />
+    </StrictMode>,
+  );
+  await waitFor(() => expect(maps.Marker).toHaveBeenCalledOnce());
+  await waitFor(() => expect(map.getLevel()).toBe(3));
+  const first = maps.Marker.mock.results[0].value;
+  load.mockRejectedValueOnce(new Error('sdk'));
+  vi.stubEnv('VITE_KAKAO_MAP_APP_KEY', 'new-key');
+  view.rerender(
+    <StrictMode>
+      <KakaoMapView target={polygonTarget} searchSelection={selection} />
+    </StrictMode>,
+  );
+  await screen.findByRole('alert');
+  expect(first.setMap).toHaveBeenLastCalledWith(null);
+  expect(maps.event.removeListener).toHaveBeenCalledWith(
+    first,
+    'click',
+    expect.any(Function),
+  );
+  fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
+  await waitFor(() => expect(maps.Marker).toHaveBeenCalledTimes(2));
+  expect(map.getCenter().getLng()).toBe(126.978);
+  view.unmount();
+  expect(maps.Marker.mock.results[1].value.setMap).toHaveBeenLastCalledWith(
+    null,
+  );
 });

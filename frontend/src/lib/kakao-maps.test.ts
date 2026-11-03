@@ -23,6 +23,12 @@ function sdk() {
     load: vi.fn((callback: () => void) => callback()),
     Map: vi.fn(),
     LatLng: vi.fn(),
+    services: {
+      Places: vi.fn(),
+      Geocoder: vi.fn(),
+      Status: { OK: 'OK', ZERO_RESULT: 'ZERO_RESULT', ERROR: 'ERROR' },
+      SortBy: { ACCURACY: 'accuracy' },
+    },
   };
   vi.stubGlobal('kakao', { maps });
   return maps;
@@ -44,6 +50,7 @@ test('동시 호출은 하나의 비동기 SDK 로딩과 준비 콜백을 공유
   );
   expect(script().async).toBe(true);
   expect(new URL(script().src).searchParams.get('autoload')).toBe('false');
+  expect(new URL(script().src).searchParams.get('libraries')).toBe('services');
   const maps = sdk();
   script().dispatchEvent(new Event('load'));
   await expect(first).resolves.toBe(maps);
@@ -94,4 +101,24 @@ test('스크립트만 로드되고 SDK가 없으면 실패로 처리한다', asy
   const rejected = expect(result).rejects.toThrow('불러오지 못했습니다');
   script().dispatchEvent(new Event('load'));
   await rejected;
+});
+
+test('Services 없는 SDK는 준비 완료로 간주하지 않고 실패 후 전체 라이브러리를 재시도한다', async () => {
+  const { loadKakaoMaps } = await import('./kakao-maps');
+  const first = loadKakaoMaps('test-key');
+  const rejected = expect(first).rejects.toThrow('불러오지 못했습니다');
+  vi.stubGlobal('kakao', {
+    maps: {
+      Map: vi.fn(),
+      LatLng: vi.fn(),
+      load: (callback: () => void) => callback(),
+    },
+  });
+  script().dispatchEvent(new Event('load'));
+  await rejected;
+  const retry = loadKakaoMaps('test-key');
+  expect(new URL(script().src).searchParams.get('libraries')).toBe('services');
+  const maps = sdk();
+  script().dispatchEvent(new Event('load'));
+  await expect(retry).resolves.toBe(maps);
 });

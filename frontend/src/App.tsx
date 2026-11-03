@@ -5,10 +5,12 @@ import {
   Coffee,
   GitCompareArrows,
   MapPin,
-  Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ExplorePanel, type ExploreMenu } from '@/components/explore-panel';
+import { PlaceSearch } from '@/components/place-search';
+import { usePlaceSearch } from '@/hooks/use-place-search';
+import type { MapConnection } from '@/components/kakao-map';
 import { KakaoMapView } from '@/components/kakao-map';
 import { useRegionExplorer } from '@/hooks/use-region-explorer';
 import { useCafeExplorer } from '@/hooks/use-cafe-explorer';
@@ -22,6 +24,12 @@ const menus = [
 
 export default function App() {
   const region = useRegionExplorer();
+  const [connection, setConnection] = useState<MapConnection | null>(null);
+  const search = usePlaceSearch(
+    connection?.status === 'ready' ? (connection.context?.maps ?? null) : null,
+    region.revision,
+    connection?.context ?? null,
+  );
   const cafes = useCafeExplorer(
     region.districtCode,
     region.dongCode,
@@ -97,34 +105,23 @@ export default function App() {
             ))}
           </ul>
         </nav>
-        {/* 태그 제거 후에도 기존 검색창의 반응형 폭과 위치를 유지합니다. */}
-        <div
-          role="search"
-          aria-label="장소 검색"
-          className="absolute top-4 left-4 z-30 flex h-12 w-[calc(100%-134px)] max-w-[346px] min-w-0 items-center gap-2 rounded-xl border bg-background px-3 shadow-sm sm:w-[329px] md:left-22"
-        >
-          <Search
-            aria-hidden="true"
-            className="size-4 shrink-0 text-muted-foreground"
-          />
-          <label htmlFor="place-search" className="sr-only">
-            장소 검색
-          </label>
-          <input
-            id="place-search"
-            type="text"
-            disabled
-            placeholder="장소 검색"
-            aria-describedby="place-search-help"
-            className="h-full min-w-0 flex-1 bg-transparent text-sm disabled:cursor-not-allowed disabled:text-muted-foreground"
-          />
-          <span className="shrink-0 border-l pl-2 text-xs text-muted-foreground">
-            준비 중
-          </span>
-          <p id="place-search-help" className="sr-only">
-            장소 검색은 준비 중입니다.
-          </p>
-        </div>
+        <PlaceSearch
+          search={search}
+          connection={connection}
+          panelOpen={selectedMenu !== null}
+          regionFiltered={!!region.districtCode}
+          onNearby={(place) => {
+            cafes.setMode('nearby');
+            cafes.selectCenter({
+              longitude: place.longitude,
+              latitude: place.latitude,
+            });
+            setPanelMenu('cafes');
+            setSelectedMenu('cafes');
+            search.close();
+            menuRefs.current.cafes?.focus();
+          }}
+        />
         <div
           className="explore-panel-shell order-2 md:order-0"
           data-open={selectedMenu !== null}
@@ -163,6 +160,9 @@ export default function App() {
         <KakaoMapView
           target={region.target}
           cafes={cafes}
+          connectionChanged={setConnection}
+          searchSelection={search.selected}
+          onSearchMarkerClick={search.showSelection}
           centerPicking={selectedMenu === 'cafes'}
         />
       </main>

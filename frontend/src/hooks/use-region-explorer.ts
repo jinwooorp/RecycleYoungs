@@ -67,6 +67,7 @@ export function useRegionExplorer() {
   const [selection, setSelection] = useState({
     districtCode: '',
     dongCode: '',
+    revision: 0,
   });
   const { districtCode, dongCode } = selection;
   const districts = useRegionRequest('districts', fetchDistricts);
@@ -89,15 +90,24 @@ export function useRegionExplorer() {
   function selectDistrict(value: string) {
     if (value && !districts.data?.some((item) => item.districtCode === value))
       return;
-    setSelection({ districtCode: value, dongCode: '' });
+    setSelection((current) => ({
+      districtCode: value,
+      dongCode: '',
+      revision: current.revision + 1,
+    }));
   }
   function selectDong(value: string) {
     if (value && !dongs.data?.some((item) => item.dongCode === value)) return;
-    setSelection((current) => ({ ...current, dongCode: value }));
+    setSelection((current) => ({
+      ...current,
+      dongCode: value,
+      revision: current.revision + 1,
+    }));
   }
   return {
     districtCode,
     dongCode,
+    revision: selection.revision,
     districts,
     dongs,
     boundary,
