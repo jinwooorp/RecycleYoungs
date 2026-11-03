@@ -5,6 +5,13 @@ export interface KakaoLatLng {
 }
 
 export interface KakaoMap {
+  setBounds(
+    bounds: KakaoBounds,
+    paddingTop?: number,
+    paddingRight?: number,
+    paddingBottom?: number,
+    paddingLeft?: number,
+  ): void;
   getCenter(): KakaoLatLng;
   setCenter(center: KakaoLatLng): void;
   getLevel(): number;
@@ -12,9 +19,18 @@ export interface KakaoMap {
   relayout(): void;
 }
 
+export interface KakaoBounds {
+  getSouthWest(): KakaoLatLng;
+  getNorthEast(): KakaoLatLng;
+}
+
 export interface KakaoMaps {
   load(callback: () => void): void;
   LatLng: new (latitude: number, longitude: number) => KakaoLatLng;
+  LatLngBounds: new (
+    southWest: KakaoLatLng,
+    northEast: KakaoLatLng,
+  ) => KakaoBounds;
   Map: new (
     container: HTMLElement,
     options: { center: KakaoLatLng; level: number },

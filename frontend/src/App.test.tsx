@@ -2,10 +2,21 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import App from './App';
 
-beforeEach(() => vi.stubEnv('VITE_KAKAO_MAP_APP_KEY', ''));
+beforeEach(() => {
+  vi.stubEnv('VITE_KAKAO_MAP_APP_KEY', '');
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockImplementation(() =>
+        Promise.resolve(new Response(JSON.stringify({ items: [] }))),
+      ),
+  );
+});
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 test('초기에는 네 메뉴와 지도만 표시하고 상세 패널은 닫는다', async () => {
@@ -100,7 +111,7 @@ test('닫기 버튼과 Escape는 패널을 접고 선택 메뉴로 포커스를 
   expect(menu).toHaveFocus();
 });
 
-test('지역·장소·반경 입력은 준비 중이며 행정구역 전체 통계와 주변 정보를 구분한다', () => {
+test('미연동 장소·반경 입력과 행정구역 전체 통계를 구분한다', () => {
   const fetch = vi.spyOn(globalThis, 'fetch');
   render(<App />);
   fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
@@ -121,5 +132,11 @@ test('지역·장소·반경 입력은 준비 중이며 행정구역 전체 통�
   fireEvent.click(screen.getByRole('button', { name: '후보지 비교' }));
   expect(screen.getByText('관심 위치 저장 준비 중')).toBeVisible();
   expect(screen.getByRole('region', { name: '비교 결과' })).toBeVisible();
-  expect(fetch).not.toHaveBeenCalled();
+  expect(fetch).toHaveBeenCalledWith(
+    '/api/v1/districts',
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  );
+  expect(fetch.mock.calls.every(([url]) => url === '/api/v1/districts')).toBe(
+    true,
+  );
 });

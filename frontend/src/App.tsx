@@ -10,6 +10,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { ExplorePanel, type ExploreMenu } from '@/components/explore-panel';
 import { KakaoMapView } from '@/components/kakao-map';
+import { useRegionExplorer } from '@/hooks/use-region-explorer';
 
 const menus = [
   { id: 'region', label: '지역 탐색', Icon: MapPin },
@@ -19,6 +20,7 @@ const menus = [
 ] as const;
 
 export default function App() {
+  const region = useRegionExplorer();
   const [selectedMenu, setSelectedMenu] = useState<ExploreMenu | null>(null);
   // 닫는 전환이 끝날 때까지 마지막 내용을 유지해 깜빡임을 방지합니다.
   const [panelMenu, setPanelMenu] = useState<ExploreMenu>('region');
@@ -142,11 +144,11 @@ export default function App() {
               </Button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-              <ExplorePanel key={panelMenu} menu={panelMenu} />
+              <ExplorePanel key={panelMenu} menu={panelMenu} region={region} />
             </div>
           </aside>
         </div>
-        <KakaoMapView />
+        <KakaoMapView target={region.target} />
       </main>
     </div>
   );

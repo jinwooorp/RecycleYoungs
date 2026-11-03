@@ -7,6 +7,11 @@ import {
   Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import type { ReactNode } from 'react';
+import type {
+  RegionExplorer,
+  RegionResource,
+} from '@/hooks/use-region-explorer';
 
 export type ExploreMenu = 'region' | 'cafes' | 'analysis' | 'compare';
 
@@ -37,15 +42,99 @@ function PreparedSelect({
   );
 }
 
+function RegionSelect({
+  label,
+  value,
+  onChange,
+  disabled,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <label className="flex min-w-0 flex-col gap-2 text-xs font-medium">
+      {label}
+      <span className="relative block">
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          disabled={disabled}
+          className="h-11 w-full min-w-0 appearance-none rounded-lg border bg-muted/50 pr-10 pl-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:text-muted-foreground disabled:opacity-100"
+        >
+          <option value="">전체</option>
+          {children}
+        </select>
+        <ChevronDown
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground"
+        />
+      </span>
+    </label>
+  );
+}
+
+function ResourceNotice({
+  resource,
+  label,
+  empty,
+}: {
+  resource: RegionResource<unknown>;
+  label: string;
+  empty?: boolean;
+}) {
+  if (resource.status === 'loading')
+    return (
+      <p role="status" className="text-xs leading-5 text-muted-foreground">
+        {label} 불러오는 중…
+      </p>
+    );
+  if (resource.status === 'error')
+    return (
+      <div
+        role="alert"
+        className="flex flex-col items-start gap-2 text-xs leading-5 text-muted-foreground"
+      >
+        <p>
+          {label}: {resource.error}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={resource.retry}
+          aria-label={`${label} 다시 시도`}
+        >
+          다시 시도
+        </Button>
+      </div>
+    );
+  if (resource.status === 'ready' && empty)
+    return (
+      <p className="text-xs leading-5 text-muted-foreground">
+        조회 가능한 {label}이 없습니다.
+      </p>
+    );
+  return null;
+}
+
 /** 메뉴별 후속 연동 영역을 분리하고 실제 데이터가 없는 상태를 안내합니다. */
-export function ExplorePanel({ menu }: { menu: ExploreMenu }) {
-  if (menu === 'region') return <RegionPanel />;
+export function ExplorePanel({
+  menu,
+  region,
+}: {
+  menu: ExploreMenu;
+  region: RegionExplorer;
+}) {
+  if (menu === 'region') return <RegionPanel region={region} />;
   if (menu === 'cafes') return <CafePanel />;
   if (menu === 'analysis') return <AnalysisPanel />;
   return <ComparePanel />;
 }
 
-function RegionPanel() {
+function RegionPanel({ region }: { region: RegionExplorer }) {
   return (
     <div className="flex flex-col gap-6 p-5 break-keep text-pretty">
       <p className="text-sm leading-6 text-muted-foreground">
@@ -63,15 +152,57 @@ function RegionPanel() {
           서울특별시 · 고정
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <PreparedSelect label="자치구" describedBy="district-help" />
-          <PreparedSelect label="행정동" describedBy="district-help" />
+          <RegionSelect
+            label="자치구"
+            value={region.districtCode}
+            onChange={region.selectDistrict}
+            disabled={
+              region.districts.status !== 'ready' ||
+              !region.districts.data?.length
+            }
+          >
+            {region.districts.data?.map((item) => (
+              <option key={item.districtCode} value={item.districtCode}>
+                {item.districtName}
+              </option>
+            ))}
+          </RegionSelect>
+          <RegionSelect
+            label="행정동"
+            value={region.dongCode}
+            onChange={region.selectDong}
+            disabled={
+              !region.districtCode ||
+              region.dongs.status !== 'ready' ||
+              !region.dongs.data?.length
+            }
+          >
+            {region.dongs.data?.map((item) => (
+              <option key={item.dongCode} value={item.dongCode}>
+                {item.dongName}
+              </option>
+            ))}
+          </RegionSelect>
         </div>
         <p
           id="district-help"
           className="text-xs leading-5 text-muted-foreground"
         >
-          지역 선택은 준비 중입니다.
+          {region.districtCode
+            ? '행정동 전체는 선택한 자치구를 의미합니다.'
+            : '자치구를 선택하면 행정동을 조회합니다.'}
         </p>
+        <ResourceNotice
+          resource={region.districts}
+          label="자치구 목록"
+          empty={region.districts.data?.length === 0}
+        />
+        <ResourceNotice
+          resource={region.dongs}
+          label="행정동 목록"
+          empty={region.dongs.data?.length === 0}
+        />
+        <ResourceNotice resource={region.boundary} label="선택 지역 경계" />
       </section>
       <p className="border-t pt-5 text-xs leading-5 text-muted-foreground">
         전체 통계는 ‘상권 분석’에 연동 예정입니다.

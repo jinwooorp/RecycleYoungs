@@ -7,7 +7,12 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { loadKakaoMaps, type KakaoMaps } from '@/lib/kakao-maps';
+import {
+  loadKakaoMaps,
+  type KakaoMaps,
+  type KakaoLatLng,
+  type KakaoBounds,
+} from '@/lib/kakao-maps';
 import { KakaoMapView } from './kakao-map';
 import App from '@/App';
 
@@ -19,6 +24,20 @@ let resize: ResizeObserverCallback;
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('VITE_KAKAO_MAP_APP_KEY', 'test-key');
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockImplementation(() =>
+        Promise.resolve(new Response(JSON.stringify({ items: [] }))),
+      ),
+  );
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+    window.setTimeout(() => callback(performance.now()), 0),
+  );
+  vi.stubGlobal('cancelAnimationFrame', (id: number) =>
+    window.clearTimeout(id),
+  );
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -41,6 +60,17 @@ function createSdk() {
   const handlers = new Map<string, () => void>();
   let center = { getLat: () => 37.5665, getLng: () => 126.978 };
   const map = {
+    setBounds: vi.fn((bounds: KakaoBounds) => {
+      const sw = bounds.getSouthWest();
+      const ne = bounds.getNorthEast();
+      center = {
+        getLat: () => (sw.getLat() + ne.getLat()) / 2,
+        getLng: () => (sw.getLng() + ne.getLng()) / 2,
+      };
+      level = 7;
+      handlers.get('center_changed')?.();
+      handlers.get('zoom_changed')?.();
+    }),
     getLevel: () => level,
     setLevel: vi.fn((next: number) => {
       level = next;
@@ -55,8 +85,11 @@ function createSdk() {
   };
   const maps = {
     load: vi.fn(),
-    LatLng: vi.fn(function () {
-      return center;
+    LatLng: vi.fn(function (latitude: number, longitude: number) {
+      return { getLat: () => latitude, getLng: () => longitude };
+    }),
+    LatLngBounds: vi.fn(function (sw: KakaoLatLng, ne: KakaoLatLng) {
+      return { getSouthWest: () => sw, getNorthEast: () => ne };
     }),
     Map: vi.fn(function () {
       return map;
@@ -110,6 +143,30 @@ test('로딩 중 상태를 표시한 뒤 StrictMode에서도 지도를 한 번 �
     'zoom_changed',
     expect.any(Function),
   );
+});
+
+test('경계 범위로 이동한 뒤 relayout에도 중심을 유지하고 전체 선택은 기본 위치로 돌아간다', async () => {
+  const { maps, map } = createSdk();
+  load.mockResolvedValue(maps);
+  const view = render(
+    <KakaoMapView
+      target={{
+        kind: 'boundary',
+        extent: { west: 126.9, south: 37.5, east: 127.1, north: 37.6 },
+      }}
+    />,
+  );
+  await waitFor(() => expect(map.setBounds).toHaveBeenCalledOnce());
+  expect(maps.LatLng).toHaveBeenCalledWith(37.5, 126.9);
+  expect(maps.LatLng).toHaveBeenCalledWith(37.6, 127.1);
+  const fittedCenter = map.getCenter();
+  act(() => resize([], {} as ResizeObserver));
+  expect(map.setCenter).toHaveBeenLastCalledWith(fittedCenter);
+  view.rerender(<KakaoMapView target={{ kind: 'default' }} />);
+  await waitFor(() => expect(map.getCenter().getLat()).toBe(37.5665));
+  expect(map.getCenter().getLng()).toBe(126.978);
+  expect(map.getLevel()).toBe(5);
+  expect(maps.Map).toHaveBeenCalledOnce();
 });
 
 test('SDK 실패 안내에서 재시도하면 로딩을 거쳐 지도가 준비된다', async () => {
@@ -220,4 +277,22 @@ test('크기 변경으로 SDK 중심이 바뀌어도 마지막 사용자 탐색 
     'center_changed',
     expect.any(Function),
   );
+});
+
+test('같은 크기의 반복 relayout에서도 SDK 반올림 좌표가 누적되지 않는다', async () => {
+  const { maps, map } = createSdk();
+  load.mockResolvedValue(maps);
+  render(<KakaoMapView />);
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: '지도 확대' })).toBeEnabled(),
+  );
+  const original = map.getCenter();
+  // SDK가 setCenter 이벤트에서 픽셀 반올림된 좌표를 반환하는 경우를 재현합니다.
+  vi.spyOn(map, 'getCenter').mockReturnValue({
+    getLat: () => 37.56649,
+    getLng: () => 126.97799,
+  });
+  act(() => resize([], {} as ResizeObserver));
+  act(() => resize([], {} as ResizeObserver));
+  expect(map.setCenter).toHaveBeenLastCalledWith(original);
 });

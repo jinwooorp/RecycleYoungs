@@ -8,13 +8,15 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { loadKakaoMaps, type KakaoMap } from '@/lib/kakao-maps';
+import type { RegionMapTarget } from '@/lib/regions';
 
 type MapStatus = 'loading' | 'ready' | 'error';
 
 /** SDK 수명은 로더가, 지도 인스턴스와 화면 이벤트는 이 컴포넌트가 관리합니다. */
-export function KakaoMapView() {
+export function KakaoMapView({ target }: { target?: RegionMapTarget | null }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<KakaoMap | null>(null);
+  const moveRef = useRef<((next: RegionMapTarget | null) => void) | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<MapStatus>('loading');
   const [level, setLevel] = useState(5);
@@ -38,9 +40,58 @@ export function KakaoMapView() {
         let center = map.getCenter();
         let width = container.clientWidth;
         let height = container.clientHeight;
+        let restoringCenter = false;
+        let fitFrame: number | null = null;
+        moveRef.current = (next) => {
+          if (fitFrame !== null) cancelAnimationFrame(fitFrame);
+          fitFrame = null;
+          if (!next) return;
+          let previousWidth = container.clientWidth;
+          let previousHeight = container.clientHeight;
+          let stableFrames = 0;
+          // 패널 전환 중의 임시 너비에 맞추지 않고, 두 프레임 연속 안정된 크기를 사용합니다.
+          const fit = () => {
+            if (
+              container.clientWidth === previousWidth &&
+              container.clientHeight === previousHeight
+            )
+              stableFrames++;
+            else {
+              previousWidth = container.clientWidth;
+              previousHeight = container.clientHeight;
+              stableFrames = 0;
+            }
+            if (stableFrames < 2) {
+              fitFrame = requestAnimationFrame(fit);
+              return;
+            }
+            fitFrame = null;
+            if (next.kind === 'default') {
+              map.setLevel(5);
+              map.setCenter(new maps.LatLng(37.5665, 126.978));
+            } else {
+              const { west, south, east, north } = next.extent;
+              map.setBounds(
+                new maps.LatLngBounds(
+                  new maps.LatLng(south, west),
+                  new maps.LatLng(north, east),
+                ),
+                96,
+                32,
+                48,
+                32,
+              );
+            }
+            // 크기 변경 알림 전 지도 이동이 끝난 경우에도 새 중심을 보존합니다.
+            center = map.getCenter();
+            onZoom();
+          };
+          fitFrame = requestAnimationFrame(fit);
+        };
         const onCenterChanged = () => {
           // SDK는 크기가 바뀐 직후 중심을 재계산할 수 있어 사용자 탐색과 구분합니다.
           if (
+            !restoringCenter &&
             width === container.clientWidth &&
             height === container.clientHeight
           ) {
@@ -49,8 +100,14 @@ export function KakaoMapView() {
         };
         const onZoom = () => setLevel(map.getLevel());
         const onResize = () => {
-          map.relayout();
-          map.setCenter(center);
+          // 복원 중 발생하는 center_changed는 사용자 이동이 아니며 반올림을 누적하지 않습니다.
+          restoringCenter = true;
+          try {
+            map.relayout();
+            map.setCenter(center);
+          } finally {
+            restoringCenter = false;
+          }
           width = container.clientWidth;
           height = container.clientHeight;
         };
@@ -58,6 +115,7 @@ export function KakaoMapView() {
         // 리스너 등록 중 실패해도 이미 연결된 자원을 정리할 수 있도록 먼저 설정합니다.
         release = () => {
           observer.disconnect();
+          if (fitFrame !== null) cancelAnimationFrame(fitFrame);
           maps.event.removeListener(map, 'zoom_changed', onZoom);
           maps.event.removeListener(map, 'center_changed', onCenterChanged);
         };
@@ -80,9 +138,14 @@ export function KakaoMapView() {
       disposed = true;
       release?.();
       mapRef.current = null;
+      moveRef.current = null;
       container.replaceChildren();
     };
   }, [appKey, attempt]);
+
+  useEffect(() => {
+    if (status === 'ready') moveRef.current?.(target ?? null);
+  }, [status, target]);
 
   function retry() {
     setStatus('loading');
