@@ -134,7 +134,7 @@ test('미연동 장소·반경 입력과 행정구역 전체 통계를 구분한
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
   expect(
     screen.getByRole('region', { name: '행정구역 전체 통계' }),
-  ).toHaveTextContent('분석 데이터 연동 준비 중');
+  ).toHaveTextContent('지역 탐색에서 자치구 또는 행정동을 선택해 주세요.');
   expect(screen.getByText('점포 현황')).toBeVisible();
   expect(screen.getByText('추정매출')).toBeVisible();
   expect(screen.getByText('유동인구')).toBeVisible();

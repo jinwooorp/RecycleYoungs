@@ -155,6 +155,7 @@ export default function App() {
                 menu={panelMenu}
                 region={region}
                 cafes={cafes}
+                active={selectedMenu !== null}
               />
             </div>
           </aside>

@@ -1,6 +1,8 @@
-import { ChevronDown, MapPin, Store, TrendingUp, Users } from 'lucide-react';
+import { ChevronDown, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
+import { useStatisticsExplorer } from '@/hooks/use-statistics-explorer';
+import { formatStatistic } from '@/lib/statistics';
 import type { CafeExplorer } from '@/hooks/use-cafe-explorer';
 import { cafeAddress, formatCafeDistance } from '@/lib/cafes';
 import type {
@@ -93,14 +95,17 @@ export function ExplorePanel({
   menu,
   region,
   cafes,
+  active = true,
 }: {
   menu: ExploreMenu;
   region: RegionExplorer;
   cafes: CafeExplorer;
+  active?: boolean;
 }) {
   if (menu === 'region') return <RegionPanel region={region} />;
   if (menu === 'cafes') return <CafePanel cafes={cafes} />;
-  if (menu === 'analysis') return <AnalysisPanel />;
+  if (menu === 'analysis')
+    return <AnalysisPanel region={region} active={active} />;
   return <ComparePanel />;
 }
 
@@ -175,7 +180,8 @@ function RegionPanel({ region }: { region: RegionExplorer }) {
         <ResourceNotice resource={region.boundary} label="선택 지역 경계" />
       </section>
       <p className="border-t pt-5 text-xs leading-5 text-muted-foreground">
-        전체 통계는 ‘상권 분석’에 연동 예정입니다.
+        선택한 자치구·행정동의 점포·추정매출·유동인구 통계는 ‘상권 분석’에서
+        확인할 수 있습니다.
       </p>
     </div>
   );
@@ -348,55 +354,258 @@ function CafePanel({ cafes }: { cafes: CafeExplorer }) {
   );
 }
 
-function AnalysisPanel() {
+type StatisticsTab = 'stores' | 'sales' | 'footTraffic';
+
+function AnalysisPanel({
+  region,
+  active,
+}: {
+  region: RegionExplorer;
+  active: boolean;
+}) {
+  const statistics = useStatisticsExplorer(
+    region.districtCode,
+    region.dongCode,
+    active,
+  );
+  const [tab, setTab] = useState<StatisticsTab>('stores');
+  const tabRefs = useRef<
+    Partial<Record<StatisticsTab, HTMLButtonElement | null>>
+  >({});
+  const districtName =
+    region.districts.data?.find(
+      (item) => item.districtCode === region.districtCode,
+    )?.districtName ?? region.districtCode;
+  const dongName =
+    region.dongs.data?.find((item) => item.dongCode === region.dongCode)
+      ?.dongName ?? region.dongCode;
+  const storeData = statistics.stores.data?.data;
+  const salesData = statistics.sales.data?.data;
+  const footData = statistics.footTraffic.data?.data;
+  const panels = [
+    {
+      id: 'stores',
+      label: '점포 현황',
+      resource: statistics.stores,
+      note: '전체·세부 점포 수와 개업·폐업률은 원천 값을 그대로 표시합니다.',
+      metrics: [
+        {
+          label: '전체 점포 수',
+          value: storeData?.storeCount ?? null,
+          unit: '개',
+        },
+        {
+          label: '일반 점포 수',
+          value: storeData?.generalStoreCount ?? null,
+          unit: '개',
+        },
+        {
+          label: '프랜차이즈 점포 수',
+          value: storeData?.franchiseStoreCount ?? null,
+          unit: '개',
+        },
+        {
+          label: '개업 점포 수',
+          value: storeData?.openedStoreCount ?? null,
+          unit: '개',
+        },
+        {
+          label: '폐업 점포 수',
+          value: storeData?.closedStoreCount ?? null,
+          unit: '개',
+        },
+        { label: '개업률', value: storeData?.openingRate ?? null, unit: '%' },
+        { label: '폐업률', value: storeData?.closureRate ?? null, unit: '%' },
+      ],
+    },
+    {
+      id: 'sales',
+      label: '추정매출',
+      resource: statistics.sales,
+      note: '원천의 당월 기준 값입니다. 분기 합계·월평균으로 환산하지 않습니다.',
+      metrics: [
+        {
+          label: '당월 추정매출액',
+          value: salesData?.monthlySalesAmount ?? null,
+          unit: '원',
+        },
+        {
+          label: '당월 매출 건수',
+          value: salesData?.monthlySalesCount ?? null,
+          unit: '건',
+        },
+        {
+          label: '주중 매출액',
+          value: salesData?.weekdaySalesAmount ?? null,
+          unit: '원',
+        },
+        {
+          label: '주말 매출액',
+          value: salesData?.weekendSalesAmount ?? null,
+          unit: '원',
+        },
+      ],
+    },
+    {
+      id: 'footTraffic',
+      label: '유동인구',
+      resource: statistics.footTraffic,
+      note: '지역 전체 유동인구이며 카페 업종 전용 통계가 아닙니다.',
+      metrics: [
+        {
+          label: '전체 유동인구',
+          value: footData?.totalFootTraffic ?? null,
+          unit: '명',
+        },
+        {
+          label: '남성 유동인구',
+          value: footData?.maleFootTraffic ?? null,
+          unit: '명',
+        },
+        {
+          label: '여성 유동인구',
+          value: footData?.femaleFootTraffic ?? null,
+          unit: '명',
+        },
+      ],
+    },
+  ] as const;
+  const current = panels.find((panel) => panel.id === tab)!;
+  const data = current.resource.data?.data;
   return (
-    <div className="flex flex-col gap-6 p-5 break-keep text-pretty">
-      <section aria-label="행정구역 전체 통계" className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5 p-5 break-keep text-pretty">
+      <section
+        aria-label="행정구역 전체 통계"
+        className="flex min-w-0 flex-col gap-4"
+      >
         <h3 className="text-sm font-semibold">행정구역 전체 통계</h3>
-        <p className="text-sm leading-6 text-muted-foreground">
-          구·행정동 전체 통계를 연결할 예정입니다.
-        </p>
-        <div className="rounded-lg bg-accent px-3 py-3 text-xs leading-5 text-primary">
-          특정 위치의 반경 내 수치와는 다릅니다.
-        </div>
-        {/* 공개 승인 후에도 평가 범위와 기준 시점을 함께 안내하도록 이 영역을 확장합니다. */}
-        <p className="text-sm font-medium">분석 데이터 연동 준비 중</p>
-        <ul className="flex flex-col divide-y rounded-xl border px-4">
-          {[
-            {
-              Icon: Store,
-              label: '점포 현황',
-              description: '점포 수와 개업·폐업 현황',
-            },
-            {
-              Icon: TrendingUp,
-              label: '추정매출',
-              description: '지역의 분기별 추정매출',
-            },
-            {
-              Icon: Users,
-              label: '유동인구',
-              description: '지역의 분기별 유동인구',
-            },
-          ].map(({ Icon, label, description }) => (
-            <li key={label} className="flex items-start gap-3 py-4">
-              <Icon
-                aria-hidden="true"
-                className="mt-0.5 size-4 shrink-0 text-primary"
-              />
-              <div className="flex flex-1 flex-col gap-1">
-                <p className="text-sm font-medium">{label}</p>
-                <p className="text-xs leading-5 text-muted-foreground">
-                  {description}
-                </p>
-              </div>
-              <span className="text-xs text-muted-foreground">준비 중</span>
-            </li>
-          ))}
-        </ul>
+        {statistics.target && (
+          <p className="text-base font-semibold">
+            {region.dongCode ? `${districtName} · ${dongName}` : districtName}
+          </p>
+        )}
         <p className="text-xs leading-5 text-muted-foreground">
-          연동 후 출처·기준 분기·집계 단위를 안내합니다.
+          기준: 2026년 2분기 (20262)
+          <br />
+          점포·매출 업종: 카페 (CS100010)
         </p>
+        <p className="rounded-lg bg-accent p-3 text-xs leading-5 text-primary">
+          선택한 {region.dongCode ? '행정동' : '자치구'} 전체 통계입니다. 특정
+          위치의 반경 내 수치와는 다릅니다.
+          {region.districtCode &&
+            !region.dongCode &&
+            ' 자치구 공식 원천을 사용하며 행정동 값을 합산하지 않습니다.'}
+        </p>
+        <div
+          role="tablist"
+          aria-label="통계 항목"
+          className="grid grid-cols-3 gap-1 rounded-xl bg-muted/50 p-1"
+        >
+          {panels.map((panel, index) => (
+            <Button
+              key={panel.id}
+              ref={(node) => {
+                tabRefs.current[panel.id] = node;
+              }}
+              id={`statistics-tab-${panel.id}`}
+              role="tab"
+              aria-selected={tab === panel.id}
+              aria-controls={`statistics-panel-${panel.id}`}
+              tabIndex={tab === panel.id ? 0 : -1}
+              variant={tab === panel.id ? 'outline' : 'ghost'}
+              size="sm"
+              onClick={() => setTab(panel.id)}
+              onKeyDown={(event) => {
+                let next: number;
+                if (event.key === 'ArrowRight')
+                  next = (index + 1) % panels.length;
+                else if (event.key === 'ArrowLeft')
+                  next = (index + panels.length - 1) % panels.length;
+                else if (event.key === 'Home') next = 0;
+                else if (event.key === 'End') next = panels.length - 1;
+                else return;
+                event.preventDefault();
+                setTab(panels[next].id);
+                tabRefs.current[panels[next].id]?.focus();
+              }}
+            >
+              {panel.label}
+            </Button>
+          ))}
+        </div>
+        <div
+          id={`statistics-panel-${tab}`}
+          role="tabpanel"
+          aria-labelledby={`statistics-tab-${tab}`}
+          tabIndex={0}
+          className="flex min-w-0 flex-col gap-4 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {!statistics.target ? (
+            <p
+              role="status"
+              className="text-sm leading-6 text-muted-foreground"
+            >
+              지역 탐색에서 자치구 또는 행정동을 선택해 주세요.
+            </p>
+          ) : (
+            <>
+              <p className="text-xs leading-5 text-muted-foreground">
+                {current.note}
+              </p>
+              <ResourceNotice
+                resource={current.resource}
+                label={current.label}
+              />
+              {current.resource.status === 'ready' &&
+                (data ? (
+                  <>
+                    <dl className="grid min-w-0 gap-3">
+                      {current.metrics.map((metric) => (
+                        <div
+                          key={metric.label}
+                          className="min-w-0 rounded-xl border p-4"
+                        >
+                          <dt className="text-xs leading-5 text-muted-foreground">
+                            {metric.label}
+                          </dt>
+                          <dd className="mt-2 text-base leading-6 font-semibold tabular-nums [overflow-wrap:anywhere]">
+                            <span>{formatStatistic(metric.value)}</span>
+                            {metric.value !== null && (
+                              <span className="ml-1 text-xs font-normal text-muted-foreground">
+                                {metric.unit}
+                              </span>
+                            )}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <div className="flex flex-col gap-1 text-xs leading-5 text-muted-foreground">
+                      <p>
+                        출처: 서울시 상권분석서비스 ·{' '}
+                        {region.dongCode ? '행정동 원천' : '자치구 공식 원천'}
+                      </p>
+                      <p>
+                        게시 시점:{' '}
+                        <time
+                          dateTime={data.sourceBatch.publishedAt}
+                          className="break-all"
+                        >
+                          {data.sourceBatch.publishedAt}
+                        </time>
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <p
+                    role="status"
+                    className="text-sm leading-6 text-muted-foreground"
+                  >
+                    선택한 지역·조회 조건의 통계 자료가 없습니다.
+                  </p>
+                ))}
+            </>
+          )}
+        </div>
       </section>
     </div>
   );
