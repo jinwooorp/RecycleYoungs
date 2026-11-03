@@ -14,8 +14,16 @@ export interface BoundaryExtent {
   east: number;
   north: number;
 }
+type BoundaryRing = readonly (readonly number[])[];
+export type BoundaryGeometry =
+  | { type: 'Polygon'; coordinates: readonly BoundaryRing[] }
+  | { type: 'MultiPolygon'; coordinates: readonly (readonly BoundaryRing[])[] };
+export interface RegionBoundary {
+  extent: BoundaryExtent;
+  geometry: BoundaryGeometry;
+}
 export type RegionMapTarget =
-  { kind: 'default' } | { kind: 'boundary'; extent: BoundaryExtent };
+  { kind: 'default' } | ({ kind: 'boundary' } & RegionBoundary);
 
 /** 서버의 내부 오류 원문 대신 상태·코드별로 안전한 안내를 제공합니다. */
 export class RegionRequestError extends Error {
@@ -153,6 +161,10 @@ export function geometryExtent(geometry: unknown): BoundaryExtent {
         extent.south = Math.min(extent.south, latitude);
         extent.north = Math.max(extent.north, latitude);
       }
+      // GeoJSON LinearRing은 닫힌 경로여야 잘못된 영역이 채워지지 않습니다.
+      const first = ring[0];
+      const last = ring[ring.length - 1];
+      if (first[0] !== last[0] || first[1] !== last[1]) return invalid();
     }
   }
   return extent;
@@ -162,7 +174,7 @@ export async function fetchBoundary(
   kind: 'district' | 'dong',
   code: string,
   signal: AbortSignal,
-): Promise<BoundaryExtent> {
+): Promise<RegionBoundary> {
   const body = await request(
     `/api/v1/${kind === 'district' ? 'districts' : 'dongs'}/${encodeURIComponent(code)}/boundary`,
     signal,
@@ -176,5 +188,7 @@ export async function fetchBoundary(
     body.properties.regionType !== kind.toUpperCase()
   )
     return invalid();
-  return geometryExtent(body.geometry);
+  const extent = geometryExtent(body.geometry);
+  // 범위 계산을 통과한 Polygon·MultiPolygon만 SDK에 전달합니다.
+  return { extent, geometry: body.geometry as BoundaryGeometry };
 }

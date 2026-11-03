@@ -7,8 +7,12 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { loadKakaoMaps, type KakaoMap } from '@/lib/kakao-maps';
-import type { RegionMapTarget } from '@/lib/regions';
+import {
+  loadKakaoMaps,
+  type KakaoMap,
+  type KakaoPolygon,
+} from '@/lib/kakao-maps';
+import type { BoundaryGeometry, RegionMapTarget } from '@/lib/regions';
 
 type MapStatus = 'loading' | 'ready' | 'error';
 
@@ -19,6 +23,7 @@ export function KakaoMapView({ target }: { target?: RegionMapTarget | null }) {
   const moveRef = useRef<((next: RegionMapTarget | null) => void) | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<MapStatus>('loading');
+  const [mapGeneration, setMapGeneration] = useState(0);
   const [level, setLevel] = useState(5);
   const appKey = import.meta.env.VITE_KAKAO_MAP_APP_KEY?.trim() ?? '';
 
@@ -27,6 +32,15 @@ export function KakaoMapView({ target }: { target?: RegionMapTarget | null }) {
     if (!container) return;
     let disposed = false;
     let release: (() => void) | undefined;
+    const fail = () => {
+      if (disposed) return;
+      release?.();
+      release = undefined;
+      mapRef.current = null;
+      moveRef.current = null;
+      container.replaceChildren();
+      setStatus('error');
+    };
 
     void loadKakaoMaps(appKey)
       .then((maps) => {
@@ -42,9 +56,53 @@ export function KakaoMapView({ target }: { target?: RegionMapTarget | null }) {
         let height = container.clientHeight;
         let restoringCenter = false;
         let fitFrame: number | null = null;
+        let polygons: KakaoPolygon[] = [];
+        let geometry: BoundaryGeometry | null = null;
+        const clearBoundary = () => {
+          polygons.forEach((polygon) => polygon.setMap(null));
+          polygons = [];
+          geometry = null;
+        };
         moveRef.current = (next) => {
           if (fitFrame !== null) cancelAnimationFrame(fitFrame);
           fitFrame = null;
+          const nextGeometry = next?.kind === 'boundary' ? next.geometry : null;
+          if (nextGeometry !== geometry) {
+            // 조회 중·실패 상태에서도 이전 지역의 강조를 즉시 제거합니다.
+            clearBoundary();
+            if (nextGeometry) {
+              const areas =
+                nextGeometry.type === 'Polygon'
+                  ? [nextGeometry.coordinates]
+                  : nextGeometry.coordinates;
+              try {
+                for (const rings of areas) {
+                  const polygon = new maps.Polygon({
+                    // 링을 합치지 않아 외부 경계와 내부 구멍의 관계를 유지합니다.
+                    path: rings.map((ring) =>
+                      ring.map(
+                        ([longitude, latitude]) =>
+                          new maps.LatLng(latitude, longitude),
+                      ),
+                    ),
+                    strokeWeight: 3,
+                    strokeColor: '#23513F',
+                    strokeOpacity: 0.9,
+                    strokeStyle: 'solid',
+                    fillColor: '#23513F',
+                    fillOpacity: 0.12,
+                  });
+                  polygons.push(polygon);
+                  polygon.setMap(map);
+                }
+                geometry = nextGeometry;
+              } catch {
+                // 일부 영역 생성 후 SDK가 실패해도 오버레이와 지도 자원을 함께 정리합니다.
+                fail();
+                return;
+              }
+            }
+          }
           if (!next) return;
           let previousWidth = container.clientWidth;
           let previousHeight = container.clientHeight;
@@ -116,6 +174,7 @@ export function KakaoMapView({ target }: { target?: RegionMapTarget | null }) {
         release = () => {
           observer.disconnect();
           if (fitFrame !== null) cancelAnimationFrame(fitFrame);
+          clearBoundary();
           maps.event.removeListener(map, 'zoom_changed', onZoom);
           maps.event.removeListener(map, 'center_changed', onCenterChanged);
         };
@@ -123,16 +182,11 @@ export function KakaoMapView({ target }: { target?: RegionMapTarget | null }) {
         maps.event.addListener(map, 'center_changed', onCenterChanged);
         observer.observe(container);
         onZoom();
+        // 이미 ready인 지도도 재초기화되면 현재 선택을 새 인스턴스에 적용합니다.
+        setMapGeneration((value) => value + 1);
         setStatus('ready');
       })
-      .catch(() => {
-        if (disposed) return;
-        release?.();
-        release = undefined;
-        mapRef.current = null;
-        container.replaceChildren();
-        setStatus('error');
-      });
+      .catch(fail);
 
     return () => {
       disposed = true;
@@ -145,7 +199,7 @@ export function KakaoMapView({ target }: { target?: RegionMapTarget | null }) {
 
   useEffect(() => {
     if (status === 'ready') moveRef.current?.(target ?? null);
-  }, [status, target]);
+  }, [status, target, mapGeneration]);
 
   function retry() {
     setStatus('loading');

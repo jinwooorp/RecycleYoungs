@@ -12,9 +12,27 @@ import {
   type KakaoMaps,
   type KakaoLatLng,
   type KakaoBounds,
+  type KakaoPolygonOptions,
 } from '@/lib/kakao-maps';
 import { KakaoMapView } from './kakao-map';
 import App from '@/App';
+import type { RegionMapTarget } from '@/lib/regions';
+
+const polygonTarget = {
+  kind: 'boundary',
+  extent: { west: 126.9, south: 37.5, east: 127.1, north: 37.6 },
+  geometry: {
+    type: 'Polygon',
+    coordinates: [
+      [
+        [126.9, 37.5],
+        [127.1, 37.5],
+        [127.1, 37.6],
+        [126.9, 37.5],
+      ],
+    ],
+  },
+} as const;
 
 vi.mock('@/lib/kakao-maps', () => ({ loadKakaoMaps: vi.fn() }));
 const load = vi.mocked(loadKakaoMaps);
@@ -91,6 +109,9 @@ function createSdk() {
     LatLngBounds: vi.fn(function (sw: KakaoLatLng, ne: KakaoLatLng) {
       return { getSouthWest: () => sw, getNorthEast: () => ne };
     }),
+    Polygon: vi.fn(function (options: KakaoPolygonOptions) {
+      return { path: options.path, setMap: vi.fn() };
+    }),
     Map: vi.fn(function () {
       return map;
     }),
@@ -148,14 +169,7 @@ test('로딩 중 상태를 표시한 뒤 StrictMode에서도 지도를 한 번 �
 test('경계 범위로 이동한 뒤 relayout에도 중심을 유지하고 전체 선택은 기본 위치로 돌아간다', async () => {
   const { maps, map } = createSdk();
   load.mockResolvedValue(maps);
-  const view = render(
-    <KakaoMapView
-      target={{
-        kind: 'boundary',
-        extent: { west: 126.9, south: 37.5, east: 127.1, north: 37.6 },
-      }}
-    />,
-  );
+  const view = render(<KakaoMapView target={polygonTarget} />);
   await waitFor(() => expect(map.setBounds).toHaveBeenCalledOnce());
   expect(maps.LatLng).toHaveBeenCalledWith(37.5, 126.9);
   expect(maps.LatLng).toHaveBeenCalledWith(37.6, 127.1);
@@ -167,6 +181,253 @@ test('경계 범위로 이동한 뒤 relayout에도 중심을 유지하고 전�
   expect(map.getCenter().getLng()).toBe(126.978);
   expect(map.getLevel()).toBe(5);
   expect(maps.Map).toHaveBeenCalledOnce();
+});
+
+test('MultiPolygon의 각 영역과 내부 링을 위도·경도 순서로 그린다', async () => {
+  const { maps, map } = createSdk();
+  load.mockResolvedValue(maps);
+  const target = {
+    kind: 'boundary',
+    extent: polygonTarget.extent,
+    geometry: {
+      type: 'MultiPolygon',
+      coordinates: [
+        [
+          [
+            [126.9, 37.5],
+            [127, 37.5],
+            [127, 37.6],
+            [126.9, 37.5],
+          ],
+          [
+            [126.92, 37.52],
+            [126.94, 37.52],
+            [126.94, 37.54],
+            [126.92, 37.52],
+          ],
+        ],
+        [
+          [
+            [127.05, 37.55],
+            [127.1, 37.55],
+            [127.1, 37.6],
+            [127.05, 37.55],
+          ],
+        ],
+      ],
+    },
+  } satisfies RegionMapTarget;
+  const view = render(
+    <StrictMode>
+      <KakaoMapView target={target} />
+    </StrictMode>,
+  );
+  await waitFor(() => expect(maps.Polygon).toHaveBeenCalledTimes(2));
+  const paths = maps.Polygon.mock.calls.map(([options]) =>
+    options.path.map((ring) =>
+      ring.map((point) => [point.getLat(), point.getLng()]),
+    ),
+  );
+  expect(paths).toEqual([
+    [
+      [
+        [37.5, 126.9],
+        [37.5, 127],
+        [37.6, 127],
+        [37.5, 126.9],
+      ],
+      [
+        [37.52, 126.92],
+        [37.52, 126.94],
+        [37.54, 126.94],
+        [37.52, 126.92],
+      ],
+    ],
+    [
+      [
+        [37.55, 127.05],
+        [37.55, 127.1],
+        [37.6, 127.1],
+        [37.55, 127.05],
+      ],
+    ],
+  ]);
+  const overlays = maps.Polygon.mock.results.map((result) => result.value);
+  overlays.forEach((overlay) =>
+    expect(overlay.setMap).toHaveBeenCalledWith(map),
+  );
+  view.rerender(
+    <StrictMode>
+      <KakaoMapView target={target} />
+    </StrictMode>,
+  );
+  act(() => resize([], {} as ResizeObserver));
+  fireEvent.click(screen.getByRole('button', { name: '지도 확대' }));
+  expect(maps.Polygon).toHaveBeenCalledTimes(2);
+  view.unmount();
+  overlays.forEach((overlay) =>
+    expect(overlay.setMap).toHaveBeenLastCalledWith(null),
+  );
+  expect(maps.Map).toHaveBeenCalledOnce();
+});
+
+test('경계 교체·조회 중·전체 선택에서 이전 오버레이를 즉시 제거한다', async () => {
+  const { maps } = createSdk();
+  load.mockResolvedValue(maps);
+  const view = render(<KakaoMapView target={polygonTarget} />);
+  await waitFor(() => expect(maps.Polygon).toHaveBeenCalledOnce());
+  const first = maps.Polygon.mock.results[0].value;
+  const other = { ...polygonTarget, geometry: { ...polygonTarget.geometry } };
+  view.rerender(<KakaoMapView target={other} />);
+  expect(first.setMap).toHaveBeenLastCalledWith(null);
+  expect(maps.Polygon).toHaveBeenCalledTimes(2);
+  const second = maps.Polygon.mock.results[1].value;
+  view.rerender(<KakaoMapView target={null} />);
+  expect(second.setMap).toHaveBeenLastCalledWith(null);
+  view.rerender(<KakaoMapView target={polygonTarget} />);
+  const third = maps.Polygon.mock.results[2].value;
+  view.rerender(<KakaoMapView target={{ kind: 'default' }} />);
+  expect(third.setMap).toHaveBeenLastCalledWith(null);
+  await waitFor(() =>
+    expect(maps.Map.mock.results[0].value.getLevel()).toBe(5),
+  );
+});
+
+test('API 선택 변경·실패·늦은 응답에서도 최신 경계만 표시하고 패널 전환은 재생성하지 않는다', async () => {
+  const { maps, map } = createSdk();
+  load.mockResolvedValue(maps);
+  let finishOld!: (response: Response) => void;
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status });
+  const feature = (id: string, regionType: string) => ({
+    type: 'Feature',
+    id,
+    properties: { regionCode: id, regionType },
+    geometry: polygonTarget.geometry,
+  });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) => {
+      if (url === '/api/v1/districts')
+        return json({
+          items: [
+            { districtCode: '11110', districtName: '종로구' },
+            { districtCode: '11140', districtName: '중구' },
+          ],
+        });
+      if (url.endsWith('/dongs'))
+        return json({
+          items: [
+            {
+              districtCode: url.split('/')[4],
+              dongCode: `${url.split('/')[4]}001`,
+              dongName: '선택동',
+              labelPoint: { type: 'Point', coordinates: [127, 37] },
+            },
+          ],
+        });
+      if (url.includes('/dongs/'))
+        return new Promise<Response>((resolve) => {
+          finishOld = resolve;
+        });
+      if (url.includes('11140')) return json({ code: 'DATA_NOT_READY' }, 503);
+      return json(feature('11110', 'DISTRICT'));
+    }),
+  );
+  render(<App />);
+  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
+  await screen.findByRole('option', { name: '종로구' });
+  fireEvent.change(screen.getByRole('combobox', { name: '자치구' }), {
+    target: { value: '11110' },
+  });
+  await waitFor(() => expect(maps.Polygon).toHaveBeenCalledOnce());
+  const first = maps.Polygon.mock.results[0].value;
+  await screen.findByRole('option', { name: '선택동' });
+  fireEvent.click(screen.getByRole('button', { name: '지역 탐색 패널 닫기' }));
+  fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
+  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
+  expect(maps.Polygon).toHaveBeenCalledOnce();
+  fireEvent.change(screen.getByRole('combobox', { name: '행정동' }), {
+    target: { value: '11110001' },
+  });
+  expect(first.setMap).toHaveBeenLastCalledWith(null);
+  fireEvent.change(screen.getByRole('combobox', { name: '자치구' }), {
+    target: { value: '11140' },
+  });
+  expect(await screen.findByRole('alert')).toHaveTextContent('선택 지역 경계');
+  await act(async () => finishOld(json(feature('11110001', 'DONG'))));
+  expect(maps.Polygon).toHaveBeenCalledOnce();
+  fireEvent.change(screen.getByRole('combobox', { name: '자치구' }), {
+    target: { value: '11110' },
+  });
+  await waitFor(() => expect(maps.Polygon).toHaveBeenCalledTimes(2));
+  fireEvent.change(screen.getByRole('combobox', { name: '행정동' }), {
+    target: { value: '11110001' },
+  });
+  await act(async () => finishOld(json(feature('11110001', 'DONG'))));
+  expect(maps.Polygon).toHaveBeenCalledTimes(3);
+  fireEvent.change(screen.getByRole('combobox', { name: '행정동' }), {
+    target: { value: '' },
+  });
+  expect(maps.Polygon.mock.results[2].value.setMap).toHaveBeenLastCalledWith(
+    null,
+  );
+  await waitFor(() => expect(maps.Polygon).toHaveBeenCalledTimes(4));
+  expect(maps.Polygon.mock.results[3].value.setMap).toHaveBeenCalledWith(map);
+  fireEvent.change(screen.getByRole('combobox', { name: '자치구' }), {
+    target: { value: '' },
+  });
+  expect(maps.Polygon.mock.results[3].value.setMap).toHaveBeenLastCalledWith(
+    null,
+  );
+  expect(maps.Map).toHaveBeenCalledOnce();
+});
+
+test('일부 오버레이를 만든 뒤 SDK가 실패하면 정리하고 재시도에서 선택 경계를 복원한다', async () => {
+  const { maps } = createSdk();
+  const construct = maps.Polygon.getMockImplementation()!;
+  maps.Polygon.mockImplementationOnce(construct).mockImplementationOnce(
+    function () {
+      throw new Error('polygon');
+    },
+  );
+  load.mockResolvedValue(maps);
+  const target = {
+    ...polygonTarget,
+    geometry: {
+      type: 'MultiPolygon',
+      coordinates: [
+        polygonTarget.geometry.coordinates,
+        polygonTarget.geometry.coordinates,
+      ],
+    },
+  } as const;
+  const view = render(<KakaoMapView target={target} />);
+  expect(await screen.findByRole('alert')).toBeVisible();
+  expect(maps.Polygon.mock.results[0].value.setMap).toHaveBeenLastCalledWith(
+    null,
+  );
+  fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
+  await waitFor(() => expect(maps.Polygon).toHaveBeenCalledTimes(4));
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  view.unmount();
+  for (const index of [2, 3])
+    expect(
+      maps.Polygon.mock.results[index].value.setMap,
+    ).toHaveBeenLastCalledWith(null);
+});
+
+test('지도 재초기화 시 이전 오버레이를 제거하고 새 지도에 선택 경계를 표시한다', async () => {
+  const { maps } = createSdk();
+  load.mockResolvedValue(maps);
+  const view = render(<KakaoMapView target={polygonTarget} />);
+  await waitFor(() => expect(maps.Polygon).toHaveBeenCalledOnce());
+  const first = maps.Polygon.mock.results[0].value;
+  vi.stubEnv('VITE_KAKAO_MAP_APP_KEY', 'another-test-key');
+  view.rerender(<KakaoMapView target={polygonTarget} />);
+  expect(first.setMap).toHaveBeenLastCalledWith(null);
+  await waitFor(() => expect(maps.Polygon).toHaveBeenCalledTimes(2));
+  expect(maps.Map).toHaveBeenCalledTimes(2);
 });
 
 test('SDK 실패 안내에서 재시도하면 로딩을 거쳐 지도가 준비된다', async () => {

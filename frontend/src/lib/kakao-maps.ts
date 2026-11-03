@@ -24,9 +24,24 @@ export interface KakaoBounds {
   getNorthEast(): KakaoLatLng;
 }
 
+export interface KakaoPolygon {
+  setMap(map: KakaoMap | null): void;
+}
+
+export interface KakaoPolygonOptions {
+  path: KakaoLatLng[][];
+  strokeWeight: number;
+  strokeColor: string;
+  strokeOpacity: number;
+  strokeStyle: 'solid';
+  fillColor: string;
+  fillOpacity: number;
+}
+
 export interface KakaoMaps {
   load(callback: () => void): void;
   LatLng: new (latitude: number, longitude: number) => KakaoLatLng;
+  Polygon: new (options: KakaoPolygonOptions) => KakaoPolygon;
   LatLngBounds: new (
     southWest: KakaoLatLng,
     northEast: KakaoLatLng,

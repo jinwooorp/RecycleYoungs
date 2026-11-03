@@ -103,14 +103,64 @@ test('경계 Feature 응답을 검증하고 조회 지역의 범위를 반환한
   );
   vi.stubGlobal('fetch', fetch);
   expect(await fetchBoundary('dong', '00110001', signal)).toEqual({
-    west: 126.9,
-    south: 37.5,
-    east: 127,
-    north: 37.6,
+    extent: { west: 126.9, south: 37.5, east: 127, north: 37.6 },
+    geometry: { type: 'Polygon', coordinates: [ring] },
   });
   expect(fetch).toHaveBeenCalledWith('/api/v1/dongs/00110001/boundary', {
     signal,
   });
+});
+
+test('MultiPolygon의 분리된 영역과 내부 링을 경계 조회 결과에 보존한다', async () => {
+  const hole = [
+    [126.92, 37.52],
+    [126.94, 37.52],
+    [126.94, 37.54],
+    [126.92, 37.52],
+  ];
+  const island = [
+    [127.2, 37.5],
+    [127.3, 37.5],
+    [127.3, 37.6],
+    [127.2, 37.5],
+  ];
+  const geometry = {
+    type: 'MultiPolygon',
+    coordinates: [[ring, hole], [island]],
+  };
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          type: 'Feature',
+          id: '00110',
+          geometry,
+          properties: { regionType: 'DISTRICT', regionCode: '00110' },
+        }),
+      ),
+    ),
+  );
+  expect(await fetchBoundary('district', '00110', signal)).toEqual({
+    extent: { west: 126.9, south: 37.5, east: 127.3, north: 37.6 },
+    geometry,
+  });
+});
+
+test('닫히지 않은 링은 오버레이로 전달하지 않는다', () => {
+  expect(() =>
+    geometryExtent({
+      type: 'Polygon',
+      coordinates: [
+        [
+          [126.9, 37.5],
+          [127, 37.5],
+          [127, 37.6],
+          [126.9, 37.6],
+        ],
+      ],
+    }),
+  ).toThrow('응답');
 });
 
 test.each([

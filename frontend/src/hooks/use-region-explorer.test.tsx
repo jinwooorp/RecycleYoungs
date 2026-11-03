@@ -103,6 +103,7 @@ test('느린 이전 구의 목록과 경계 응답이 최신 선택을 덮어쓰
     expect(result.current.target).toEqual({
       kind: 'boundary',
       extent: { west: 126.8, south: 37.5, east: 127.1, north: 37.6 },
+      geometry: boundary('00140', 'DISTRICT', 126.8).geometry,
     }),
   );
   await act(async () => {
@@ -114,6 +115,7 @@ test('느린 이전 구의 목록과 경계 응답이 최신 선택을 덮어쓰
   expect(result.current.target).toEqual({
     kind: 'boundary',
     extent: { west: 126.8, south: 37.5, east: 127.1, north: 37.6 },
+    geometry: boundary('00140', 'DISTRICT', 126.8).geometry,
   });
   const oldCall = fetch.mock.calls.find(
     ([url]) => url === '/api/v1/districts/00110/dongs',

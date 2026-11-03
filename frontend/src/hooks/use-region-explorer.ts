@@ -83,7 +83,7 @@ export function useRegionExplorer() {
   const target = useMemo<RegionMapTarget | null>(() => {
     if (!districtCode) return { kind: 'default' };
     return boundary.status === 'ready' && boundary.data
-      ? { kind: 'boundary', extent: boundary.data }
+      ? { kind: 'boundary', ...boundary.data }
       : null;
   }, [districtCode, boundary.status, boundary.data]);
   function selectDistrict(value: string) {
