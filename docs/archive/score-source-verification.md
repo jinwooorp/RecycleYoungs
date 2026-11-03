@@ -4,7 +4,7 @@
 
 핵심 판단은 **A를 단일 분기 참고 비교의 조건부 후보로 유지하되, 현재 적재 판본의 비교 가능성과 평가 목적을 확인한 뒤 공개 채택 여부를 결정한다**는 것입니다. 모든 미확인 사항의 완전한 해명을 기다릴 필요는 없지만, 출처가 정상이라는 이유만으로 서로 다른 의미의 값을 섞어도 된다고 볼 수는 없습니다.
 
-[쉬운 요약](../score-design.md#8-원천-데이터-검증-및-mvp-v1-결정-준비) · [이전 평가 기준 검증](score-mvp-criteria-validation.md) · [A·D·E 상세 원문](score-experiments-ade.md) · [자치구 통계 정책](../district-statistics-policy.md#기간과-원천-판본)
+[쉬운 요약](../score-design.md#8-원천-데이터-검증-및-mvp-v1-결정-준비) · [이전 평가 기준 검증](score-mvp-criteria-validation.md) · [A·D·E 상세 원문](score-mvp-criteria-validation.md#2026-11-01-ade-결합-방식-비교) · [자치구 통계 정책](../district-statistics-policy.md#기간과-원천-판본)
 
 ## 1. 확인 범위와 근거 수준
 

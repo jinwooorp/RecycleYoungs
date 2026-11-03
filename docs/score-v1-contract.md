@@ -1,10 +1,12 @@
-# MVP v1 창업 환경 점수 정책·계산 계약 제안
+# MVP v1 점수 계산·조회·REST API·재현 계약
 
-**상태: 승인 전 권장안. 내부 계산·재현 검증과 REST API의 미승인 차단 경로만 구현했습니다.** 기존 A를 어떤 규칙으로 계산하고 설명할지 구체화한 명세이며 새 모델이나 실제 점수 실험을 추가하지 않았습니다. 공개 점수의 성공 응답·승인 게이트는 미구현이고, 필드·예외·정밀도·저장 제안은 아직 확정된 서비스 계약이 아닙니다.
+이 문서는 **점수 백엔드를 구현·테스트하거나 검증 도구를 실행하는 개발자**를 위한 계산 명세와 실행 안내입니다. 모델의 목적·실험 해석은 [점수 설계](score-design.md), 원천 판본·승인 책임·manifest·Trust Record는 [공개 준비](score-20262-publication-readiness.md)에서 확인합니다.
 
-**현재 적재 판본의 분기·공간·업종별 비교 가능성을 확인하기 전에는 공개 점수 제공을 승인하지 않습니다.** 정책 승인과 데이터 승인은 별도 조건이며, 이 문서 작성으로 어느 쪽도 승인되지 않습니다. 승인 전에도 순수 계산기의 합성 테스트와 계약 구현 준비는 할 수 있습니다.
+**현재 구현:** 순수 A 계산기, 전체 입력 Repository, 내부 ScoreService, R01·R02 스냅샷 코어, 명시 실행 회귀·내보내기·오프라인 검증 도구, REST 미승인 차단 경로입니다. **미구현:** 공개 200 응답, 최종 지역 404 연결, 운영 신뢰 기록 로더·승인/철회·현재 DB 대조 게이트와 `region_score`입니다.
 
-[정책안](#1-권장하는-v1-정책안) · [결정 규칙](#2-승인이-필요한-정책-규칙) · [조회·계산](#3-spring-boot-조회계산-경계) · [정확한 계산](#4-정밀도와-출력-규칙) · [API](#5-점수-rest-api-제안) · [저장·재현](#6-계산-시점과-재현-정보-보존) · [테스트](#7-구현할-테스트-계약) · [착수 조건](#8-승인과-구현-착수-조건)
+A의 방향·비중·예외·표시 규칙은 승인 전 후보입니다. 내부 구현이 있다는 이유로 서비스 정책을 채택하지 않습니다. `NOT_APPROVED`, `sourceTrust=NOT_ESTABLISHED`, `R03_COMPLETE=false`를 유지하며 현재 판본의 분기·공간·업종 비교 가능성 확인 전에는 공개 점수를 제공하지 않습니다.
+
+[정책안](#1-권장하는-v1-정책안) · [예외 규칙](#2-승인이-필요한-정책-규칙) · [코드와 조회](#3-spring-boot-조회계산-경계) · [정확한 계산](#4-정밀도와-출력-규칙) · [현재/목표 API](#5-점수-rest-api-제안) · [스냅샷·실행 도구](#6-계산-시점과-재현-정보-보존) · [검증 계약](#7-구현할-테스트-계약) · [공개 전 조건](#8-승인과-구현-착수-조건)
 
 ## 1. 권장하는 v1 정책안
 
@@ -27,11 +29,11 @@
 
 매출 비중을 0.30→0.25로 낮추고 다른 비중을 기존 비율대로 재배분한 조건에서는 삼성동·북아현동·삼양동이 A 상위 43동에 진입했습니다. 기존 비중을 유지하는 이유는 설명과 검증의 연속성이지 최적화가 아닙니다. 삼성동의 기존 A 60.36점·83위처럼 낮은 매출을 다른 항목이 메우는 현상을 사용자에게 설명해야 합니다.
 
-A는 항목별 기여를 더해 결과를 설명할 수 있습니다. B·C의 작은 분모, D의 한 항목 0에 따른 전체 0점, E의 추가 복잡성과 보상 잔존은 이번 v1 목적에 대한 더 강한 근거가 아닙니다. [기존 A·D·E 기록](archive/score-experiments-ade.md)은 수정하지 않았습니다.
+A는 항목별 기여를 더해 결과를 설명할 수 있습니다. B·C의 작은 분모, D의 한 항목 0에 따른 전체 0점, E의 추가 복잡성과 보상 잔존은 이번 v1 목적에 대한 더 강한 근거가 아닙니다. [기존 A·D·E 기록](archive/score-mvp-criteria-validation.md#2026-11-01-ade-결합-방식-비교)을 근거로 합니다.
 
 ## 2. 승인이 필요한 정책 규칙
 
-‘기존’은 현재 DB·통계 API 계약 또는 기존 실험에서 이미 사용한 규칙을 뜻하며, 그 실험 규칙이 공개 점수 정책으로 승인됐다는 뜻은 아닙니다. **아래 권장 규칙은 모두 v1 정책 묶음으로 최종 승인이 필요합니다.** 특히 ‘새 제안’은 승인 전 서비스 동작에 적용하지 않습니다.
+‘기존’은 현재 DB·통계 API 계약 또는 기존 실험에서 이미 사용한 규칙을 뜻하며, 그 실험 규칙이 공개 점수 정책으로 승인됐다는 뜻은 아닙니다. **아래 권장 규칙은 모두 v1 정책 묶음으로 최종 승인이 필요합니다.** ‘새 제안’ 중 일부는 내부 진단·재현에 구현했지만 공개 서비스 정책으로 적용하지 않습니다.
 
 | 결정           | 권장 규칙 하나·구분                                                                                                    | 이유                                                                                              | 대안의 단점                                                                                | 최종 승인                          |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------- |
@@ -52,15 +54,23 @@ n은 완비 비교 지역 수, N은 한 지역의 점포 수입니다. 점포 10
 
 ### 3.1 현재 코드에서 확인한 패턴
 
-현재 백엔드는 Java 21·Spring Boot, `db` 프로필의 Controller → Service → JdbcClient Repository 구조입니다. 다음 코드의 동작만 참고하며 수정하지 않습니다.
+Java 21·Spring Boot와 `db` 프로필의 Controller → Service → JdbcClient Repository 패턴을 따릅니다. 현재 공개 Controller와 내부 진단 경로는 분리돼 있습니다.
 
-- [자치구 점포 Controller](../backend/src/main/java/kr/ac/recycleyoungs/store/DistrictStoreStatController.java): 코드·필수 파라미터 원문과 중복 검증.
-- [자치구 점포 Service](../backend/src/main/java/kr/ac/recycleyoungs/store/DistrictStoreStatService.java): `@Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)`, 경계 → 지역 → 통계 준비 → 조건별 조회 순서.
-- [경계 Repository](../backend/src/main/java/kr/ac/recycleyoungs/region/RegionRepository.java): 최신 적격 배치 선택 후 실제 행 존재, 동과 부모 구의 같은 게시본 검사.
-- [점포 Repository](../backend/src/main/java/kr/ac/recycleyoungs/store/DistrictStoreStatRepository.java), [매출 Repository](../backend/src/main/java/kr/ac/recycleyoungs/sales/DistrictSalesStatRepository.java), [인구 Repository](../backend/src/main/java/kr/ac/recycleyoungs/foottraffic/DistrictFootTrafficStatRepository.java): 행별 출처 검사와 수치 문자열 조회.
-- [공통 오류 처리](../backend/src/main/java/kr/ac/recycleyoungs/api/ApiExceptionHandler.java): ProblemDetail, DB 연결·자원·시간 초과와 내부 오류 구분, SQL·인증정보 비노출.
+| 코드                                                                                                                                                                                                                                                                                                                                                          | 구현된 책임                                                                        | 확인할 테스트                                                                                                                                                                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [ScoreController](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreController.java)                                                                                                                                                                                                                                                                    | `db`에서 요청 검증 후 항상 차단. DB·Service·승인 도구 호출 없음                    | [MockMvc](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreControllerTests.java), [기본 프로필](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreControllerDefaultProfileTests.java)       |
+| [ScoreService](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreService.java)·[InternalScoreResult](../backend/src/main/java/kr/ac/recycleyoungs/score/InternalScoreResult.java)                                                                                                                                                                       | 읽기 전용 REPEATABLE_READ 안의 내부 진단과 상태 구분. 공개 DTO가 아님              | [단위](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreServiceTests.java), [통합](../backend/src/integrationTest/java/kr/ac/recycleyoungs/score/ScoreServiceIntegrationTests.java)               |
+| [ScoreInputRepository](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreInputRepository.java)·[ScoreInputSnapshot](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreInputSnapshot.java)                                                                                                                                                         | 상위 트랜잭션 필수. 단위별 SQL 한 번으로 전체 경계·원본·행별 출처 조회             | [모델](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreInputSnapshotTests.java), [통합](../backend/src/integrationTest/java/kr/ac/recycleyoungs/score/ScoreInputRepositoryIntegrationTests.java) |
+| [ScoreCohortEvaluator](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreCohortEvaluator.java)                                                                                                                                                                                                                                                          | Service와 오프라인 재현이 공유하는 순수 입력 검증·집단 보류. 승인 검사는 하지 않음 | Service·스냅샷 테스트에서 함께 검증                                                                                                                                                                      |
+| [AScoreCalculator](../backend/src/main/java/kr/ac/recycleyoungs/score/AScoreCalculator.java)·[ScoreInput](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreInput.java)·[ScoreCalculation](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreCalculation.java)·[ScoreMetric](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreMetric.java) | DB·HTTP·Spring·시각·파일과 독립된 A 계산 및 불변 결과                              | [계산기](../backend/src/test/java/kr/ac/recycleyoungs/score/AScoreCalculatorTests.java)                                                                                                                  |
+| [ExactFraction](../backend/src/main/java/kr/ac/recycleyoungs/score/ExactFraction.java)                                                                                                                                                                                                                                                                        | 약분·양수 분모의 정확한 정수/분수, 출력 소수 변환 분리                             | [분수](../backend/src/test/java/kr/ac/recycleyoungs/score/ExactFractionTests.java)                                                                                                                       |
+| [ScoreSnapshotArtifact](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreSnapshotArtifact.java)·[ScoreSnapshotCodec](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreSnapshotCodec.java)                                                                                                                                                       | 전체 입력 봉인·정규 JSON·해시·재현. 파일 저장이나 자동 캡처 없음                   | [R01·R02](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreSnapshotTests.java)                                                                                                                    |
 
-**제안하는 책임:** 점수 Controller는 요청만 검증하고, 점수 Service는 단일 스냅샷·승인 상태·응답 상태를 조정합니다. 점수 입력 Repository는 단위별 전체 경계와 세 통계를 일괄 조회합니다. 순수 A 계산기는 DB·HTTP·시각·표시 문자열에 의존하지 않고 완비 입력 목록만 받아 순위·기여·점수를 반환합니다. 내부 계산기·Repository·ScoreService는 구현돼 있지만, 현재 [ScoreController](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreController.java)는 이들을 호출하지 않고 요청 검증 후 즉시 503으로 차단합니다. 실제 승인·철회 게이트와 현재 DB 대조는 후속 구현입니다.
+기존 [RegionRepository](../backend/src/main/java/kr/ac/recycleyoungs/region/RegionRepository.java)의 경계 선택, [점포](../backend/src/main/java/kr/ac/recycleyoungs/store/DistrictStoreStatRepository.java)·[매출](../backend/src/main/java/kr/ac/recycleyoungs/sales/DistrictSalesStatRepository.java)·[인구 Repository](../backend/src/main/java/kr/ac/recycleyoungs/foottraffic/DistrictFootTrafficStatRepository.java)의 행별 출처 검증과 [ApiExceptionHandler](../backend/src/main/java/kr/ac/recycleyoungs/api/ApiExceptionHandler.java)의 ProblemDetail·DB 오류 분류를 유지합니다. [점포 Controller](../backend/src/main/java/kr/ac/recycleyoungs/store/DistrictStoreStatController.java)·[Service](../backend/src/main/java/kr/ac/recycleyoungs/store/DistrictStoreStatService.java)도 같은 계층 패턴을 사용합니다.
+
+**내부 실행 순서:** Repository의 한 번 조회 결과를 재사용해 경계 준비 → 요청 지역 존재 → 데이터셋 준비 → 전체 입력 검증 → 계산을 판정합니다. 구·동은 각각 서울 전체 완비 집단이며 지역 선택·입력 순서로 재정규화하지 않습니다.
+
+`InternalScoreResult.Status`는 `INTERNAL_CALCULATED`, `NOT_CALCULABLE`, `BOUNDARY_NOT_READY`, `REGION_NOT_FOUND`, `DATASET_NOT_READY`, `UNSUPPORTED_INPUT`, `DATABASE_UNAVAILABLE`, `INTERNAL_ERROR`를 구분합니다. 연결·자원·시간 초과와 SQL·매핑·불변식 오류를 결측이나 정상 0점으로 숨기지 않습니다. 트랜잭션 시작 전 연결 실패는 프록시 호출 경계에 전파될 수 있습니다. 결과의 `publicationState()`는 항상 `NOT_APPROVED`입니다.
 
 ### 3.2 입력 조회 계약
 
@@ -146,7 +156,15 @@ n은 완비 비교 지역 수, N은 한 지역의 점포 수입니다. 점포 10
 
 ### 5.2 상태와 오류
 
-현재 응답은 기존 `ApiException`·`ApiErrorCode`·`ProblemDetail`을 사용한 400/503뿐이며 별도 `reason`을 추가하지 않습니다. **아래 표의 200·404와 DB 조회 오류는 승인 게이트 연결 후의 목표 계약**입니다. 현재의 고정 503을 지역·통계 준비 상태를 조회한 결과로 해석하지 않습니다.
+현재 응답은 기존 `ApiException`·`ApiErrorCode`·`ProblemDetail`을 사용한 400/503뿐이며 별도 `reason`을 추가하지 않습니다.
+
+| 현재 경로/요청                                     | 응답                    | DB·내부 점수 노출                           |
+| -------------------------------------------------- | ----------------------- | ------------------------------------------- |
+| 두 경로의 누락·중복·추가 query, 형식·지원 값 오류  | 400 `INVALID_PARAMETER` | 없음                                        |
+| `db`의 유효한 요청, 형식만 유효한 미존재 코드 포함 | 503 `DATA_NOT_READY`    | 없음. 존재·데이터 준비를 조회한 결과가 아님 |
+| 기본 프로필                                        | 점수 Controller 미등록  | 없음                                        |
+
+현재 503은 `title`, `status`, `detail`, `instance`, `code`의 기존 오류 형식이며 `about:blank` 타입은 현재 직렬화에서 생략됩니다. 점수·순위·입력·기여·내부 상태는 없습니다. **아래 표의 200·404와 DB 조회 오류는 승인 게이트 연결 후의 목표 계약**입니다. 현재의 고정 503을 지역·통계 준비 상태를 조회한 결과로 해석하지 않습니다.
 
 | HTTP·상태                  | 조건                                                         | 표현                                                           |
 | -------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------- |
@@ -337,25 +355,152 @@ n은 완비 비교 지역 수, N은 한 지역의 점포 수입니다. 점포 10
 
 ### 6.2 승인 입력 스냅샷을 불변 배포 아티팩트로 보존
 
-**새 제안:** 고정 분기 v1은 공개 승인 시 전체 입력 스냅샷과 승인 manifest를 읽기 전용 배포 아티팩트로 보존합니다. 요청 시 DB에서 읽은 내용이 그 스냅샷과 일치하는지 확인한 뒤 계산합니다. 과거 보존본을 현재 DB 대신 자동 조회하는 폴백은 없습니다. 재게시로 달라졌다면 새 판본·커버리지 승인까지 공개 점수는 503입니다.
+**구현된 코어와 명시 도구:** 전체 집단을 메모리에서 봉인하고, JSON·해시를 검증해 DB 없이 재현할 수 있습니다. 명시적 내보내기·파일 검증도 구현했습니다. 실제 입력의 로컬 단일 사본 보존은 [2026-11-02 실행 기록](archive/score-20262-snapshot-preservation.md)이며 운영 보관·백업·승인이 완료됐다는 뜻은 아닙니다.
 
-이 방식은 요청마다 파일이나 DB 행을 쓰지 않고도 이미 승인한 입력을 재현하기 위한 제안입니다. **이번 작업에서 원본·스냅샷·manifest 파일을 생성하지 않았습니다.** 실제 보관 위치·백업·배포 시 접근 권한과 검토 책임자는 구현 착수 전에 정해야 합니다. 기존 저장소·배포 환경에 보존 기능이 있다고 가정하지 않습니다. 이 조건을 확보하지 못하면 과거 결과 재현을 보장한다고 표시할 수 없습니다.
+**공개 운영 권장안:** 전체 스냅샷과 독립 manifest를 읽기 전용 배포 아티팩트로 보관하고, 요청 시 DB 입력과 승인 스냅샷이 같은지 확인한 뒤 계산합니다. 현재 이 게이트는 미구현입니다. 과거 보존본을 현재 DB 대신 쓰는 폴백은 없으며, 재게시로 달라지면 새 판본·커버리지 검토 전까지 공개를 차단하는 안입니다. 요청마다 파일이나 DB 행을 쓰지 않습니다.
 
-보존 payload에는 다음을 반드시 넣습니다.
+스냅샷 코어는 파일·DB·HTTP·Spring Context를 사용하지 않고 Service 호출에도 자동 연결되지 않습니다. 정책·판본·커버리지 승인과 기대 아티팩트의 진위는 [공개 준비의 독립 신뢰 계약](score-20262-publication-readiness.md)에서 다룹니다.
 
-- `snapshotSchemaVersion`, 단위·분기·업종, 정책 버전과 네 입력·방향·정규화·비중·예외·표시 규칙.
-- 선택한 경계의 batchId·publishedAt, 모든 경계 지역 코드·명칭과 동의 부모 구 코드.
-- **전체 비교 집단과 제외 지역 각각**의 네 원본 문자열·NULL·행 존재 여부·출처 적격 여부·세 실제 source_batch_id·제외 사유. 요청 지역 한 건만 저장하면 재현할 수 없음.
-- 참조한 모든 배치의 dataset_code·source_type·scope_type·scope_code·status·published_at·source_checksum·etl_version·period_from/to. 파일 경로·인증정보·source_reference 원문·error_message는 포함하지 않음.
-- 코드순으로 정렬한 완비·제외 목록과 수. 승인할 커버리지의 내용 자체를 포함함.
+### 6.3 스키마와 전체 집단 검증
 
-별도 승인 manifest에는 이 payload의 해시와 policyApprovalId·비교 가능성 근거 ID·coverageApprovalId·승인 상태·승인일·담당·근거 URL을 남깁니다. 승인 메타데이터와 계산 입력을 한 해시 안에서 서로 참조하게 만들지 않습니다.
+구와 동은 각각 별도 아티팩트입니다. 생성 대상은 `20262`·`CS100010`의 준비된 전체 경계·데이터셋입니다. nullable 필드도 키는 필수이고 정의하지 않은 필드는 거부합니다.
 
-**해시 규칙 제안:** 모든 객체 키를 사전순으로 정렬한 JSON, UTF-8, BOM·불필요한 공백·끝 개행 없음으로 통일합니다. 키 비교는 로케일과 무관한 Unicode 코드 포인트 순서입니다. 문자열의 비ASCII 문자는 UTF-8 그대로, 따옴표·역슬래시는 이스케이프, `/`는 그대로 씁니다. 제어문자는 `\b`, `\f`, `\n`, `\r`, `\t`를 우선 쓰고 나머지는 소문자 4자리 `\u` 표기로 통일합니다. UUID는 소문자, 시각은 UTC ISO-8601의 Z 표기이며 불필요한 소수 끝 0을 제거하고 초 정밀도 0일 때 소수부를 생략합니다. 지역·배치 목록은 코드·UUID 오름차순, 사유는 5절 순서로 정렬합니다. 숫자 원본은 text 조회 문자열 그대로 보존하므로 수치가 같은 scale 변화도 다른 스냅샷이 될 수 있습니다. 원본 비교 순위는 여전히 수치 비교입니다.
+| 최상위 필드       | 내용                                                | 입력 해시 대상        |
+| ----------------- | --------------------------------------------------- | --------------------- |
+| `payload`         | 아래 전체 입력 스키마                               | 전체 포함             |
+| `inputSnapshotId` | 정규 payload 바이트의 소문자 SHA-256 64자리         | 제외                  |
+| `expected`        | 완비 수·제외/집단 보류 사유·모든 결과의 정확한 분수 | 제외. 재계산으로 대조 |
+| `requestedAt`     | nullable 감사용 요청 시각. 계산에 사용하지 않음     | 제외                  |
 
-전체 payload 바이트의 SHA-256을 `inputSnapshotId`로 하고 해시 자신·승인 상태·승인일·요청 시각은 해시 대상 밖 manifest에 둡니다. payload 안에는 승인 목록의 내용은 넣되 승인 ID·담당·근거 URL 같은 manifest 메타데이터는 넣지 않습니다. 같은 계산 입력이면 요청 시각만 바뀌어 ID가 변하지 않습니다. 승인 ID와 입력 해시의 연결을 검증하고, 정책·경계·원본·출처·집단·제외 사유 중 하나라도 달라지면 변경을 탐지합니다.
+| payload 필드            | 내용                                                                         |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| `snapshotSchemaVersion` | `score-input-v1`. 다른 버전 거부                                             |
+| `algorithmVersion`      | `a-rank-v1-candidate.1`. 현재 이 후보만 재현 지원                            |
+| `policy`                | 컬럼·방향·비중·순위 정규화·입력/집단 예외·표시·분기·업종·보상 규칙           |
+| `coverage`              | 전체 경계·완비·제외 수. 실제 목록 크기와 대조                                |
+| `input`                 | `ScoreInputSnapshot` 전체: 단위·분기·업종·경계·준비 상태·모든 지역과 네 입력 |
+| `boundaryRegionCodes`   | 호출자가 명시한 전체 경계 코드 목록                                          |
+| `batches`               | 실제 참조한 경계·통계 메타데이터. UUID별 한 건                               |
+| `eligibleRegionCodes`   | 입력 검증을 통과한 모든 코드. 동일값으로 보류해도 보존                       |
+| `excludedRegions`       | 제외 코드와 모든 지표별 사유                                                 |
 
-`algorithmVersion` 후보는 `a-rank-v1-candidate.1`입니다. 승인은 별도 상태이며 이름에 v1이 들어간 것으로 채택되지 않습니다. 비중·방향·예외·표시·지원 범위 중 하나라도 바꾸면 새 정책 버전으로 기록합니다. 출처 재게시만으로 수식 버전을 바꾸지는 않지만 입력 해시와 승인 연결은 새로 검토합니다. 결과를 보여 준 버전과 원본 스냅샷을 함께 보존해야 합니다.
+`input.regions`는 지역 코드·명칭·부모 구 코드/명칭과 `sales`, `footTraffic`, `storeCount`, `closureRate`를 보존합니다. 각 지표에는 `raw` 문자열/NULL, `source.rowPresent`, 실제 `sourceBatchId`, `eligible`, 안전한 `batch` 메타데이터가 있습니다. 실제 0·행 없음·측정값 NULL·음수·비유한 값·N=0·부적격 출처를 합치지 않습니다.
+
+**행 출처 완전성:** `rowPresent=true`이면 출처 ID와 BatchMetadata가 필수이며 두 ID가 같아야 합니다. 부적격 배치도 실제 ID·메타데이터를 유지합니다. 행은 있고 측정값만 NULL인 경우는 유효하게 보존합니다. `rowPresent=false`이면 원본값·ID·배치 메타데이터가 모두 없어야 합니다. 적격성 모순과 같은 UUID의 메타데이터 충돌도 거부합니다.
+
+메타데이터는 UUID·dataset_code·source_type·scope_type/scope_code·period_from/to·source_checksum·etl_version·status·started/finished/published 시각입니다. 원천 경로·`source_reference`·`error_message`·인증정보는 넣지 않습니다. 원본 숫자 문자열의 소수 자릿수를 유지하므로 `1.0`과 `1.00`은 계산상 동률이어도 입력 해시는 다릅니다.
+
+전체 경계 코드와 입력 행의 코드가 정확히 같아야 하고, 완비·제외 목록은 중복·누락 없이 전체 경계를 분할해야 합니다. 실제 행 참조와 배치 목록도 같아야 합니다. 기대 목록·제외 사유를 재계산하므로 한 지역만 빼거나 제외를 숨기면 해시를 다시 만들어도 거부합니다.
+
+단, 호출자가 전체 경계 목록과 행·기대 결과를 **함께 축소**하면 파일만으로 ‘진짜 서울 전체’를 증명할 수 없습니다. 생성 시 동일 Repository 스냅샷의 전체 경계를 사용하고 후속 독립 승인 목록과 대조해야 합니다. 25구·421동을 영구 상수로 두지 않습니다. 경계·데이터셋 미준비는 봉인하지 않으며 n≤1·필수 지표 전체 동일은 점수 대신 기존 내부 보류 사유를 재현합니다.
+
+### 6.4 정규 JSON·SHA-256 — R01
+
+1. 지역·완비·제외 코드는 Unicode 코드 포인트 오름차순, 배치는 UUID 문자열 오름차순입니다. 사유는 `ReasonCode` 선언 순서 뒤 지표 선언 순서입니다. 중복 목록은 거부합니다.
+2. 모든 객체 키는 로케일과 무관한 Unicode 코드 포인트순입니다. UTF-16 코드 유닛과 순서가 다른 보충 문자도 포함합니다.
+3. UTF-8, BOM·불필요한 공백·끝 개행 없음. 비ASCII와 `/`는 그대로 쓰며 따옴표·역슬래시는 이스케이프합니다. 제어문자는 `\b`·`\f`·`\n`·`\r`·`\t` 우선, 나머지는 소문자 4자리 `\u`입니다. 잘못된 UTF-8·짝 없는 surrogate는 거부합니다.
+4. UUID는 소문자, 시각은 UTC ISO-8601 `Z`이며 불필요한 소수 초 끝 0과 정수 초 소수부를 생략합니다. `09:00:00.100+09:00` → `00:00:00.1Z`입니다.
+5. 원본 숫자와 분수 분자/분모는 문자열, 집단 크기·동률 수는 JSON 정수입니다. 분수는 약분·양수 분모를 유지합니다.
+6. **payload 전체 바이트**의 SHA-256이 `inputSnapshotId`입니다. 자기 해시·요청 시각·기대 결과·승인 메타데이터는 제외합니다. 승인 대상 목록의 내용은 payload에 있지만 승인 ID·담당자·근거 URL은 독립 manifest에 있습니다.
+
+`decode`는 중복 키·누락·알 수 없는 필드·잘못된 버전/타입·primitive NULL·손상·추가 JSON 값·해시 불일치를 거부합니다. 유효한 공백·키 순서는 정규화합니다. 기대 결과 변경은 입력 해시를 바꾸지 않을 수 있지만 **재현 대조가 실패하므로 거부**됩니다. 오류에 원본 입력·접속정보·예외 원문을 붙이지 않습니다.
+
+Python 표준 `json`·`hashlib`로 독립 검산한 **합성 5지역** payload는 14,935바이트, 기대 SHA-256은 `c671ee9b6263f5ff92334f7cc2a5e522f5f84872fe0cda2d38c1f1db71759f95`입니다. 작은 JSON 벡터로 제어문자·한글·보충 문자 정렬과 해시도 확인했습니다. 실제 원본 fixture가 아닙니다.
+
+비중·방향·예외·표시·지원 범위를 바꾸면 새 정책 버전으로 기록합니다. 출처 재게시만으로 수식 버전을 바꾸지는 않지만 입력 해시와 승인 연결은 재검토합니다. 버전에 v1이 들어간다고 채택되지는 않습니다.
+
+### 6.5 DB 없는 생성·재현 — R02
+
+`fullBoundaryCodes`는 선택 지역이 아닌 같은 조회의 전체 경계입니다. 다음 Java 호출은 파일을 쓰거나 DB·Spring Context를 시작하지 않습니다.
+
+```java
+var artifact = ScoreSnapshotArtifact.capture(input, fullBoundaryCodes, requestedAt);
+var codec = new ScoreSnapshotCodec();
+byte[] json = codec.encode(artifact);
+var restored = codec.decode(json);
+var reproduced = restored.replay();
+String hash = restored.inputSnapshotId();
+// publicationState()는 항상 NOT_APPROVED이다.
+```
+
+`replay()`는 지원 알고리즘·정책 확인 → 공통 입력 검증 → 기존 A 계산 순서입니다. 완비·제외 목록과 모든 지표별/집단 사유, 모든 지역의 정규화·기여·최종 A·평균 순위·동률 수가 정확히 같아야 합니다. 원본·분수를 표시 소수로 바꾸지 않습니다. 다른 정책으로 만든 해시가 유효해도 지원 정책으로 자동 채택하지 않으며 재현을 거부합니다.
+
+### 6.6 명시 실행 도구와 환경변수
+
+도구는 [scoreRegression 소스셋](../backend/build.gradle)에 있어 제품 JAR·공개 API에 포함되지 않고 일반 `test`·`integrationTest`·`build`에서 자동 실행하지 않습니다. 명령행 인자를 받거나 `.env`를 자동 로드하지 않습니다.
+
+| 작업·코드                                                                                                                                                                                                                      | 접근 대상·조건                                                                         | 검증                                                                                                                                                                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scoreRegression`: [Main](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreRegressionMain.java)·[Verifier](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreRegressionVerifier.java)       | 명시 활성화 후 실제 개발 DB의 대표값·현재 전체 결과 검산. 파일 저장 없음               | [단위](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreRegressionTests.java)·[통합](../backend/src/integrationTest/java/kr/ac/recycleyoungs/score/ScoreRegressionIntegrationTests.java)            |
+| `scoreSnapshotExport`: [ExportMain](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreSnapshotExportMain.java)                                                                                                | 명시 활성화 후 한 읽기 전용 스냅샷의 구·동 전체 입력을 검증·롤백하고 외부 새 파일 보존 | [도구 단위](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreSnapshotToolTests.java)·[통합](../backend/src/integrationTest/java/kr/ac/recycleyoungs/score/ScoreSnapshotExportIntegrationTests.java) |
+| `scoreSnapshotVerify`: [VerifyMain](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreSnapshotVerifyMain.java)                                                                                                | 지정한 외부 파일 하나를 DB·Spring Context 없이 검증·재현                               | 같은 도구 단위 테스트                                                                                                                                                                                      |
+| 공통 [ScoreSnapshotBundle](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreSnapshotBundle.java)·[ScoreSnapshotFiles](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreSnapshotFiles.java) | 두 단위의 일관성, 안전한 외부 파일 읽기/새 파일 보존                                   | 같은 도구 테스트                                                                                                                                                                                           |
+
+| 환경변수                                | 사용처·의미                                                                 |
+| --------------------------------------- | --------------------------------------------------------------------------- |
+| `SCORE_REGRESSION_ENABLED`              | 실데이터 회귀 작업을 허용할 때만 `1`                                        |
+| `SCORE_SNAPSHOT_EXPORT_ENABLED`         | 내보내기를 허용할 때만 `1`                                                  |
+| `DB_JDBC_URL`, `DB_USER`, `DB_PASSWORD` | 회귀·내보내기에만 사용. 완전히 해석된 PostgreSQL JDBC URL과 안전한 인증정보 |
+| `SCORE_SNAPSHOT_OUTPUT_PATH`            | 내보낼 저장소 외부 실제 절대 경로. 기존 파일 금지                           |
+| `SCORE_SNAPSHOT_INPUT_PATH`             | 검증할 외부 파일의 실제 절대 경로                                           |
+| `SCORE_SNAPSHOT_EXPECTED_DISTRICT_ID`   | 선택: 별도로 확보한 구 payload SHA-256                                      |
+| `SCORE_SNAPSHOT_EXPECTED_DONG_ID`       | 선택: 별도로 확보한 동 payload SHA-256                                      |
+| `SCORE_SNAPSHOT_EXPECTED_FILE_SHA256`   | 선택: 별도로 확보한 파일 전체 바이트 SHA-256                                |
+
+DB URL에 `${DB_NAME}`·`${DB_PORT:-5432}` 같은 참조가 남아 있으면 안 됩니다. 필요한 해석은 안전한 환경 준비 과정에서 메모리 안에서만 하고 값·접속 문자열을 출력하지 않습니다. URL query는 `sslmode`·`ssl`·`currentSchema`만 허용하며 `options`·`readOnly`·`readOnlyMode`·추가 설정 파일·인증정보로 안전 설정을 덮어쓸 수 없습니다. **운영·공유 DB를 대상으로 삼지 않습니다.**
+
+회귀·내보내기는 `default_transaction_read_only=on`, JDBC 읽기 전용·REPEATABLE_READ·`SET TRANSACTION READ ONLY`와 실제 설정 확인을 사용하며 종료는 ROLLBACK입니다. Flyway 자동 구성·마이그레이션·ETL을 시작하지 않습니다. 내보내기는 같은 트랜잭션에서 구·동을 각각 한 번 조회하고 `capture()`한 뒤, 분기·업종·스키마·알고리즘·정책·경계 메타데이터·조회 시각, 부모 구 코드/명칭과 동일 UUID의 배치를 대조합니다. **ROLLBACK 완료 통지와 Context 종료 후** 바이트 재검증에 성공해야 저장합니다.
+
+보존 파일은 `bundleSchemaVersion="score-snapshot-bundle-v1"`, `district`, `dong` 세 필드뿐입니다. 한 단위 누락·중복 키·추가 필드·다른 버전은 거부합니다. 두 단위는 독립된 입력 해시와 비교 집단을 유지하며 manifest가 아닙니다. 파일 SHA-256은 요청 시각까지 포함한 묶음 바이트 전체이므로 같은 입력을 다른 시각에 보존하면 입력 해시는 같아도 파일 해시는 달라질 수 있습니다.
+
+### 6.7 외부 파일·권한·실패 복구
+
+보관 담당자가 준비한 **현재 사용자 소유 POSIX 0700 디렉터리**를 사용합니다. 도구는 부모를 만들거나 권한을 고치지 않습니다. 실제 절대 경로만 허용하며 `..`·중간/최종 심볼릭 링크·저장소 내부를 거부합니다. macOS 별칭도 실제 경로로 준비합니다. 상위 디렉터리는 root/현재 사용자 소유이며 비보호 쓰기 경로는 거부하고 `/tmp` 유형 sticky 디렉터리의 소유자 보호를 확인합니다. 실행 중 이동·권한 변경이나 보관 계정 공유를 하지 않습니다.
+
+지원 provider는 `SecureDirectoryStream`으로 디렉터리를 고정합니다. 기존 macOS 검증 환경은 미지원이므로 POSIX 소유권·sticky 보호·링크·부모 inode 동일성 검사를 사용했습니다. 필요한 POSIX·파일 식별·하드 링크 기능이 없으면 중단합니다. Linux 고정 디렉터리 분기는 이 macOS 검증으로 입증하지 않았습니다.
+
+같은 디렉터리에 무작위 `.score-snapshot-*.part`를 `CREATE_NEW`·`NOFOLLOW`·0600으로 만들고 전체 기록·파일 동기화 후 0400으로 제한합니다. 하드 링크로 완성된 두 아티팩트를 원자적으로 게시해 기존 파일·디렉터리·링크를 덮어쓰지 않으며 성공 후 임시 이름을 지웁니다. 일반 실패는 식별자가 같은 이번 실행 항목만 정리합니다. 이전 파일은 임의 삭제하지 않습니다.
+
+강제 종료·전원 장애·신뢰하는 보관 계정의 경로 변경까지 자동 복구한다고 보장하지 않습니다. 파일 동기화는 백업이나 디렉터리 게시의 전원 장애 내구성을 대신하지 않습니다. 검증은 링크·비정규 파일·읽는 중 변경을 거부하고 파일 크기를 **64 MiB**로 제한합니다. 이는 점수·커버리지 임계값이 아닙니다.
+
+복구 순서는 다음과 같습니다.
+
+1. 종료값과 안전한 실패 단계를 확인하고 `NOT_COMPLETED`를 성공으로 취급하지 않습니다.
+2. 담당자가 비공개 보관 위치를 확인합니다. `.part`를 완성본으로 쓰거나 자동 승인하지 않으며 소유·생성 이력이 확인된 항목만 별도로 정리합니다.
+3. 기존 최종 파일은 덮어쓰지 말고 검증합니다. 재시도는 새 출력 이름을 지정합니다.
+4. 권한·공간·파일시스템 지원과 원인을 확인하되 원본·접속 문자열·예외 원문을 로그/이슈에 붙이지 않습니다.
+
+권장 파일명은 `*.score-snapshot.json`이며 패턴과 임시 파일은 `.gitignore`로 보호합니다. 이름을 바꿔도 원본의 Git 추가가 허용되지는 않습니다. 실제 보관·백업/복원·보존 기간·배포 책임과 독립 해시 보관 경로는 여전히 운영 전 결정 사항입니다.
+
+### 6.8 실행 명령과 결과 해석
+
+**일반 검증 — 합성 입력만 사용, 실제 개발 DB·보존 파일 불필요.** 저장소 루트에서 `cd backend`한 뒤 실행합니다. 통합 테스트만 Docker의 일회용 PostGIS가 필요하며 기존 DB 환경변수는 필요하지 않습니다. DB 없는 기본 프로필 테스트도 유지합니다.
+
+```bash
+cd backend
+./gradlew test --tests '*ScoreSnapshotTests'
+# 전체 검증이 필요할 때
+./gradlew test integrationTest build spotlessCheck
+```
+
+**명시 실데이터/파일 작업 — 아래는 실행 안내이며 문서 정리 작업에서 실행하지 않습니다.** 같은 `backend/` 위치에서 필요한 환경변수를 미리 안전하게 준비합니다. 실제 개발 DB 여부·권한을 확인한 후 회귀/내보내기만 별도로 실행합니다. 출력·입력 경로는 사용자 선택의 외부 절대 경로이며 이 문서에 개인 경로를 쓰지 않습니다.
+
+```bash
+# DB 조회만: SCORE_REGRESSION_ENABLED와 DB 설정 필요
+SCORE_REGRESSION_ENABLED=1 ./gradlew scoreRegression --quiet --console=plain 2>/dev/null
+
+# DB 조회와 새 파일 보존: DB 설정·SCORE_SNAPSHOT_OUTPUT_PATH 필요
+SCORE_SNAPSHOT_EXPORT_ENABLED=1 ./gradlew scoreSnapshotExport --quiet --console=plain 2>/dev/null
+
+# DB 없는 파일 검증: SCORE_SNAPSHOT_INPUT_PATH 필요
+./gradlew scoreSnapshotVerify --quiet --console=plain 2>/dev/null
+```
+
+외부 해시를 대조하려면 세 `SCORE_SNAPSHOT_EXPECTED_*` 변수를 독립 기록에서 준비합니다. 소문자 64자리만 허용하고 제공한 값이 비거나 다르면 실패합니다. 파일 안에서 읽은 해시를 그대로 기대값으로 쓰는 것은 독립 검증이 아닙니다. `externalPins=0`은 외부 기준 없이 내부 일관성만 확인한 상태이며 3개 일치도 진위·의미·전체 목록의 독립 승인을 증명하지 않습니다.
+
+회귀 Java 도구는 0=대표 대조·현재 검산 성공, 1=기준선 차이/검산 실패, 2=설정·접속·안전 조건 등 미완료입니다. 내보내기·파일 검증은 0=성공, 2=오류입니다. Gradle은 비정상 종료를 작업 실패로 전달하므로 외부 Gradle 종료값만으로 1/2를 구분하지 말고 안전한 표준출력 단계도 확인합니다. **0도 R03 완전 재현이나 공개 승인은 아닙니다.** 도구 결과는 `publication=NOT_APPROVED`, `sourceTrust=NOT_ESTABLISHED`, `R03_COMPLETE=false`를 유지합니다.
+
+표준출력은 수·제외·해시·읽기 전용/롤백·미승인 상태와 안전한 실패 단계만 담습니다. Gradle 오류에 로컬 Java 경로가 섞일 수 있어 위 명령은 표준오류를 버립니다. 실패 시 `--debug`·`--info`·`--stacktrace` 로그나 접속 설정을 공유하지 않습니다. 새 해시·기대 결과까지 함께 변조한 파일은 신뢰할 수 있는 외부 기준/서명 없이 탐지할 수 없습니다.
 
 ## 7. 구현할 테스트 계약
 
@@ -422,7 +567,20 @@ C06은 실제 지역 실험이 아니라 표현 계층에 주입하는 분수 fi
 | 성북구 돈암1동    | 41.36 / 322.5      |
 | 서대문구 북아현동 | 64.50 / 45         |
 
-R03의 현재 근거는 [기존 실험 기록](archive/score-mvp-criteria-validation.md)입니다. 상세 문서·체크섬·배치 ID만으로 전체 원본 fixture가 확보된 것은 아닙니다. 원본 보존본을 확보하기 전에는 **실데이터 회귀 미검증**으로 남기고, 이번 문서의 대표 수치만으로 전체 입력을 역산해 만들지 않습니다. 과거 분기 순위 안정성과 실제 창업 성과는 이 회귀 테스트의 보장 범위가 아닙니다.
+[기준 검증](archive/score-mvp-criteria-validation.md)과 [R03·실제 입력 보존 기록](archive/score-20262-snapshot-preservation.md)을 구분해 읽습니다. 2026-11-02 17:38에는 대표 6곳·현재 446개를 검산했고 20:56에는 별도 실제 입력을 보존·오프라인 재현했습니다. **과거 12:17 전체 입력 fixture는 없어 R03 완전 재현은 미완료**입니다. 체크섬·배치·대표값으로 과거 전체 입력을 역산하지 않습니다. 과거 분기 순위 안정성과 실제 창업 성과는 보장 범위가 아닙니다.
+
+### 7.5 기존 검증 결과와 재실행 경계
+
+아래는 **각 구현 당시의 별도 실행 기록**이며 이번 문서 통합에서 테스트를 다시 실행한 결과가 아닙니다. 서로 다른 시점의 합계로 현재 전체 테스트 수를 추정하지 않습니다.
+
+| 시점·단계                             | 당시 결과                                                          | 범위·한계                                                                                               |
+| ------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| 2026-11-02 R01·R02 코어, 도구 추가 전 | 스냅샷 44개, 전체 단위 526개·통합 828개, 실패/건너뜀 0             | 합성 전체 집단. 행 존재+출처 ID/메타데이터 필수 조건을 포함한 보완 7개도 포함. 실제 개발 DB 도구 미실행 |
+| 2026-11-02 내보내기·오프라인 도구     | 신규 단위 22개·통합 5개, 전체 단위 548개·통합 833개, 실패/건너뜀 0 | 합성 전체 3구·3동·JUnit 소유 임시 디렉터리·일회용 PostGIS. 기존 코어 44개·고정 SHA fixture 유지         |
+
+두 단계 모두 빌드·Spotless·문서 Prettier·링크·표·신규 파일 공백 검사를 확인한 과거 기록입니다. 도구 테스트는 비활성·안전 속성 덮어쓰기·외부 경로/권한/기존 파일/링크/경로 교체·부분 저장 정리·변조·외부 기준·오프라인 재현을 다룹니다. 일회용 DB에서는 실제 읽기 전용·ROLLBACK·두 단위 저장·동시 변경의 동일 스냅샷·인증 실패·빈 최신 경계·게시 실패를 확인했습니다. 테스트 fixture 쓰기/마이그레이션은 내보내기 도구의 쓰기가 아닙니다.
+
+R01은 순서·시각 불변성, 변경 탐지·고정 해시·JSON 왕복/손상 거부를 검증합니다. R02는 원본 표현·전체 집단·정확한 결과·제외/보류의 DB 없는 재현입니다. 합성 코어 성공과 이후 실제 입력 보존 성공을 동일 실행으로 합치거나 승인된 실데이터라고 부르지 않습니다. 정책·원천 판본·커버리지·실제 창업 성과 승인은 어느 단계도 수행하지 않았습니다.
 
 ## 8. 승인과 구현 착수 조건
 
