@@ -5,6 +5,70 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@layer components {
+  /* DOM은 유지하고 공간만 접어 닫기·빠른 재열기에도 같은 전환을 이어갑니다. */
+  .explore-panel-shell {
+    display: grid;
+    grid-template-rows: minmax(0, 0fr);
+    width: 100%;
+    flex-shrink: 0;
+    overflow: clip;
+    transition: grid-template-rows 220ms ease-in-out;
+  }
+
+  .explore-panel-shell[data-open='true'] {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .explore-panel {
+    max-height: min(45dvh, 24rem);
+    opacity: 0;
+    transform: translateX(-1rem);
+    transition:
+      transform 220ms ease-in-out,
+      opacity 220ms ease-in-out;
+  }
+
+  .explore-panel-shell[data-open='true'] .explore-panel {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  @media (width >= 48rem) {
+    .explore-panel-shell {
+      --explore-panel-width: 20rem;
+      /* 검색창 48px와 위·아래 여백 16px씩을 확보하고 지도 높이는 유지합니다. */
+      margin-top: 5rem;
+      grid-template-rows: minmax(0, 1fr);
+      width: 0;
+      transition: width 220ms ease-in-out;
+    }
+
+    .explore-panel-shell[data-open='true'] {
+      width: var(--explore-panel-width);
+    }
+
+    .explore-panel {
+      width: var(--explore-panel-width);
+      max-height: none;
+    }
+  }
+
+  @media (width >= 64rem) {
+    .explore-panel-shell {
+      --explore-panel-width: 22.5rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .explore-panel-shell,
+    .explore-panel {
+      transition: none;
+      transform: none;
+    }
+  }
+}
+
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: 'Geist Variable', sans-serif;
@@ -55,14 +119,14 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  --primary: oklch(0.39 0.066 164);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --accent: oklch(0.96 0.017 164);
+  --accent-foreground: oklch(0.39 0.066 164);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);

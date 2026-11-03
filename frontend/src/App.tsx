@@ -1,12 +1,153 @@
+import { useRef, useState } from 'react';
+import {
+  BarChart3,
+  ChevronLeft,
+  Coffee,
+  GitCompareArrows,
+  MapPin,
+  Search,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ExplorePanel, type ExploreMenu } from '@/components/explore-panel';
+import { KakaoMapView } from '@/components/kakao-map';
 
-// 개발 환경 확인용 준비 화면입니다. 실제 탐색 기능이 없으므로 시작 버튼은 비활성화합니다.
+const menus = [
+  { id: 'region', label: '지역 탐색', Icon: MapPin },
+  { id: 'cafes', label: '주변 카페', Icon: Coffee },
+  { id: 'analysis', label: '상권 분석', Icon: BarChart3 },
+  { id: 'compare', label: '후보지 비교', Icon: GitCompareArrows },
+] as const;
+
 export default function App() {
+  const [selectedMenu, setSelectedMenu] = useState<ExploreMenu | null>(null);
+  // 닫는 전환이 끝날 때까지 마지막 내용을 유지해 깜빡임을 방지합니다.
+  const [panelMenu, setPanelMenu] = useState<ExploreMenu>('region');
+  const menuRefs = useRef<
+    Partial<Record<ExploreMenu, HTMLButtonElement | null>>
+  >({});
+  const selectedLabel = menus.find(({ id }) => id === panelMenu)!.label;
+
+  function closePanel() {
+    // 패널 안에 있던 키보드 포커스가 숨겨지지 않도록 메뉴로 돌려보냅니다.
+    if (selectedMenu) menuRefs.current[selectedMenu]?.focus();
+    setSelectedMenu(null);
+  }
   return (
-    <main className="flex min-h-svh flex-col items-center justify-center gap-4 p-6">
-      <h1 className="text-2xl font-semibold">RecycleYoungs</h1>
-      <p className="text-muted-foreground">개발 환경이 준비되었습니다.</p>
-      <Button disabled>서비스 준비 중</Button>
-    </main>
+    <div className="flex h-dvh min-h-80 flex-col overflow-hidden bg-background">
+      <a
+        href="#explore-main"
+        className="sr-only z-50 rounded-lg bg-background p-3 focus:not-sr-only focus:absolute focus:top-2 focus:left-2"
+      >
+        탐색 화면으로 건너뛰기
+      </a>
+      <main
+        id="explore-main"
+        aria-label="RecycleYoungs 탐색 화면"
+        tabIndex={-1}
+        className="relative flex min-h-0 flex-1 flex-col outline-none md:flex-row"
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && selectedMenu) {
+            event.preventDefault();
+            closePanel();
+          }
+        }}
+      >
+        <nav
+          aria-label="탐색 메뉴"
+          className="order-3 shrink-0 border-t bg-background p-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] md:order-0 md:w-18 md:border-t-0 md:border-r md:pb-1"
+        >
+          <div className="mb-2 hidden h-16 items-center justify-center border-b md:flex">
+            <div
+              role="img"
+              aria-label="RecycleYoungs"
+              className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground"
+            >
+              <Coffee aria-hidden="true" className="size-5" />
+            </div>
+          </div>
+          <ul className="grid grid-cols-4 gap-1 md:flex md:flex-col md:gap-2">
+            {menus.map(({ id, label, Icon }) => (
+              <li key={id}>
+                <Button
+                  ref={(node) => {
+                    menuRefs.current[id] = node;
+                  }}
+                  variant="navigation"
+                  size="navigation"
+                  aria-label={label}
+                  aria-expanded={selectedMenu === id}
+                  aria-controls="explore-panel"
+                  onClick={() => {
+                    setPanelMenu(id);
+                    setSelectedMenu((current) => (current === id ? null : id));
+                  }}
+                >
+                  <Icon aria-hidden="true" />
+                  <span>{label}</span>
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        {/* 태그 제거 후에도 기존 검색창의 반응형 폭과 위치를 유지합니다. */}
+        <div
+          role="search"
+          aria-label="장소 검색"
+          className="absolute top-4 left-4 z-30 flex h-12 w-[calc(100%-134px)] max-w-[346px] min-w-0 items-center gap-2 rounded-xl border bg-background px-3 shadow-sm sm:w-[329px] md:left-22"
+        >
+          <Search
+            aria-hidden="true"
+            className="size-4 shrink-0 text-muted-foreground"
+          />
+          <label htmlFor="place-search" className="sr-only">
+            장소 검색
+          </label>
+          <input
+            id="place-search"
+            type="text"
+            disabled
+            placeholder="장소 검색"
+            aria-describedby="place-search-help"
+            className="h-full min-w-0 flex-1 bg-transparent text-sm disabled:cursor-not-allowed disabled:text-muted-foreground"
+          />
+          <span className="shrink-0 border-l pl-2 text-xs text-muted-foreground">
+            준비 중
+          </span>
+          <p id="place-search-help" className="sr-only">
+            장소 검색은 준비 중입니다.
+          </p>
+        </div>
+        <div
+          className="explore-panel-shell order-2 md:order-0"
+          data-open={selectedMenu !== null}
+        >
+          <aside
+            id="explore-panel"
+            aria-labelledby="explore-panel-title"
+            aria-hidden={selectedMenu === null}
+            inert={selectedMenu === null}
+            className="explore-panel flex min-h-0 flex-col overflow-hidden border-t bg-background md:border-t-0 md:border-r"
+          >
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b px-5 py-3">
+              <h2 id="explore-panel-title" className="text-base font-semibold">
+                {selectedLabel ?? '탐색 도구'}
+              </h2>
+              <Button
+                variant="ghost"
+                size="icon-lg"
+                aria-label={`${selectedLabel ?? '상세'} 패널 닫기`}
+                onClick={closePanel}
+              >
+                <ChevronLeft aria-hidden="true" />
+              </Button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              <ExplorePanel key={panelMenu} menu={panelMenu} />
+            </div>
+          </aside>
+        </div>
+        <KakaoMapView />
+      </main>
+    </div>
   );
 }
