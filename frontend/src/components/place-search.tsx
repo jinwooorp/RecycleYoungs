@@ -12,12 +12,14 @@ export function PlaceSearch({
   panelOpen,
   regionFiltered,
   onNearby,
+  onCandidate,
 }: {
   search: PlaceSearchState;
   connection: MapConnection | null;
   panelOpen: boolean;
   regionFiltered: boolean;
   onNearby: (place: PlaceSearchResult) => void;
+  onCandidate?: (place: PlaceSearchResult) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const nearbyRef = useRef<HTMLButtonElement>(null);
@@ -222,6 +224,15 @@ export function PlaceSearch({
                 >
                   이 위치 주변 카페 보기
                 </Button>
+                {onCandidate && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onCandidate(search.selected!.place)}
+                  >
+                    후보지로 추가
+                  </Button>
+                )}
               </>
             )
           )}

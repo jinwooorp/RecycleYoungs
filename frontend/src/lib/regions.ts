@@ -192,3 +192,58 @@ export async function fetchBoundary(
   // 범위 계산을 통과한 Polygon·MultiPolygon만 SDK에 전달합니다.
   return { extent, geometry: body.geometry as BoundaryGeometry };
 }
+
+/** 1m 검색 결과 중 실제 중심점을 덮는 경계만 소속 판정에 사용합니다. */
+export async function fetchContainingRegions(
+  longitude: number,
+  latitude: number,
+  signal: AbortSignal,
+): Promise<{ districts: District[]; dongs: Omit<Dong, 'labelPoint'>[] }> {
+  const params = new URLSearchParams({
+    longitude: String(longitude),
+    latitude: String(latitude),
+    radiusM: '1',
+  });
+  const body = await request(`/api/v1/regions/nearby?${params}`, signal);
+  if (
+    !record(body) ||
+    !Array.isArray(body.districts) ||
+    !Array.isArray(body.dongs)
+  )
+    return invalid();
+  const districts = body.districts.flatMap((row: unknown) => {
+    if (
+      !record(row) ||
+      typeof row.districtCode !== 'string' ||
+      !/^\d{5}$/.test(row.districtCode) ||
+      typeof row.districtName !== 'string' ||
+      typeof row.containsCenter !== 'boolean'
+    )
+      return invalid();
+    return row.containsCenter
+      ? [{ districtCode: row.districtCode, districtName: row.districtName }]
+      : [];
+  });
+  const dongs = body.dongs.flatMap((row: unknown) => {
+    if (
+      !record(row) ||
+      typeof row.dongCode !== 'string' ||
+      !/^\d{8}$/.test(row.dongCode) ||
+      typeof row.districtCode !== 'string' ||
+      !/^\d{5}$/.test(row.districtCode) ||
+      typeof row.dongName !== 'string' ||
+      typeof row.containsCenter !== 'boolean'
+    )
+      return invalid();
+    return row.containsCenter
+      ? [
+          {
+            dongCode: row.dongCode,
+            districtCode: row.districtCode,
+            dongName: row.dongName,
+          },
+        ]
+      : [];
+  });
+  return { districts, dongs };
+}

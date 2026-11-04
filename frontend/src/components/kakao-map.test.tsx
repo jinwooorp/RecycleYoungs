@@ -1210,7 +1210,7 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
     expect.objectContaining({
       title: '임시 관심 위치',
       image: expect.any(Object),
-      clickable: false,
+      clickable: true,
     }),
   );
   const markerIndex = maps.Marker.mock.calls.findLastIndex(
@@ -1342,7 +1342,11 @@ test('반경 API 실패에도 지도와 중심점을 유지하고 재시도로 �
   fireEvent.click(screen.getByRole('button', { name: '주변 카페' }));
   fireEvent.click(screen.getByRole('button', { name: '선택 지점 주변' }));
   await waitFor(() =>
-    expect(screen.getByRole('button', { name: '지도 확대' })).toBeEnabled(),
+    expect(maps.event.addListener).toHaveBeenCalledWith(
+      map,
+      'click',
+      expect.any(Function),
+    ),
   );
   const click = maps.event.addListener.mock.calls.findLast(
     ([target, type]) => target === map && type === 'click',
@@ -1638,4 +1642,121 @@ test('선택 검색 마커와 카메라를 SDK 재시도에서 복원하고 언�
   expect(maps.Marker.mock.results[1].value.setMap).toHaveBeenLastCalledWith(
     null,
   );
+});
+
+test('지도 추가 모드와 검색에서 후보지를 등록하고 명시적으로 선택할 때만 이동한다', async () => {
+  const { maps, map } = createSdk();
+  load.mockResolvedValue(maps);
+  maps.services.Places.mockImplementation(function () {
+    return {
+      keywordSearch: vi.fn((_query: string, callback: KakaoSearchCallback) =>
+        callback(
+          [
+            {
+              id: 'station',
+              place_name: '검색 장소',
+              address_name: '서울 중구 예시',
+              x: '127',
+              y: '37.51',
+            },
+          ],
+          'OK',
+        ),
+      ),
+    };
+  });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (path: string) =>
+      Response.json(
+        path.includes('/regions/nearby')
+          ? {
+              districts: [
+                {
+                  districtCode: '11140',
+                  districtName: '중구',
+                  containsCenter: true,
+                },
+              ],
+              dongs: [],
+            }
+          : { items: [] },
+      ),
+    ),
+  );
+  const view = render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+  const menu = screen.getByRole('button', { name: '후보지 비교' });
+  fireEvent.click(menu);
+  const mode = screen.getByRole('button', { name: '지도에서 후보지 추가' });
+  await waitFor(() => expect(mode).toBeEnabled());
+  const mapClick = () =>
+    maps.event.addListener.mock.calls.findLast(
+      ([target, type]) => target === map && type === 'click',
+    )?.[2];
+  expect(mapClick()).toBeUndefined();
+  fireEvent.click(mode);
+  const firstClick = mapClick()!;
+  act(() =>
+    firstClick({ latLng: { getLat: () => 37.5, getLng: () => 126.99 } }),
+  );
+  await screen.findByText('후보지 A를 등록했습니다.');
+  expect(maps.event.removeListener).toHaveBeenCalledWith(
+    map,
+    'click',
+    firstClick,
+  );
+  const marker = maps.Marker.mock.results.at(-1)!.value;
+  const markerClick = maps.event.addListener.mock.calls.find(
+    ([target, type]) => target === marker && type === 'click',
+  )![2];
+  act(() => markerClick());
+  expect(maps.event.preventMap).toHaveBeenCalled();
+  await waitFor(() => expect(map.getCenter().getLng()).toBe(126.99));
+  const moves = map.setCenter.mock.calls.length;
+  fireEvent.change(screen.getByRole('textbox', { name: '후보지 A 이름' }), {
+    target: { value: '지도로 등록' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '후보지 A 이름 저장' }));
+  expect(map.setCenter).toHaveBeenCalledTimes(moves);
+  fireEvent.click(screen.getByRole('button', { name: '지도에서 후보지 추가' }));
+  const pendingClick = mapClick();
+  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
+  expect(maps.event.removeListener).toHaveBeenCalledWith(
+    map,
+    'click',
+    pendingClick,
+  );
+  const input = screen.getByRole('textbox', { name: '장소 검색' });
+  fireEvent.change(input, { target: { value: '검색 장소' } });
+  fireEvent.submit(input.closest('form')!);
+  fireEvent.click(
+    await screen.findByRole('button', { name: /검색 장소.*서울 중구/ }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: '후보지로 추가' }));
+  await screen.findByText('후보지 B를 등록했습니다.');
+  expect(screen.getByRole('button', { name: 'A · 지도로 등록' })).toBeVisible();
+  expect(screen.getByRole('table', { name: '후보지 비교표' })).toBeVisible();
+  const removed = maps.Marker.mock.results.at(-1)!.value;
+  fireEvent.click(screen.getByRole('button', { name: '후보지 B 삭제' }));
+  expect(removed.setMap).toHaveBeenLastCalledWith(null);
+  const remaining = maps.Marker.mock.results.at(-1)!.value;
+  expect(maps.Map).toHaveBeenCalledOnce();
+  vi.stubEnv('VITE_KAKAO_MAP_APP_KEY', 'replacement-key');
+  view.rerender(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+  await waitFor(() => expect(maps.Map).toHaveBeenCalledTimes(2));
+  expect(remaining.setMap).toHaveBeenLastCalledWith(null);
+  const restored = maps.Marker.mock.results.at(-1)!.value;
+  expect(restored).not.toBe(remaining);
+  expect(restored.setMap).toHaveBeenLastCalledWith(map);
+  view.unmount();
+  expect(restored.setMap).toHaveBeenLastCalledWith(null);
+  sessionStorage.removeItem('recycleyoungs.candidates');
 });

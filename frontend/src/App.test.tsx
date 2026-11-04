@@ -139,7 +139,11 @@ test('미연동 장소·반경 입력과 행정구역 전체 통계를 구분한
   expect(screen.getByText('추정매출')).toBeVisible();
   expect(screen.getByText('유동인구')).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: '후보지 비교' }));
-  expect(screen.getByText('관심 위치 저장 준비 중')).toBeVisible();
+  expect(
+    screen.getByText(
+      '등록된 후보지가 없습니다. 지도 또는 장소 검색에서 추가하세요.',
+    ),
+  ).toBeVisible();
   expect(screen.getByRole('region', { name: '비교 결과' })).toBeVisible();
   expect(fetch).toHaveBeenCalledWith(
     '/api/v1/districts',

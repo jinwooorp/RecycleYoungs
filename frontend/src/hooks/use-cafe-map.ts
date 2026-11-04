@@ -97,7 +97,8 @@ export function useCafeMap(
     const marker = new maps.Marker({
       position,
       title: '임시 관심 위치',
-      clickable: false,
+      // 중심 표식을 클릭해도 지도 클릭으로 전파되지 않게 합니다.
+      clickable: true,
       zIndex: 3,
       image: new maps.MarkerImage(
         `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,

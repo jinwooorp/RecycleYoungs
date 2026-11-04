@@ -106,7 +106,7 @@ export function ExplorePanel({
   if (menu === 'cafes') return <CafePanel cafes={cafes} />;
   if (menu === 'analysis')
     return <AnalysisPanel region={region} active={active} />;
-  return <ComparePanel />;
+  return null;
 }
 
 function RegionPanel({ region }: { region: RegionExplorer }) {
@@ -606,60 +606,6 @@ function AnalysisPanel({
             </>
           )}
         </div>
-      </section>
-    </div>
-  );
-}
-
-function ComparePanel() {
-  return (
-    <div className="flex flex-col gap-6 p-5 break-keep text-pretty">
-      <section
-        aria-labelledby="candidate-heading"
-        className="flex flex-col gap-4"
-      >
-        <h3 id="candidate-heading" className="text-sm font-semibold">
-          관심 위치
-        </h3>
-        <p className="text-sm leading-6 text-muted-foreground">
-          후보지는 비교를 위한 관심 위치이며, 상가 매물 정보가 아닙니다.
-        </p>
-        <div className="flex flex-col gap-3 rounded-xl border border-dashed p-5">
-          <MapPin aria-hidden="true" className="size-5 text-primary" />
-          <p className="text-sm font-medium">관심 위치 저장 준비 중</p>
-          <p className="text-xs leading-5 text-muted-foreground">
-            위치 지정·추가는 추후 제공됩니다.
-          </p>
-          <Button variant="outline" size="lg" disabled>
-            후보지 추가 · 준비 중
-          </Button>
-        </div>
-      </section>
-      <section
-        aria-label="비교 결과"
-        className="flex flex-col gap-4 border-t pt-6"
-      >
-        <h3 className="text-sm font-semibold">비교 결과</h3>
-        <p className="text-sm leading-6 text-muted-foreground">
-          비교 데이터 연동 준비 중
-        </p>
-        <dl className="flex flex-col gap-4 text-xs leading-5">
-          <div>
-            <dt className="font-medium">위치 주변 정보</dt>
-            <dd className="mt-1 text-muted-foreground">
-              후보지별 반경 내 경쟁 카페를 비교합니다.
-            </dd>
-          </div>
-          <div>
-            <dt className="font-medium">행정구역 전체 통계</dt>
-            <dd className="mt-1 text-muted-foreground">
-              구·행정동의 점포·매출·인구를 같은 기간과 집계 단위로 비교합니다.
-            </dd>
-          </div>
-        </dl>
-        <p className="text-xs leading-5 text-muted-foreground">
-          같은 행정동이어도 주변 카페 분포는 다를 수 있습니다.
-        </p>
       </section>
     </div>
   );

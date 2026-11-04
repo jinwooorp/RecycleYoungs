@@ -14,6 +14,10 @@ import type { MapConnection } from '@/components/kakao-map';
 import { KakaoMapView } from '@/components/kakao-map';
 import { useRegionExplorer } from '@/hooks/use-region-explorer';
 import { useCafeExplorer } from '@/hooks/use-cafe-explorer';
+import { useCandidates } from '@/hooks/use-candidates';
+import { useCandidateMap } from '@/hooks/use-candidate-map';
+import { CandidatePanel } from '@/components/candidate-panel';
+import type { Candidate } from '@/lib/candidates';
 
 const menus = [
   { id: 'region', label: '지역 탐색', Icon: MapPin },
@@ -41,11 +45,28 @@ export default function App() {
   const menuRefs = useRef<
     Partial<Record<ExploreMenu, HTMLButtonElement | null>>
   >({});
+  const candidates = useCandidates();
+  function selectCandidate(item: Candidate) {
+    candidates.setSelected(item.slot);
+    connection?.focusLocation?.(item, region.target);
+  }
+  useCandidateMap(
+    connection?.context ?? null,
+    candidates.items,
+    candidates.selected,
+    selectedMenu === 'compare' && candidates.picking,
+    selectCandidate,
+    (center) => {
+      if (selectedMenu === 'compare' && candidates.picking)
+        void candidates.add(center);
+    },
+  );
   const selectedLabel = menus.find(({ id }) => id === panelMenu)!.label;
 
   function closePanel() {
     // 패널 안에 있던 키보드 포커스가 숨겨지지 않도록 메뉴로 돌려보냅니다.
     if (selectedMenu) menuRefs.current[selectedMenu]?.focus();
+    if (selectedMenu === 'compare') candidates.leave();
     setSelectedMenu(null);
   }
   return (
@@ -94,6 +115,7 @@ export default function App() {
                   aria-expanded={selectedMenu === id}
                   aria-controls="explore-panel"
                   onClick={() => {
+                    if (selectedMenu === 'compare') candidates.leave();
                     setPanelMenu(id);
                     setSelectedMenu((current) => (current === id ? null : id));
                   }}
@@ -110,7 +132,15 @@ export default function App() {
           connection={connection}
           panelOpen={selectedMenu !== null}
           regionFiltered={!!region.districtCode}
+          onCandidate={(place) => {
+            setPanelMenu('compare');
+            setSelectedMenu('compare');
+            search.close();
+            menuRefs.current.compare?.focus();
+            void candidates.add(place);
+          }}
           onNearby={(place) => {
+            if (selectedMenu === 'compare') candidates.leave();
             cafes.setMode('nearby');
             cafes.selectCenter({
               longitude: place.longitude,
@@ -147,13 +177,22 @@ export default function App() {
               </Button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-              <ExplorePanel
-                key={panelMenu}
-                menu={panelMenu}
-                region={region}
-                cafes={cafes}
-                active={selectedMenu !== null}
-              />
+              {panelMenu === 'compare' ? (
+                <CandidatePanel
+                  candidates={candidates}
+                  active={selectedMenu === 'compare'}
+                  mapReady={connection?.status === 'ready'}
+                  onSelect={selectCandidate}
+                />
+              ) : (
+                <ExplorePanel
+                  key={panelMenu}
+                  menu={panelMenu}
+                  region={region}
+                  cafes={cafes}
+                  active={selectedMenu !== null}
+                />
+              )}
             </div>
           </aside>
         </div>

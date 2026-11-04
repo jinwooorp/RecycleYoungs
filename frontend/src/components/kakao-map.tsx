@@ -17,13 +17,14 @@ import type { BoundaryGeometry, RegionMapTarget } from '@/lib/regions';
 import type { CafeExplorer } from '@/hooks/use-cafe-explorer';
 import { useCafeMap } from '@/hooks/use-cafe-map';
 import type { PlaceSelection } from '@/hooks/use-place-search';
-import type { PlaceSearchResult } from '@/lib/place-search';
+import type { CafeCenter } from '@/lib/cafes';
 
 type MapStatus = 'loading' | 'ready' | 'error';
 export interface MapConnection {
   status: MapStatus;
   context: KakaoMapContext | null;
   retry: () => void;
+  focusLocation?: (center: CafeCenter, target: RegionMapTarget | null) => void;
 }
 
 /** SDK 수명은 로더가, 지도 인스턴스와 화면 이벤트는 이 컴포넌트가 관리합니다. */
@@ -45,8 +46,7 @@ export function KakaoMapView({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<KakaoMap | null>(null);
   const moveRef = useRef<
-    | ((next: RegionMapTarget | null, location?: PlaceSearchResult) => void)
-    | null
+    ((next: RegionMapTarget | null, location?: CafeCenter) => void) | null
   >(null);
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<MapStatus>('loading');
@@ -64,6 +64,7 @@ export function KakaoMapView({
       status,
       context: status === 'ready' ? context : null,
       retry,
+      focusLocation: (center, target) => moveRef.current?.(target, center),
     });
   }, [status, context, retry, connectionChanged]);
 
