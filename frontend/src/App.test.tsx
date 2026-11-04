@@ -71,7 +71,12 @@ test('같은 메뉴를 다시 누르면 닫고 다른 메뉴를 누르면 내용
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
   expect(
     screen.getByRole('complementary', { name: '상권 분석' }),
-  ).toHaveTextContent('행정구역 전체 통계');
+  ).toHaveTextContent('지역을 선택해 주세요');
+  expect(
+    screen.getByRole('complementary', { name: '상권 분석' }),
+  ).toContainElement(
+    screen.getByRole('region', { name: '행정구역 전체 통계' }),
+  );
   expect(screen.getByRole('textbox', { name: '장소 검색' })).toBe(search);
   expect(screen.getByRole('region', { name: '서울 상권 지도' })).toBe(map);
 });
@@ -94,7 +99,10 @@ test('장소 검색은 패널·지도 밖에 유지하고 닫는 동안 패널 �
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
   expect(screen.getByRole('complementary', { name: '상권 분석' })).toBe(panel);
   expect(panel).not.toHaveAttribute('inert');
-  expect(panel).toHaveTextContent('행정구역 전체 통계');
+  expect(panel).toHaveTextContent('지역을 선택해 주세요');
+  expect(panel).toContainElement(
+    screen.getByRole('region', { name: '행정구역 전체 통계' }),
+  );
   expect(screen.getByRole('search', { name: '장소 검색' })).toBe(search);
 });
 
