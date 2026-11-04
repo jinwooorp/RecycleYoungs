@@ -567,3 +567,26 @@
     translate: none;
   }
 }
+
+/* 클러스터 숫자는 SDK가 전달한 현재 마커 개수이며 일반 카페 핀과 구분합니다. */
+.explore-app .cafe-cluster-button {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--explore-action);
+  color: var(--primary);
+  font:
+    700 0.9375rem/1 'Geist Variable',
+    sans-serif;
+  cursor: pointer;
+}
+.explore-app .cafe-cluster-button:hover {
+  background: var(--explore-action-hover);
+}
+.explore-app .cafe-cluster-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}

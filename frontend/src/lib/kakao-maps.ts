@@ -36,7 +36,7 @@ export interface KakaoMap {
   getBounds(): KakaoBounds;
   setCenter(center: KakaoLatLng): void;
   getLevel(): number;
-  setLevel(level: number): void;
+  setLevel(level: number, options?: { anchor: KakaoLatLng }): void;
   relayout(): void;
 }
 
@@ -51,6 +51,29 @@ export interface KakaoPolygon {
 
 export interface KakaoMarker {
   setMap(map: KakaoMap | null): void;
+  setZIndex(zIndex: number): void;
+}
+/** Cluster는 SDK 이벤트에서만 제공되며 직접 생성하지 않습니다. */
+export interface KakaoCluster {
+  getCenter(): KakaoLatLng;
+  getClusterMarker(): { setZIndex(zIndex: number): void };
+}
+export interface KakaoMarkerClusterer {
+  addMarkers(markers: KakaoMarker[], nodraw?: boolean): void;
+  removeMarkers(markers: KakaoMarker[], nodraw?: boolean): void;
+  clear(): void;
+  redraw(): void;
+}
+export interface KakaoClustererOptions {
+  map: KakaoMap;
+  minLevel: number;
+  gridSize: number;
+  minClusterSize: number;
+  averageCenter: boolean;
+  disableClickZoom: boolean;
+  calculator: number[];
+  styles: Record<string, string>[];
+  texts: (size: number) => string;
 }
 export interface KakaoInfoWindow {
   setContent(content: HTMLElement): void;
@@ -104,6 +127,7 @@ export interface KakaoServices {
 
 export interface KakaoMaps {
   services: KakaoServices;
+  MarkerClusterer: new (options: KakaoClustererOptions) => KakaoMarkerClusterer;
   load(callback: () => void): void;
   LatLng: new (latitude: number, longitude: number) => KakaoLatLng;
   Circle: new (options: KakaoCircleOptions) => KakaoCircle;
@@ -137,9 +161,29 @@ export interface KakaoMaps {
   event: {
     preventMap(): void;
     addListener(
+      target: KakaoMarkerClusterer,
+      type: 'clusterclick',
+      handler: (cluster: KakaoCluster) => void,
+    ): void;
+    addListener(
+      target: KakaoMarkerClusterer,
+      type: 'clustered',
+      handler: (clusters: KakaoCluster[]) => void,
+    ): void;
+    addListener(
       target: KakaoMap | KakaoMarker,
       type: string,
       handler: (event?: KakaoMouseEvent) => void,
+    ): void;
+    removeListener(
+      target: KakaoMarkerClusterer,
+      type: 'clusterclick',
+      handler: (cluster: KakaoCluster) => void,
+    ): void;
+    removeListener(
+      target: KakaoMarkerClusterer,
+      type: 'clustered',
+      handler: (clusters: KakaoCluster[]) => void,
     ): void;
     removeListener(
       target: KakaoMap | KakaoMarker,
@@ -157,10 +201,11 @@ declare global {
 
 let pending: Promise<KakaoMaps> | undefined;
 
-function servicesReady(maps: KakaoMaps | undefined): maps is KakaoMaps {
+function librariesReady(maps: KakaoMaps | undefined): maps is KakaoMaps {
   return !!(
     maps?.Map &&
     maps.LatLng &&
+    typeof maps.MarkerClusterer === 'function' &&
     maps.services?.Places &&
     maps.services.Geocoder &&
     maps.services.Status &&
@@ -173,7 +218,7 @@ export function loadKakaoMaps(appKey: string): Promise<KakaoMaps> {
   if (!appKey.trim())
     return Promise.reject(new Error('Kakao JavaScript 키가 필요합니다.'));
   if (pending) return pending;
-  if (servicesReady(window.kakao?.maps))
+  if (librariesReady(window.kakao?.maps))
     return Promise.resolve(window.kakao.maps);
 
   const request = new Promise<KakaoMaps>((resolve, reject) => {
@@ -181,8 +226,8 @@ export function loadKakaoMaps(appKey: string): Promise<KakaoMaps> {
     const url = new URL('https://dapi.kakao.com/v2/maps/sdk.js');
     url.searchParams.set('appkey', appKey.trim());
     url.searchParams.set('autoload', 'false');
-    url.searchParams.set('libraries', 'services');
-    script.src = url.toString();
+    // SDK는 라이브러리 목록을 쉼표로 직접 분리하므로 구분자를 인코딩하지 않습니다.
+    script.src = `${url.toString()}&libraries=services,clusterer`;
     script.async = true;
     script.dataset.kakaoMapsSdk = '';
     let settled = false;
@@ -208,7 +253,7 @@ export function loadKakaoMaps(appKey: string): Promise<KakaoMaps> {
         maps.load(() => {
           // 시간 초과한 요청의 늦은 콜백은 새 재시도에 영향을 주지 않습니다.
           if (settled) return;
-          if (!servicesReady(maps)) return onError();
+          if (!librariesReady(maps)) return onError();
           settled = true;
           cleanup();
           resolve(maps);

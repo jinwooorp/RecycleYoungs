@@ -295,6 +295,10 @@ function CafePanel({ cafes }: { cafes: CafeExplorer }) {
               {cafes.data.totalCount.toLocaleString('ko-KR')}곳 중{' '}
               {cafes.items.length.toLocaleString('ko-KR')}곳 표시
             </p>
+            <p className="text-xs leading-5 text-muted-foreground">
+              지도에는 조회된 최대 200곳의 분포만 표시합니다. 묶음 숫자는 현재
+              포함된 마커 수이며, 확대하면 개별 카페를 볼 수 있습니다.
+            </p>
             {cafes.data.hasMore && (
               <p className="text-xs leading-5 text-muted-foreground">
                 최대 200곳만 표시합니다.{' '}

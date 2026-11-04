@@ -23,6 +23,7 @@ function sdk() {
     load: vi.fn((callback: () => void) => callback()),
     Map: vi.fn(),
     LatLng: vi.fn(),
+    MarkerClusterer: vi.fn(),
     services: {
       Places: vi.fn(),
       Geocoder: vi.fn(),
@@ -49,8 +50,11 @@ test('동시 호출은 하나의 비동기 SDK 로딩과 준비 콜백을 공유
     1,
   );
   expect(script().async).toBe(true);
+  expect(script().src).toContain('libraries=services,clusterer');
   expect(new URL(script().src).searchParams.get('autoload')).toBe('false');
-  expect(new URL(script().src).searchParams.get('libraries')).toBe('services');
+  expect(new URL(script().src).searchParams.get('libraries')).toBe(
+    'services,clusterer',
+  );
   const maps = sdk();
   script().dispatchEvent(new Event('load'));
   await expect(first).resolves.toBe(maps);
@@ -111,14 +115,35 @@ test('Services 없는 SDK는 준비 완료로 간주하지 않고 실패 후 전
     maps: {
       Map: vi.fn(),
       LatLng: vi.fn(),
+      MarkerClusterer: vi.fn(),
       load: (callback: () => void) => callback(),
     },
   });
   script().dispatchEvent(new Event('load'));
   await rejected;
   const retry = loadKakaoMaps('test-key');
-  expect(new URL(script().src).searchParams.get('libraries')).toBe('services');
+  expect(new URL(script().src).searchParams.get('libraries')).toBe(
+    'services,clusterer',
+  );
   const maps = sdk();
   script().dispatchEvent(new Event('load'));
   await expect(retry).resolves.toBe(maps);
 });
+
+test.each([undefined, {}])(
+  'Clusterer 생성자가 준비되지 않은 SDK는 전체 라이브러리를 재시도한다: %j',
+  async (constructor) => {
+    const { loadKakaoMaps } = await import('./kakao-maps');
+    const incomplete = sdk();
+    Object.assign(incomplete, { MarkerClusterer: constructor });
+    const first = loadKakaoMaps('test-key');
+    expect(script()).not.toBeNull();
+    const rejected = expect(first).rejects.toThrow('불러오지 못했습니다');
+    script().dispatchEvent(new Event('load'));
+    await rejected;
+    const retry = loadKakaoMaps('test-key');
+    const ready = sdk();
+    script().dispatchEvent(new Event('load'));
+    await expect(retry).resolves.toBe(ready);
+  },
+);

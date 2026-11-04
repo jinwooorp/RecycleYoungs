@@ -17,11 +17,15 @@ import {
   type KakaoCircleOptions,
   type KakaoMouseEvent,
   type KakaoSearchCallback,
+  type KakaoMarker,
+  type KakaoClustererOptions,
+  type KakaoCluster,
 } from '@/lib/kakao-maps';
 import { KakaoMapView } from './kakao-map';
 import ExploreApp from '@/App';
 import { MemoryRouter } from 'react-router';
 import { useCafeMap } from '@/hooks/use-cafe-map';
+import { useCandidateMap } from '@/hooks/use-candidate-map';
 import type { CafeExplorer } from '@/hooks/use-cafe-explorer';
 import type { RegionMapTarget } from '@/lib/regions';
 
@@ -160,8 +164,38 @@ function createSdk() {
     Polygon: vi.fn(function (options: KakaoPolygonOptions) {
       return { path: options.path, setMap: vi.fn() };
     }),
-    Marker: vi.fn(function (options: { position: KakaoLatLng; title: string }) {
-      return { ...options, setMap: vi.fn() };
+    Marker: vi.fn(function (options: {
+      position: KakaoLatLng;
+      title: string;
+      zIndex?: number;
+      image?: object;
+    }) {
+      return { ...options, setMap: vi.fn(), setZIndex: vi.fn() };
+    }),
+    MarkerClusterer: vi.fn(function (options: KakaoClustererOptions) {
+      const managed = new Set<KakaoMarker>();
+      const redraw = vi.fn(() => {
+        for (const marker of managed) marker.setMap(options.map);
+      });
+      return {
+        managed,
+        addMarkers: vi.fn((markers: KakaoMarker[], nodraw = false) => {
+          for (const marker of markers) managed.add(marker);
+          if (!nodraw) redraw();
+        }),
+        removeMarkers: vi.fn((markers: KakaoMarker[], nodraw = false) => {
+          for (const marker of markers) {
+            managed.delete(marker);
+            marker.setMap(null);
+          }
+          if (!nodraw) redraw();
+        }),
+        clear: vi.fn(() => {
+          for (const marker of managed) marker.setMap(null);
+          managed.clear();
+        }),
+        redraw,
+      };
     }),
     InfoWindow: vi.fn(function () {
       return { open: vi.fn(), close: vi.fn(), setContent: vi.fn() };
@@ -171,10 +205,12 @@ function createSdk() {
     }),
     event: {
       preventMap: vi.fn(),
-      addListener: vi.fn((_target, type, handler) =>
-        handlers.set(type, handler),
-      ),
-      removeListener: vi.fn((_target, type) => handlers.delete(type)),
+      addListener: vi.fn((target, type, handler) => {
+        if (target === map) handlers.set(type, handler);
+      }),
+      removeListener: vi.fn((target, type) => {
+        if (target === map) handlers.delete(type);
+      }),
     },
   } satisfies KakaoMaps;
   return { maps, map };
@@ -246,7 +282,7 @@ test('최초 영역·idle 재조회와 목록 선택은 마커·안전한 정보
   act(() => idleAfterZoom());
   await screen.findByRole('button', { name: /<img src=x/ });
   expect(screen.getByText('전체 301곳 중 2곳 표시')).toBeVisible();
-  expect(screen.getByText(/최대 200곳/)).toBeVisible();
+  expect(screen.getByText(/최대 200곳만/)).toBeVisible();
   expect(maps.Marker).toHaveBeenCalledTimes(2);
   const marker = maps.Marker.mock.results[0].value;
   expect(marker.setMap).toHaveBeenCalledWith(map);
@@ -279,7 +315,7 @@ test('최초 영역·idle 재조회와 목록 선택은 마커·안전한 정보
   expect(
     (info.setContent.mock.calls.at(-1)![0] as HTMLElement).textContent,
   ).toContain('주소 정보가 없습니다.');
-  expect(map.setCenter).toHaveBeenCalledTimes(1);
+  expect(map.setCenter).toHaveBeenCalledTimes(2);
   const cafeCalls = () =>
     fetch.mock.calls.filter(([url]) =>
       url.startsWith('/api/v1/cafes/viewport'),
@@ -292,13 +328,13 @@ test('최초 영역·idle 재조회와 목록 선택은 마커·안전한 정보
   )![2];
   act(() => idle());
   await new Promise((resolve) => setTimeout(resolve, 300));
-  expect(cafeCalls()).toHaveLength(1);
+  expect(cafeCalls()).toHaveLength(2);
   map.getBounds.mockReturnValue({
     getSouthWest: () => ({ getLat: () => 37.5, getLng: () => 126.9 }),
     getNorthEast: () => ({ getLat: () => 37.6, getLng: () => 127 }),
   });
   act(() => idle());
-  await waitFor(() => expect(cafeCalls()).toHaveLength(2));
+  await waitFor(() => expect(cafeCalls()).toHaveLength(3));
   expect(marker.setMap).toHaveBeenLastCalledWith(map);
   expect(maps.Marker).toHaveBeenCalledTimes(2);
   expect(info.open).toHaveBeenCalledTimes(2);
@@ -317,7 +353,7 @@ test('최초 영역·idle 재조회와 목록 선택은 마커·안전한 정보
     idle();
   });
   await screen.findByText(/자치구를 선택하거나 지도를 확대하면/);
-  expect(cafeCalls()).toHaveLength(3);
+  expect(cafeCalls()).toHaveLength(4);
   expect(
     screen.queryByText('현재 지도 영역에 조회된 카페가 없습니다.'),
   ).not.toBeInTheDocument();
@@ -1198,7 +1234,7 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
   );
   expect(nearbyCalls()[0][0]).not.toContain('Codes');
   expect(screen.getByText(/499.9m/)).toBeVisible();
-  expect(screen.getByText(/최대 200곳/)).toBeVisible();
+  expect(screen.getByText(/최대 200곳만/)).toBeVisible();
   expect(maps.Circle.mock.calls[0][0]).toMatchObject({
     radius: 500,
     strokeStyle: 'dashed',
@@ -1510,6 +1546,9 @@ test('장소 검색 이동·지역 필터 독립성·명시적 반경 연계와 
       maps.Marker.mock.calls[index][0].title === '검색 위치: 서울시청',
   )!.value;
   expect(searchMarker.setMap).toHaveBeenLastCalledWith(map);
+  expect(
+    maps.MarkerClusterer.mock.results[0].value.managed.has(searchMarker),
+  ).toBe(false);
   await waitFor(() =>
     expect(
       fetch.mock.calls.some(
@@ -1780,3 +1819,349 @@ function App() {
     </MemoryRouter>
   );
 }
+
+test('카페 클러스터러는 지도당 한 번 초기화하고 패널·조회 범위 변경에는 다시 만들지 않는다', async () => {
+  const { maps, map } = createSdk();
+  load.mockResolvedValue(maps);
+  const view = render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+  await waitFor(() => expect(maps.MarkerClusterer).toHaveBeenCalledOnce());
+  const clusterer = maps.MarkerClusterer.mock.results[0].value;
+  expect(maps.MarkerClusterer).toHaveBeenCalledWith(
+    expect.objectContaining({
+      map,
+      minLevel: 3,
+      gridSize: 60,
+      minClusterSize: 2,
+      averageCenter: true,
+      disableClickZoom: true,
+    }),
+  );
+  for (const name of [
+    '주변 카페',
+    '선택 지점 주변',
+    '상권 분석',
+    '후보지 비교',
+  ])
+    fireEvent.click(screen.getByRole('button', { name }));
+  expect(maps.MarkerClusterer).toHaveBeenCalledOnce();
+  view.unmount();
+  expect(clusterer.managed.size).toBe(0);
+  expect(maps.event.removeListener).toHaveBeenCalledWith(
+    clusterer,
+    'clusterclick',
+    expect.any(Function),
+  );
+});
+
+function clusterCafes(count: number): CafeExplorer {
+  return {
+    status: 'ready',
+    data: null,
+    error: null,
+    retry: vi.fn(),
+    needsZoom: false,
+    items: Array.from({ length: count }, (_, index) => ({
+      bizesId: `cafe-${index}`,
+      storeName: `카페 ${index}`,
+      branchName: null,
+      semasIndustryCode: 'I21201',
+      semasIndustryName: '카페',
+      roadAddress: null,
+      lotAddress: null,
+      longitude: 126.978 + index * 0.00001,
+      latitude: 37.5665,
+    })),
+    selected: null,
+    selectCafe: vi.fn(),
+    onViewportChange: vi.fn(),
+    scopeKey: 'district:one',
+    mode: 'viewport',
+    setMode: vi.fn(),
+    center: null,
+    selectCenter: vi.fn(),
+    clearCenter: vi.fn(),
+    radiusM: 500,
+    setRadiusM: vi.fn(),
+  };
+}
+
+test.each([0, 1, 200])(
+  '카페 %i개의 클러스터 일괄 등록·중복 방지와 StrictMode 자원 정리를 보장한다',
+  (count) => {
+    const { maps, map } = createSdk();
+    const context = { maps, map };
+    const moving = { current: false };
+    const notify = { current: null };
+    const cafes = clusterCafes(count);
+    const view = renderHook(
+      ({ value }) => useCafeMap(context, moving, notify, undefined, value),
+      {
+        initialProps: { value: cafes },
+        wrapper: StrictMode,
+      },
+    );
+    expect(maps.MarkerClusterer).toHaveBeenCalledOnce();
+    const clusterer = maps.MarkerClusterer.mock.results[0].value;
+    expect(clusterer.managed.size).toBe(count);
+    const markerCount = maps.Marker.mock.calls.length;
+    const redrawCount = clusterer.redraw.mock.calls.length;
+    view.rerender({
+      value: { ...cafes, items: count ? [...cafes.items, cafes.items[0]] : [] },
+    });
+    expect(maps.Marker.mock.calls.length).toBe(markerCount);
+    expect(clusterer.managed.size).toBe(count);
+    expect(clusterer.redraw.mock.calls.length).toBe(redrawCount);
+    act(() => {
+      map.setLevel(2);
+      map.setLevel(5);
+    });
+    expect(maps.MarkerClusterer).toHaveBeenCalledOnce();
+    expect(map.setCenter).not.toHaveBeenCalled();
+    view.unmount();
+    expect(clusterer.managed.size).toBe(0);
+    for (const marker of maps.Marker.mock.results)
+      expect(marker.value.setMap).toHaveBeenLastCalledWith(null);
+  },
+);
+
+test('클러스터의 숫자·크기·접근성 문구는 현재 로드된 마커 개수만 표현한다', () => {
+  const { maps, map } = createSdk();
+  const context = { maps, map };
+  const value = clusterCafes(1);
+  const view = renderHook(() =>
+    useCafeMap(
+      context,
+      { current: false },
+      { current: null },
+      undefined,
+      value,
+    ),
+  );
+  const options = maps.MarkerClusterer.mock.calls[0][0];
+  expect(options.styles.map((style) => style.width)).toEqual([
+    '48px',
+    '56px',
+    '64px',
+  ]);
+  expect(options.calculator).toEqual([10, 50]);
+  const node = document.createElement('div');
+  node.innerHTML = options.texts(200);
+  const button = node.querySelector('button')!;
+  expect(button).toHaveTextContent('200');
+  expect(button).toHaveAttribute('aria-label', '조회된 카페 200곳, 확대');
+  expect(node.textContent).not.toContain(value.items[0].storeName);
+  view.unmount();
+});
+
+test('클러스터 클릭은 현재 중심으로 한 레벨만 확대하고 지도 클릭에 전파하지 않는다', () => {
+  const { maps, map } = createSdk();
+  const context = { maps, map };
+  const value = {
+    ...clusterCafes(2),
+    mode: 'nearby' as const,
+    center: { longitude: 126.978, latitude: 37.5665 },
+  };
+  const view = renderHook(() =>
+    useCafeMap(
+      context,
+      { current: false },
+      { current: null },
+      undefined,
+      value,
+      true,
+    ),
+  );
+  const clusterer = maps.MarkerClusterer.mock.results[0].value;
+  const center = new maps.LatLng(37.57, 126.98);
+  const overlay = { setZIndex: vi.fn() };
+  const cluster: KakaoCluster = {
+    getCenter: () => center,
+    getClusterMarker: () => overlay,
+  };
+  const click = maps.event.addListener.mock.calls.find(
+    ([target, type]) => target === clusterer && type === 'clusterclick',
+  )![2] as unknown as (cluster: KakaoCluster) => void;
+  const clustered = maps.event.addListener.mock.calls.find(
+    ([target, type]) => target === clusterer && type === 'clustered',
+  )![2] as unknown as (clusters: KakaoCluster[]) => void;
+  act(() => {
+    clustered([cluster]);
+    click(cluster);
+  });
+  expect(overlay.setZIndex).toHaveBeenCalledWith(1);
+  expect(maps.event.preventMap).toHaveBeenCalledOnce();
+  expect(map.setLevel).toHaveBeenCalledOnce();
+  expect(map.setLevel).toHaveBeenCalledWith(4, { anchor: center });
+  expect(value.selectCenter).not.toHaveBeenCalled();
+  expect(value.selectCafe).not.toHaveBeenCalled();
+  // 반경 중심 표식은 클러스터에 등록하지 않습니다.
+  expect(clusterer.managed.size).toBe(2);
+  expect(
+    [...clusterer.managed].every(
+      (marker) =>
+        !(marker as { title?: string }).title?.includes('임시 관심 위치'),
+    ),
+  ).toBe(true);
+  view.unmount();
+  act(() => click(cluster));
+  expect(map.setLevel).toHaveBeenCalledOnce();
+});
+
+test('목록 선택 핀은 묶음에서 분리하고 재조회·축소에는 카메라를 반복 이동하지 않는다', () => {
+  const { maps, map } = createSdk();
+  const context = { maps, map };
+  const value = clusterCafes(2);
+  const moving = { current: false };
+  const notify = { current: null };
+  const view = renderHook(
+    ({ cafes }) => useCafeMap(context, moving, notify, undefined, cafes),
+    { initialProps: { cafes: value } },
+  );
+  const clusterer = maps.MarkerClusterer.mock.results[0].value;
+  const marker = maps.Marker.mock.results[0].value;
+  const selected = {
+    ...value,
+    selected: {
+      bizesId: value.items[0].bizesId,
+      scopeKey: value.scopeKey,
+      revision: 1,
+    },
+  };
+  view.rerender({ cafes: selected });
+  expect(map.getLevel()).toBe(2);
+  expect(clusterer.managed.has(marker)).toBe(false);
+  expect(marker.setMap).toHaveBeenLastCalledWith(map);
+  expect(marker.setZIndex).toHaveBeenLastCalledWith(2);
+  const info = maps.InfoWindow.mock.results[0].value;
+  expect(info.open).toHaveBeenLastCalledWith(map, marker);
+  const moves = map.setCenter.mock.calls.length;
+  const opens = info.open.mock.calls.length;
+  view.rerender({
+    cafes: {
+      ...selected,
+      items: selected.items.map((cafe) => ({
+        ...cafe,
+        branchName: '갱신 지점',
+      })),
+    },
+  });
+  act(() => map.setLevel(5));
+  expect(clusterer.managed.has(marker)).toBe(false);
+  expect(map.setCenter).toHaveBeenCalledTimes(moves);
+  expect(info.open).toHaveBeenCalledTimes(opens);
+  view.rerender({ cafes: value });
+  expect(info.close).toHaveBeenCalled();
+  expect(clusterer.managed.has(marker)).toBe(true);
+  view.unmount();
+});
+
+test('지역·반경 변경과 오류·빈 결과·지도 교체에서 기존 마커·정보창·클러스터를 정리한다', () => {
+  const first = createSdk();
+  const second = createSdk();
+  const moving = { current: false };
+  const notify = { current: null };
+  const value = clusterCafes(2);
+  const context = { maps: first.maps, map: first.map };
+  const view = renderHook(
+    ({ ctx, cafes }) => useCafeMap(ctx, moving, notify, undefined, cafes),
+    { initialProps: { ctx: context, cafes: value } },
+  );
+  const clusterer = first.maps.MarkerClusterer.mock.results[0].value;
+  const markers = first.maps.Marker.mock.results.map((result) => result.value);
+  view.rerender({
+    ctx: context,
+    cafes: {
+      ...value,
+      mode: 'nearby',
+      scopeKey: 'nearby:500',
+      center: { longitude: 126.978, latitude: 37.5665 },
+    },
+  });
+  expect(first.maps.MarkerClusterer).toHaveBeenCalledOnce();
+  for (const marker of markers)
+    expect(marker.setMap).toHaveBeenLastCalledWith(null);
+  view.rerender({
+    ctx: context,
+    cafes: { ...value, scopeKey: 'nearby:1000', radiusM: 1000, items: [] },
+  });
+  expect(clusterer.managed.size).toBe(0);
+  view.rerender({
+    ctx: context,
+    cafes: { ...value, status: 'error', items: [], error: 'API 실패' },
+  });
+  expect(clusterer.managed.size).toBe(0);
+  view.rerender({ ctx: { maps: second.maps, map: second.map }, cafes: value });
+  expect(clusterer.managed.size).toBe(0);
+  expect(second.maps.MarkerClusterer).toHaveBeenCalledOnce();
+  view.unmount();
+  expect(second.maps.MarkerClusterer.mock.results[0].value.managed.size).toBe(
+    0,
+  );
+});
+
+test('카페만 묶고 후보지 A·B·C와 반경 중심 표식은 별도 계층에 유지한다', () => {
+  const { maps, map } = createSdk();
+  const context = { maps, map };
+  const cafes = {
+    ...clusterCafes(2),
+    mode: 'nearby' as const,
+    center: { longitude: 126.978, latitude: 37.5665 },
+  };
+  const add = vi.fn();
+  const view = renderHook(() => {
+    useCafeMap(
+      context,
+      { current: false },
+      { current: null },
+      undefined,
+      cafes,
+    );
+    useCandidateMap(
+      context,
+      [
+        {
+          slot: 'A',
+          name: '후보지 하나',
+          longitude: 126.978,
+          latitude: 37.5665,
+        },
+        { slot: 'B', name: '후보지 둘', longitude: 126.979, latitude: 37.5665 },
+        { slot: 'C', name: '후보지 셋', longitude: 126.98, latitude: 37.5665 },
+      ],
+      'A',
+      true,
+      vi.fn(),
+      add,
+    );
+  });
+  const clusterer = maps.MarkerClusterer.mock.results[0].value;
+  expect(maps.Marker).toHaveBeenCalledTimes(6);
+  expect(clusterer.managed.size).toBe(2);
+  const titles = [...clusterer.managed].map(
+    (marker) => (marker as { title?: string }).title,
+  );
+  expect(titles).toEqual(['카페 0', '카페 1']);
+  expect(
+    maps.Marker.mock.calls
+      .filter(([options]) => options.title.startsWith('후보지'))
+      .map(([options]) => options.zIndex),
+  ).toEqual([7, 6, 6]);
+  const click = maps.event.addListener.mock.calls.find(
+    ([target, type]) => target === clusterer && type === 'clusterclick',
+  )![2] as unknown as (cluster: KakaoCluster) => void;
+  act(() =>
+    click({
+      getCenter: () => new maps.LatLng(37.5665, 126.978),
+      getClusterMarker: () => ({ setZIndex: vi.fn() }),
+    }),
+  );
+  expect(maps.event.preventMap).toHaveBeenCalledOnce();
+  expect(add).not.toHaveBeenCalled();
+  view.unmount();
+  for (const marker of maps.Marker.mock.results)
+    expect(marker.value.setMap).toHaveBeenLastCalledWith(null);
+});

@@ -4,10 +4,43 @@ import type {
   KakaoMarker,
   KakaoInfoWindow,
   KakaoMouseEvent,
+  KakaoMarkerClusterer,
+  KakaoCluster,
+  KakaoMap,
 } from '@/lib/kakao-maps';
 import type { RegionMapTarget } from '@/lib/regions';
 import type { CafeExplorer } from './use-cafe-explorer';
 import { cafeAddress, formatCafeDistance, type Cafe } from '@/lib/cafes';
+
+// 레벨 3 이상에서 60px 단위로 묶고, 레벨 2 이하는 개별 핀을 표시합니다.
+// 2곳부터 묶어 밀집 지역의 겹침을 줄이며 실제 거리 반경과는 무관한 표시 설정입니다.
+const clusterSettings = {
+  minLevel: 3,
+  gridSize: 60,
+  minClusterSize: 2,
+  averageCenter: true,
+};
+// 2px 테두리를 제외한 내부 버튼도 최소 44px가 되도록 크기를 지정합니다.
+const clusterStyles = [48, 56, 64].map((size) => ({
+  width: `${size}px`,
+  height: `${size}px`,
+  lineHeight: `${size - 4}px`,
+  background: '#8BE26E',
+  color: '#173629',
+  borderRadius: '50%',
+  border: '2px solid white',
+  boxSizing: 'border-box',
+}));
+
+// 공식 Clusterer에는 dispose가 없습니다. 같은 지도에서는 비운 인스턴스를 재사용해
+// StrictMode 재설정 때 SDK 내부 지도 리스너가 누적되지 않게 하고, 지도 폐기는 WeakMap에 맡깁니다.
+const clusterers = new WeakMap<KakaoMap, KakaoMarkerClusterer>();
+
+/** 외부 문자열 없이 SDK가 계산한 현재 마커 개수만 접근 가능한 버튼으로 표시합니다. */
+function clusterText(count: number) {
+  const size = Number.isInteger(count) && count >= 0 ? count : 0;
+  return `<button type="button" class="cafe-cluster-button" aria-label="조회된 카페 ${size}곳, 확대" title="현재 조회된 카페 ${size}곳">${size}</button>`;
+}
 
 /** API 문자열은 textContent로만 전달해 HTML로 해석되지 않도록 합니다. */
 function cafeContent(cafe: Cafe) {
@@ -61,6 +94,8 @@ export function useCafeMap(
   const selectCafe = cafes?.selectCafe;
   const status = cafes?.status;
   const scopeKey = cafes?.scopeKey;
+  const clustererRef = useRef<KakaoMarkerClusterer | null>(null);
+  const cafeLayerEnabled = scopeKey !== undefined;
   const layerRef = useRef<{
     markers: Map<
       string,
@@ -70,6 +105,7 @@ export function useCafeMap(
     selectedId: string | null;
     onSelect?: (id: string) => void;
     open: (id: string) => void;
+    releaseSelection: () => void;
   } | null>(null);
 
   useEffect(() => {
@@ -161,7 +197,50 @@ export function useCafeMap(
   }, [context, onViewportChange, target, movingRef, notifyRef]);
 
   useEffect(() => {
-    if (!context || scopeKey === undefined) return;
+    if (!context || !cafeLayerEnabled) return;
+    const { map, maps } = context;
+    let instance = clusterers.get(map);
+    if (!instance) {
+      instance = new maps.MarkerClusterer({
+        map,
+        ...clusterSettings,
+        disableClickZoom: true,
+        calculator: [10, 50],
+        styles: clusterStyles,
+        texts: clusterText,
+      });
+      clusterers.set(map, instance);
+    }
+    const clusterer = instance;
+    clustererRef.current = clusterer;
+    let active = true;
+    const click = (cluster: KakaoCluster) => {
+      if (!active) return;
+      maps.event.preventMap();
+      // 기본 영역 맞춤 확대와 중복 실행하지 않고 한 번에 한 레벨만 확대합니다.
+      map.setLevel(Math.max(1, map.getLevel() - 1), {
+        anchor: cluster.getCenter(),
+      });
+    };
+    const clustered = (clusters: KakaoCluster[]) => {
+      if (!active) return;
+      // 후보지(6/7)·검색(4)·반경 중심(3) 마커보다 아래에 표시합니다.
+      for (const cluster of clusters) cluster.getClusterMarker().setZIndex(1);
+    };
+    maps.event.addListener(clusterer, 'clusterclick', click);
+    maps.event.addListener(clusterer, 'clustered', clustered);
+    return () => {
+      active = false;
+      maps.event.removeListener(clusterer, 'clusterclick', click);
+      maps.event.removeListener(clusterer, 'clustered', clustered);
+      clusterer.clear();
+      clustererRef.current = null;
+    };
+  }, [context, cafeLayerEnabled]);
+
+  useEffect(() => {
+    const clusterer = clustererRef.current;
+    if (!context || !clusterer || scopeKey === undefined) return;
     const { map, maps } = context;
     // 사용자 선택 시에는 화면 끝의 정보창도 읽을 수 있도록 SDK의 자동 패닝을 허용합니다.
     const info = new maps.InfoWindow({
@@ -183,6 +262,30 @@ export function useCafeMap(
         if (!entry) return;
         if (positionFrame !== null) cancelAnimationFrame(positionFrame);
         info.close();
+        if (layer.selectedId !== id) {
+          const previous = layer.selectedId
+            ? markers.get(layer.selectedId)
+            : undefined;
+          if (previous) {
+            previous.marker.setZIndex(0);
+            previous.marker.setMap(null);
+            clusterer.addMarkers([previous.marker], true);
+          }
+          // 선택 핀은 클러스터에서 분리해 이후 축소·재집계에도 정보창의 앵커를 보장합니다.
+          clusterer.removeMarkers([entry.marker], true);
+          entry.marker.setZIndex(2);
+          entry.marker.setMap(map);
+          layer.selectedId = id;
+          clusterer.redraw();
+        }
+        if (map.getLevel() >= clusterSettings.minLevel) {
+          const position = new maps.LatLng(
+            entry.cafe.latitude,
+            entry.cafe.longitude,
+          );
+          map.setLevel(clusterSettings.minLevel - 1, { anchor: position });
+          map.setCenter(position);
+        }
         const content = cafeContent(entry.cafe);
         info.setContent(content);
         info.open(map, entry.marker);
@@ -226,11 +329,25 @@ export function useCafeMap(
         });
         layer.selectedId = id;
       },
+      releaseSelection: () => {
+        if (!layer.selectedId) return;
+        if (positionFrame !== null) cancelAnimationFrame(positionFrame);
+        info.close();
+        const previous = markers.get(layer.selectedId);
+        layer.selectedId = null;
+        if (previous) {
+          previous.marker.setZIndex(0);
+          previous.marker.setMap(null);
+          clusterer.addMarkers([previous.marker], true);
+          clusterer.redraw();
+        }
+      },
     };
     layerRef.current = layer;
     return () => {
       if (positionFrame !== null) cancelAnimationFrame(positionFrame);
       info.close();
+      clusterer.clear();
       for (const { marker, click } of markers.values()) {
         maps.event.removeListener(marker, 'click', click);
         marker.setMap(null);
@@ -242,7 +359,11 @@ export function useCafeMap(
   useEffect(() => {
     const layer = layerRef.current;
     if (!context || !layer || !items) return;
-    const { map, maps } = context;
+    const { maps } = context;
+    const clusterer = clustererRef.current;
+    if (!clusterer) return;
+    const removed: KakaoMarker[] = [];
+    const added: KakaoMarker[] = [];
     layer.onSelect = selectCafe;
     // 같은 지역의 지도 이동 중에는 기존 마커를 유지하고, 완료된 최신 결과와 대조합니다.
     // 지역 선택 변경은 위 effect의 scopeKey로 즉시 전체 정리합니다.
@@ -257,6 +378,7 @@ export function useCafeMap(
         cafe.storeName !== entry.cafe.storeName
       ) {
         maps.event.removeListener(entry.marker, 'click', entry.click);
+        removed.push(entry.marker);
         entry.marker.setMap(null);
         layer.markers.delete(id);
         if (layer.selectedId === id) {
@@ -284,11 +406,16 @@ export function useCafeMap(
       };
       layer.markers.set(cafe.bizesId, { marker, cafe, click });
       maps.event.addListener(marker, 'click', click);
-      marker.setMap(map);
+      added.push(marker);
     }
+    // 최대 200개를 일괄 반영한 뒤 한 번만 다시 그립니다. 동일 결과는 재등록하지 않습니다.
+    if (removed.length) clusterer.removeMarkers(removed, true);
+    if (added.length) clusterer.addMarkers(added, true);
+    if (removed.length || added.length) clusterer.redraw();
   }, [context, items, selectCafe, status, scopeKey]);
 
   useEffect(() => {
     if (selected) layerRef.current?.open(selected.bizesId);
+    else layerRef.current?.releaseSelection();
   }, [context, selected]);
 }
