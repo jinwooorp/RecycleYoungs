@@ -463,6 +463,22 @@
   margin-left: 0;
 }
 
+.cafe-marker-label {
+  display: block;
+  max-width: 9rem;
+  overflow: hidden;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .explore-location-notice {
   position: absolute;
   z-index: 10;

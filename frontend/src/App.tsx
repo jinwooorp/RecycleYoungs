@@ -33,6 +33,7 @@ export default function App() {
     region.districtCode,
     region.dongCode,
     region.boundary.status === 'loading',
+    connection?.status === 'ready' ? (connection.context?.maps ?? null) : null,
   );
   const [selectedMenu, setSelectedMenu] = useState<ExploreMenu | null>(null);
   // 닫는 전환이 끝날 때까지 마지막 내용을 유지해 깜빡임을 방지합니다.
@@ -141,10 +142,13 @@ export default function App() {
           onNearby={(place) => {
             if (selectedMenu === 'compare') candidates.leave();
             cafes.setMode('nearby');
-            cafes.selectCenter({
-              longitude: place.longitude,
-              latitude: place.latitude,
-            });
+            cafes.selectCenter(
+              {
+                longitude: place.longitude,
+                latitude: place.latitude,
+              },
+              place,
+            );
             setPanelMenu('cafes');
             setSelectedMenu('cafes');
             search.close();

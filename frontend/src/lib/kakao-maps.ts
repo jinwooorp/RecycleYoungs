@@ -121,6 +121,11 @@ export interface KakaoServices {
     ): void;
   };
   Geocoder: new () => {
+    coord2Address(
+      longitude: number,
+      latitude: number,
+      callback: KakaoSearchCallback,
+    ): void;
     coord2RegionCode(
       longitude: number,
       latitude: number,
@@ -135,6 +140,13 @@ export interface KakaoServices {
 }
 
 export interface KakaoMaps {
+  CustomOverlay: new (options: {
+    position: KakaoLatLng;
+    content: HTMLElement;
+    xAnchor: number;
+    yAnchor: number;
+    zIndex: number;
+  }) => { setMap(map: KakaoMap | null): void };
   services: KakaoServices;
   MarkerClusterer: new (options: KakaoClustererOptions) => KakaoMarkerClusterer;
   load(callback: () => void): void;

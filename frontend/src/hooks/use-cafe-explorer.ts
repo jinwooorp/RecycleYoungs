@@ -9,6 +9,8 @@ import {
 
 import type { BoundaryExtent } from '@/lib/regions';
 import { useRegionRequest } from './use-region-explorer';
+import { useCenterAddress, type CenterPlace } from './use-center-address';
+import type { KakaoMaps } from '@/lib/kakao-maps';
 
 export type CafeMode = 'viewport' | 'nearby';
 
@@ -19,9 +21,12 @@ export function useCafeExplorer(
   districtCode: string,
   dongCode: string,
   regionLoading: boolean,
+  maps: KakaoMaps | null = null,
 ) {
   const [mode, changeMode] = useState<CafeMode>('viewport');
   const [center, setCenter] = useState<CafeCenter | null>(null);
+  const [centerPlace, setCenterPlace] = useState<CenterPlace | null>(null);
+  const centerDetails = useCenterAddress(maps, center, centerPlace);
   const [radiusM, changeRadius] = useState<CafeRadius>(500);
   const regionKey = `${districtCode}:${dongCode}`;
   const [viewport, setViewport] = useState<{
@@ -104,28 +109,39 @@ export function useCafeExplorer(
     changeMode(next);
     setSelection(null);
   }, []);
+  const clearCafeSelection = useCallback(() => setSelection(null), []);
   const setRadiusM = useCallback((next: CafeRadius) => {
     changeRadius(next);
     setSelection(null);
   }, []);
-  const selectCenter = useCallback((next: CafeCenter) => {
-    if (
-      !Number.isFinite(next.longitude) ||
-      !Number.isFinite(next.latitude) ||
-      Math.abs(next.longitude) > 180 ||
-      Math.abs(next.latitude) > 90
-    )
-      return;
-    setCenter((current) =>
-      current?.longitude === next.longitude &&
-      current.latitude === next.latitude
-        ? current
-        : next,
-    );
-    setSelection(null);
-  }, []);
+  const selectCenter = useCallback(
+    (next: CafeCenter, place?: CenterPlace) => {
+      if (
+        !Number.isFinite(next.longitude) ||
+        !Number.isFinite(next.latitude) ||
+        Math.abs(next.longitude) > 180 ||
+        Math.abs(next.latitude) > 90
+      )
+        return;
+      if (
+        center?.longitude !== next.longitude ||
+        center.latitude !== next.latitude
+      ) {
+        // 표시 정보를 섞지 않고 기존 좌표만 API 조회 키에 사용합니다.
+        setCenter({ longitude: next.longitude, latitude: next.latitude });
+        setSelection(null);
+      }
+      setCenterPlace(
+        place
+          ? { name: place.name.trim(), address: place.address.trim() }
+          : null,
+      );
+    },
+    [center],
+  );
   const clearCenter = useCallback(() => {
     setCenter(null);
+    setCenterPlace(null);
     setSelection(null);
   }, []);
   return {
@@ -134,6 +150,7 @@ export function useCafeExplorer(
     mode,
     setMode,
     center,
+    centerDetails,
     selectCenter,
     clearCenter,
     radiusM,
@@ -141,6 +158,7 @@ export function useCafeExplorer(
     items,
     selected,
     selectCafe,
+    clearCafeSelection,
     onViewportChange,
     scopeKey,
   };

@@ -87,7 +87,9 @@ afterEach(() => {
 /** 지도 API 경계만 대체하고 컴포넌트의 실제 비동기 흐름과 사용자 조작을 검증합니다. */
 function createSdk() {
   let level = 5;
-  const handlers = new Map<string, (event?: KakaoMouseEvent) => void>();
+  const handlers = new Map<string, Set<(event?: KakaoMouseEvent) => void>>();
+  const emit = (type: string) =>
+    handlers.get(type)?.forEach((handler) => handler());
   let center = { getLat: () => 37.5665, getLng: () => 126.978 };
   const map = {
     getBounds: vi.fn((): KakaoBounds => ({
@@ -102,19 +104,19 @@ function createSdk() {
         getLng: () => (sw.getLng() + ne.getLng()) / 2,
       };
       level = 7;
-      handlers.get('center_changed')?.();
-      handlers.get('zoom_changed')?.();
+      emit('center_changed');
+      emit('zoom_changed');
     }),
     panBy: vi.fn(),
     getLevel: () => level,
     setLevel: vi.fn((next: number) => {
       level = next;
-      handlers.get('zoom_changed')?.();
+      emit('zoom_changed');
     }),
     getCenter: () => center,
     setCenter: vi.fn((next: typeof center) => {
       center = next;
-      handlers.get('center_changed')?.();
+      emit('center_changed');
     }),
     relayout: vi.fn(),
     getProjection: vi.fn(() => ({
@@ -123,6 +125,9 @@ function createSdk() {
     })),
   };
   const maps = {
+    CustomOverlay: vi.fn(function (options) {
+      return { ...options, setMap: vi.fn() };
+    }),
     services: {
       Status: { OK: 'OK', ZERO_RESULT: 'ZERO_RESULT', ERROR: 'ERROR' },
       SortBy: { ACCURACY: 'accuracy' },
@@ -136,6 +141,9 @@ function createSdk() {
       }),
       Geocoder: vi.fn(function () {
         return {
+          coord2Address: vi.fn((_x, _y, callback) =>
+            callback([], 'ZERO_RESULT'),
+          ),
           coord2RegionCode: vi.fn(
             (_x: number, _y: number, callback: KakaoSearchCallback) =>
               callback(
@@ -209,8 +217,11 @@ function createSdk() {
         redraw,
       };
     }),
-    InfoWindow: vi.fn(function () {
-      return { open: vi.fn(), close: vi.fn(), setContent: vi.fn() };
+    InfoWindow: vi.fn(function (options: {
+      disableAutoPan: boolean;
+      removable: boolean;
+    }) {
+      return { options, open: vi.fn(), close: vi.fn(), setContent: vi.fn() };
     }),
     Map: vi.fn(function () {
       return map;
@@ -218,10 +229,13 @@ function createSdk() {
     event: {
       preventMap: vi.fn(),
       addListener: vi.fn((target, type, handler) => {
-        if (target === map) handlers.set(type, handler);
+        if (target === map) {
+          if (!handlers.has(type)) handlers.set(type, new Set());
+          handlers.get(type)!.add(handler);
+        }
       }),
-      removeListener: vi.fn((target, type) => {
-        if (target === map) handlers.delete(type);
+      removeListener: vi.fn((target, type, handler) => {
+        if (target === map) handlers.get(type)?.delete(handler);
       }),
     },
   } satisfies KakaoMaps;
@@ -482,6 +496,9 @@ test.each([
       maps.services.Geocoder.mockImplementation(function () {
         return {
           addressSearch: vi.fn(),
+          coord2Address: vi.fn((_x, _y, callback) =>
+            callback([], 'ZERO_RESULT'),
+          ),
           coord2RegionCode: vi.fn((_x, _y, callback) =>
             callback(
               [{ region_type: 'H', region_1depth_name: '경기도' }],
@@ -543,6 +560,7 @@ test.each(['region', 'search', 'drag', 'candidate'] as const)(
     maps.services.Geocoder.mockImplementation(function () {
       return {
         addressSearch: vi.fn(),
+        coord2Address: vi.fn((_x, _y, callback) => callback([], 'ZERO_RESULT')),
         coord2RegionCode: vi.fn((_x, _y, callback) => {
           verify = callback;
         }),
@@ -707,6 +725,9 @@ test.each([
       maps.services.Geocoder.mockImplementation(function () {
         return {
           addressSearch: vi.fn(),
+          coord2Address: vi.fn((_x, _y, callback) =>
+            callback([], 'ZERO_RESULT'),
+          ),
           coord2RegionCode: vi.fn((_x, _y, callback) =>
             callback(
               [{ region_type: 'H', region_1depth_name: '경기도' }],
@@ -872,7 +893,7 @@ test('최초 영역·idle 재조회와 목록 선택은 마커·안전한 정보
   const info = maps.InfoWindow.mock.results.at(-1)!.value;
   expect(maps.InfoWindow).toHaveBeenCalledWith({
     disableAutoPan: false,
-    removable: true,
+    removable: false,
   });
   expect(info.open).toHaveBeenCalledWith(map, marker);
   const content = info.setContent.mock.calls.at(-1)![0] as HTMLElement;
@@ -1654,8 +1675,9 @@ test.each([
       'getBoundingClientRect',
     ).mockReturnValue(new DOMRect(16, 16, 256, 48));
     let content!: HTMLElement;
-    maps.InfoWindow.mockImplementation(function () {
+    maps.InfoWindow.mockImplementation(function (options) {
       return {
+        options,
         setContent: vi.fn((node: HTMLElement) => {
           content = node;
         }),
@@ -1688,6 +1710,8 @@ test.each([
       items: [cafe],
       selected: { bizesId: '001', scopeKey: ':', revision: 1 },
       selectCafe: vi.fn(),
+      clearCafeSelection: vi.fn(),
+      centerDetails: { name: null, address: null, pending: false },
       onViewportChange: vi.fn(),
       scopeKey: ':',
       mode: 'viewport',
@@ -1812,6 +1836,7 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
     mapClick()({ latLng: { getLat: () => 37.5665, getLng: () => 126.978 } }),
   );
   await screen.findByText('반경 내 전체 201곳 중 1곳 표시');
+  expect(screen.getByText('지도에서 선택한 위치')).toBeVisible();
   expect(nearbyCalls()[0][0]).toContain(
     'longitude=126.978&latitude=37.5665&radiusM=500&limit=200&offset=0',
   );
@@ -2180,6 +2205,16 @@ test('장소 검색 이동·지역 필터 독립성·명시적 반경 연계와 
   );
   expect(searchMarker.setMap).toHaveBeenLastCalledWith(null);
   expect(maps.Circle.mock.calls.at(-1)![0].radius).toBe(500);
+  const centerPanel = screen.getByRole('region', {
+    name: '선택 지점 주변 카페',
+  });
+  expect(within(centerPanel).getByText('서울시청')).toBeVisible();
+  expect(within(centerPanel).getByText('서울 중구 세종대로 110')).toBeVisible();
+  expect(
+    screen.queryByRole('region', { name: '장소 검색 결과' }),
+  ).not.toBeInTheDocument();
+  for (const { value } of maps.services.Geocoder.mock.results)
+    expect(value.coord2Address).not.toHaveBeenCalled();
   fireEvent.change(screen.getByRole('combobox', { name: '탐색 반경' }), {
     target: { value: '1000' },
   });
@@ -2428,6 +2463,7 @@ test('선택한 후보지에서 서울 외부 위치가 반환되어도 후보�
     maps.services.Geocoder.mockImplementation(function () {
       return {
         addressSearch: vi.fn(),
+        coord2Address: vi.fn((_x, _y, callback) => callback([], 'ZERO_RESULT')),
         coord2RegionCode: vi.fn((_x, _y, callback) =>
           callback([{ region_type: 'H', region_1depth_name: '경기도' }], 'OK'),
         ),
@@ -2520,6 +2556,8 @@ function clusterCafes(count: number): CafeExplorer {
     })),
     selected: null,
     selectCafe: vi.fn(),
+    clearCafeSelection: vi.fn(),
+    centerDetails: { name: null, address: null, pending: false },
     onViewportChange: vi.fn(),
     scopeKey: 'district:one',
     mode: 'viewport',
@@ -2700,6 +2738,232 @@ test('목록 선택 핀은 묶음에서 분리하고 재조회·축소에는 카
   expect(info.close).toHaveBeenCalled();
   expect(clusterer.managed.has(marker)).toBe(true);
   view.unmount();
+});
+
+test('Hover는 정보창 하나를 재사용하고 클릭·터치 선택의 고정 정보와 카메라를 침범하지 않는다', () => {
+  const { maps, map } = createSdk();
+  const context = { maps, map };
+  const value = clusterCafes(2);
+  value.items[0] = {
+    ...value.items[0],
+    storeName: '<img src=x onerror=alert(1)>',
+    branchName: '홍대점',
+    roadAddress: '서울 도로 1',
+    distanceM: 12.5,
+  };
+  value.items[1] = { ...value.items[1], lotAddress: '서울 지번 2' };
+  const view = renderHook(
+    ({ cafes }) =>
+      useCafeMap(
+        context,
+        { current: false },
+        { current: null },
+        undefined,
+        cafes,
+      ),
+    { initialProps: { cafes: value } },
+  );
+  const markerA = maps.Marker.mock.results[0].value;
+  const markerB = maps.Marker.mock.results[1].value;
+  const handler = (marker: KakaoMarker, type: string) =>
+    maps.event.addListener.mock.calls.findLast(
+      ([target, event]) => target === marker && event === type,
+    )![2];
+  const overA = handler(markerA, 'mouseover');
+  const outA = handler(markerA, 'mouseout');
+  const overB = handler(markerB, 'mouseover');
+  const outB = handler(markerB, 'mouseout');
+  const pinned = maps.InfoWindow.mock.results[0].value;
+  act(() => overA());
+  expect(maps.InfoWindow).toHaveBeenCalledTimes(2);
+  expect(maps.InfoWindow.mock.calls[1][0]).toEqual({
+    disableAutoPan: true,
+    removable: false,
+  });
+  const hover = maps.InfoWindow.mock.results[1].value;
+  expect(hover.open).toHaveBeenLastCalledWith(map, markerA);
+  const content = hover.setContent.mock.calls.at(-1)![0] as HTMLElement;
+  expect(content.textContent).toContain(
+    '<img src=x onerror=alert(1)> · 홍대점',
+  );
+  expect(content.textContent).toContain('서울 도로 1');
+  expect(content.textContent).toContain('중심점에서 12.5m');
+  expect(content.querySelector('img,script')).toBeNull();
+  act(() => {
+    overB();
+    outA();
+  });
+  expect(hover.open).toHaveBeenLastCalledWith(map, markerB);
+  expect(
+    (hover.setContent.mock.calls.at(-1)![0] as HTMLElement).textContent,
+  ).toContain('서울 지번 2');
+  const closes = hover.close.mock.calls.length;
+  act(() => outB());
+  expect(hover.close).toHaveBeenCalledTimes(closes + 1);
+  expect(value.selectCafe).not.toHaveBeenCalled();
+  expect(map.setLevel).not.toHaveBeenCalled();
+  expect(map.setCenter).not.toHaveBeenCalled();
+  expect(map.panBy).not.toHaveBeenCalled();
+  act(() => {
+    overA();
+    handler(markerB, 'click')();
+  });
+  expect(value.selectCafe).toHaveBeenCalledWith(value.items[1].bizesId);
+  expect(maps.event.preventMap).toHaveBeenCalled();
+  view.rerender({
+    cafes: {
+      ...value,
+      selected: {
+        bizesId: value.items[1].bizesId,
+        scopeKey: value.scopeKey,
+        revision: 1,
+      },
+    },
+  });
+  expect(pinned.open).toHaveBeenLastCalledWith(map, markerB);
+  expect(maps.MarkerClusterer.mock.results[0].value.managed.has(markerB)).toBe(
+    false,
+  );
+  const pinnedCloses = pinned.close.mock.calls.length;
+  const hoverOpens = hover.open.mock.calls.length;
+  act(() => {
+    outB();
+    overA();
+    outA();
+  });
+  expect(pinned.close).toHaveBeenCalledTimes(pinnedCloses);
+  expect(hover.open).toHaveBeenCalledTimes(hoverOpens);
+  const fixedContent = pinned.setContent.mock.calls.at(-1)![0] as HTMLElement;
+  fireEvent.click(
+    within(fixedContent).getByRole('button', { name: '카페 상세 정보 닫기' }),
+  );
+  expect(value.clearCafeSelection).toHaveBeenCalledOnce();
+  expect(maps.MarkerClusterer.mock.results[0].value.managed.has(markerB)).toBe(
+    true,
+  );
+  expect(pinned.close).toHaveBeenCalledTimes(pinnedCloses + 1);
+  view.unmount();
+  const selectedCalls = vi.mocked(value.selectCafe).mock.calls.length;
+  act(() => {
+    overA();
+    handler(markerA, 'click')();
+  });
+  expect(value.selectCafe).toHaveBeenCalledTimes(selectedCalls);
+  for (const marker of [markerA, markerB]) {
+    for (const event of ['click', 'mouseover', 'mouseout'])
+      expect(maps.event.removeListener).toHaveBeenCalledWith(
+        marker,
+        event,
+        expect.any(Function),
+      );
+  }
+  expect(hover.close).toHaveBeenCalled();
+});
+
+test('Hover 중 결과 변경·삭제는 최신 정보를 표시하고 제거한 마커의 임시 정보와 리스너를 정리한다', () => {
+  const { maps, map } = createSdk();
+  const context = { maps, map };
+  const value = clusterCafes(2);
+  const view = renderHook(
+    ({ cafes }) =>
+      useCafeMap(
+        context,
+        { current: false },
+        { current: null },
+        undefined,
+        cafes,
+      ),
+    { initialProps: { cafes: value } },
+  );
+  const marker = maps.Marker.mock.results[0].value;
+  const over = maps.event.addListener.mock.calls.find(
+    ([target, event]) => target === marker && event === 'mouseover',
+  )![2];
+  act(() => over());
+  const hover = maps.InfoWindow.mock.results[1].value;
+  view.rerender({
+    cafes: {
+      ...value,
+      items: value.items.map((cafe) => ({
+        ...cafe,
+        branchName: '최신 지점',
+        roadAddress: '최신 주소',
+      })),
+    },
+  });
+  expect(
+    (hover.setContent.mock.calls.at(-1)![0] as HTMLElement).textContent,
+  ).toContain('최신 지점');
+  expect(
+    (hover.setContent.mock.calls.at(-1)![0] as HTMLElement).textContent,
+  ).toContain('최신 주소');
+  const opens = hover.open.mock.calls.length;
+  view.rerender({ cafes: { ...value, items: [] } });
+  expect(hover.close).toHaveBeenCalled();
+  expect(marker.setMap).toHaveBeenLastCalledWith(null);
+  act(() => over());
+  expect(hover.open).toHaveBeenCalledTimes(opens);
+  expect(map.setCenter).not.toHaveBeenCalled();
+});
+
+test('200개 이름 라벨은 레벨 1·2에서만 겹침·화면 범위·40개 상한을 적용하고 클러스터와 함께 표시하지 않는다', async () => {
+  const { maps, map } = createSdk();
+  const context = { maps, map };
+  const value = clusterCafes(200);
+  vi.stubGlobal('innerWidth', 2000);
+  vi.stubGlobal('innerHeight', 2000);
+  const project = vi.fn(() => ({ x: 200, y: 200 }));
+  map.getProjection.mockReturnValue({
+    containerPointFromCoords: project,
+    coordsFromContainerPoint: vi.fn(() => map.getCenter()),
+  });
+  const view = renderHook(() =>
+    useCafeMap(
+      context,
+      { current: false },
+      { current: null },
+      undefined,
+      value,
+    ),
+  );
+  expect(maps.CustomOverlay).not.toHaveBeenCalled();
+  act(() => map.setLevel(2));
+  await waitFor(() => expect(maps.CustomOverlay).toHaveBeenCalledOnce());
+  expect(maps.CustomOverlay.mock.calls[0][0].content.textContent).toBe(
+    '카페 0',
+  );
+  expect(maps.CustomOverlay.mock.calls[0][0].content.className).toBe(
+    'cafe-marker-label',
+  );
+  project.mockImplementation((...args: unknown[]) => {
+    const position = args[0] as KakaoLatLng;
+    const index = Math.round((position.getLng() - 126.978) / 0.00001);
+    return {
+      x: 100 + (index % 10) * 160,
+      y: 100 + Math.floor(index / 10) * 40,
+    };
+  });
+  act(() => map.setLevel(1));
+  await waitFor(() => expect(maps.CustomOverlay).toHaveBeenCalledTimes(41));
+  const labels = maps.CustomOverlay.mock.results
+    .slice(1)
+    .map(({ value }) => value);
+  labels.forEach((label) => expect(label.setMap).toHaveBeenLastCalledWith(map));
+  act(() => map.setLevel(3));
+  await waitFor(() =>
+    labels.forEach((label) =>
+      expect(label.setMap).toHaveBeenLastCalledWith(null),
+    ),
+  );
+  expect(maps.MarkerClusterer.mock.results[0].value.managed.size).toBe(200);
+  expect(maps.InfoWindow).toHaveBeenCalledOnce();
+  expect(value.selectCafe).not.toHaveBeenCalled();
+  view.unmount();
+  expect(maps.event.removeListener).toHaveBeenCalledWith(
+    map,
+    'zoom_changed',
+    expect.any(Function),
+  );
 });
 
 test('지역·반경 변경과 오류·빈 결과·지도 교체에서 기존 마커·정보창·클러스터를 정리한다', () => {

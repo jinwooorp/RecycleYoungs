@@ -43,7 +43,7 @@ function clusterText(count: number) {
 }
 
 /** API 문자열은 textContent로만 전달해 HTML로 해석되지 않도록 합니다. */
-function cafeContent(cafe: Cafe) {
+function cafeContent(cafe: Cafe, close?: () => void) {
   const content = document.createElement('div');
   content.className =
     'w-[min(15rem,calc(100vw-4rem))] max-h-[min(16rem,30dvh)] box-border overflow-y-auto overscroll-contain whitespace-normal break-words p-4 pr-7 text-sm leading-5 [overflow-wrap:anywhere]';
@@ -51,6 +51,18 @@ function cafeContent(cafe: Cafe) {
   purpose.className = 'mb-2 text-xs font-medium text-primary';
   purpose.textContent = '기존 경쟁 카페';
   content.append(purpose);
+  if (close) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'mb-2 min-h-11 rounded-md border px-3 text-xs';
+    button.textContent = '닫기';
+    button.setAttribute('aria-label', '카페 상세 정보 닫기');
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      close();
+    });
+    content.append(button);
+  }
   const title = document.createElement('strong');
   title.className = 'block font-semibold';
   title.textContent = [cafe.storeName, cafe.branchName?.trim()]
@@ -74,6 +86,14 @@ function cafeContent(cafe: Cafe) {
   return content;
 }
 
+interface CafeMarkerEntry {
+  marker: KakaoMarker;
+  cafe: Cafe;
+  click: () => void;
+  over: () => void;
+  out: () => void;
+}
+
 /** 지도 이벤트·카페 오버레이 수명을 지도 생성과 분리합니다. 마커 갱신은 카메라를 움직이지 않습니다. */
 export function useCafeMap(
   context: KakaoMapContext | null,
@@ -92,18 +112,22 @@ export function useCafeMap(
   const items = cafes?.items;
   const selected = cafes?.selected;
   const selectCafe = cafes?.selectCafe;
+  const clearCafeSelection = cafes?.clearCafeSelection;
   const status = cafes?.status;
   const scopeKey = cafes?.scopeKey;
   const clustererRef = useRef<KakaoMarkerClusterer | null>(null);
   const cafeLayerEnabled = scopeKey !== undefined;
   const layerRef = useRef<{
-    markers: Map<
-      string,
-      { marker: KakaoMarker; cafe: Cafe; click: () => void }
-    >;
+    markers: Map<string, CafeMarkerEntry>;
     info: KakaoInfoWindow;
     selectedId: string | null;
     onSelect?: (id: string) => void;
+    onClearSelection?: () => void;
+    refreshLabels: () => void;
+    showHover: (id: string) => void;
+    hideHover: (id?: string) => void;
+    updateContent: (id: string) => void;
+    close: () => void;
     open: (id: string) => void;
     releaseSelection: () => void;
   } | null>(null);
@@ -245,21 +269,113 @@ export function useCafeMap(
     // 사용자 선택 시에는 화면 끝의 정보창도 읽을 수 있도록 SDK의 자동 패닝을 허용합니다.
     const info = new maps.InfoWindow({
       disableAutoPan: false,
-      removable: true,
+      removable: false,
     });
+    // Hover는 지도당 하나를 지연 생성·재사용하며 자동 패닝과 선택 상태를 변경하지 않습니다.
+    let hoverInfo: KakaoInfoWindow | null = null;
+    let hoveredId: string | null = null;
+    let active = true;
     let positionFrame: number | null = null;
-    const markers = new Map<
-      string,
-      { marker: KakaoMarker; cafe: Cafe; click: () => void }
-    >();
+    let labelFrame: number | null = null;
+    const labels: { setMap(map: KakaoMap | null): void }[] = [];
+    const clearLabels = () => {
+      labels.forEach((label) => label.setMap(null));
+      labels.length = 0;
+    };
+    const markers = new Map<string, CafeMarkerEntry>();
     const layer = {
       markers,
       info,
       selectedId: null as string | null,
       onSelect: undefined as ((id: string) => void) | undefined,
+      onClearSelection: undefined as (() => void) | undefined,
+      refreshLabels: () => {
+        if (labelFrame !== null) cancelAnimationFrame(labelFrame);
+        labelFrame = requestAnimationFrame(() => {
+          labelFrame = null;
+          clearLabels();
+          // 클러스터가 없는 레벨 1·2에서만 화면 안의 겹치지 않는 이름을 최대 40개 표시합니다.
+          if (!active || map.getLevel() >= clusterSettings.minLevel) return;
+          const area = document.querySelector<HTMLElement>(
+            '[aria-label="Kakao Maps 지도"]',
+          );
+          const width = area?.clientWidth || window.innerWidth;
+          const height = area?.clientHeight || window.innerHeight;
+          const occupied: { x: number; y: number }[] = [];
+          const projection = map.getProjection();
+          for (const [id, entry] of markers) {
+            if (id === layer.selectedId || id === hoveredId) continue;
+            const position = new maps.LatLng(
+              entry.cafe.latitude,
+              entry.cafe.longitude,
+            );
+            const { x, y } = projection.containerPointFromCoords(position);
+            if (
+              x < 76 ||
+              x > width - 76 ||
+              y < 0 ||
+              y > height - 32 ||
+              occupied.some(
+                (point) =>
+                  Math.abs(point.x - x) < 152 && Math.abs(point.y - y) < 32,
+              )
+            )
+              continue;
+            const content = document.createElement('span');
+            content.className = 'cafe-marker-label';
+            content.textContent = [
+              entry.cafe.storeName,
+              entry.cafe.branchName?.trim(),
+            ]
+              .filter(Boolean)
+              .join(' · ');
+            const label = new maps.CustomOverlay({
+              position,
+              content,
+              xAnchor: 0.5,
+              yAnchor: -0.2,
+              zIndex: 0,
+            });
+            label.setMap(map);
+            labels.push(label);
+            occupied.push({ x, y });
+            if (labels.length === 40) break;
+          }
+        });
+      },
+      hideHover: (id?: string) => {
+        if (id && hoveredId !== id) return;
+        hoverInfo?.close();
+        hoveredId = null;
+      },
+      showHover: (id: string) => {
+        const entry = markers.get(id);
+        if (!active || !entry || layer.selectedId) return;
+        layer.hideHover();
+        hoverInfo ??= new maps.InfoWindow({
+          disableAutoPan: true,
+          removable: false,
+        });
+        hoverInfo.setContent(cafeContent(entry.cafe));
+        hoverInfo.open(map, entry.marker);
+        hoveredId = id;
+      },
+      updateContent: (id: string) => {
+        const entry = markers.get(id);
+        if (!entry) return;
+        if (layer.selectedId === id)
+          info.setContent(cafeContent(entry.cafe, layer.close));
+        if (hoveredId === id) hoverInfo?.setContent(cafeContent(entry.cafe));
+      },
+      close: () => {
+        maps.event.preventMap();
+        layer.releaseSelection();
+        layer.onClearSelection?.();
+      },
       open: (id: string) => {
         const entry = markers.get(id);
         if (!entry) return;
+        layer.hideHover();
         if (positionFrame !== null) cancelAnimationFrame(positionFrame);
         info.close();
         if (layer.selectedId !== id) {
@@ -286,7 +402,7 @@ export function useCafeMap(
           map.setLevel(clusterSettings.minLevel - 1, { anchor: position });
           map.setCenter(position);
         }
-        const content = cafeContent(entry.cafe);
+        const content = cafeContent(entry.cafe, layer.close);
         info.setContent(content);
         info.open(map, entry.marker);
         // SDK 자동 패닝은 지도 위의 고정 검색창을 모르므로 겹칠 때만 추가 여백을 확보합니다.
@@ -328,6 +444,7 @@ export function useCafeMap(
           if (x || y) map.panBy(x, y);
         });
         layer.selectedId = id;
+        layer.refreshLabels();
       },
       releaseSelection: () => {
         if (!layer.selectedId) return;
@@ -341,17 +458,29 @@ export function useCafeMap(
           clusterer.addMarkers([previous.marker], true);
           clusterer.redraw();
         }
+        layer.refreshLabels();
       },
     };
     layerRef.current = layer;
+    maps.event.addListener(map, 'zoom_changed', layer.refreshLabels);
+    maps.event.addListener(map, 'idle', layer.refreshLabels);
     return () => {
+      active = false;
       if (positionFrame !== null) cancelAnimationFrame(positionFrame);
+      if (labelFrame !== null) cancelAnimationFrame(labelFrame);
+      clearLabels();
+      layer.hideHover();
       info.close();
       clusterer.clear();
-      for (const { marker, click } of markers.values()) {
+      maps.event.removeListener(map, 'zoom_changed', layer.refreshLabels);
+      maps.event.removeListener(map, 'idle', layer.refreshLabels);
+      for (const { marker, click, over, out } of markers.values()) {
         maps.event.removeListener(marker, 'click', click);
+        maps.event.removeListener(marker, 'mouseover', over);
+        maps.event.removeListener(marker, 'mouseout', out);
         marker.setMap(null);
       }
+      markers.clear();
       layerRef.current = null;
     };
   }, [context, scopeKey]);
@@ -365,6 +494,7 @@ export function useCafeMap(
     const removed: KakaoMarker[] = [];
     const added: KakaoMarker[] = [];
     layer.onSelect = selectCafe;
+    layer.onClearSelection = clearCafeSelection;
     // 같은 지역의 지도 이동 중에는 기존 마커를 유지하고, 완료된 최신 결과와 대조합니다.
     // 지역 선택 변경은 위 effect의 scopeKey로 즉시 전체 정리합니다.
     if (status === 'loading') return;
@@ -378,6 +508,9 @@ export function useCafeMap(
         cafe.storeName !== entry.cafe.storeName
       ) {
         maps.event.removeListener(entry.marker, 'click', entry.click);
+        maps.event.removeListener(entry.marker, 'mouseover', entry.over);
+        maps.event.removeListener(entry.marker, 'mouseout', entry.out);
+        layer.hideHover(id);
         removed.push(entry.marker);
         entry.marker.setMap(null);
         layer.markers.delete(id);
@@ -391,8 +524,7 @@ export function useCafeMap(
       const existing = layer.markers.get(cafe.bizesId);
       if (existing) {
         existing.cafe = cafe;
-        if (layer.selectedId === cafe.bizesId)
-          layer.info.setContent(cafeContent(cafe));
+        layer.updateContent(cafe.bizesId);
         continue;
       }
       const marker = new maps.Marker({
@@ -401,18 +533,28 @@ export function useCafeMap(
         clickable: true,
       });
       const click = () => {
+        if (layer.markers.get(cafe.bizesId)?.marker !== marker) return;
         maps.event.preventMap();
+        layer.hideHover();
         layer.onSelect?.(cafe.bizesId);
       };
-      layer.markers.set(cafe.bizesId, { marker, cafe, click });
+      const over = () => {
+        if (layer.markers.get(cafe.bizesId)?.marker === marker)
+          layer.showHover(cafe.bizesId);
+      };
+      const out = () => layer.hideHover(cafe.bizesId);
+      layer.markers.set(cafe.bizesId, { marker, cafe, click, over, out });
       maps.event.addListener(marker, 'click', click);
+      maps.event.addListener(marker, 'mouseover', over);
+      maps.event.addListener(marker, 'mouseout', out);
       added.push(marker);
     }
     // 최대 200개를 일괄 반영한 뒤 한 번만 다시 그립니다. 동일 결과는 재등록하지 않습니다.
     if (removed.length) clusterer.removeMarkers(removed, true);
     if (added.length) clusterer.addMarkers(added, true);
     if (removed.length || added.length) clusterer.redraw();
-  }, [context, items, selectCafe, status, scopeKey]);
+    layer.refreshLabels();
+  }, [context, items, selectCafe, clearCafeSelection, status, scopeKey]);
 
   useEffect(() => {
     if (selected) layerRef.current?.open(selected.bizesId);

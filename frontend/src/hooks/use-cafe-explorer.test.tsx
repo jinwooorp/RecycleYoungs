@@ -2,6 +2,7 @@ import { StrictMode, type ReactNode } from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { useCafeExplorer } from './use-cafe-explorer';
+import type { KakaoMaps, KakaoSearchCallback } from '@/lib/kakao-maps';
 
 afterEach(() => vi.unstubAllGlobals());
 const bounds = { west: 126.97, south: 37.55, east: 126.99, north: 37.57 };
@@ -263,4 +264,108 @@ test('반경 조회는 StrictMode에서도 오류·재시도·빈 결과를 구�
   await waitFor(() => expect(result.current.status).toBe('ready'));
   expect(result.current.data?.totalCount).toBe(0);
   expect(result.current.items).toEqual([]);
+});
+
+test('중심점 표시 정보는 좌표 조회 키와 분리하고 주소 완료·이름 변경이 카페 재조회와 선택 해제를 만들지 않는다', async () => {
+  const fetch = vi
+    .fn()
+    .mockImplementation(async () => response('001', false, 12.5));
+  vi.stubGlobal('fetch', fetch);
+  let address!: KakaoSearchCallback;
+  const lookup = vi.fn(
+    (_x: number, _y: number, callback: KakaoSearchCallback) => {
+      address = callback;
+    },
+  );
+  const maps = {
+    services: {
+      Status: { OK: 'OK' },
+      Geocoder: function () {
+        return { coord2Address: lookup };
+      },
+    },
+  } as unknown as KakaoMaps;
+  const { result } = renderHook(() => useCafeExplorer('', '', false, maps));
+  const point = { longitude: 126.978, latitude: 37.5665 };
+  act(() => {
+    result.current.setMode('nearby');
+    result.current.selectCenter(point);
+  });
+  expect(result.current.centerDetails.pending).toBe(true);
+  await waitFor(() => expect(result.current.status).toBe('ready'));
+  act(() => result.current.selectCafe('001'));
+  const selected = result.current.selected;
+  act(() =>
+    address([{ road_address: { address_name: '서울 도로명주소' } }], 'OK'),
+  );
+  await waitFor(() =>
+    expect(result.current.centerDetails.address).toBe('서울 도로명주소'),
+  );
+  expect(result.current.selected).toBe(selected);
+  expect(fetch).toHaveBeenCalledOnce();
+  act(() =>
+    result.current.selectCenter(point, {
+      name: '염창역',
+      address: '검색 주소',
+    }),
+  );
+  expect(result.current.centerDetails.name).toBe('염창역');
+  expect(result.current.selected).toBe(selected);
+  expect(fetch).toHaveBeenCalledOnce();
+  expect(lookup).toHaveBeenCalledOnce();
+  act(() => result.current.setRadiusM(1000));
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+  expect(result.current.centerDetails.name).toBe('염창역');
+  expect(result.current.centerDetails.address).toBe('검색 주소');
+  expect(lookup).toHaveBeenCalledOnce();
+  act(() => result.current.selectCenter({ longitude: 127, latitude: 37.55 }));
+  expect(result.current.centerDetails.name).toBeNull();
+  expect(result.current.centerDetails.address).toBeNull();
+  expect(lookup).toHaveBeenCalledTimes(2);
+  act(() => result.current.clearCenter());
+  expect(result.current.centerDetails).toEqual({
+    name: null,
+    address: null,
+    pending: false,
+  });
+});
+
+test('검색 장소명을 보관한 중심점은 반경 전환·패널 재렌더에서도 역지오코딩하지 않는다', async () => {
+  const fetch = vi
+    .fn()
+    .mockImplementation(async () => response('001', false, 12.5));
+  vi.stubGlobal('fetch', fetch);
+  const lookup = vi.fn();
+  const maps = {
+    services: {
+      Geocoder: function () {
+        return { coord2Address: lookup };
+      },
+    },
+  } as unknown as KakaoMaps;
+  const view = renderHook(() => useCafeExplorer('', '', false, maps));
+  act(() => {
+    view.result.current.setMode('nearby');
+    view.result.current.selectCenter(
+      { longitude: 126.87, latitude: 37.55 },
+      { name: '염창역', address: '서울 강서구 공항대로' },
+    );
+  });
+  await waitFor(() => expect(view.result.current.status).toBe('ready'));
+  expect(view.result.current.center).toEqual({
+    longitude: 126.87,
+    latitude: 37.55,
+  });
+  expect(fetch.mock.calls[0][0]).not.toContain('염창역');
+  act(() => view.result.current.setRadiusM(1000));
+  await waitFor(() => expect(view.result.current.status).toBe('ready'));
+  act(() => view.result.current.setRadiusM(500));
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
+  view.rerender();
+  expect(view.result.current.centerDetails).toEqual({
+    name: '염창역',
+    address: '서울 강서구 공항대로',
+    pending: false,
+  });
+  expect(lookup).not.toHaveBeenCalled();
 });

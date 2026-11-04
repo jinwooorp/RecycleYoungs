@@ -136,12 +136,22 @@ function CafePanel({ cafes }: { cafes: CafeExplorer }) {
             <div className="flex flex-col gap-2 rounded-xl border bg-muted/30 p-3 text-xs leading-5">
               <p className="font-medium">임시 관심 위치 · 저장되지 않습니다.</p>
               {cafes.center ? (
-                <p>
-                  위도 {cafes.center.latitude.toFixed(5)} · 경도{' '}
-                  {cafes.center.longitude.toFixed(5)}
-                  <br />
-                  반경 {cafes.radiusM === 500 ? '500m' : '1km'}
-                </p>
+                <div
+                  className="space-y-1 [overflow-wrap:anywhere]"
+                  aria-live="polite"
+                >
+                  <p className="font-medium">
+                    {cafes.centerDetails.pending
+                      ? '주소 확인 중…'
+                      : cafes.centerDetails.name ||
+                        cafes.centerDetails.address ||
+                        '지도에서 선택한 위치'}
+                  </p>
+                  {cafes.centerDetails.name && cafes.centerDetails.address && (
+                    <p>{cafes.centerDetails.address}</p>
+                  )}
+                  <p>탐색 반경: {cafes.radiusM === 500 ? '500m' : '1km'}</p>
+                </div>
               ) : (
                 <p>중심점이 선택되지 않았습니다.</p>
               )}
