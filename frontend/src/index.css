@@ -192,3 +192,11 @@
     @apply font-sans;
   }
 }
+
+/* 랜딩과 404에서는 모션 감소 설정에 따라 CTA의 누름 이동과 전환을 제거합니다. */
+@media (prefers-reduced-motion: reduce) {
+  [data-public-page] [data-slot='button'] {
+    transition: none;
+    translate: none;
+  }
+}

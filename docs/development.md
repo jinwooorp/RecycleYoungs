@@ -127,7 +127,11 @@ npm ci
 npm run dev
 ```
 
-[http://localhost:5173](http://localhost:5173)에서 기본 탐색 화면을 확인합니다. `npm run build`는 타입 검사 후 정적 파일을 `dist/`에 생성하고, `npm run preview`로 빌드 결과를 확인할 수 있습니다.
+[메인 랜딩](http://localhost:5173/)에서 서비스 소개를, [상권 탐색](http://localhost:5173/explore)에서 지도를 확인합니다. `npm run build`는 타입 검사 후 정적 파일을 `dist/`에 생성하고, `npm run preview`로 빌드 결과를 확인할 수 있습니다.
+
+### 프론트엔드 경로
+
+React Router의 [Declarative Mode](https://reactrouter.com/start/declarative/routing)로 `/`(랜딩), `/explore`(탐색), `*`(404 화면)를 구성합니다. 탐색 컴포넌트는 `React.lazy`로 분리해 해당 경로에서만 지도 SDK와 API를 사용합니다. Vite 개발 서버는 탐색 주소의 직접 접속과 새로고침을 지원합니다.
 
 ### Kakao Maps 설정
 
@@ -343,6 +347,38 @@ flowchart TB
 ```
 
 위 구성은 배포 방향을 설명하기 위한 예시입니다. 실제 환경에서는 프론트엔드 정적 파일 제공 방식, 데이터베이스 호스팅 위치, ETL 실행 방법 및 보안 구성을 별도로 결정할 예정입니다.
+
+#### Nginx의 SPA 경로 처리 예시
+
+정적 빌드 `dist/`를 제공하는 `server` 블록에서 아래처럼 경로를 나눕니다. `root`와 Backend 주소는 배포 환경에 맞게 지정합니다.
+
+```nginx
+root /var/www/recycleyoungs/dist;
+index index.html;
+
+location = /api {
+    proxy_pass http://127.0.0.1:8080;
+}
+
+location ^~ /api/ {
+    proxy_pass http://127.0.0.1:8080;
+}
+
+location ^~ /assets/ {
+    try_files $uri =404;
+}
+
+location ~ \.[^/]+$ {
+    try_files $uri =404;
+}
+
+location / {
+    try_files $uri $uri/ /index.html;
+}
+```
+
+문서 경로는 `index.html`을 받아 React Router가 화면을 선택합니다. 알 수 없는 문서 경로도 HTML 응답은 HTTP 200일 수 있으며, 앱 안에서 404 화면을 표시합니다. `/api`는 원래 경로로 Backend에 전달하고, 누락된 정적 파일은 HTTP 404로 응답합니다. [Nginx try_files 문서](https://nginx.org/en/docs/http/ngx_http_core_module.html#try_files)
+
 
 ### 검토 항목
 
