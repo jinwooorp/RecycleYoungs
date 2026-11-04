@@ -19,7 +19,8 @@ import {
   type KakaoSearchCallback,
 } from '@/lib/kakao-maps';
 import { KakaoMapView } from './kakao-map';
-import App from '@/App';
+import ExploreApp from '@/App';
+import { MemoryRouter } from 'react-router';
 import { useCafeMap } from '@/hooks/use-cafe-map';
 import type { CafeExplorer } from '@/hooks/use-cafe-explorer';
 import type { RegionMapTarget } from '@/lib/regions';
@@ -1481,9 +1482,20 @@ test('장소 검색 이동·지역 필터 독립성·명시적 반경 연계와 
   await waitFor(() => expect(input).toBeEnabled());
   fireEvent.change(input, { target: { value: '다중 검색' } });
   fireEvent.submit(input.closest('form')!);
-  fireEvent.click(
-    await screen.findByRole('button', { name: /서울시청.*세종대로/ }),
+  await screen.findByRole('button', { name: /서울시청.*세종대로/ });
+  const results = screen.getByRole('region', { name: '장소 검색 결과' });
+  const regionPanel = screen.getByRole('complementary', { name: '지역 탐색' });
+  expect(regionPanel).not.toContainElement(results);
+  expect(screen.getByRole('search', { name: '장소 검색' })).toHaveAttribute(
+    'data-panel-open',
+    'true',
   );
+  expect(
+    screen
+      .getByRole('button', { name: '검색 결과 닫기' })
+      .closest('.explore-search-result-body'),
+  ).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: /서울시청.*세종대로/ }));
   await waitFor(() =>
     expect(map.setCenter.mock.calls.at(-1)![0].getLng()).toBe(126.978),
   );
@@ -1760,3 +1772,11 @@ test('지도 추가 모드와 검색에서 후보지를 등록하고 명시적�
   expect(restored.setMap).toHaveBeenLastCalledWith(null);
   sessionStorage.removeItem('recycleyoungs.candidates');
 });
+
+function App() {
+  return (
+    <MemoryRouter>
+      <ExploreApp />
+    </MemoryRouter>
+  );
+}

@@ -170,3 +170,38 @@ test('알 수 없는 경로에서 홈과 탐색 링크를 제공한다', async (
     }),
   ).toBeVisible();
 });
+
+test('탐색의 홈 링크로 랜딩에 돌아와도 후보지를 보존하고 재진입에서 복원한다', async () => {
+  const saved = JSON.stringify({
+    version: 1,
+    items: [
+      {
+        slot: 'A',
+        name: '홈 이동 후 후보지',
+        longitude: 126.978,
+        latitude: 37.5665,
+      },
+    ],
+  });
+  sessionStorage.setItem('recycleyoungs.candidates', saved);
+  renderRoute('/explore');
+  const home = await screen.findByRole('link', {
+    name: 'RecycleYoungs 홈으로',
+  });
+  expect(home).toHaveAttribute('href', '/');
+  fireEvent.click(home);
+  expect(
+    await screen.findByRole('heading', {
+      name: '카페 창업할 곳, 감으로만 고르지 마세요.',
+    }),
+  ).toBeVisible();
+  expect(sessionStorage.getItem('recycleyoungs.candidates')).toBe(saved);
+  fireEvent.click(
+    within(screen.getByRole('banner')).getByRole('link', { name: '시작하기' }),
+  );
+  await screen.findByRole('main', { name: 'RecycleYoungs 탐색 화면' });
+  fireEvent.click(screen.getByRole('button', { name: '후보지 비교' }));
+  expect(
+    await screen.findByRole('button', { name: 'A · 홈 이동 후 후보지' }),
+  ).toBeVisible();
+});

@@ -6,7 +6,8 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import App from '@/App';
+import ExploreApp from '@/App';
+import { MemoryRouter } from 'react-router';
 
 const sourceBatch = {
   batchId: '00000000-0000-0000-0000-000000000004',
@@ -276,3 +277,11 @@ test('빠른 지역 변경·닫기·메뉴 전환은 요청을 취소하고 늦�
   view.unmount();
   expect(pending.every((p) => p.signal.aborted)).toBe(true);
 });
+
+function App() {
+  return (
+    <MemoryRouter>
+      <ExploreApp />
+    </MemoryRouter>
+  );
+}

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { Link } from 'react-router';
 import {
   BarChart3,
   ChevronLeft,
@@ -70,7 +71,7 @@ export default function App() {
     setSelectedMenu(null);
   }
   return (
-    <div className="flex h-dvh min-h-80 flex-col overflow-hidden bg-background">
+    <div className="explore-app flex h-dvh min-h-80 flex-col overflow-hidden bg-background">
       <a
         href="#explore-main"
         className="sr-only z-50 rounded-lg bg-background p-3 focus:not-sr-only focus:absolute focus:top-2 focus:left-2"
@@ -89,20 +90,19 @@ export default function App() {
           }
         }}
       >
+        <Link
+          to="/"
+          aria-label="RecycleYoungs 홈으로"
+          title="RecycleYoungs 홈으로"
+          className="explore-home"
+        >
+          <Coffee aria-hidden="true" />
+        </Link>
         <nav
           aria-label="탐색 메뉴"
-          className="order-3 shrink-0 border-t bg-background p-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] md:order-0 md:w-18 md:border-t-0 md:border-r md:pb-1"
+          className="explore-navigation order-3 shrink-0 bg-background md:order-0"
         >
-          <div className="mb-2 hidden h-16 items-center justify-center border-b md:flex">
-            <div
-              role="img"
-              aria-label="RecycleYoungs"
-              className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground"
-            >
-              <Coffee aria-hidden="true" className="size-5" />
-            </div>
-          </div>
-          <ul className="grid grid-cols-4 gap-1 md:flex md:flex-col md:gap-2">
+          <ul className="explore-menu-list grid grid-cols-4 md:flex md:flex-col">
             {menus.map(({ id, label, Icon }) => (
               <li key={id}>
                 <Button
@@ -163,7 +163,7 @@ export default function App() {
             inert={selectedMenu === null}
             className="explore-panel flex min-h-0 flex-col overflow-hidden border-t bg-background md:border-t-0 md:border-r"
           >
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b px-5 py-3">
+            <div className="explore-panel-heading flex shrink-0 items-center justify-between gap-3">
               <h2 id="explore-panel-title" className="text-base font-semibold">
                 {selectedLabel ?? '탐색 도구'}
               </h2>
@@ -176,7 +176,7 @@ export default function App() {
                 <ChevronLeft aria-hidden="true" />
               </Button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <div className="explore-panel-content min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {panelMenu === 'compare' ? (
                 <CandidatePanel
                   candidates={candidates}

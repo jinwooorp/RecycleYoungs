@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import App from './App';
+import ExploreApp from './App';
+import { MemoryRouter } from 'react-router';
 
 beforeEach(() => {
   vi.stubEnv('VITE_KAKAO_MAP_APP_KEY', '');
@@ -22,9 +23,9 @@ afterEach(() => {
 test('초기에는 네 메뉴와 지도만 표시하고 상세 패널은 닫는다', async () => {
   render(<App />);
   expect(screen.queryByRole('banner')).not.toBeInTheDocument();
-  const brand = screen.getByRole('img', { name: 'RecycleYoungs' });
+  const brand = screen.getByRole('link', { name: 'RecycleYoungs 홈으로' });
   expect(brand).toBeVisible();
-  expect(brand.closest('a')).toBeNull();
+  expect(brand).toHaveAttribute('href', '/');
   expect(screen.queryByText('RecycleYoungs')).not.toBeInTheDocument();
   expect(
     screen.queryByText('서울시 카페 창업 상권 분석'),
@@ -153,3 +154,11 @@ test('미연동 장소·반경 입력과 행정구역 전체 통계를 구분한
     true,
   );
 });
+
+function App() {
+  return (
+    <MemoryRouter>
+      <ExploreApp />
+    </MemoryRouter>
+  );
+}

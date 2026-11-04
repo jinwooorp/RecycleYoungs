@@ -6,7 +6,8 @@ import {
   within,
 } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import App from '@/App';
+import ExploreApp from '@/App';
+import { MemoryRouter } from 'react-router';
 
 beforeEach(() => vi.stubEnv('VITE_KAKAO_MAP_APP_KEY', ''));
 afterEach(() => {
@@ -125,3 +126,11 @@ test('목록 로딩·오류·재시도·빈 목록을 화면에서 구분한다'
   ).toBeVisible();
   expect(within(panel).queryByRole('alert')).not.toBeInTheDocument();
 });
+
+function App() {
+  return (
+    <MemoryRouter>
+      <ExploreApp />
+    </MemoryRouter>
+  );
+}

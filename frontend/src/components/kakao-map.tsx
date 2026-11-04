@@ -317,7 +317,7 @@ export function KakaoMapView({
   return (
     <section
       aria-label="서울 상권 지도"
-      className="relative order-1 min-h-0 min-w-0 flex-1 overflow-hidden bg-muted md:order-0"
+      className="explore-map relative order-1 min-h-0 min-w-0 flex-1 overflow-hidden bg-muted md:order-0"
     >
       <div
         ref={containerRef}
@@ -326,7 +326,7 @@ export function KakaoMapView({
         className="absolute inset-0"
       />
       {status !== 'ready' && (
-        <div className="absolute inset-x-0 top-24 bottom-0 z-10 flex overflow-y-auto px-4 pb-4">
+        <div className="explore-map-notice absolute inset-x-0 top-24 bottom-0 z-10 flex overflow-y-auto px-4 pb-4">
           {status === 'loading' ? (
             <div
               role="status"
@@ -372,7 +372,7 @@ export function KakaoMapView({
       <div
         role="group"
         aria-label="지도 확대·축소"
-        className="absolute right-4 bottom-8 z-10 flex flex-col gap-1 rounded-xl border bg-background p-1 shadow-sm"
+        className="explore-map-controls absolute z-10 flex flex-col bg-background"
       >
         <Button
           variant="ghost"

@@ -36,7 +36,8 @@ export function PlaceSearch({
     <div
       role="search"
       aria-label="장소 검색"
-      className="absolute top-4 left-4 z-30 w-[calc(100%-134px)] max-w-[346px] min-w-0 sm:w-[329px] md:left-22"
+      className="explore-search"
+      data-panel-open={panelOpen}
       onKeyDown={(event) => {
         if (event.key === 'Escape' && search.isOpen) {
           event.preventDefault();
@@ -46,7 +47,8 @@ export function PlaceSearch({
       }}
     >
       <form
-        className="flex h-12 items-center gap-2 rounded-xl border bg-background px-3 shadow-sm focus-within:ring-2 focus-within:ring-ring"
+        className="explore-search-form"
+        aria-busy={search.status === 'loading'}
         onSubmit={(event) => {
           event.preventDefault();
           search.submit();
@@ -63,6 +65,9 @@ export function PlaceSearch({
           ref={inputRef}
           id="place-search"
           type="text"
+          inputMode="search"
+          enterKeyHint="search"
+          autoComplete="off"
           value={search.query}
           onChange={(event) => search.changeQuery(event.target.value)}
           disabled={!ready}
@@ -75,7 +80,6 @@ export function PlaceSearch({
         />
         <Button
           type="submit"
-          variant="ghost"
           size="sm"
           aria-label="장소 검색 실행"
           disabled={!ready || !search.query.trim()}
@@ -96,7 +100,7 @@ export function PlaceSearch({
           : '지도와 검색 서비스를 준비한 뒤 검색할 수 있습니다.'}
       </p>
       {connection?.status === 'error' && (
-        <div className="mt-2 rounded-xl border bg-background p-3 text-xs leading-5 shadow-sm">
+        <div className="explore-search-error mt-2 rounded-xl border bg-background p-3 text-sm leading-6">
           <p>지도와 검색 서비스를 불러오지 못했습니다.</p>
           <Button variant="outline" size="sm" onClick={connection.retry}>
             검색 서비스 다시 시도
@@ -107,9 +111,9 @@ export function PlaceSearch({
         <section
           id="place-search-results"
           aria-label="장소 검색 결과"
-          className={`absolute top-full left-0 mt-2 flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-3 overflow-y-auto overscroll-contain rounded-xl border bg-background p-3 shadow-md ${panelOpen ? 'max-h-[min(24rem,calc(55dvh-10rem))]' : 'max-h-[min(32rem,calc(100dvh-7rem))]'} md:max-h-[min(32rem,calc(100dvh-7rem))]`}
+          className="explore-search-results"
         >
-          <div className="flex items-center justify-between gap-2">
+          <div className="explore-search-heading flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold">
               {search.view === 'selection' ? '선택한 위치' : '검색 결과'}
             </h2>
@@ -122,120 +126,127 @@ export function PlaceSearch({
               <X aria-hidden="true" />
             </Button>
           </div>
-          {search.view === 'results' ? (
-            <>
-              {search.status === 'loading' && (
-                <p
-                  role="status"
-                  className="text-xs leading-5 text-muted-foreground"
-                >
-                  장소·주소 검색 중…
-                </p>
-              )}
-              {search.status === 'error' && (
-                <div
-                  role="alert"
-                  className="flex flex-col items-start gap-2 text-xs leading-5"
-                >
-                  <p>{search.error}</p>
-                  <Button variant="outline" size="sm" onClick={search.submit}>
-                    검색 다시 시도
-                  </Button>
-                </div>
-              )}
-              {search.status === 'ready' && search.data && (
-                <>
+          <div className="explore-search-result-body">
+            {search.view === 'results' ? (
+              <>
+                {search.status === 'loading' && (
                   <p
                     role="status"
                     className="text-xs leading-5 text-muted-foreground"
                   >
-                    {search.data.items.length
-                      ? `${search.data.items.length}개 결과 · 서울 소재 우선`
-                      : '검색 결과가 없습니다. 다른 검색어로 시도해 주세요.'}
+                    장소·주소 검색 중…
                   </p>
-                  {(search.data.hasMore || search.data.partial) && (
-                    <p className="text-xs leading-5 text-muted-foreground">
-                      {search.data.partial
-                        ? '일부 검색을 불러오지 못했습니다. '
-                        : ''}
-                      첫 페이지의 최대 15개 결과만 표시합니다.
-                    </p>
-                  )}
-                  {search.data.partial && (
+                )}
+                {search.status === 'error' && (
+                  <div
+                    role="alert"
+                    className="flex flex-col items-start gap-2 text-xs leading-5"
+                  >
+                    <p>{search.error}</p>
                     <Button variant="outline" size="sm" onClick={search.submit}>
                       검색 다시 시도
                     </Button>
-                  )}
-                  <ul className="flex flex-col divide-y">
-                    {search.data.items.map((place) => (
-                      <li key={place.id}>
-                        <button
-                          type="button"
-                          aria-label={`${place.name} · ${place.address} · ${place.kind}${place.isSeoul ? '' : ' · 서울 서비스 범위 밖 또는 소재 확인 필요'}`}
-                          className="flex w-full flex-col gap-1 rounded-lg p-3 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-                          onClick={() => search.selectResult(place)}
-                        >
-                          <span className="text-sm font-medium [overflow-wrap:anywhere]">
-                            {place.name}
-                          </span>
-                          <span className="text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
-                            {place.address}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {place.kind}
-                            {!place.isSeoul &&
-                              ' · 서울 서비스 범위 밖 또는 소재 확인 필요'}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </>
-          ) : (
-            search.selected && (
-              <>
-                <h3 className="text-sm font-semibold [overflow-wrap:anywhere]">
-                  {search.selected.place.name}
-                </h3>
-                <p className="text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
-                  {search.selected.place.address}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {search.selected.place.kind}
-                </p>
-                {!search.selected.place.isSeoul && (
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    서울 서비스 범위 밖이거나 소재를 확인할 수 없는 위치입니다.
-                    주변 카페 조회는 서울 공공데이터만 대상으로 합니다.
-                  </p>
+                  </div>
                 )}
-                {regionFiltered && (
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    기존 구·동 필터가 유지됩니다. 지도 영역 카페는 해당 필터로
-                    조회하며, 반경 탐색에는 적용하지 않습니다.
-                  </p>
-                )}
-                <Button
-                  ref={nearbyRef}
-                  size="sm"
-                  onClick={() => onNearby(search.selected!.place)}
-                >
-                  이 위치 주변 카페 보기
-                </Button>
-                {onCandidate && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onCandidate(search.selected!.place)}
-                  >
-                    후보지로 추가
-                  </Button>
+                {search.status === 'ready' && search.data && (
+                  <>
+                    <p
+                      role="status"
+                      className="text-xs leading-5 text-muted-foreground"
+                    >
+                      {search.data.items.length
+                        ? `${search.data.items.length}개 결과 · 서울 소재 우선`
+                        : '검색 결과가 없습니다. 다른 검색어로 시도해 주세요.'}
+                    </p>
+                    {(search.data.hasMore || search.data.partial) && (
+                      <p className="text-xs leading-5 text-muted-foreground">
+                        {search.data.partial
+                          ? '일부 검색을 불러오지 못했습니다. '
+                          : ''}
+                        첫 페이지의 최대 15개 결과만 표시합니다.
+                      </p>
+                    )}
+                    {search.data.partial && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={search.submit}
+                      >
+                        검색 다시 시도
+                      </Button>
+                    )}
+                    <ul className="explore-search-list flex flex-col">
+                      {search.data.items.map((place) => (
+                        <li key={place.id}>
+                          <button
+                            type="button"
+                            aria-label={`${place.name} · ${place.address} · ${place.kind}${place.isSeoul ? '' : ' · 서울 서비스 범위 밖 또는 소재 확인 필요'}`}
+                            className="flex w-full flex-col gap-1 rounded-lg p-3 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                            onClick={() => search.selectResult(place)}
+                          >
+                            <span className="text-sm font-medium [overflow-wrap:anywhere]">
+                              {place.name}
+                            </span>
+                            <span className="text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+                              {place.address}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {place.kind}
+                              {!place.isSeoul &&
+                                ' · 서울 서비스 범위 밖 또는 소재 확인 필요'}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
                 )}
               </>
-            )
-          )}
+            ) : (
+              search.selected && (
+                <>
+                  <h3 className="text-sm font-semibold [overflow-wrap:anywhere]">
+                    {search.selected.place.name}
+                  </h3>
+                  <p className="text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+                    {search.selected.place.address}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {search.selected.place.kind}
+                  </p>
+                  {!search.selected.place.isSeoul && (
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      서울 서비스 범위 밖이거나 소재를 확인할 수 없는
+                      위치입니다. 주변 카페 조회는 서울 공공데이터만 대상으로
+                      합니다.
+                    </p>
+                  )}
+                  {regionFiltered && (
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      기존 구·동 필터가 유지됩니다. 지도 영역 카페는 해당 필터로
+                      조회하며, 반경 탐색에는 적용하지 않습니다.
+                    </p>
+                  )}
+                  <Button
+                    ref={nearbyRef}
+                    size="lg"
+                    onClick={() => onNearby(search.selected!.place)}
+                  >
+                    이 위치 주변 카페 보기
+                  </Button>
+                  {onCandidate && (
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      onClick={() => onCandidate(search.selected!.place)}
+                    >
+                      후보지로 추가
+                    </Button>
+                  )}
+                </>
+              )
+            )}
+          </div>
         </section>
       )}
     </div>
