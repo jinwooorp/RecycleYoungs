@@ -466,6 +466,146 @@
   margin-left: -3.5rem;
 }
 
+/* 지역 선택은 업종·패널과 독립적인 지도 공통 도구로 배치합니다. */
+.region-filter {
+  position: absolute;
+  z-index: 32;
+  top: calc(var(--explore-top) + 3.75rem);
+  right: max(0.75rem, env(safe-area-inset-right));
+}
+.region-filter > [data-slot='button'] {
+  height: 2.75rem;
+  max-width: 12rem;
+  border-color: var(--input);
+  background: var(--background);
+  box-shadow: 0 2px 8px rgb(23 54 41 / 6%);
+}
+.region-filter > [aria-expanded='true'] {
+  background: var(--accent);
+  border-color: var(--primary);
+}
+.region-filter-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.region-filter-controls {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  width: min(22rem, calc(100vw - 5.25rem));
+  max-height: calc(
+    100dvh - var(--explore-nav-height) - var(--explore-top) - 7.5rem
+  );
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+  background: var(--background);
+  box-shadow: 0 4px 16px rgb(23 54 41 / 8%);
+  scrollbar-width: thin;
+}
+.region-filter-controls[hidden] {
+  display: none;
+}
+.region-filter-heading {
+  position: sticky;
+  top: -0.75rem;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  font-size: 0.9375rem;
+  font-weight: 650;
+  background: var(--background);
+}
+.region-filter-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.region-filter-city {
+  grid-column: 1 / -1;
+}
+.region-filter-city,
+.region-filter-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.region-filter-city p {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding-inline: 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+.region-filter-city svg {
+  width: 1rem;
+  height: 1rem;
+}
+.region-filter-select {
+  position: relative;
+  display: block;
+}
+.region-filter select {
+  width: 100%;
+  min-width: 0;
+  height: 2.75rem;
+  appearance: none;
+  padding: 0 2rem 0 0.75rem;
+  border: 1px solid var(--input);
+  border-radius: 0.5rem;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 0.875rem;
+}
+.region-filter select[data-selected='true'] {
+  background: var(--accent);
+  border-color: var(--explore-action);
+  color: var(--primary);
+  font-weight: 650;
+}
+.region-filter select:disabled {
+  color: var(--muted-foreground);
+  cursor: not-allowed;
+}
+.region-filter-select > svg {
+  position: absolute;
+  top: 50%;
+  right: 0.75rem;
+  width: 1rem;
+  height: 1rem;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--muted-foreground);
+}
+.region-filter-help,
+.region-filter-notices {
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.65;
+  color: var(--muted-foreground);
+}
+.region-filter-error {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 0.5rem;
+}
+.region-filter-notices > * + * {
+  margin-top: 0.5rem;
+}
+
 .explore-app .explore-map-controls {
   right: max(0.75rem, env(safe-area-inset-right));
   bottom: 2rem;
@@ -486,6 +626,34 @@
 }
 
 @media (width < 48rem) {
+  /* 검색 결과는 지역 필터 버튼 아래에, 확대·축소 버튼 왼쪽에 머뭅니다. */
+  .explore-search-results {
+    top: calc(100% + 3.75rem);
+    max-height: calc(
+      100dvh - var(--explore-nav-height) - var(--explore-top) - 8.75rem
+    );
+  }
+  .explore-search[data-panel-open='true'] .explore-search-results {
+    max-height: max(
+      5rem,
+      calc(
+        100dvh - var(--explore-nav-height) -
+          var(--explore-mobile-panel-height) - var(--explore-top) - 8.75rem
+      )
+    );
+  }
+  .region-filter-controls {
+    right: 3.75rem;
+  }
+  .region-filter[data-panel-open='true'] .region-filter-controls {
+    max-height: max(
+      4rem,
+      calc(
+        100dvh - var(--explore-nav-height) -
+          var(--explore-mobile-panel-height) - var(--explore-top) - 7.5rem
+      )
+    );
+  }
   .explore-app [data-slot='button']:not([data-size='navigation']) {
     min-height: 2.75rem;
   }
@@ -495,6 +663,10 @@
 }
 
 @media (width >= 48rem) {
+  .region-filter {
+    top: var(--explore-top);
+    right: 1rem;
+  }
   .explore-app {
     --explore-top: max(1rem, env(safe-area-inset-top));
   }
@@ -557,6 +729,49 @@
 @media (width >= 64rem) {
   .explore-app {
     --explore-panel-width: 22.5rem;
+  }
+  .region-filter-controls {
+    position: relative;
+    top: auto;
+    width: 26rem;
+    overflow: visible;
+    padding: 0.125rem;
+    border-radius: 0.75rem;
+  }
+  .region-filter-fields {
+    grid-template-columns: 7.5rem 8rem minmax(0, 1fr);
+    gap: 0;
+  }
+  .region-filter-city {
+    grid-column: auto;
+  }
+  .region-filter-city > span,
+  .region-filter-field > span:first-child {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .region-filter-city p {
+    background: transparent;
+    color: var(--primary);
+  }
+  .region-filter select {
+    border: 0;
+    border-left: 1px solid var(--border);
+    border-radius: 0.5rem;
+  }
+  .region-filter-notices {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--background);
   }
 }
 

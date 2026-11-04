@@ -6,6 +6,7 @@ import {
   renderHook,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import {
@@ -725,7 +726,6 @@ test('API 선택 변경·실패·늦은 응답에서도 최신 경계만 표시�
     }),
   );
   render(<App />);
-  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
   await screen.findByRole('option', { name: '종로구' });
   fireEvent.change(screen.getByRole('combobox', { name: '자치구' }), {
     target: { value: '11110' },
@@ -733,9 +733,7 @@ test('API 선택 변경·실패·늦은 응답에서도 최신 경계만 표시�
   await waitFor(() => expect(maps.Polygon).toHaveBeenCalledOnce());
   const first = maps.Polygon.mock.results[0].value;
   await screen.findByRole('option', { name: '선택동' });
-  fireEvent.click(screen.getByRole('button', { name: '지역 탐색 패널 닫기' }));
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
-  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
   expect(maps.Polygon).toHaveBeenCalledOnce();
   fireEvent.change(screen.getByRole('combobox', { name: '행정동' }), {
     target: { value: '11110001' },
@@ -744,7 +742,11 @@ test('API 선택 변경·실패·늦은 응답에서도 최신 경계만 표시�
   fireEvent.change(screen.getByRole('combobox', { name: '자치구' }), {
     target: { value: '11140' },
   });
-  expect(await screen.findByRole('alert')).toHaveTextContent('선택 지역 경계');
+  expect(
+    await within(screen.getByRole('group', { name: '지역 필터' })).findByRole(
+      'alert',
+    ),
+  ).toHaveTextContent('선택 지역 경계');
   await act(async () => finishOld(json(feature('11110001', 'DONG'))));
   expect(maps.Polygon).toHaveBeenCalledOnce();
   fireEvent.change(screen.getByRole('combobox', { name: '자치구' }), {
@@ -883,7 +885,7 @@ test('상세 패널을 열고 전환하고 닫아도 같은 지도에서 크기�
     expect(screen.getByRole('button', { name: '지도 확대' })).toBeEnabled(),
   );
   const container = screen.getByLabelText('Kakao Maps 지도');
-  for (const name of ['지역 탐색', '상권 분석', '상권 분석']) {
+  for (const name of ['주변 카페', '상권 분석', '상권 분석']) {
     fireEvent.click(screen.getByRole('button', { name }));
     // jsdom에는 레이아웃이 없어 브라우저의 크기 변경 알림을 직접 전달합니다.
     act(() => resize([], {} as ResizeObserver));
@@ -1015,7 +1017,6 @@ test('구·동 변경은 즉시 이전 마커를 정리하고 늦은 동 응답�
   });
   vi.stubGlobal('fetch', fetch);
   const view = render(<App />);
-  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
   await screen.findByRole('option', { name: '종로구' });
   fireEvent.change(screen.getByRole('combobox', { name: '자치구' }), {
     target: { value: '11110' },
@@ -1202,7 +1203,6 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
       <App />
     </StrictMode>,
   );
-  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
   await screen.findByRole('option', { name: '종로구' });
   fireEvent.change(screen.getByRole('combobox', { name: '자치구' }), {
     target: { value: '11110' },
@@ -1333,7 +1333,6 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
   fireEvent.click(screen.getByRole('button', { name: '지도 영역' }));
   await screen.findByRole('button', { name: /지도 카페/ });
   expect(screen.queryByText(/499.9m/)).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
   expect(screen.getByRole('combobox', { name: '자치구' })).toHaveValue('11110');
   expect(screen.getByRole('combobox', { name: '행정동' })).toHaveValue(
     '11110515',
@@ -1504,7 +1503,6 @@ test('장소 검색 이동·지역 필터 독립성·명시적 반경 연계와 
       <App />
     </StrictMode>,
   );
-  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
   await screen.findByRole('option', { name: '종로구' });
   fireEvent.change(screen.getByRole('combobox', { name: '자치구' }), {
     target: { value: '11110' },
@@ -1520,7 +1518,8 @@ test('장소 검색 이동·지역 필터 독립성·명시적 반경 연계와 
   fireEvent.submit(input.closest('form')!);
   await screen.findByRole('button', { name: /서울시청.*세종대로/ });
   const results = screen.getByRole('region', { name: '장소 검색 결과' });
-  const regionPanel = screen.getByRole('complementary', { name: '지역 탐색' });
+  fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
+  const regionPanel = screen.getByRole('complementary', { name: '상권 분석' });
   expect(regionPanel).not.toContainElement(results);
   expect(screen.getByRole('search', { name: '장소 검색' })).toHaveAttribute(
     'data-panel-open',
@@ -1569,7 +1568,7 @@ test('장소 검색 이동·지역 필터 독립성·명시적 반경 연계와 
     screen.getByRole('button', { name: '이 위치 주변 카페 보기' }),
     { key: 'Escape' },
   );
-  expect(screen.getByRole('button', { name: '지역 탐색' })).toHaveAttribute(
+  expect(screen.getByRole('button', { name: '상권 분석' })).toHaveAttribute(
     'aria-expanded',
     'true',
   );
@@ -1632,7 +1631,6 @@ test('장소 검색 이동·지역 필터 독립성·명시적 반경 연계와 
   await waitFor(() => expect(map.getCenter().getLng()).toBe(126.978));
   const lastMarker = maps.Marker.mock.results.at(-1)!.value;
   fireEvent.click(screen.getByRole('button', { name: '검색 결과 닫기' }));
-  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
   fireEvent.change(screen.getByRole('combobox', { name: '자치구' }), {
     target: { value: '11140' },
   });
@@ -1775,7 +1773,7 @@ test('지도 추가 모드와 검색에서 후보지를 등록하고 명시적�
   expect(map.setCenter).toHaveBeenCalledTimes(moves);
   fireEvent.click(screen.getByRole('button', { name: '지도에서 후보지 추가' }));
   const pendingClick = mapClick();
-  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
+  fireEvent.click(screen.getByRole('button', { name: '주변 카페' }));
   expect(maps.event.removeListener).toHaveBeenCalledWith(
     map,
     'click',

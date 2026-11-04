@@ -20,7 +20,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test('초기에는 네 메뉴와 지도만 표시하고 상세 패널은 닫는다', async () => {
+test('초기에는 세 메뉴·공통 지역 필터와 지도를 표시하고 상세 패널은 닫는다', async () => {
   render(<App />);
   expect(screen.queryByRole('banner')).not.toBeInTheDocument();
   const brand = screen.getByRole('link', { name: 'RecycleYoungs 홈으로' });
@@ -32,7 +32,7 @@ test('초기에는 네 메뉴와 지도만 표시하고 상세 패널은 닫는�
   ).not.toBeInTheDocument();
   expect(screen.queryByText('상권 탐색')).not.toBeInTheDocument();
   expect(screen.getByRole('navigation', { name: '탐색 메뉴' })).toBeVisible();
-  for (const name of ['지역 탐색', '주변 카페', '상권 분석', '후보지 비교']) {
+  for (const name of ['주변 카페', '상권 분석', '후보지 비교']) {
     expect(screen.getByRole('button', { name })).toHaveAttribute(
       'aria-expanded',
       'false',
@@ -41,8 +41,10 @@ test('초기에는 네 메뉴와 지도만 표시하고 상세 패널은 닫는�
   expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
   expect(screen.getByRole('search', { name: '장소 검색' })).toBeVisible();
   expect(
-    screen.queryByText('서울특별시', { exact: true }),
+    screen.queryByRole('button', { name: '지역 탐색' }),
   ).not.toBeInTheDocument();
+  expect(screen.getByRole('group', { name: '지역 필터' })).toBeVisible();
+  expect(screen.getByText('서울특별시')).toBeVisible();
   expect(screen.getByRole('textbox', { name: '장소 검색' })).toBeDisabled();
   expect(await screen.findByRole('alert')).toHaveTextContent(
     '지도 설정이 필요합니다',
@@ -52,24 +54,24 @@ test('초기에는 네 메뉴와 지도만 표시하고 상세 패널은 닫는�
 
 test('같은 메뉴를 다시 누르면 닫고 다른 메뉴를 누르면 내용을 전환한다', () => {
   render(<App />);
-  const toggle = screen.getByRole('button', { name: '지역 탐색' });
+  const toggle = screen.getByRole('button', { name: '주변 카페' });
   const map = screen.getByRole('region', { name: '서울 상권 지도' });
   const search = screen.getByRole('textbox', { name: '장소 검색' });
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
   fireEvent.click(toggle);
   expect(toggle).toHaveAttribute('aria-expanded', 'true');
   expect(
-    screen.getByRole('complementary', { name: '지역 탐색' }),
+    screen.getByRole('complementary', { name: '주변 카페' }),
   ).toBeVisible();
   fireEvent.click(toggle);
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
   expect(screen.getByRole('region', { name: '서울 상권 지도' })).toBe(map);
   fireEvent.click(toggle);
-  fireEvent.click(screen.getByRole('button', { name: '주변 카페' }));
+  fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
   expect(
-    screen.getByRole('complementary', { name: '주변 카페' }),
-  ).toHaveTextContent('현재 지도 영역 카페');
+    screen.getByRole('complementary', { name: '상권 분석' }),
+  ).toHaveTextContent('행정구역 전체 통계');
   expect(screen.getByRole('textbox', { name: '장소 검색' })).toBe(search);
   expect(screen.getByRole('region', { name: '서울 상권 지도' })).toBe(map);
 });
@@ -80,14 +82,14 @@ test('장소 검색은 패널·지도 밖에 유지하고 닫는 동안 패널 �
   expect(
     screen.getByRole('region', { name: '서울 상권 지도' }),
   ).not.toContainElement(search);
-  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
-  const panel = screen.getByRole('complementary', { name: '지역 탐색' });
+  fireEvent.click(screen.getByRole('button', { name: '주변 카페' }));
+  const panel = screen.getByRole('complementary', { name: '주변 카페' });
   expect(panel).not.toContainElement(search);
   expect(search).toHaveTextContent('검색');
-  fireEvent.click(screen.getByRole('button', { name: '지역 탐색 패널 닫기' }));
+  fireEvent.click(screen.getByRole('button', { name: '주변 카페 패널 닫기' }));
   expect(panel).toHaveAttribute('inert');
   expect(panel).toHaveAttribute('aria-hidden', 'true');
-  expect(panel).toHaveTextContent('행정구역 선택');
+  expect(panel).toHaveTextContent('현재 지도 영역 카페');
   // 닫는 도중 다른 메뉴를 선택해도 이전 내용이나 지연 콜백에 가려지지 않습니다.
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
   expect(screen.getByRole('complementary', { name: '상권 분석' })).toBe(panel);
@@ -98,25 +100,24 @@ test('장소 검색은 패널·지도 밖에 유지하고 닫는 동안 패널 �
 
 test('닫기 버튼과 Escape는 패널을 접고 선택 메뉴로 포커스를 돌린다', () => {
   render(<App />);
-  const menu = screen.getByRole('button', { name: '지역 탐색' });
+  const menu = screen.getByRole('button', { name: '주변 카페' });
   fireEvent.click(menu);
-  const close = screen.getByRole('button', { name: '지역 탐색 패널 닫기' });
+  const close = screen.getByRole('button', { name: '주변 카페 패널 닫기' });
   close.focus();
   fireEvent.click(close);
   expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
   expect(menu).toHaveFocus();
   fireEvent.click(menu);
-  screen.getByRole('button', { name: '지역 탐색 패널 닫기' }).focus();
+  screen.getByRole('button', { name: '주변 카페 패널 닫기' }).focus();
   fireEvent.keyDown(screen.getByRole('complementary'), { key: 'Escape' });
   expect(menu).toHaveAttribute('aria-expanded', 'false');
   expect(menu).toHaveFocus();
 });
 
-test('미연동 장소·반경 입력과 행정구역 전체 통계를 구분한다', () => {
+test('공통 지역 필터와 반경 입력·행정구역 전체 통계를 구분한다', () => {
   const fetch = vi.spyOn(globalThis, 'fetch');
   render(<App />);
-  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
-  expect(screen.getByText('서울특별시 · 고정')).toBeVisible();
+  expect(screen.getByText('서울특별시')).toBeVisible();
   expect(screen.getByRole('combobox', { name: '자치구' })).toBeDisabled();
   expect(screen.getByRole('combobox', { name: '행정동' })).toBeDisabled();
   expect(screen.getByRole('textbox', { name: '장소 검색' })).toBeDisabled();
@@ -135,7 +136,7 @@ test('미연동 장소·반경 입력과 행정구역 전체 통계를 구분한
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
   expect(
     screen.getByRole('region', { name: '행정구역 전체 통계' }),
-  ).toHaveTextContent('지역 탐색에서 자치구 또는 행정동을 선택해 주세요.');
+  ).toHaveTextContent('상단 지역 필터에서 자치구 또는 행정동을 선택해 주세요.');
   expect(screen.getByText('점포 현황')).toBeVisible();
   expect(screen.getByText('추정매출')).toBeVisible();
   expect(screen.getByText('유동인구')).toBeVisible();

@@ -1,15 +1,10 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router';
-import {
-  BarChart3,
-  ChevronLeft,
-  Coffee,
-  GitCompareArrows,
-  MapPin,
-} from 'lucide-react';
+import { BarChart3, ChevronLeft, Coffee, GitCompareArrows } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ExplorePanel, type ExploreMenu } from '@/components/explore-panel';
 import { PlaceSearch } from '@/components/place-search';
+import { RegionFilter } from '@/components/region-filter';
 import { usePlaceSearch } from '@/hooks/use-place-search';
 import type { MapConnection } from '@/components/kakao-map';
 import { KakaoMapView } from '@/components/kakao-map';
@@ -21,7 +16,6 @@ import { CandidatePanel } from '@/components/candidate-panel';
 import type { Candidate } from '@/lib/candidates';
 
 const menus = [
-  { id: 'region', label: '지역 탐색', Icon: MapPin },
   { id: 'cafes', label: '주변 카페', Icon: Coffee },
   { id: 'analysis', label: '상권 분석', Icon: BarChart3 },
   { id: 'compare', label: '후보지 비교', Icon: GitCompareArrows },
@@ -42,7 +36,7 @@ export default function App() {
   );
   const [selectedMenu, setSelectedMenu] = useState<ExploreMenu | null>(null);
   // 닫는 전환이 끝날 때까지 마지막 내용을 유지해 깜빡임을 방지합니다.
-  const [panelMenu, setPanelMenu] = useState<ExploreMenu>('region');
+  const [panelMenu, setPanelMenu] = useState<ExploreMenu>('cafes');
   const menuRefs = useRef<
     Partial<Record<ExploreMenu, HTMLButtonElement | null>>
   >({});
@@ -102,7 +96,7 @@ export default function App() {
           aria-label="탐색 메뉴"
           className="explore-navigation order-3 shrink-0 bg-background md:order-0"
         >
-          <ul className="explore-menu-list grid grid-cols-4 md:flex md:flex-col">
+          <ul className="explore-menu-list grid grid-cols-3 md:flex md:flex-col">
             {menus.map(({ id, label, Icon }) => (
               <li key={id}>
                 <Button
@@ -127,6 +121,11 @@ export default function App() {
             ))}
           </ul>
         </nav>
+        <RegionFilter
+          region={region}
+          onOpen={search.close}
+          panelOpen={selectedMenu !== null}
+        />
         <PlaceSearch
           search={search}
           connection={connection}

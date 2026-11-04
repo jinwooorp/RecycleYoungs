@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -6,6 +7,7 @@ import {
   within,
 } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { StrictMode } from 'react';
 import ExploreApp from '@/App';
 import { MemoryRouter } from 'react-router';
 
@@ -59,7 +61,6 @@ test('실제 선택 UI에서 구·동 선택을 유지하고 메뉴 전환·닫�
   });
   vi.stubGlobal('fetch', fetch);
   render(<App />);
-  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
   await screen.findByRole('option', { name: '예시구' });
   fireEvent.change(screen.getByRole('combobox', { name: '자치구' }), {
     target: { value: '00110' },
@@ -74,9 +75,9 @@ test('실제 선택 UI에서 구·동 선택을 유지하고 메뉴 전환·닫�
       expect.anything(),
     ),
   );
-  fireEvent.click(screen.getByRole('button', { name: '지역 탐색 패널 닫기' }));
   fireEvent.click(screen.getByRole('button', { name: '주변 카페' }));
-  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
+  fireEvent.click(screen.getByRole('button', { name: '주변 카페 패널 닫기' }));
+  fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
   expect(screen.getByRole('combobox', { name: '자치구' })).toHaveValue('00110');
   expect(screen.getByRole('combobox', { name: '행정동' })).toHaveValue(
     '00110001',
@@ -105,8 +106,7 @@ test('목록 로딩·오류·재시도·빈 목록을 화면에서 구분한다'
     ),
   );
   render(<App />);
-  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
-  const panel = screen.getByRole('complementary', { name: '지역 탐색' });
+  const panel = screen.getByRole('group', { name: '지역 필터' });
   expect(within(panel).getByRole('status')).toHaveTextContent(
     '자치구 목록 불러오는 중',
   );
@@ -134,3 +134,148 @@ function App() {
     </MemoryRouter>
   );
 }
+
+test('모바일은 세 메뉴와 접힌 필터를 제공하고 Escape·닫기·외부 입력의 포커스를 유지한다', async () => {
+  vi.stubGlobal('matchMedia', () => ({
+    matches: false,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      json({ items: [{ districtCode: '00110', districtName: '예시구' }] }),
+    ),
+  );
+  render(<App />);
+  const navigation = screen.getByRole('navigation', { name: '탐색 메뉴' });
+  expect(within(navigation).getAllByRole('button')).toHaveLength(3);
+  const toggle = screen.getByRole('button', { name: '지역 필터' });
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
+  await waitFor(() => expect(fetch).toHaveBeenCalled());
+  fireEvent.click(toggle);
+  expect(screen.getByText('서울특별시')).toBeVisible();
+  expect(screen.getByRole('combobox', { name: '자치구' })).toHaveFocus();
+  expect(screen.getByRole('combobox', { name: '행정동' })).toBeDisabled();
+  fireEvent.keyDown(screen.getByRole('combobox', { name: '자치구' }), {
+    key: 'Escape',
+  });
+  expect(toggle).toHaveFocus();
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  expect(
+    screen.getByRole('complementary', { name: '상권 분석' }),
+  ).toBeVisible();
+  fireEvent.click(toggle);
+  fireEvent.click(screen.getByRole('button', { name: '지역 필터 닫기' }));
+  expect(toggle).toHaveFocus();
+  fireEvent.click(toggle);
+  const compare = screen.getByRole('button', { name: '후보지 비교' });
+  fireEvent.pointerDown(compare);
+  compare.focus();
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  expect(compare).toHaveFocus();
+});
+
+test('StrictMode·화면 크기 전환·언마운트에서 필터 리스너와 목록 요청을 정리한다', async () => {
+  let desktop = false;
+  const listeners = new Set<() => void>();
+  vi.stubGlobal('matchMedia', () => ({
+    get matches() {
+      return desktop;
+    },
+    addEventListener: (_: string, listener: () => void) =>
+      listeners.add(listener),
+    removeEventListener: (_: string, listener: () => void) =>
+      listeners.delete(listener),
+  }));
+  const signals: AbortSignal[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((_: string, options: RequestInit) => {
+      signals.push(options.signal as AbortSignal);
+      return new Promise<Response>(() => {});
+    }),
+  );
+  const add = vi.spyOn(document, 'addEventListener');
+  const remove = vi.spyOn(document, 'removeEventListener');
+  const view = render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+  fireEvent.click(screen.getByRole('button', { name: '지역 필터' }));
+  const pointerListener = add.mock.calls.find(
+    ([type]) => type === 'pointerdown',
+  )![1];
+  act(() => {
+    desktop = true;
+    listeners.forEach((listener) => listener());
+  });
+  expect(
+    screen.queryByRole('button', { name: '지역 필터' }),
+  ).not.toBeInTheDocument();
+  expect(screen.getAllByRole('combobox')).toHaveLength(2);
+  expect(remove).toHaveBeenCalledWith('pointerdown', pointerListener);
+  view.unmount();
+  expect(listeners.size).toBe(0);
+  expect(signals.every((signal) => signal.aborted)).toBe(true);
+  add.mockRestore();
+  remove.mockRestore();
+});
+
+test('빠른 구 변경은 이전 동 목록을 숨기고 취소를 무시하는 응답도 차단한다', async () => {
+  const pending: {
+    code: string;
+    signal: AbortSignal;
+    finish: (response: Response) => void;
+  }[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string, options: RequestInit) => {
+      if (url === '/api/v1/districts')
+        return Promise.resolve(
+          json({
+            items: [
+              { districtCode: '00110', districtName: '첫구' },
+              { districtCode: '00120', districtName: '다음구' },
+            ],
+          }),
+        );
+      if (url.endsWith('/dongs'))
+        return new Promise<Response>((finish) =>
+          pending.push({
+            code: url.split('/')[4],
+            signal: options.signal as AbortSignal,
+            finish,
+          }),
+        );
+      return Promise.resolve(json(feature(url.split('/')[4], 'DISTRICT')));
+    }),
+  );
+  render(<App />);
+  await screen.findByRole('option', { name: '첫구' });
+  const district = screen.getByRole('combobox', { name: '자치구' });
+  fireEvent.change(district, { target: { value: '00110' } });
+  fireEvent.change(district, { target: { value: '00120' } });
+  expect(pending[0].signal.aborted).toBe(true);
+  expect(screen.getByRole('combobox', { name: '행정동' })).toBeDisabled();
+  const dong = (districtCode: string, dongName: string) => ({
+    items: [
+      {
+        districtCode,
+        dongCode: `${districtCode}001`,
+        dongName,
+        labelPoint: { type: 'Point', coordinates: [127, 37] },
+      },
+    ],
+  });
+  await act(async () => pending[1].finish(json(dong('00120', '최신동'))));
+  await act(async () => pending[0].finish(json(dong('00110', '과거동'))));
+  expect(screen.getByRole('option', { name: '최신동' })).toBeInTheDocument();
+  expect(
+    screen.queryByRole('option', { name: '과거동' }),
+  ).not.toBeInTheDocument();
+  expect(district).toHaveValue('00120');
+});

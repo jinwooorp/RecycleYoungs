@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import ExploreApp from '@/App';
@@ -104,7 +105,6 @@ function mockApi(
   return fetch;
 }
 async function chooseDistrict(code = '11110') {
-  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
   await screen.findByRole('option', { name: '종로구' });
   fireEvent.change(screen.getByRole('combobox', { name: '자치구' }), {
     target: { value: code },
@@ -121,13 +121,14 @@ test('지역 미선택·닫힌 패널은 통계를 요청하지 않고 안내와
   render(<App />);
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
   expect(
-    screen.getByText('지역 탐색에서 자치구 또는 행정동을 선택해 주세요.'),
+    screen.getByText('상단 지역 필터에서 자치구 또는 행정동을 선택해 주세요.'),
   ).toBeVisible();
   expect(screen.getByRole('tab', { name: '점포 현황' })).toHaveAttribute(
     'aria-selected',
     'true',
   );
   expect(fetch.mock.calls.some(([url]) => url.includes('/stats/'))).toBe(false);
+  fireEvent.click(screen.getByRole('button', { name: '상권 분석 패널 닫기' }));
   await chooseDistrict();
   expect(fetch.mock.calls.some(([url]) => url.includes('/stats/'))).toBe(false);
 });
@@ -138,7 +139,11 @@ test('구 공식 통계·동 통계를 실제 DTO로 표시하고 정밀도·당
   await chooseDistrict();
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
   await screen.findByText('9,007,199,254,740,993');
-  expect(screen.getByText('종로구')).toBeVisible();
+  expect(
+    within(screen.getByRole('complementary', { name: '상권 분석' })).getByText(
+      '종로구',
+    ),
+  ).toBeVisible();
   expect(screen.getByText('123.456789012345678900')).toBeVisible();
   expect(screen.getByText('0.0000')).toBeVisible();
   expect(screen.getByText('자료 없음')).toBeVisible();
@@ -167,12 +172,14 @@ test('구 공식 통계·동 통계를 실제 DTO로 표시하고 정밀도·당
       url.includes('foot-traffic') ? null : 'CS100010',
     );
   }
+  fireEvent.click(screen.getByRole('button', { name: '상권 분석 패널 닫기' }));
   await chooseDistrict();
   await screen.findByRole('option', { name: '선택동' });
   fireEvent.change(screen.getByRole('combobox', { name: '행정동' }), {
     target: { value: '11110515' },
   });
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
+  fireEvent.click(screen.getByRole('tab', { name: '점포 현황' }));
   await screen.findByText('9,007,199,254,740,993');
   expect(
     fetch.mock.calls.filter(([url]) => url.includes('/dongs/11110515/stats/')),
@@ -245,7 +252,7 @@ test('빠른 지역 변경·닫기·메뉴 전환은 요청을 취소하고 늦�
   await chooseDistrict();
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
   await waitFor(() => expect(pending).toHaveLength(3));
-  fireEvent.click(screen.getByRole('button', { name: '지역 탐색' }));
+  fireEvent.click(screen.getByRole('button', { name: '상권 분석 패널 닫기' }));
   expect(pending.slice(0, 3).every((p) => p.signal.aborted)).toBe(true);
   fireEvent.change(screen.getByRole('combobox', { name: '자치구' }), {
     target: { value: '11140' },
