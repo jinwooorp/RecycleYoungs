@@ -38,6 +38,10 @@ export interface KakaoMap {
   getLevel(): number;
   setLevel(level: number, options?: { anchor: KakaoLatLng }): void;
   relayout(): void;
+  getProjection(): {
+    containerPointFromCoords(position: KakaoLatLng): { x: number; y: number };
+    coordsFromContainerPoint(point: object): KakaoLatLng;
+  };
 }
 
 export interface KakaoBounds {
@@ -117,6 +121,11 @@ export interface KakaoServices {
     ): void;
   };
   Geocoder: new () => {
+    coord2RegionCode(
+      longitude: number,
+      latitude: number,
+      callback: KakaoSearchCallback,
+    ): void;
     addressSearch(
       address: string,
       callback: KakaoSearchCallback,

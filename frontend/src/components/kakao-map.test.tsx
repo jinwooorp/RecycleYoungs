@@ -117,6 +117,10 @@ function createSdk() {
       handlers.get('center_changed')?.();
     }),
     relayout: vi.fn(),
+    getProjection: vi.fn(() => ({
+      containerPointFromCoords: vi.fn(() => ({ x: 0, y: 0 })),
+      coordsFromContainerPoint: vi.fn(() => center),
+    })),
   };
   const maps = {
     services: {
@@ -132,6 +136,13 @@ function createSdk() {
       }),
       Geocoder: vi.fn(function () {
         return {
+          coord2RegionCode: vi.fn(
+            (_x: number, _y: number, callback: KakaoSearchCallback) =>
+              callback(
+                [{ region_type: 'H', region_1depth_name: '서울특별시' }],
+                'OK',
+              ),
+          ),
           addressSearch: vi.fn(
             (_query: string, callback: KakaoSearchCallback) =>
               callback([], 'ZERO_RESULT'),
@@ -216,6 +227,576 @@ function createSdk() {
   } satisfies KakaoMaps;
   return { maps, map };
 }
+
+test('서울로 확인한 현재 위치로 한 번 시작하고 별도 표식을 표시한다', async () => {
+  const { maps, map } = createSdk();
+  const locate = vi.fn((success: PositionCallback) =>
+    success({
+      coords: { latitude: 37.55687, longitude: 126.92378 },
+    } as GeolocationPosition),
+  );
+  vi.stubGlobal('navigator', { geolocation: { getCurrentPosition: locate } });
+  load.mockResolvedValue(maps);
+  const view = render(
+    <StrictMode>
+      <KakaoMapView />
+    </StrictMode>,
+  );
+  await waitFor(() => expect(locate).toHaveBeenCalledOnce());
+  await waitFor(() => expect(map.getCenter().getLng()).toBe(126.92378));
+  expect(map.getLevel()).toBe(3);
+  expect(maps.Marker).toHaveBeenCalledWith(
+    expect.objectContaining({ title: '현재 위치', zIndex: 5 }),
+  );
+  const count = map.setCenter.mock.calls.length;
+  view.rerender(
+    <StrictMode>
+      <KakaoMapView />
+    </StrictMode>,
+  );
+  expect(map.setCenter).toHaveBeenCalledTimes(count);
+  expect(maps.Map).toHaveBeenCalledOnce();
+});
+
+/** 취소 API가 없는 브라우저 콜백을 원하는 순서로 완료합니다. */
+function pendingPositions() {
+  const pending: { success: PositionCallback; fail: PositionErrorCallback }[] =
+    [];
+  const locate = vi.fn(
+    (success: PositionCallback, fail: PositionErrorCallback) =>
+      pending.push({ success, fail }),
+  );
+  vi.stubGlobal('navigator', { geolocation: { getCurrentPosition: locate } });
+  const complete = (index = 0, longitude = 126.92378) =>
+    act(() =>
+      pending[index].success({
+        coords: { longitude, latitude: 37.55687 },
+      } as GeolocationPosition),
+    );
+  return { pending, locate, complete };
+}
+const locationSearch = {
+  place: {
+    id: 'user-place',
+    name: '선택 장소',
+    address: '서울',
+    kind: '장소',
+    isSeoul: true,
+    longitude: 127.03,
+    latitude: 37.56,
+  },
+  scope: 0,
+  revision: 1,
+};
+
+test.each(['region', 'search', 'drag', 'candidate'] as const)(
+  '늦은 자동 위치 응답은 먼저 수행한 %s 이동을 덮어쓰지 않는다',
+  async (kind) => {
+    const { maps, map } = createSdk();
+    const geo = pendingPositions();
+    load.mockResolvedValue(maps);
+    const connection = vi.fn();
+    const view = render(<KakaoMapView connectionChanged={connection} />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '지도 확대' })).toBeEnabled(),
+    );
+    let expected: number;
+    if (kind === 'region') {
+      view.rerender(
+        <KakaoMapView
+          target={polygonTarget}
+          regionRevision={1}
+          connectionChanged={connection}
+        />,
+      );
+      await waitFor(() => expect(map.setBounds).toHaveBeenCalled());
+      expected = 127;
+    } else if (kind === 'search') {
+      view.rerender(
+        <KakaoMapView
+          searchSelection={locationSearch}
+          connectionChanged={connection}
+        />,
+      );
+      await waitFor(() => expect(map.getCenter().getLng()).toBe(127.03));
+      expected = 127.03;
+    } else if (kind === 'candidate') {
+      act(() =>
+        connection.mock.calls
+          .at(-1)![0]
+          .focusLocation({ longitude: 127.06, latitude: 37.54 }, null),
+      );
+      await waitFor(() => expect(map.getCenter().getLng()).toBe(127.06));
+      expected = 127.06;
+    } else {
+      fireEvent.pointerDown(screen.getByLabelText('Kakao Maps 지도'));
+      act(() => map.setCenter({ getLng: () => 127.02, getLat: () => 37.57 }));
+      expected = 127.02;
+    }
+    geo.complete();
+    await screen.findByText(
+      '현재 위치를 확인했습니다. 지도는 사용자 선택을 우선하며 지역 필터는 변경하지 않습니다.',
+    );
+    expect(map.getCenter().getLng()).toBe(expected);
+    expect(maps.Map).toHaveBeenCalledOnce();
+  },
+);
+
+test('SDK보다 먼저 도착한 위치는 SDK 준비 후 검증하며 언마운트 이후 콜백은 무시한다', async () => {
+  const { maps, map } = createSdk();
+  const geo = pendingPositions();
+  let ready!: (maps: KakaoMaps) => void;
+  load.mockReturnValue(
+    new Promise((resolve) => {
+      ready = resolve;
+    }),
+  );
+  const view = render(
+    <StrictMode>
+      <KakaoMapView />
+    </StrictMode>,
+  );
+  geo.complete();
+  expect(maps.services.Geocoder).not.toHaveBeenCalled();
+  await act(async () => ready(maps));
+  await waitFor(() => expect(map.getCenter().getLng()).toBe(126.92378));
+  expect(geo.locate).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole('button', { name: '내 위치로 이동' }));
+  expect(geo.locate).toHaveBeenCalledTimes(2);
+  view.unmount();
+  const moves = map.setCenter.mock.calls.length;
+  geo.complete(1, 127.01);
+  await act(async () => {});
+  expect(map.setCenter).toHaveBeenCalledTimes(moves);
+});
+
+test('내 위치 재조회는 중복 실행을 막고 최신 사용자 선택과 지역 경계를 유지한다', async () => {
+  const { maps, map } = createSdk();
+  const geo = pendingPositions();
+  load.mockResolvedValue(maps);
+  const view = render(
+    <KakaoMapView target={polygonTarget} regionRevision={1} />,
+  );
+  act(() => geo.pending[0].fail({ code: 1 } as GeolocationPositionError));
+  await waitFor(() => expect(map.setBounds).toHaveBeenCalled());
+  const button = screen.getByRole('button', { name: '내 위치로 이동' });
+  fireEvent.click(button);
+  fireEvent.click(button);
+  expect(geo.locate).toHaveBeenCalledTimes(2);
+  expect(button).toBeDisabled();
+  geo.complete(1);
+  await waitFor(() => expect(map.getCenter().getLng()).toBe(126.92378));
+  expect(map.getCenter().getLat()).toBe(37.55687);
+  expect(map.getLevel()).toBe(3);
+  expect(maps.Polygon).toHaveBeenCalledOnce();
+  expect(maps.Polygon.mock.results[0].value.setMap).toHaveBeenLastCalledWith(
+    map,
+  );
+  fireEvent.click(button);
+  view.rerender(
+    <KakaoMapView
+      target={polygonTarget}
+      regionRevision={1}
+      searchSelection={locationSearch}
+    />,
+  );
+  await waitFor(() => expect(map.getCenter().getLng()).toBe(127.03));
+  geo.complete(2);
+  await waitFor(() => expect(button).toBeEnabled());
+  expect(map.getCenter().getLng()).toBe(127.03);
+  expect(maps.Map).toHaveBeenCalledOnce();
+});
+
+test.each([
+  ['서교동', 'denied'],
+  ['검색 장소', 'timeout'],
+  ['후보지', 'outside'],
+  ['서교동', 'verification'],
+  ['검색 장소', 'invalid'],
+  ['서교동', 'unsupported'],
+  ['후보지', 'unavailable'],
+] as const)(
+  '%s에서 수동 위치 조회 %s 시 중심·확대·경계·검색·카페 상태를 유지한다',
+  async (selection, reason) => {
+    const { maps, map } = createSdk();
+    const geo = pendingPositions();
+    const connection = vi.fn();
+    const cafes = clusterCafes(2);
+    const target: RegionMapTarget = {
+      kind: 'boundary',
+      extent: { west: 126.91, south: 37.55, east: 126.93, north: 37.56 },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [126.91, 37.55],
+            [126.93, 37.55],
+            [126.93, 37.56],
+            [126.91, 37.55],
+          ],
+        ],
+      },
+    };
+    load.mockResolvedValue(maps);
+    render(
+      <KakaoMapView
+        target={target}
+        regionRevision={1}
+        searchSelection={selection === '검색 장소' ? locationSearch : null}
+        connectionChanged={connection}
+        cafes={cafes}
+      />,
+    );
+    act(() => geo.pending[0].fail({ code: 1 } as GeolocationPositionError));
+    await waitFor(() =>
+      expect(map.getLevel()).toBe(selection === '검색 장소' ? 3 : 7),
+    );
+    if (selection === '후보지') {
+      act(() =>
+        connection.mock.calls
+          .at(-1)![0]
+          .focusLocation({ longitude: 127.06, latitude: 37.54 }, target),
+      );
+      await waitFor(() => expect(map.getCenter().getLng()).toBe(127.06));
+    }
+    // 기본 확대 수준과 다른 사용자 확대도 실패 후 그대로 유지해야 합니다.
+    fireEvent.click(screen.getByRole('button', { name: '지도 확대' }));
+    const center = map.getCenter();
+    const level = map.getLevel();
+    const moves = map.setCenter.mock.calls.length;
+    const zooms = map.setLevel.mock.calls.length;
+    const bounds = map.setBounds.mock.calls.length;
+    const overlays = [
+      ...maps.Polygon.mock.results,
+      ...maps.Marker.mock.results,
+    ].map(({ value }) => value);
+    const overlayCalls = overlays.map(
+      (overlay) => overlay.setMap.mock.calls.length,
+    );
+    const clusterer = maps.MarkerClusterer.mock.results[0].value;
+    const cafeMarkers = [...clusterer.managed];
+    const viewportCalls = vi.mocked(cafes.onViewportChange).mock.calls.length;
+    if (reason === 'unsupported') vi.stubGlobal('navigator', {});
+    fireEvent.click(screen.getByRole('button', { name: '내 위치로 이동' }));
+    if (reason === 'outside' || reason === 'verification') {
+      maps.services.Geocoder.mockImplementation(function () {
+        return {
+          addressSearch: vi.fn(),
+          coord2RegionCode: vi.fn((_x, _y, callback) =>
+            callback(
+              [{ region_type: 'H', region_1depth_name: '경기도' }],
+              reason === 'verification' ? 'ERROR' : 'OK',
+            ),
+          ),
+        };
+      });
+      geo.complete(1, 127.2);
+    } else if (reason === 'invalid') geo.complete(1, NaN);
+    else if (reason !== 'unsupported')
+      act(() =>
+        geo.pending[1].fail({
+          code: reason === 'denied' ? 1 : reason === 'timeout' ? 3 : 2,
+        } as GeolocationPositionError),
+      );
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: '내 위치로 이동' }),
+      ).toBeEnabled(),
+    );
+    // 예약된 지도 이동 프레임까지 처리해 늦은 서울시청 복귀도 검출합니다.
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
+    });
+    expect(screen.getByText(/현재 지도를 유지합니다/)).toBeVisible();
+    expect(screen.queryByText(/서울시청/)).not.toBeInTheDocument();
+    expect(map.getCenter()).toBe(center);
+    expect(map.getLevel()).toBe(level);
+    expect(map.setCenter).toHaveBeenCalledTimes(moves);
+    expect(map.setLevel).toHaveBeenCalledTimes(zooms);
+    expect(map.setBounds).toHaveBeenCalledTimes(bounds);
+    expect(maps.Polygon).toHaveBeenCalledOnce();
+    expect(maps.Marker).toHaveBeenCalledTimes(overlays.length - 1);
+    overlays.forEach((overlay, index) => {
+      expect(overlay.setMap).toHaveBeenCalledTimes(overlayCalls[index]);
+      expect(overlay.setMap).toHaveBeenLastCalledWith(map);
+    });
+    expect([...clusterer.managed]).toEqual(cafeMarkers);
+    expect(cafes.onViewportChange).toHaveBeenCalledTimes(viewportCalls);
+    expect(cafes.selectCafe).not.toHaveBeenCalled();
+    expect(cafes.selectCenter).not.toHaveBeenCalled();
+    expect(maps.Map).toHaveBeenCalledOnce();
+  },
+);
+
+test.each(['region', 'search', 'drag', 'candidate'] as const)(
+  '수동 위치의 서울 확인 중 수행한 %s 선택을 늦은 성공 응답보다 우선한다',
+  async (kind) => {
+    const { maps, map } = createSdk();
+    const geo = pendingPositions();
+    const connection = vi.fn();
+    load.mockResolvedValue(maps);
+    const view = render(<KakaoMapView connectionChanged={connection} />);
+    act(() => geo.pending[0].fail({ code: 1 } as GeolocationPositionError));
+    const button = screen.getByRole('button', { name: '내 위치로 이동' });
+    await waitFor(() => expect(button).toBeEnabled());
+    let verify!: KakaoSearchCallback;
+    maps.services.Geocoder.mockImplementation(function () {
+      return {
+        addressSearch: vi.fn(),
+        coord2RegionCode: vi.fn((_x, _y, callback) => {
+          verify = callback;
+        }),
+      };
+    });
+    fireEvent.click(button);
+    geo.complete(1);
+    await waitFor(() => expect(verify).toBeDefined());
+    if (kind === 'region') {
+      view.rerender(
+        <KakaoMapView
+          target={polygonTarget}
+          regionRevision={1}
+          connectionChanged={connection}
+        />,
+      );
+      await waitFor(() => expect(map.getLevel()).toBe(7));
+    } else if (kind === 'search') {
+      view.rerender(
+        <KakaoMapView
+          searchSelection={locationSearch}
+          connectionChanged={connection}
+        />,
+      );
+      await waitFor(() => expect(map.getCenter().getLng()).toBe(127.03));
+    } else if (kind === 'candidate') {
+      act(() =>
+        connection.mock.calls
+          .at(-1)![0]
+          .focusLocation({ longitude: 127.06, latitude: 37.54 }, null),
+      );
+      await waitFor(() => expect(map.getCenter().getLng()).toBe(127.06));
+    } else {
+      fireEvent.pointerDown(screen.getByLabelText('Kakao Maps 지도'));
+      act(() => map.setCenter({ getLng: () => 127.02, getLat: () => 37.57 }));
+      fireEvent.click(screen.getByRole('button', { name: '지도 확대' }));
+    }
+    const center = map.getCenter();
+    const level = map.getLevel();
+    const moves = map.setCenter.mock.calls.length;
+    act(() =>
+      verify([{ region_type: 'H', region_1depth_name: '서울특별시' }], 'OK'),
+    );
+    await waitFor(() => expect(button).toBeEnabled());
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
+    });
+    expect(map.getCenter()).toBe(center);
+    expect(map.getLevel()).toBe(level);
+    expect(map.setCenter).toHaveBeenCalledTimes(moves);
+    expect(
+      screen.getByText(/현재 위치를 확인했습니다.*사용자 선택을 우선/),
+    ).toBeVisible();
+  },
+);
+
+test('구 선택이 경계 응답을 기다리는 동안 위치가 완료되어도 기본 중심을 덮어쓰지 않는다', async () => {
+  const { maps, map } = createSdk();
+  const geo = pendingPositions();
+  load.mockResolvedValue(maps);
+  const view = render(<KakaoMapView regionRevision={0} />);
+  await waitFor(() => expect(maps.Map).toHaveBeenCalledOnce());
+  view.rerender(<KakaoMapView target={null} regionRevision={1} />);
+  geo.complete();
+  await screen.findByText(
+    '현재 위치를 확인했습니다. 지도는 사용자 선택을 우선하며 지역 필터는 변경하지 않습니다.',
+  );
+  expect(map.getCenter().getLng()).toBe(126.978);
+  view.rerender(<KakaoMapView target={polygonTarget} regionRevision={1} />);
+  await waitFor(() => expect(map.getCenter().getLng()).toBe(127));
+});
+
+test('늦게 완료된 지역 경계는 그 사이 명시적으로 선택한 후보지 이동을 덮어쓰지 않는다', async () => {
+  const { maps, map } = createSdk();
+  const geo = pendingPositions();
+  const connection = vi.fn();
+  load.mockResolvedValue(maps);
+  const view = render(
+    <KakaoMapView
+      target={null}
+      regionRevision={1}
+      connectionChanged={connection}
+    />,
+  );
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: '지도 확대' })).toBeEnabled(),
+  );
+  act(() =>
+    connection.mock.calls
+      .at(-1)![0]
+      .focusLocation({ longitude: 127.06, latitude: 37.54 }, null),
+  );
+  await waitFor(() => expect(map.getCenter().getLng()).toBe(127.06));
+  view.rerender(
+    <KakaoMapView
+      target={polygonTarget}
+      regionRevision={1}
+      connectionChanged={connection}
+    />,
+  );
+  geo.complete();
+  await screen.findByText(
+    '현재 위치를 확인했습니다. 지도는 사용자 선택을 우선하며 지역 필터는 변경하지 않습니다.',
+  );
+  await waitFor(() => expect(maps.Polygon).toHaveBeenCalledOnce());
+  expect(map.getCenter().getLng()).toBe(127.06);
+  expect(map.setBounds).not.toHaveBeenCalled();
+});
+
+test('SDK 재초기화는 확인한 위치만 복원하고 위치·표식·리스너가 누적되지 않는다', async () => {
+  const { maps, map } = createSdk();
+  const geo = pendingPositions();
+  const store = vi.spyOn(Storage.prototype, 'setItem');
+  const log = vi.spyOn(console, 'log');
+  load.mockResolvedValue(maps);
+  const view = render(<KakaoMapView />);
+  geo.complete();
+  await waitFor(() => expect(map.getCenter().getLng()).toBe(126.92378));
+  const marker = maps.Marker.mock.results[0].value;
+  const click = maps.event.addListener.mock.calls.find(
+    ([target, type]) => target === marker && type === 'click',
+  )![2];
+  act(() => click());
+  expect(maps.event.preventMap).toHaveBeenCalledOnce();
+  const lookups = maps.services.Geocoder.mock.calls.length;
+  vi.stubEnv('VITE_KAKAO_MAP_APP_KEY', 'retry-key');
+  view.rerender(<KakaoMapView />);
+  await waitFor(() => expect(maps.Map).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(maps.Marker).toHaveBeenCalledTimes(2));
+  expect(marker.setMap).toHaveBeenLastCalledWith(null);
+  expect(geo.locate).toHaveBeenCalledOnce();
+  expect(maps.services.Geocoder).toHaveBeenCalledTimes(lookups);
+  expect(fetch).not.toHaveBeenCalled();
+  expect(store).not.toHaveBeenCalled();
+  expect(log).not.toHaveBeenCalled();
+  view.unmount();
+  expect(maps.Marker.mock.results[1].value.setMap).toHaveBeenLastCalledWith(
+    null,
+  );
+  expect(maps.event.removeListener).toHaveBeenCalledWith(
+    map,
+    'dragstart',
+    expect.any(Function),
+  );
+  store.mockRestore();
+  log.mockRestore();
+});
+
+test.each([
+  'denied',
+  'timeout',
+  'unsupported',
+  'outside',
+  'verification',
+] as const)(
+  '위치 %s 상태는 기본 지도를 오류로 바꾸지 않는다',
+  async (reason) => {
+    const { maps, map } = createSdk();
+    const geo = pendingPositions();
+    if (reason === 'unsupported') vi.stubGlobal('navigator', {});
+    if (reason === 'outside' || reason === 'verification')
+      maps.services.Geocoder.mockImplementation(function () {
+        return {
+          addressSearch: vi.fn(),
+          coord2RegionCode: vi.fn((_x, _y, callback) =>
+            callback(
+              [{ region_type: 'H', region_1depth_name: '경기도' }],
+              reason === 'verification' ? 'ERROR' : 'OK',
+            ),
+          ),
+        };
+      });
+    load.mockResolvedValue(maps);
+    render(<KakaoMapView />);
+    if (reason === 'denied' || reason === 'timeout')
+      act(() =>
+        geo.pending[0].fail({
+          code: reason === 'denied' ? 1 : 3,
+        } as GeolocationPositionError),
+      );
+    else if (reason !== 'unsupported') geo.complete();
+    await screen.findByText(/현재 지도를 유지합니다/);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '지도 확대' })).toBeEnabled();
+    expect(map.getCenter().getLng()).toBe(126.978);
+    expect(map.getLevel()).toBe(5);
+    expect(maps.Marker).not.toHaveBeenCalled();
+  },
+);
+
+test.each([false, true])(
+  '가려진 검색 마커만 크기 안정 후 보정하고 모션 감소=%s와 직접 지도 이동을 존중한다',
+  async (reduced) => {
+    const { maps, map } = createSdk();
+    load.mockResolvedValue(maps);
+    vi.stubGlobal('matchMedia', () => ({ matches: reduced }));
+    const rect = (x: number, y: number, width: number, height: number) =>
+      ({
+        x,
+        y,
+        left: x,
+        top: y,
+        width,
+        height,
+        right: x + width,
+        bottom: y + height,
+      }) as DOMRect;
+    const measure = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.getAttribute('aria-label') === 'Kakao Maps 지도')
+          return rect(0, 0, 390, 383);
+        if (this.classList.contains('explore-search-results'))
+          return rect(68, 120, 250, 230);
+        if (this.classList.contains('explore-search-form'))
+          return rect(68, 12, 310, 48);
+        return rect(0, 0, 0, 0);
+      });
+    const project = vi.fn(() => ({ x: 195, y: 190 }));
+    const unproject = vi.fn(() => ({
+      getLat: () => 37.56,
+      getLng: () => 127.031,
+    }));
+    map.getProjection.mockImplementation(() => ({
+      containerPointFromCoords: project,
+      coordsFromContainerPoint: unproject,
+    }));
+    const view = render(
+      <div className="explore-app">
+        <form className="explore-search-form" />
+        <div className="explore-search-results" />
+        <KakaoMapView searchSelection={locationSearch} searchOpen />
+      </div>,
+    );
+    if (reduced) {
+      await waitFor(() => expect(unproject).toHaveBeenCalled());
+      expect(map.panBy).not.toHaveBeenCalled();
+      expect(map.setCenter.mock.calls.at(-1)![0].getLng()).toBe(127.031);
+    } else await waitFor(() => expect(map.panBy).toHaveBeenCalledWith(-155, 0));
+    const count = project.mock.calls.length;
+    fireEvent.pointerDown(screen.getByLabelText('Kakao Maps 지도'));
+    act(() => {
+      resize([], {} as ResizeObserver);
+      resize([], {} as ResizeObserver);
+    });
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
+    });
+    expect(project).toHaveBeenCalledTimes(count);
+    expect(maps.Map).toHaveBeenCalledOnce();
+    view.unmount();
+    measure.mockRestore();
+  },
+);
 
 test('최초 영역·idle 재조회와 목록 선택은 마커·안전한 정보창을 표시하고 전체 자원을 정리한다', async () => {
   const { maps, map } = createSdk();
@@ -540,7 +1121,9 @@ test('로딩 중 상태를 표시한 뒤 StrictMode에서도 지도를 한 번 �
     expect.any(HTMLElement),
     expect.objectContaining({ level: 5 }),
   );
-  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(
+    screen.queryByText('서울 지도를 불러오고 있습니다'),
+  ).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '지도 확대' }));
   expect(map.setLevel).toHaveBeenLastCalledWith(4);
   fireEvent.click(screen.getByRole('button', { name: '지도 축소' }));
@@ -1520,6 +2103,12 @@ test('장소 검색 이동·지역 필터 독립성·명시적 반경 연계와 
   const results = screen.getByRole('region', { name: '장소 검색 결과' });
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
   const regionPanel = screen.getByRole('complementary', { name: '상권 분석' });
+  const keywordSearch =
+    maps.services.Places.mock.results.at(-1)!.value.keywordSearch;
+  fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
+  fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
+  expect(keywordSearch).toHaveBeenCalledOnce();
+  expect(screen.getByRole('region', { name: '장소 검색 결과' })).toBe(results);
   expect(regionPanel).not.toContainElement(results);
   expect(screen.getByRole('search', { name: '장소 검색' })).toHaveAttribute(
     'data-panel-open',
@@ -1808,6 +2397,62 @@ test('지도 추가 모드와 검색에서 후보지를 등록하고 명시적�
   view.unmount();
   expect(restored.setMap).toHaveBeenLastCalledWith(null);
   sessionStorage.removeItem('recycleyoungs.candidates');
+});
+
+test('선택한 후보지에서 서울 외부 위치가 반환되어도 후보지 선택·이름·마커를 유지한다', async () => {
+  const { maps, map } = createSdk();
+  const geo = pendingPositions();
+  const storageKey = 'recycleyoungs.candidates';
+  const saved = JSON.stringify({
+    version: 1,
+    items: [
+      { slot: 'A', name: '서교동 후보지', longitude: 126.92, latitude: 37.55 },
+    ],
+  });
+  sessionStorage.setItem(storageKey, saved);
+  try {
+    load.mockResolvedValue(maps);
+    render(<App />);
+    act(() => geo.pending[0].fail({ code: 1 } as GeolocationPositionError));
+    fireEvent.click(screen.getByRole('button', { name: '후보지 비교' }));
+    const candidate = screen.getByRole('button', { name: 'A · 서교동 후보지' });
+    await waitFor(() => expect(candidate).toBeEnabled());
+    fireEvent.click(candidate);
+    await waitFor(() => expect(map.getCenter().getLng()).toBe(126.92));
+    const marker = maps.Marker.mock.results.findLast(
+      ({ value }) => value.title === '후보지 A: 서교동 후보지',
+    )!.value;
+    const markerCalls = marker.setMap.mock.calls.length;
+    const center = map.getCenter();
+    const level = map.getLevel();
+    maps.services.Geocoder.mockImplementation(function () {
+      return {
+        addressSearch: vi.fn(),
+        coord2RegionCode: vi.fn((_x, _y, callback) =>
+          callback([{ region_type: 'H', region_1depth_name: '경기도' }], 'OK'),
+        ),
+      };
+    });
+    fireEvent.click(screen.getByRole('button', { name: '내 위치로 이동' }));
+    geo.complete(1, 127.2);
+    await screen.findByText(
+      '서울 서비스 범위 밖입니다. 현재 지도를 유지합니다.',
+    );
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
+    });
+    expect(map.getCenter()).toBe(center);
+    expect(map.getLevel()).toBe(level);
+    expect(candidate).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('textbox', { name: '후보지 A 이름' })).toHaveValue(
+      '서교동 후보지',
+    );
+    expect(marker.setMap).toHaveBeenCalledTimes(markerCalls);
+    expect(marker.setMap).toHaveBeenLastCalledWith(map);
+    expect(sessionStorage.getItem(storageKey)).toBe(saved);
+  } finally {
+    sessionStorage.removeItem(storageKey);
+  }
 });
 
 function App() {

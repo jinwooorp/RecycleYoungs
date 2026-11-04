@@ -196,6 +196,8 @@ export default function App() {
           </aside>
         </div>
         <KakaoMapView
+          regionRevision={region.revision}
+          searchOpen={search.isOpen}
           target={region.target}
           cafes={cafes}
           connectionChanged={setConnection}

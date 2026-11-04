@@ -47,7 +47,10 @@ function renderRoute(path: string) {
 }
 
 test('랜딩은 서비스 소개와 탐색 링크를 표시하며 SDK와 API를 시작하지 않는다', () => {
+  const locate = vi.fn();
+  vi.stubGlobal('navigator', { geolocation: { getCurrentPosition: locate } });
   renderRoute('/');
+  expect(locate).not.toHaveBeenCalled();
   expect(
     screen.getByRole('heading', {
       level: 1,
