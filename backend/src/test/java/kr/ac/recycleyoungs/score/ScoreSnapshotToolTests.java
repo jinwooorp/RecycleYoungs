@@ -83,7 +83,7 @@ class ScoreSnapshotToolTests {
             shared.resolve("private"),
             PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
     assertThatThrownBy(
-            () -> ScoreSnapshotFiles.prepareOutput(parent.resolve("forbidden.json"), repository()))
+            () -> ScoreSnapshotOutput.prepareOutput(parent.resolve("forbidden.json"), repository()))
         .isInstanceOf(Exception.class);
     try (var files = Files.list(parent)) {
       assertThat(files.count()).isZero();
@@ -95,7 +95,7 @@ class ScoreSnapshotToolTests {
     Path target = privateDirectory().resolve("synthetic.score-snapshot.json");
     var bundle = fixture();
     byte[] bytes = bundle.encode();
-    ScoreSnapshotFiles.saveNew(ScoreSnapshotFiles.prepareOutput(target, repository()), bytes);
+    ScoreSnapshotOutput.saveNew(ScoreSnapshotOutput.prepareOutput(target, repository()), bytes);
     assertThat(Files.getPosixFilePermissions(target))
         .isEqualTo(PosixFilePermissions.fromString("r--------"));
     assertThat(Files.readAllBytes(target)).isEqualTo(bytes);
@@ -198,7 +198,7 @@ class ScoreSnapshotToolTests {
           Files.setPosixFilePermissions(directory, PosixFilePermissions.fromString("rwxr-xr-x"));
     }
     Path selected = target;
-    assertThatThrownBy(() -> ScoreSnapshotFiles.prepareOutput(selected, repository()))
+    assertThatThrownBy(() -> ScoreSnapshotOutput.prepareOutput(selected, repository()))
         .isInstanceOf(Exception.class);
     assertThat(Files.readString(sentinel)).isEqualTo("sentinel-original");
   }
@@ -206,9 +206,9 @@ class ScoreSnapshotToolTests {
   @Test
   void aRacingNewTargetIsNotOverwrittenAndOwnStageIsCleaned() throws Exception {
     Path target = privateDirectory().resolve("race.json");
-    var prepared = ScoreSnapshotFiles.prepareOutput(target, repository());
+    var prepared = ScoreSnapshotOutput.prepareOutput(target, repository());
     Files.writeString(target, "created-after-preflight");
-    assertThatThrownBy(() -> ScoreSnapshotFiles.saveNew(prepared, fixture().encode()))
+    assertThatThrownBy(() -> ScoreSnapshotOutput.saveNew(prepared, fixture().encode()))
         .isInstanceOf(Exception.class);
     assertThat(Files.readString(target)).isEqualTo("created-after-preflight");
     try (var files = Files.list(target.getParent())) {
@@ -222,8 +222,8 @@ class ScoreSnapshotToolTests {
     Path target = directory.resolve("x".repeat(300) + ".json");
     assertThatThrownBy(
             () ->
-                ScoreSnapshotFiles.saveNew(
-                    ScoreSnapshotFiles.prepareOutput(target, repository()), fixture().encode()))
+                ScoreSnapshotOutput.saveNew(
+                    ScoreSnapshotOutput.prepareOutput(target, repository()), fixture().encode()))
         .isInstanceOf(Exception.class);
     try (var files = Files.list(directory)) {
       assertThat(files.count()).isZero();
@@ -241,10 +241,10 @@ class ScoreSnapshotToolTests {
         Files.createDirectory(
             base.resolve("alternate"),
             PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
-    var prepared = ScoreSnapshotFiles.prepareOutput(parent.resolve("unsafe.json"), repository());
+    var prepared = ScoreSnapshotOutput.prepareOutput(parent.resolve("unsafe.json"), repository());
     Path moved = Files.move(parent, base.resolve("moved"));
     Files.createSymbolicLink(parent, alternate);
-    assertThatThrownBy(() -> ScoreSnapshotFiles.saveNew(prepared, fixture().encode()))
+    assertThatThrownBy(() -> ScoreSnapshotOutput.saveNew(prepared, fixture().encode()))
         .isInstanceOf(Exception.class);
     try (var a = Files.list(alternate);
         var b = Files.list(moved)) {
@@ -257,8 +257,8 @@ class ScoreSnapshotToolTests {
   void verifiesOnlyExplicitFilesAndRejectsExternalHashMismatchWithoutLeakingPaths()
       throws Exception {
     Path target = privateDirectory().resolve("pin.json");
-    ScoreSnapshotFiles.saveNew(
-        ScoreSnapshotFiles.prepareOutput(target, repository()), fixture().encode());
+    ScoreSnapshotOutput.saveNew(
+        ScoreSnapshotOutput.prepareOutput(target, repository()), fixture().encode());
     var out = new ByteArrayOutputStream();
     assertThat(ScoreSnapshotVerifyMain.execute(Map.of(), repository(), new PrintStream(out)))
         .isEqualTo(2);

@@ -2,7 +2,7 @@
 
 이 문서는 **점수 백엔드를 구현·테스트하거나 검증 도구를 실행하는 개발자**를 위한 계산 명세와 실행 안내입니다. 모델의 목적·실험 해석은 [점수 설계](score-design.md), 원천 판본·승인 책임·manifest·Trust Record는 [공개 준비](score-20262-publication-readiness.md)에서 확인합니다.
 
-**현재 구현:** 순수 A 계산기, 전체 입력 Repository, 내부 ScoreService, R01·R02 스냅샷 코어, 명시 실행 회귀·내보내기·오프라인 검증·Trust 사전 진단 도구, REST 미승인 차단 경로입니다. **미구현:** 공개 200 응답, 최종 지역 404 연결, 운영 신뢰 기록 로더·승인/철회·현재 DB 대조 게이트와 `region_score`입니다.
+**현재 구현:** 순수 A 계산기, 전체 입력 Repository, 내부 ScoreService, R01·R02 스냅샷 코어, 명시 실행 회귀·내보내기·오프라인 검증·Trust 사전 진단 도구, 호출자가 제공한 기준에 대한 내부 신뢰 검증 진입점, REST 미승인 차단 경로입니다. **미구현:** 공개 200 응답, 최종 지역 404 연결, 운영 신뢰 기준 공급·철회 전파·현재 DB 대조 게이트와 `region_score`입니다.
 
 A의 방향·비중·예외·표시 규칙은 승인 전 후보입니다. 내부 구현이 있다는 이유로 서비스 정책을 채택하지 않습니다. `NOT_APPROVED`, `sourceTrust=NOT_ESTABLISHED`, `R03_COMPLETE=false`를 유지하며 현재 판본의 분기·공간·업종 비교 가능성 확인 전에는 공개 점수를 제공하지 않습니다.
 
@@ -427,15 +427,15 @@ String hash = restored.inputSnapshotId();
 
 ### 6.6 명시 실행 도구와 환경변수
 
-도구는 [scoreRegression 소스셋](../backend/build.gradle)에 있어 제품 JAR·공개 API에 포함되지 않고 일반 `test`·`integrationTest`·`build`에서 자동 실행하지 않습니다. 명령행 인자를 받거나 `.env`를 자동 로드하지 않습니다.
+CLI 도구는 [scoreRegression 소스셋](../backend/build.gradle)에 있어 제품 JAR·공개 API에 포함되지 않고 일반 `test`·`integrationTest`·`build`에서 자동 실행하지 않습니다. 명령행 인자를 받거나 `.env`를 자동 로드하지 않습니다. 공통 Trust Record·manifest 검증, 묶음·안전 읽기와 내부 진입점은 `main`에서 공유합니다. 파일 쓰기는 CLI 전용 `ScoreSnapshotOutput`으로 분리했습니다. `build`의 `verifyScorePackaging`이 두 제품 JAR의 공통 코드 포함 및 CLI/내보내기 제외를 검사합니다.
 
-| 작업·코드                                                                                                                                                                                                                      | 접근 대상·조건                                                                         | 검증                                                                                                                                                                                                       |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scoreRegression`: [Main](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreRegressionMain.java)·[Verifier](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreRegressionVerifier.java)       | 명시 활성화 후 실제 개발 DB의 대표값·현재 전체 결과 검산. 파일 저장 없음               | [단위](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreRegressionTests.java)·[통합](../backend/src/integrationTest/java/kr/ac/recycleyoungs/score/ScoreRegressionIntegrationTests.java)            |
-| `scoreSnapshotExport`: [ExportMain](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreSnapshotExportMain.java)                                                                                                | 명시 활성화 후 한 읽기 전용 스냅샷의 구·동 전체 입력을 검증·롤백하고 외부 새 파일 보존 | [도구 단위](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreSnapshotToolTests.java)·[통합](../backend/src/integrationTest/java/kr/ac/recycleyoungs/score/ScoreSnapshotExportIntegrationTests.java) |
-| `scoreSnapshotVerify`: [VerifyMain](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreSnapshotVerifyMain.java)                                                                                                | 지정한 외부 파일 하나를 DB·Spring Context 없이 검증·재현                               | 같은 도구 단위 테스트                                                                                                                                                                                      |
-| `scoreTrustPreflight`: [PreflightMain](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreTrustPreflightMain.java)                                                                                             | 명시 활성화 후 외부 Trust Record·manifest·묶음과 독립 해시를 오프라인 결합 진단        | [사전 진단 단위 테스트](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreTrustPreflightTests.java)                                                                                                  |
-| 공통 [ScoreSnapshotBundle](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreSnapshotBundle.java)·[ScoreSnapshotFiles](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreSnapshotFiles.java) | 두 단위의 일관성, 안전한 외부 파일 읽기/새 파일 보존                                   | 같은 도구 테스트                                                                                                                                                                                           |
+| 작업·코드                                                                                                                                                                                                                                                                                                                        | 접근 대상·조건                                                                         | 검증                                                                                                                                                                                                       |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scoreRegression`: [Main](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreRegressionMain.java)·[Verifier](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreRegressionVerifier.java)                                                                                                         | 명시 활성화 후 실제 개발 DB의 대표값·현재 전체 결과 검산. 파일 저장 없음               | [단위](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreRegressionTests.java)·[통합](../backend/src/integrationTest/java/kr/ac/recycleyoungs/score/ScoreRegressionIntegrationTests.java)            |
+| `scoreSnapshotExport`: [ExportMain](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreSnapshotExportMain.java)                                                                                                                                                                                                  | 명시 활성화 후 한 읽기 전용 스냅샷의 구·동 전체 입력을 검증·롤백하고 외부 새 파일 보존 | [도구 단위](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreSnapshotToolTests.java)·[통합](../backend/src/integrationTest/java/kr/ac/recycleyoungs/score/ScoreSnapshotExportIntegrationTests.java) |
+| `scoreSnapshotVerify`: [VerifyMain](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreSnapshotVerifyMain.java)                                                                                                                                                                                                  | 지정한 외부 파일 하나를 DB·Spring Context 없이 검증·재현                               | 같은 도구 단위 테스트                                                                                                                                                                                      |
+| `scoreTrustPreflight`: [PreflightMain](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreTrustPreflightMain.java)                                                                                                                                                                                               | 명시 활성화 후 외부 Trust Record·manifest·묶음과 독립 해시를 오프라인 결합 진단        | [사전 진단 단위 테스트](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreTrustPreflightTests.java)                                                                                                  |
+| 공통 [ScoreSnapshotBundle](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreSnapshotBundle.java)·[ScoreSnapshotFiles](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreSnapshotFiles.java), CLI 전용 [ScoreSnapshotOutput](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreSnapshotOutput.java) | 두 단위의 일관성·안전 읽기와 CLI 전용 새 파일 보존                                     | 같은 도구 테스트                                                                                                                                                                                           |
 
 | 환경변수                                | 사용처·의미                                                                 |
 | --------------------------------------- | --------------------------------------------------------------------------- |
@@ -531,6 +531,25 @@ SCORE_TRUST_PREFLIGHT_ENABLED=1 ./gradlew scoreTrustPreflight --quiet --console=
 실패는 Java 종료값 2와 `NOT_COMPLETED: phase=...` 또는 비활성의 `NOT_EXECUTED`로 표시합니다. 단계는 `CONFIGURATION`, `INPUT_FILES`, `TRUST_PIN`, `PREVIOUS_TRUST_PIN`, `BINDING`, `FILE_STABILITY`뿐이며 원문·경로·예외는 출력하지 않습니다. Gradle은 비정상 종료를 작업 실패로 전달하므로 표준출력의 단계를 함께 확인합니다. 파일 변경·접근 실패·검증 실패를 이전 파일이나 캐시된 성공으로 대체하지 않습니다. 성공 직전 모든 파일을 다시 대조하지만 복수 파일의 원자적 읽기·검증 종료 이후 최신성·전역 리비전 단조성을 보장하는 운영 게이트는 아닙니다.
 
 실제 공개까지는 [독립 신뢰·공개 조건](score-20262-publication-readiness.md#명시-실행-오프라인-사전-진단)의 공식 산정·경계 기준, 정책·원천·커버리지 승인, 보호된 운영 배포·철회·현재 DB 대조 게이트와 R03 전체 입력 재현이 필요합니다. 합성 테스트 성공으로 이 조건들을 대체하지 않습니다.
+
+### 6.10 Backend 내부 진입점
+
+[ScoreTrustVerification](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreTrustVerification.java)은 환경변수·Spring·DB에 의존하지 않는 명시 호출 컴포넌트입니다. 운영 신뢰 공급자는 아직 구현하지 않았습니다. 호출자는 검증 대상과 독립적으로 확보한 정규 기대 해시를 제공해야 하며, API 요청·manifest·현재 파일에서 기대값을 만들지 않습니다.
+
+```java
+var verifier = new ScoreTrustVerification(repositoryRoot);
+var basis = new ScoreTrustVerification.TrustBasis(
+    independentlyExpectedTrustSha256, independentlyExpectedPreviousSha256, minimumRevision);
+var files = new ScoreTrustVerification.InputFiles(
+    trustRecordPath, manifestPath, snapshotBundlePath, previousRecordPath);
+var result = verifier.verify(basis, files); // BINDING_VERIFIED여도 공개 허용 아님
+```
+
+현재 해시는 필수입니다. 이전 경로와 해시는 둘 다 없거나 둘 다 있어야 하며, 선택적 최소 리비전은 1 이상입니다. 저장소 루트·입력·기준이 없거나 잘못되면 파일 접근 전 `TRUST_BASIS_MISSING`을 반환합니다. 안전 읽기·해시 대조·기존 검증기·파일 재대조는 CLI와 공유합니다. 결과는 파일/무결성 실패, 철회/리비전 실패, manifest/스냅샷 결합 실패와 완료를 구분하며, 원본 예외·JSON·경로·승인 ID를 담지 않습니다.
+
+이전 기록 미제공은 `NOT_PROVIDED`, 리비전 하한만 검증하면 `REVISION_FLOOR_ONLY`, 독립 해시와 이전 기록의 이력 대조까지 완료하면 `CHECKED`입니다. 어느 경우도 최신성 서버·영구 단조 저장소·전체 철회 이력의 검증을 뜻하지 않습니다. 성공 직전 파일을 재대조해도 복수 파일의 원자적 스냅샷·검증 이후 철회 전파·현재 DB 동일성은 보장하지 않습니다. 매 호출 새로 읽고 실패 시 캐시나 과거 정상 파일을 사용하지 않습니다.
+
+상세 결과·공급자 책임·운영에 남은 조건은 [공개 준비](score-20262-publication-readiness.md#backend-내부-신뢰-검증-진입점)를 따릅니다. `ScoreController`·`ScoreService`에는 연결하지 않으며 `NOT_APPROVED`, `sourceTrust=NOT_ESTABLISHED`, `R03_COMPLETE=false`를 유지합니다. [내부 진입점 테스트](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreTrustVerificationTests.java)는 합성 파일만 사용하고 기존 CLI·점수 API 회귀 테스트도 유지합니다.
 
 ## 7. 구현할 테스트 계약
 

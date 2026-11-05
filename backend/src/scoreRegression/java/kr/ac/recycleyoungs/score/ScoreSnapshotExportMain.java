@@ -47,7 +47,7 @@ public final class ScoreSnapshotExportMain {
     var rolledBack = new AtomicBoolean();
     try {
       var target =
-          ScoreSnapshotFiles.prepareOutput(
+          ScoreSnapshotOutput.prepareOutput(
               Path.of(ScoreRegressionMain.required(env, "SCORE_SNAPSHOT_OUTPUT_PATH")), repository);
       String url = ScoreRegressionMain.required(env, "DB_JDBC_URL");
       ScoreRegressionMain.validateUrl(url);
@@ -103,7 +103,7 @@ public final class ScoreSnapshotExportMain {
       byte[] bytes = bundle.encode();
       ScoreSnapshotBundle.decode(bytes);
       phase = "FILE_PUBLICATION";
-      ScoreSnapshotFiles.saveNew(target, bytes);
+      ScoreSnapshotOutput.saveNew(target, bytes);
       out.println(
           "EXPORTED default_transaction_read_only=on transaction_read_only=on isolation=repeatable read flyway=NOT_CONFIGURED transactionEnd=ROLLBACK");
       out.println(

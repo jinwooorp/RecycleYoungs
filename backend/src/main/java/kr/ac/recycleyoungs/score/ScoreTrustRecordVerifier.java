@@ -4,6 +4,26 @@ import java.util.List;
 
 /** 독립 기대값의 결합만 검사하며 실제 승인이나 운영 신뢰 경로를 검증하지 않는다. */
 public final class ScoreTrustRecordVerifier {
+  enum FailureKind {
+    RECORD_INTEGRITY,
+    REVOCATION_OR_REVISION,
+    BINDING
+  }
+
+  /** 기존 거부 규칙의 단계만 구분한다. 원본 예외·기록은 전달하지 않는다. */
+  static final class VerificationFailure extends IllegalArgumentException {
+    private final FailureKind kind;
+
+    private VerificationFailure(FailureKind kind) {
+      super("신뢰 기록·입력 결합 검증 실패");
+      this.kind = kind;
+    }
+
+    FailureKind kind() {
+      return kind;
+    }
+  }
+
   public enum Status {
     TRUST_BINDING_VERIFIED
   }
@@ -34,9 +54,11 @@ public final class ScoreTrustRecordVerifier {
       byte[] manifestJson,
       byte[] bundleJson,
       ScoreTrustRecord independentlyTrustedPreviousRecord) {
+    var failure = FailureKind.RECORD_INTEGRITY;
     try {
       var codec = new ScoreTrustRecordCodec();
       var record = codec.decode(trustRecordJson);
+      failure = FailureKind.REVOCATION_OR_REVISION;
       if (record.releaseStatus() != ScoreTrustRecord.ReleaseStatus.ACTIVE)
         throw new IllegalArgumentException();
       for (var revocation : record.revocations()) {
@@ -55,6 +77,7 @@ public final class ScoreTrustRecordVerifier {
         revisionCheck = RevisionCheck.CHECKED;
       }
       // 범위도 기록에서 고정한다. 기대 ID나 해시를 manifest·입력에서 생성하지 않는다.
+      failure = FailureKind.BINDING;
       var manifestBytes = manifestJson.clone();
       var manifest = new ScoreApprovalManifestCodec().decode(manifestBytes);
       if (!record.quarterCode().equals(manifest.quarterCode())
@@ -78,7 +101,7 @@ public final class ScoreTrustRecordVerifier {
           revisionCheck);
     } catch (RuntimeException error) {
       // 기대값·입력·철회 사유·원본 예외를 실패 메시지에 노출하지 않는다. 폴백도 없다.
-      throw new IllegalArgumentException("신뢰 기록·입력 결합 검증 실패");
+      throw new VerificationFailure(failure);
     }
   }
 

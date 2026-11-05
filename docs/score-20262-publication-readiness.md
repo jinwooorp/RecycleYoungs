@@ -17,7 +17,7 @@
 
 [ScoreController](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreController.java)는 `db` 프로필에서 구·동 점수 경로를 등록합니다. 지역 코드·필수/중복/추가 query·지원 값 검증 실패는 `400 INVALID_PARAMETER`, 문법과 지원 값이 맞는 요청도 `503 DATA_NOT_READY`입니다. DB·지역 존재 확인·내부 계산·승인 도구를 호출하지 않습니다.
 
-[ScoreService](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreService.java)는 별도 내부 진단이며 항상 `NOT_APPROVED`입니다. 아래 검증기 여섯 클래스는 기존 `scoreRegression` 소스셋에서 DB·파일·HTTP·Spring Context 없이 전달받은 메모리 바이트만 처리하고 제품 JAR에 포함되지 않습니다. 이를 재사용하는 `scoreTrustPreflight`는 명시한 보호 경로의 외부 파일만 읽는 오프라인 도구입니다. 운영 로더·자동 발급/저장이나 Controller 연결은 없습니다. 기존 계산기·Repository·스냅샷·내보내기 도구의 동작도 유지합니다.
+[ScoreService](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreService.java)는 별도 내부 진단이며 항상 `NOT_APPROVED`입니다. 아래 Trust Record·manifest 모델/Codec/검증기 여섯 클래스와 묶음 검증·안전 읽기는 `main` 소스셋으로 옮겨 내부 진입점과 CLI가 공유합니다. 순수 검증 규칙은 그대로이며 제품 JAR에 포함됩니다. `scoreRegression`에는 명시 실행 CLI·DB 회귀·파일 출력만 남기고 제품 JAR에서 제외합니다. 내부 진입점은 자동 설정·승인·캐시나 Service·Controller 연결을 하지 않습니다. 기존 계산기·Repository·스냅샷·내보내기 계약도 유지합니다.
 
 ## 2. 검토 범위와 공식 근거별 확인 결과
 
@@ -173,11 +173,11 @@ manifest 안의 `APPROVED`·자체 선언 해시, 검증 도구 출력, GitHub�
 
 ## 6. 독립 manifest와 입력 결합 검증
 
-| 클래스                                                                                                                            | 책임                                                   |
-| --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| [ScoreApprovalManifest](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreApprovalManifest.java)                 | 불변 승인 주장, 구·동 전체 목록과 실제 배치 메타데이터 |
-| [ScoreApprovalManifestCodec](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreApprovalManifestCodec.java)       | 엄격한 JSON 입출력과 별도 manifest SHA-256             |
-| [ScoreApprovalManifestVerifier](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreApprovalManifestVerifier.java) | 실제 묶음 바이트·두 아티팩트·호출자 기대 근거 ID 대조  |
+| 클래스                                                                                                                 | 책임                                                   |
+| ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| [ScoreApprovalManifest](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreApprovalManifest.java)                 | 불변 승인 주장, 구·동 전체 목록과 실제 배치 메타데이터 |
+| [ScoreApprovalManifestCodec](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreApprovalManifestCodec.java)       | 엄격한 JSON 입출력과 별도 manifest SHA-256             |
+| [ScoreApprovalManifestVerifier](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreApprovalManifestVerifier.java) | 실제 묶음 바이트·두 아티팩트·호출자 기대 근거 ID 대조  |
 
 ### 독립 manifest 스키마
 
@@ -236,11 +236,11 @@ ID와 `policyVersion`은 영문·숫자로 시작하는 최대 128자의 영문�
 
 ## 7. 독립 Trust Record와 이력 결합 검증
 
-| 클래스                                                                                                                  | 책임                                                 |
-| ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| [ScoreTrustRecord](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreTrustRecord.java)                 | manifest와 분리된 불변 기대값, 활성 상태와 철회 목록 |
-| [ScoreTrustRecordCodec](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreTrustRecordCodec.java)       | 엄격한 JSON 해석, 정규 바이트와 별도 SHA-256         |
-| [ScoreTrustRecordVerifier](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreTrustRecordVerifier.java) | 활성·철회·이력 검사 후 기존 manifest 검증기 연결     |
+| 클래스                                                                                                       | 책임                                                 |
+| ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| [ScoreTrustRecord](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreTrustRecord.java)                 | manifest와 분리된 불변 기대값, 활성 상태와 철회 목록 |
+| [ScoreTrustRecordCodec](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreTrustRecordCodec.java)       | 엄격한 JSON 해석, 정규 바이트와 별도 SHA-256         |
+| [ScoreTrustRecordVerifier](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreTrustRecordVerifier.java) | 활성·철회·이력 검사 후 기존 manifest 검증기 연결     |
 
 ### 신뢰 기록 스키마
 
@@ -324,7 +324,31 @@ verifier.verify(
 
 그러나 공격자가 신뢰 기록·manifest·입력·기대 ID/해시를 모두 일관되게 위조하면 이 메모리 검사만으로 출처를 판별할 수 없습니다. ID·담당자·근거 URL의 형식, 올바른 해시, 결합·이력 진단 성공은 승인자 권한·근거의 진위·원천 판본의 의미적 비교 가능성을 입증하지 않습니다.
 
-실제 승인에는 신뢰할 승인 주체, 역할별 권한, 독립 기대값 또는 서명과 보호된 배포·갱신·폐기·철회·감사 절차가 필요합니다. 운영 로더·보호된 설정·실제 승인/철회·현재 DB 대조/공개 차단·운영 보관·백업 기능은 **미구현**이며 Service·Controller에도 연결하지 않았습니다.
+실제 승인에는 신뢰할 승인 주체, 역할별 권한, 독립 기대값 또는 서명과 보호된 배포·갱신·폐기·철회·감사 절차가 필요합니다. 아래 내부 진입점은 호출자가 제공한 기준과 입력의 결합만 검증합니다. 운영 신뢰 공급·보호된 설정·실제 승인/철회 전파·현재 DB 대조/공개 차단·운영 보관·백업 기능은 **미구현**이며 Service·Controller에도 연결하지 않았습니다.
+
+### Backend 내부 신뢰 검증 진입점
+
+[ScoreTrustVerification](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreTrustVerification.java)은 명시적으로 전달받은 `TrustBasis`와 `InputFiles`만 처리합니다. 생성자에는 제외 기준이 될 실제 저장소 루트를 전달합니다. 기존 안전 판독기는 그 루트의 `.git` 존재를 확인하므로 임의 경로로 대체하지 않습니다. 환경변수·Spring 설정·파일 존재를 보고 신뢰 기준을 구성하지 않으며 Spring Bean으로 자동 등록하지 않습니다. 파일·DB 쓰기, 점수 계산·공개 여부 결정도 하지 않습니다.
+
+| 책임                  | 공급자 또는 컴포넌트의 범위                                                                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 운영 신뢰 기준 공급자 | 현재 Trust Record의 독립 정규 SHA-256, 선택적 이전 기록 해시·최소 리비전을 제공. 승인 권한·독립성·최신성과 보호된 보관/배포 책임은 아직 미확정    |
+| 입력 공급자           | 현재 기록·manifest·묶음·선택적 이전 기록의 외부 경로를 지정. 입력에서 기대 해시나 승인 ID를 생성해 신뢰 기준으로 제공하지 않음                    |
+| 내부 검증 컴포넌트    | 설정을 모두 검사한 뒤 기존 안전 판독기로 새로 읽고 해시·철회·이력·결합·파일 재대조를 수행. 고정 상태만 반환하며 실패 시 이전 결과로 대체하지 않음 |
+
+`TrustBasis(expectedTrustSha256, previousExpectedSha256, minimumRevision)`의 현재 해시는 필수입니다. 이전 기록 경로와 이전 기대 해시는 함께 지정하고, 최소 리비전은 선택적인 양의 정수입니다. 기대값의 진위는 파일에서 추론하지 않습니다. 이전 기록이 없으면 `historyCheck=NOT_PROVIDED`, 최소 리비전만 제공하면 `REVISION_FLOOR_ONLY`, 독립 해시와 이전 기록을 검증한 경우에만 `CHECKED`입니다. 리비전 하한만으로 동일 리비전 변조·철회 이력 보존을 검사했다고 주장하지 않습니다.
+
+| 내부 결과 `status`               | 의미                                                                    |
+| -------------------------------- | ----------------------------------------------------------------------- |
+| `TRUST_BASIS_MISSING`            | 기준·입력·저장소 설정 누락/형식 오류. 파일 읽기 전 거부                 |
+| `FILE_OR_INTEGRITY_FAILURE`      | 경로/권한/읽기/파일 안정성 또는 Trust Record 형식·독립 해시 실패        |
+| `REVOCATION_OR_REVISION_FAILURE` | 비활성·철회, 최소 리비전 미달, 기존 이력 검사 위반                      |
+| `BINDING_FAILURE`                | 기존 manifest·묶음 형식/해시/재현/범위/근거 ID/정책/제외 목록 결합 실패 |
+| `BINDING_VERIFIED`               | 이번에 읽은 파일과 지정 기준에 대한 결합 진단 완료. 공개 승인 아님      |
+
+기존 `ScoreTrustRecordVerifier`는 거부 규칙과 예외 메시지를 유지하고 실패 단계만 타입으로 구분합니다. CLI도 같은 내부 진입점을 사용하므로 별도 검증 체계를 추가하지 않습니다. 결과에는 경로·JSON·근거 ID·원본 예외가 없고, 모든 상태에서 `publicationState=NOT_APPROVED`, `sourceTrust=NOT_ESTABLISHED`, `r03Complete=false`입니다.
+
+결과는 읽은 바이트에만 해당하며 재사용 가능한 공개 허용 토큰이 아닙니다. 각 호출은 캐시 없이 읽고 성공 직전에 재대조하지만, 여러 파일의 원자적 스냅샷·종료 후 변경/철회의 즉시 전파·전역 리비전 단조성은 보장하지 않습니다. 이전 기준 전체를 함께 교체한 공격이나 누락된 더 최신 기록도 탐지하지 못합니다. 영구 신뢰 저장소 대신 메모리 변수를 두지 않았고, 실제 배포 신뢰 공급·현재 DB 입력 대조·운영 공개 게이트는 여전히 후속입니다.
 
 ### 명시 실행 오프라인 사전 진단
 

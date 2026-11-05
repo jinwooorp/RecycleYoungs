@@ -336,6 +336,8 @@ Frontend 명령은 **`frontend/`**, Backend 명령은 **`backend/`**, ETL 명령
 
 **점수 오프라인 사전 진단:** `backend/`에서 보호된 외부 Trust Record·승인 manifest·구/동 스냅샷 경로와 독립 기대 해시를 준비하고 `SCORE_TRUST_PREFLIGHT_ENABLED=1 ./gradlew scoreTrustPreflight --quiet --console=plain 2>/dev/null`로 실행합니다. 필수 환경변수·이전 기록의 선택 쌍·해시의 독립 출처는 [실행 계약](score-v1-contract.md#69-오프라인-trust-사전-진단)을 따릅니다. 비활성·설정 누락은 파일 읽기 전에 중단하며 DB·웹 서버·파일 쓰기는 사용하지 않습니다. 일반 `build`에서 도구를 실행하지 않고, 단위 테스트는 JUnit 소유 임시 디렉터리의 합성 입력만 사용합니다. 종료값 0도 결합 진단일 뿐 `NOT_APPROVED`, `sourceTrust=NOT_ESTABLISHED`, `R03_COMPLETE=false`를 바꾸지 않으며 운영 공개 게이트를 완성한 것이 아닙니다.
 
+**점수 내부 신뢰 검증:** `ScoreTrustVerification`은 호출자가 명시한 신뢰 기준·입력 경로만 받아 CLI와 같은 검증 흐름을 실행합니다. [호출 계약](score-v1-contract.md#610-backend-내부-진입점)의 독립 해시·선택적 이전 기준을 사용하며 환경변수나 Spring 기동으로 자동 실행하지 않습니다. 공통 검증·안전 읽기는 제품 JAR에 포함하고 CLI·DB 회귀·파일 출력은 제외합니다. `./gradlew build`의 `verifyScorePackaging`이 두 JAR의 구성을 검사합니다. 보호된 운영 기준 공급·발급·철회 전파·현재 DB 입력 대조와 REST 공개 허용은 미구현입니다.
+
 환경변수 예시에는 로컬 개발용 값만 포함합니다. 실제 비밀번호가 포함된 `.env` 파일은 Git에서 제외됩니다.
 
 ## 배포 검토 항목

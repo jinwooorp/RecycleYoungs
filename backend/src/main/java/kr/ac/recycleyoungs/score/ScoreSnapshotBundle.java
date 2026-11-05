@@ -10,7 +10,7 @@ import tools.jackson.core.StreamReadFeature;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 
-/** 두 독립 단위의 아티팩트를 한 파일로 게시한다. 승인 manifest가 아니며 제품 JAR에서 제외한다. */
+/** 구·동 아티팩트의 공통 묶음 검증 모델. 파일 게시나 공개 승인은 수행하지 않는다. */
 record ScoreSnapshotBundle(ScoreSnapshotArtifact district, ScoreSnapshotArtifact dong) {
   private static final String VERSION = "score-snapshot-bundle-v1";
   private static final JsonMapper JSON =

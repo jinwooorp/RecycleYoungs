@@ -14,7 +14,7 @@ import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Objects;
 
-/** 명시한 외부 비공개 디렉터리만 사용한다. 완성한 파일을 하드 링크로 게시해 덮어쓰기를 막는다. */
+/** 저장소 외부 보호 경로의 읽기·안정성 검사. 출력 기능은 CLI 소스셋에 별도로 둔다. */
 final class ScoreSnapshotFiles {
   private static final LinkOption NOFOLLOW = LinkOption.NOFOLLOW_LINKS;
   private static final long MAX_BYTES = 64L * 1024 * 1024;
@@ -23,13 +23,7 @@ final class ScoreSnapshotFiles {
 
   record Target(Path path, Path parent, Object parentKey) {}
 
-  static Target prepareOutput(Path path, Path repository) throws IOException {
-    var target = validate(path, repository);
-    if (Files.exists(path, NOFOLLOW)) throw new IOException("기존 출력 거부");
-    return target;
-  }
-
-  private static Target validate(Path path, Path repository) throws IOException {
+  static Target validate(Path path, Path repository) throws IOException {
     if (!path.isAbsolute() || !path.equals(path.normalize()) || path.getFileName() == null)
       throw new IOException("정규 절대 경로 필요");
     Path root = repository.toRealPath();
@@ -70,7 +64,7 @@ final class ScoreSnapshotFiles {
     if (!parent.toRealPath().equals(parent)) throw new IOException("실제 경로 불일치");
   }
 
-  private static void checkParent(Target target) throws IOException {
+  static void checkParent(Target target) throws IOException {
     checkNoLinks(target.parent());
     var attrs = Files.readAttributes(target.parent(), PosixFileAttributes.class, NOFOLLOW);
     if (!Objects.equals(attrs.fileKey(), target.parentKey())
@@ -79,7 +73,7 @@ final class ScoreSnapshotFiles {
   }
 
   /** 지원 시 openat으로 고정한다. macOS 미지원 시에는 검사한 비공개 POSIX 경로만 사용한다. */
-  private static Directory secureParent(Target target) throws IOException {
+  static Directory secureParent(Target target) throws IOException {
     var root = Files.newDirectoryStream(target.parent().getRoot());
     if (!(root instanceof SecureDirectoryStream<Path> current)) {
       root.close();
@@ -104,23 +98,12 @@ final class ScoreSnapshotFiles {
   }
 
   /** 표준 provider의 차이만 흡수한다. 상대 이름은 내부에서 생성한 단일 파일명만 받는다. */
-  private record Directory(Target target, SecureDirectoryStream<Path> secure)
-      implements AutoCloseable {
-    java.nio.channels.SeekableByteChannel open(Path name, boolean create) throws IOException {
-      var options =
-          create
-              ? java.util.Set.of(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, NOFOLLOW)
-              : java.util.Set.of(StandardOpenOption.READ, NOFOLLOW);
-      var perms =
-          PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------"));
-      if (secure != null)
-        return create
-            ? secure.newByteChannel(name, options, perms)
-            : secure.newByteChannel(name, options);
+  record Directory(Target target, SecureDirectoryStream<Path> secure) implements AutoCloseable {
+    java.nio.channels.SeekableByteChannel open(Path name) throws IOException {
+      var options = java.util.Set.of(StandardOpenOption.READ, NOFOLLOW);
+      if (secure != null) return secure.newByteChannel(name, options);
       checkParent(target);
-      return create
-          ? FileChannel.open(target.parent().resolve(name), options, perms)
-          : FileChannel.open(target.parent().resolve(name), options);
+      return FileChannel.open(target.parent().resolve(name), options);
     }
 
     PosixFileAttributes attributes(Path name) throws IOException {
@@ -133,89 +116,27 @@ final class ScoreSnapshotFiles {
           target.parent().resolve(name), PosixFileAttributes.class, NOFOLLOW);
     }
 
-    void readOnly(Path name) throws IOException {
-      var perms = PosixFilePermissions.fromString("r--------");
-      if (secure != null)
-        secure
-            .getFileAttributeView(name, PosixFileAttributeView.class, NOFOLLOW)
-            .setPermissions(perms);
-      else {
-        checkParent(target);
-        Files.setPosixFilePermissions(target.parent().resolve(name), perms);
-      }
-    }
-
-    void delete(Path name) throws IOException {
-      if (secure != null) secure.deleteFile(name);
-      else {
-        checkParent(target);
-        Files.delete(target.parent().resolve(name));
-      }
-    }
-
     @Override
     public void close() throws IOException {
       if (secure != null) secure.close();
     }
   }
 
-  static void saveNew(Target target, byte[] bytes) throws IOException {
-    if (bytes.length == 0 || bytes.length > MAX_BYTES) throw new IOException("지원 파일 크기 초과");
-    checkParent(target);
-    try (var parent = secureParent(target)) {
-      Path stage = Path.of(".score-snapshot-" + java.util.UUID.randomUUID() + ".part");
-      Object stageKey = null;
-      boolean created = false, published = false, complete = false;
-      try {
-        try (var channel = parent.open(stage, true)) {
-          created = true;
-          stageKey = parent.attributes(stage).fileKey();
-          if (stageKey == null || !(channel instanceof FileChannel file))
-            throw new IOException("안전 파일 기능 미지원");
-          var buffer = ByteBuffer.wrap(bytes);
-          while (buffer.hasRemaining()) channel.write(buffer);
-          file.force(true);
-        }
-        parent.readOnly(stage);
-        checkParent(target);
-        // ATOMIC_MOVE는 일부 OS에서 기존 대상을 교체한다. createLink는 대상이 있으면 원자적으로 실패한다.
-        Files.createLink(target.path(), target.parent().resolve(stage));
-        published = true;
-        checkParent(target);
-        if (!Objects.equals(parent.attributes(target.path().getFileName()).fileKey(), stageKey))
-          throw new IOException("게시 파일 불일치");
-        parent.delete(stage);
-        created = false;
-        complete = true;
-      } finally {
-        try {
-          if (!complete && published) deleteOwn(parent, target.path().getFileName(), stageKey);
-        } finally {
-          if (created) deleteOwn(parent, stage, stageKey);
-        }
-      }
-    }
-  }
-
-  private static void deleteOwn(Directory directory, Path name, Object key) throws IOException {
-    // 기존 파일이나 다른 실행이 만든 파일은 정리하지 않는다.
-    try {
-      if (key != null && Objects.equals(directory.attributes(name).fileKey(), key))
-        directory.delete(name);
-    } catch (java.nio.file.NoSuchFileException absent) {
-      /* 이미 없는 항목을 복원하거나 다른 파일을 지우지 않는다. */
-    }
-  }
-
   static byte[] read(Path path, Path repository) throws IOException {
+    return read(path, repository, () -> {});
+  }
+
+  /** 테스트에서 채널을 연 직후 파일 변경을 재현한다. 실제 호출은 관찰 동작 없이 같은 검사를 사용한다. */
+  static byte[] read(Path path, Path repository, Runnable beforeContentRead) throws IOException {
     var target = validate(path, repository);
     checkParent(target);
     try (var parent = secureParent(target);
-        var channel = parent.open(path.getFileName(), false);
+        var channel = parent.open(path.getFileName());
         var out = new ByteArrayOutputStream()) {
       var before = parent.attributes(path.getFileName());
       if (!before.isRegularFile() || before.size() == 0 || before.size() > MAX_BYTES)
         throw new IOException("지원 파일 크기·종류 아님");
+      beforeContentRead.run();
       var buffer = ByteBuffer.allocate(8192);
       long total = 0;
       while (channel.read(buffer) != -1) {

@@ -3,7 +3,6 @@ package kr.ac.recycleyoungs.score;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.Map;
 
 /** 독립 기대값과 외부 파일의 결합만 진단한다. DB·웹 서버·실제 승인·파일 쓰기는 사용하지 않는다. */
@@ -46,60 +45,28 @@ public final class ScoreTrustPreflightMain {
       out.println(HOLDS);
       return 2;
     }
-    String phase = "CONFIGURATION";
     try {
       var config = Configuration.from(env);
-      if (repository == null) throw new IllegalArgumentException();
-      phase = "INPUT_FILES";
-      byte[] trust = reader.read(config.trust(), repository);
-      byte[] manifest = reader.read(config.manifest(), repository);
-      byte[] bundle = reader.read(config.bundle(), repository);
-      byte[] previous =
-          config.previous() == null ? null : reader.read(config.previous(), repository);
-
-      phase = "TRUST_PIN";
-      checkPin(trust, config.expected());
-      ScoreTrustRecord previousRecord = null;
-      if (previous != null) {
-        phase = "PREVIOUS_TRUST_PIN";
-        previousRecord = checkPin(previous, config.previousExpected());
+      var basis =
+          new ScoreTrustVerification.TrustBasis(config.expected(), config.previousExpected(), null);
+      var files =
+          new ScoreTrustVerification.InputFiles(
+              config.trust(), config.manifest(), config.bundle(), config.previous());
+      var result = new ScoreTrustVerification(repository, reader::read).verify(basis, files);
+      if (result.status() != ScoreTrustVerification.Status.BINDING_VERIFIED) {
+        failure(out, result.phase().name());
+        return 2;
       }
-      phase = "BINDING";
-      var result = new ScoreTrustRecordVerifier().verify(trust, manifest, bundle, previousRecord);
-
-      // 개별 파일의 안전 읽기에 더해 결합 검증 도중 바뀐 파일도 성공 출력 전에 거부한다.
-      // 여러 파일의 원자적 읽기나 종료 이후 최신성까지 보장하는 운영 게이트는 아니다.
-      phase = "FILE_STABILITY";
-      unchanged(config.trust(), trust, repository, reader);
-      unchanged(config.manifest(), manifest, repository, reader);
-      unchanged(config.bundle(), bundle, repository, reader);
-      if (previous != null) unchanged(config.previous(), previous, repository, reader);
-
       out.println(
-          "PREFLIGHT_VERIFIED binding="
-              + result.status()
-              + " externalTrustPin=MATCHED revisionCheck="
-              + result.revisionCheck());
+          "PREFLIGHT_VERIFIED binding=TRUST_BINDING_VERIFIED externalTrustPin=MATCHED revisionCheck="
+              + result.historyCheck());
       out.println("sourceComparabilityApproval=NOT_ESTABLISHED publicationApproval=NOT_APPROVED");
       out.println(HOLDS);
       return 0;
-    } catch (Exception error) {
-      // 원본 예외·JSON·경로·승인 ID를 출력하거나 과거 정상 파일/결과로 대체하지 않는다.
-      failure(out, phase);
+    } catch (RuntimeException error) {
+      failure(out, "CONFIGURATION");
       return 2;
     }
-  }
-
-  private static ScoreTrustRecord checkPin(byte[] bytes, String expected) {
-    var codec = new ScoreTrustRecordCodec();
-    var record = codec.decode(bytes);
-    if (!expected.equals(codec.sha256(record))) throw new IllegalArgumentException();
-    return record;
-  }
-
-  private static void unchanged(Path path, byte[] before, Path repository, Reader reader)
-      throws IOException {
-    if (!Arrays.equals(before, reader.read(path, repository))) throw new IOException();
   }
 
   private static void failure(PrintStream out, String phase) {
@@ -134,14 +101,12 @@ public final class ScoreTrustPreflightMain {
       String value = env.get(key);
       if (value == null || value.isBlank()) throw new IllegalArgumentException();
       Path path = Path.of(value);
-      if (!path.isAbsolute() || !path.equals(path.normalize()) || path.getFileName() == null)
-        throw new IllegalArgumentException();
       return path;
     }
 
     private static String hash(Map<String, String> env, String key) {
       String value = env.get(key);
-      if (value == null || !value.matches("[a-f0-9]{64}")) throw new IllegalArgumentException();
+      if (value == null || value.isBlank()) throw new IllegalArgumentException();
       return value;
     }
   }
