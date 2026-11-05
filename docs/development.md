@@ -9,7 +9,7 @@
 3. 별도 터미널에서 [Frontend](#2-frontend)와 [Backend](#3-backend)를 실행합니다. Backend는 DB 사용 여부에 맞는 실행 방법을 선택합니다.
 4. 각 프로젝트 디렉터리에서 [빌드·테스트·품질 검사](#빌드테스트품질-검사)를 실행합니다.
 
-**현재는 로컬 개발 환경만 구성되어 있습니다.** 실제 운영 배포와 CI/CD는 미구성이며, [배포 검토 항목](#배포-검토-항목)은 향후 계획입니다.
+로컬 개발 환경과 [GitHub Actions CI](#github-actions-ci)를 구성했습니다. GitHub-hosted Runner의 최초 검증은 Push 이후 확인해야 합니다. 실제 운영 배포와 CD는 미구성이며, [배포 검토 항목](#배포-검토-항목)은 향후 계획입니다.
 
 ## 목차
 
@@ -21,6 +21,7 @@
   - [DB를 사용하는 `db` 프로필 실행](#db를-사용하는-db-프로필-실행)
   - [마이그레이션 적용 상태와 V5~V7 검증 기록](#마이그레이션-적용-상태-확인)
 - [빌드·테스트·품질 검사](#빌드테스트품질-검사)
+- [GitHub Actions CI](#github-actions-ci)
 - [배포 검토 항목](#배포-검토-항목)
 
 ## 1. 개발 도구
@@ -344,13 +345,66 @@ Frontend 명령은 **`frontend/`**, Backend 명령은 **`backend/`**, ETL 명령
 
 환경변수 예시에는 로컬 개발용 값만 포함합니다. 실제 비밀번호가 포함된 `.env` 파일은 Git에서 제외됩니다.
 
+## GitHub Actions CI
+
+[워크플로](../.github/workflows/ci.yml)는 `project-upgrade` Push와 해당 브랜치를 대상으로 하는 PR의 생성·커밋 추가·재열기·수정·검토 준비 전환 시 실행됩니다. 같은 브랜치 또는 PR의 중복 실행은 최신 실행만 남깁니다. 모든 Job은 `ubuntu-24.04`, `contents: read` 권한을 사용하며 checkout 후 인증정보를 남기지 않습니다.
+
+| Job                 | 환경·제한 시간                               | 검증 내용                                                                         |
+| ------------------- | -------------------------------------------- | --------------------------------------------------------------------------------- |
+| Frontend            | Node.js 24·npm 11.19.1 / 15분                | `npm ci` → `npm run lint` → `npm run format:check` → `npm test` → `npm run build` |
+| Backend             | Temurin Java 21·Gradle Wrapper / 20분        | `./gradlew test` → `./gradlew spotlessCheck` → `./gradlew build`                  |
+| Backend integration | Temurin Java 21·Gradle Wrapper·Docker / 30분 | Docker 확인·테스트 이미지 준비 → `./gradlew integrationTest` → JUnit 결과 검사    |
+| ETL                 | Node.js 24·npm 11.19.1 / 15분                | `npm ci` → `npm run lint` → `npm run format:check` → `npm test` → `npm run build` |
+
+Node 버전은 각 `.nvmrc`를 사용하고 npm은 명시적으로 설치·확인합니다. 기존 두 `package-lock.json`과 Gradle Wrapper를 그대로 사용합니다. npm 다운로드 캐시는 프로젝트별 잠금 파일, Gradle 의존성·Wrapper 캐시는 Gradle 설정·Wrapper 속성 파일을 기준으로 재사용합니다. GitHub 공식 [checkout v7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1)·[setup-node v7.1.0](https://github.com/actions/setup-node/releases/tag/v7.1.0)·[setup-java v6.2.0](https://github.com/actions/setup-java/releases/tag/v6.2.0)을 전체 커밋 SHA로 고정했습니다.
+
+Frontend 테스트는 Kakao SDK·API 응답을 모의하므로 실제 키가 필요하지 않습니다. Backend `build`는 기존 `verifyScorePackaging`을 실행해 공통 내부 검증 클래스의 포함과 CLI·스냅샷 출력 클래스의 제외를 확인합니다. 점수 회귀·스냅샷 내보내기·Trust 사전 진단 CLI 작업은 자동 실행하지 않습니다.
+
+Backend 통합 Job은 기존 `postgis/postgis:17-3.5`를 준비한 뒤 Testcontainers로 일회용 DB를 생성합니다. 기존 Flyway와 합성 fixture만 적용하며 개발·운영 DB에 연결하지 않습니다. Docker 사용 불가·이미지 다운로드 실패·테스트 실패는 Job 실패입니다. JUnit 보고서 누락·실행 0건·건너뜀도 실패로 처리합니다.
+
+ETL은 기존 기본 `npm test`만 실행합니다. `RUN_*_DB_TESTS`로 활성화하는 별도 DB 통합 테스트와 실제 CSV 테스트는 기본적으로 건너뛰며 CI 검증 완료 범위에 포함하지 않습니다. 공공데이터 재다운로드·실제 ETL 적재는 실행하지 않습니다. 모든 Job은 Secrets나 실제 `.env` 생성 없이 실행하며, 의존성·테스트 이미지 다운로드 외에 운영 DB·공공데이터 API 접근이 필요하지 않습니다.
+
+### 로컬에서 같은 검증 실행
+
+Node.js 24를 선택하고 `npm install --global npm@11.19.1`로 npm 버전을 맞춥니다. 아래 명령을 `frontend/`와 `etl/`에서 각각 실행합니다. 실제 `.env`나 DB·공공 API용 환경변수를 적용할 필요가 없습니다.
+
+```bash
+node --version
+npm --version
+npm ci
+npm run lint
+npm run format:check
+npm test
+npm run build
+```
+
+Java 21과 실행 중인 Docker를 준비하고 `backend/`에서 실행합니다. CI는 각 Gradle 호출에 `--no-daemon --console=plain`을 붙이며, 통합 테스트 결과의 실패·오류·건너뜀이 모두 0인지도 검사합니다.
+
+```bash
+java -version
+./gradlew test
+./gradlew spotlessCheck
+./gradlew build
+docker version
+docker pull postgis/postgis:17-3.5
+./gradlew integrationTest
+```
+
+GitHub의 `ubuntu-24.04` Job은 x64 환경입니다. ARM64 로컬 Docker에서 위 이미지에 맞는 판본을 찾지 못하면 `docker pull --platform linux/amd64 postgis/postgis:17-3.5`로 같은 이미지의 AMD64 판본을 준비하고 에뮬레이션 지원을 확인합니다. 실패 시 다른 이미지로 대체하거나 통합 테스트를 생략하지 않습니다.
+
+### 실행 결과와 배포 범위
+
+Push 후 GitHub 저장소의 **Actions → CI → 실행 → Job/Step 로그** 또는 PR의 **Checks**에서 결과를 확인합니다. 취소된 이전 실행과 최신 실행을 구분하고 네 Job이 모두 성공했는지 확인합니다. 실패 시 해당 단계의 npm·Gradle·Docker 로그를 확인하며 테스트를 생략하거나 실패를 무시하지 않습니다.
+
+워크플로의 YAML·로컬 검증 성공과 GitHub-hosted Runner의 성공은 별개입니다. 최초 Runner 실행은 Push 이후에만 확인할 수 있으며 Actions 실행 권한·의존성 캐시·Docker 이미지 다운로드도 그때 확인합니다. CI는 자동 품질 검증이며 서버 배포·운영 이미지 생성·데이터 갱신을 수행하는 CD는 이번 범위에 없습니다. 점수 공개 미승인 상태도 변경하지 않습니다.
+
 ## 배포 검토 항목
 
 ### 배포 구성안 (계획)
 
 로컬 개발용 PostgreSQL·PostGIS는 Docker Compose로 실행합니다. 서비스 전체의 컨테이너 배포는 후속 단계에서 검토할 예정입니다.
 
-클라우드 환경은 AWS EC2 또는 다른 클라우드 서비스를 후보로 두고 있으며, Nginx와 CI/CD 도입도 고려 중입니다.
+클라우드 환경은 AWS EC2 또는 다른 클라우드 서비스를 후보로 두고 있으며, Nginx와 CD 도입도 고려 중입니다. 자동 검증 CI는 위 GitHub Actions 워크플로와 별개로 배포 기능을 갖지 않습니다.
 
 **아직 실제 배포 환경이나 배포 자동화는 구성되지 않았습니다.**
 
@@ -358,7 +412,7 @@ Frontend 명령은 **`frontend/`**, Backend 명령은 **`backend/`**, ETL 명령
 flowchart TB
     USER(["사용자"])
     GITHUB["GitHub Repository"]
-    CICD["GitHub Actions<br/>CI/CD"]
+    CICD["배포 자동화 CD<br/>(계획)"]
 
     subgraph SERVER["클라우드 서버 · Docker Compose"]
         direction TB
@@ -415,16 +469,16 @@ location / {
 
 ### 검토 항목
 
-| 항목         | 검토 방향                                          |
-| ------------ | -------------------------------------------------- |
-| 컨테이너     | Docker 및 Docker Compose 활용                      |
-| 클라우드     | AWS EC2 또는 대체 클라우드 서비스                  |
-| 웹 서버      | Nginx를 통한 정적 파일 제공 및 API 요청 전달       |
-| HTTPS        | 도메인과 TLS 인증서 적용                           |
-| 데이터베이스 | PostgreSQL·PostGIS 운영 및 데이터 보존 정책        |
-| ETL          | 데이터 갱신 주기에 맞춘 실행 및 실패 처리          |
-| CI/CD        | GitHub Actions 등을 활용한 빌드·테스트·배포 자동화 |
-| 환경변수     | 인증키, DB 접속 정보 등 비밀정보의 분리 관리       |
-| 운영         | 로그, 오류 확인, 백업 및 장애 복구 방식 검토       |
+| 항목         | 검토 방향                                    |
+| ------------ | -------------------------------------------- |
+| 컨테이너     | Docker 및 Docker Compose 활용                |
+| 클라우드     | AWS EC2 또는 대체 클라우드 서비스            |
+| 웹 서버      | Nginx를 통한 정적 파일 제공 및 API 요청 전달 |
+| HTTPS        | 도메인과 TLS 인증서 적용                     |
+| 데이터베이스 | PostgreSQL·PostGIS 운영 및 데이터 보존 정책  |
+| ETL          | 데이터 갱신 주기에 맞춘 실행 및 실패 처리    |
+| CD           | CI 검증 이후의 배포 자동화 방식 검토         |
+| 환경변수     | 인증키, DB 접속 정보 등 비밀정보의 분리 관리 |
+| 운영         | 로그, 오류 확인, 백업 및 장애 복구 방식 검토 |
 
 실제 배포 방식과 구성 요소는 MVP 개발 및 테스트 결과를 바탕으로 확정할 계획입니다.
