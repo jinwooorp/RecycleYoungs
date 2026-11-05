@@ -18,7 +18,7 @@ import type { Candidate } from '@/lib/candidates';
 const menus = [
   { id: 'cafes', label: '주변 카페', Icon: Coffee },
   { id: 'analysis', label: '상권 분석', Icon: BarChart3 },
-  { id: 'compare', label: '후보지 비교', Icon: GitCompareArrows },
+  { id: 'compare', label: '후보지 분석', Icon: GitCompareArrows },
 ] as const;
 
 export default function App() {

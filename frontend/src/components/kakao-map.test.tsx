@@ -2362,7 +2362,7 @@ test('지도 추가 모드와 검색에서 후보지를 등록하고 명시적�
       <App />
     </StrictMode>,
   );
-  const menu = screen.getByRole('button', { name: '후보지 비교' });
+  const menu = screen.getByRole('button', { name: '후보지 분석' });
   fireEvent.click(menu);
   const mode = screen.getByRole('button', { name: '지도에서 후보지 추가' });
   await waitFor(() => expect(mode).toBeEnabled());
@@ -2411,8 +2411,13 @@ test('지도 추가 모드와 검색에서 후보지를 등록하고 명시적�
   );
   fireEvent.click(screen.getByRole('button', { name: '후보지로 추가' }));
   await screen.findByText('후보지 B를 등록했습니다.');
-  expect(screen.getByRole('button', { name: 'A · 지도로 등록' })).toBeVisible();
-  expect(screen.getByRole('table', { name: '후보지 비교표' })).toBeVisible();
+  expect(
+    screen.getByRole('button', { name: '후보지 A 지도에서 위치 확인' }),
+  ).toBeVisible();
+  expect(
+    screen.getByRole('button', { name: '후보지 A 지도에서 위치 확인' }),
+  ).toHaveTextContent('지도로 등록');
+  expect(screen.getByRole('region', { name: '후보지 요약' })).toBeVisible();
   const removed = maps.Marker.mock.results.at(-1)!.value;
   fireEvent.click(screen.getByRole('button', { name: '후보지 B 삭제' }));
   expect(removed.setMap).toHaveBeenLastCalledWith(null);
@@ -2449,8 +2454,10 @@ test('선택한 후보지에서 서울 외부 위치가 반환되어도 후보�
     load.mockResolvedValue(maps);
     render(<App />);
     act(() => geo.pending[0].fail({ code: 1 } as GeolocationPositionError));
-    fireEvent.click(screen.getByRole('button', { name: '후보지 비교' }));
-    const candidate = screen.getByRole('button', { name: 'A · 서교동 후보지' });
+    fireEvent.click(screen.getByRole('button', { name: '후보지 분석' }));
+    const candidate = screen.getByRole('button', {
+      name: '후보지 A 지도에서 위치 확인',
+    });
     await waitFor(() => expect(candidate).toBeEnabled());
     fireEvent.click(candidate);
     await waitFor(() => expect(map.getCenter().getLng()).toBe(126.92));
@@ -2523,7 +2530,7 @@ test('카페 클러스터러는 지도당 한 번 초기화하고 패널·조회
     '주변 카페',
     '선택 지점 주변',
     '상권 분석',
-    '후보지 비교',
+    '후보지 분석',
   ])
     fireEvent.click(screen.getByRole('button', { name }));
   expect(maps.MarkerClusterer).toHaveBeenCalledOnce();

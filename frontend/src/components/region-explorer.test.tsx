@@ -171,7 +171,7 @@ test('모바일은 세 메뉴와 접힌 필터를 제공하고 Escape·닫기·�
   fireEvent.click(screen.getByRole('button', { name: '지역 필터 닫기' }));
   expect(toggle).toHaveFocus();
   fireEvent.click(toggle);
-  const compare = screen.getByRole('button', { name: '후보지 비교' });
+  const compare = screen.getByRole('button', { name: '후보지 분석' });
   fireEvent.pointerDown(compare);
   compare.focus();
   expect(toggle).toHaveAttribute('aria-expanded', 'false');

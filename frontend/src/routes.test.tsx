@@ -132,10 +132,13 @@ test('탐색 CTA와 뒤로·앞으로 이동 후 탭에 저장된 후보지를 �
 
   fireEvent.click(screen.getByRole('button', { name: '테스트 앞으로' }));
   await screen.findByRole('main', { name: 'RecycleYoungs 탐색 화면' });
-  fireEvent.click(screen.getByRole('button', { name: '후보지 비교' }));
+  fireEvent.click(screen.getByRole('button', { name: '후보지 분석' }));
   expect(
-    await screen.findByRole('button', { name: 'A · 복원 후보지' }),
+    await screen.findByRole('button', { name: '후보지 A 지도에서 위치 확인' }),
   ).toBeVisible();
+  expect(
+    screen.getByRole('button', { name: '후보지 A 지도에서 위치 확인' }),
+  ).toHaveTextContent('복원 후보지');
 });
 
 test('/explore에서 탐색 페이지를 바로 렌더링한다', async () => {
@@ -203,8 +206,11 @@ test('탐색의 홈 링크로 랜딩에 돌아와도 후보지를 보존하고 �
     within(screen.getByRole('banner')).getByRole('link', { name: '시작하기' }),
   );
   await screen.findByRole('main', { name: 'RecycleYoungs 탐색 화면' });
-  fireEvent.click(screen.getByRole('button', { name: '후보지 비교' }));
+  fireEvent.click(screen.getByRole('button', { name: '후보지 분석' }));
   expect(
-    await screen.findByRole('button', { name: 'A · 홈 이동 후 후보지' }),
+    await screen.findByRole('button', { name: '후보지 A 지도에서 위치 확인' }),
   ).toBeVisible();
+  expect(
+    screen.getByRole('button', { name: '후보지 A 지도에서 위치 확인' }),
+  ).toHaveTextContent('홈 이동 후 후보지');
 });
