@@ -178,7 +178,6 @@ SDK는 기존 JavaScript 키로 `autoload=false&libraries=services,clusterer`를
 
 클러스터러는 지도당 하나를 유지하고 마커 변경을 일괄 반영합니다. 공식 SDK에 dispose가 없어 같은 지도에서는 비워 둔 인스턴스를 재사용하며 WeakMap으로 지도 폐기 시 함께 회수되도록 합니다. 구·동/방식/반경 변경, 오류·빈 결과, SDK 재초기화와 언마운트에서 마커·정보창·앱이 등록한 이벤트를 정리합니다. 후보지·검색·반경 중심 마커와 Circle·Polygon은 클러스터에 포함하지 않습니다. 라이브러리 목록의 쉼표는 SDK 호환성을 위해 URL에서 인코딩하지 않습니다.
 
-
 `선택 지점 주변`은 `/api/v1/cafes/nearby`에 지도 클릭 중심점·500m/1km·200건 상한을 전달합니다. 구·동 선택을 유지하지만 요청 필터에는 포함하지 않습니다. 별도 요청 키로 취소·늦은 응답을 차단하고, 거리순 결과와 `distanceM`을 재계산·재정렬하지 않습니다. 같은 지도 인스턴스에 미터 단위 Circle과 구별되는 중심점 마커를 표시하고 방식 전환·중심점 해제·SDK 재초기화·언마운트 시 정리합니다. 중심점 클릭 리스너는 주변 카페 패널이 열린 반경 방식에서만 연결합니다. 카페 마커는 지도 클릭 전파를 막습니다. 임시 중심점·반경은 패널 개폐 후에도 유지하며 후보지로 저장하지 않습니다.
 
 중심점 좌표와 표시용 `CenterPlace`는 별도로 보관합니다. 검색 결과로 시작하면 기존 이름·주소를 재사용하며 역지오코딩하지 않습니다. 지도 클릭은 카페 조회를 즉시 시작하고, 독립적인 `Geocoder.coord2Address(경도, 위도, 콜백)`으로 도로명주소·지번주소 순서로 확인합니다. 조회 중에는 `주소 확인 중…`, 빈 결과·SDK 오류·8초 시간 초과에는 `지도에서 선택한 위치`를 표시합니다. 좌표·SDK와 응답을 연결하고 정리된 구독의 콜백은 무시합니다. StrictMode와 같은 SDK의 재연결은 요청을 공유하며 타이머는 정리합니다. 검색 결과 닫기·500m/1km 변경은 이름을 보존하고, 새 좌표 선택·중심점 해제는 이전 이름을 제거합니다. 표시 정보의 변경만으로 카페 API를 재조회하거나 선택 카페를 해제하지 않습니다. Backend 계약은 바꾸지 않습니다.
@@ -335,6 +334,8 @@ Frontend 명령은 **`frontend/`**, Backend 명령은 **`backend/`**, ETL 명령
 
 **선택 실행:** `npm run test:watch`로 테스트 감시 모드를 사용합니다. 포맷 수정은 TypeScript 프로젝트의 `npm run format`, Java의 `./gradlew spotlessApply`로 수행합니다.
 
+**점수 오프라인 사전 진단:** `backend/`에서 보호된 외부 Trust Record·승인 manifest·구/동 스냅샷 경로와 독립 기대 해시를 준비하고 `SCORE_TRUST_PREFLIGHT_ENABLED=1 ./gradlew scoreTrustPreflight --quiet --console=plain 2>/dev/null`로 실행합니다. 필수 환경변수·이전 기록의 선택 쌍·해시의 독립 출처는 [실행 계약](score-v1-contract.md#69-오프라인-trust-사전-진단)을 따릅니다. 비활성·설정 누락은 파일 읽기 전에 중단하며 DB·웹 서버·파일 쓰기는 사용하지 않습니다. 일반 `build`에서 도구를 실행하지 않고, 단위 테스트는 JUnit 소유 임시 디렉터리의 합성 입력만 사용합니다. 종료값 0도 결합 진단일 뿐 `NOT_APPROVED`, `sourceTrust=NOT_ESTABLISHED`, `R03_COMPLETE=false`를 바꾸지 않으며 운영 공개 게이트를 완성한 것이 아닙니다.
+
 환경변수 예시에는 로컬 개발용 값만 포함합니다. 실제 비밀번호가 포함된 `.env` 파일은 Git에서 제외됩니다.
 
 ## 배포 검토 항목
@@ -405,7 +406,6 @@ location / {
 ```
 
 문서 경로는 `index.html`을 받아 React Router가 화면을 선택합니다. 알 수 없는 문서 경로도 HTML 응답은 HTTP 200일 수 있으며, 앱 안에서 404 화면을 표시합니다. `/api`는 원래 경로로 Backend에 전달하고, 누락된 정적 파일은 HTTP 404로 응답합니다. [Nginx try_files 문서](https://nginx.org/en/docs/http/ngx_http_core_module.html#try_files)
-
 
 ### 검토 항목
 

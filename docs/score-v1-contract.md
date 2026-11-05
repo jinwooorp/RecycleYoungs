@@ -2,7 +2,7 @@
 
 이 문서는 **점수 백엔드를 구현·테스트하거나 검증 도구를 실행하는 개발자**를 위한 계산 명세와 실행 안내입니다. 모델의 목적·실험 해석은 [점수 설계](score-design.md), 원천 판본·승인 책임·manifest·Trust Record는 [공개 준비](score-20262-publication-readiness.md)에서 확인합니다.
 
-**현재 구현:** 순수 A 계산기, 전체 입력 Repository, 내부 ScoreService, R01·R02 스냅샷 코어, 명시 실행 회귀·내보내기·오프라인 검증 도구, REST 미승인 차단 경로입니다. **미구현:** 공개 200 응답, 최종 지역 404 연결, 운영 신뢰 기록 로더·승인/철회·현재 DB 대조 게이트와 `region_score`입니다.
+**현재 구현:** 순수 A 계산기, 전체 입력 Repository, 내부 ScoreService, R01·R02 스냅샷 코어, 명시 실행 회귀·내보내기·오프라인 검증·Trust 사전 진단 도구, REST 미승인 차단 경로입니다. **미구현:** 공개 200 응답, 최종 지역 404 연결, 운영 신뢰 기록 로더·승인/철회·현재 DB 대조 게이트와 `region_score`입니다.
 
 A의 방향·비중·예외·표시 규칙은 승인 전 후보입니다. 내부 구현이 있다는 이유로 서비스 정책을 채택하지 않습니다. `NOT_APPROVED`, `sourceTrust=NOT_ESTABLISHED`, `R03_COMPLETE=false`를 유지하며 현재 판본의 분기·공간·업종 비교 가능성 확인 전에는 공개 점수를 제공하지 않습니다.
 
@@ -434,6 +434,7 @@ String hash = restored.inputSnapshotId();
 | `scoreRegression`: [Main](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreRegressionMain.java)·[Verifier](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreRegressionVerifier.java)       | 명시 활성화 후 실제 개발 DB의 대표값·현재 전체 결과 검산. 파일 저장 없음               | [단위](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreRegressionTests.java)·[통합](../backend/src/integrationTest/java/kr/ac/recycleyoungs/score/ScoreRegressionIntegrationTests.java)            |
 | `scoreSnapshotExport`: [ExportMain](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreSnapshotExportMain.java)                                                                                                | 명시 활성화 후 한 읽기 전용 스냅샷의 구·동 전체 입력을 검증·롤백하고 외부 새 파일 보존 | [도구 단위](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreSnapshotToolTests.java)·[통합](../backend/src/integrationTest/java/kr/ac/recycleyoungs/score/ScoreSnapshotExportIntegrationTests.java) |
 | `scoreSnapshotVerify`: [VerifyMain](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreSnapshotVerifyMain.java)                                                                                                | 지정한 외부 파일 하나를 DB·Spring Context 없이 검증·재현                               | 같은 도구 단위 테스트                                                                                                                                                                                      |
+| `scoreTrustPreflight`: [PreflightMain](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreTrustPreflightMain.java)                                                                                             | 명시 활성화 후 외부 Trust Record·manifest·묶음과 독립 해시를 오프라인 결합 진단        | [사전 진단 단위 테스트](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreTrustPreflightTests.java)                                                                                                  |
 | 공통 [ScoreSnapshotBundle](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreSnapshotBundle.java)·[ScoreSnapshotFiles](../backend/src/scoreRegression/java/kr/ac/recycleyoungs/score/ScoreSnapshotFiles.java) | 두 단위의 일관성, 안전한 외부 파일 읽기/새 파일 보존                                   | 같은 도구 테스트                                                                                                                                                                                           |
 
 | 환경변수                                | 사용처·의미                                                                 |
@@ -501,6 +502,35 @@ SCORE_SNAPSHOT_EXPORT_ENABLED=1 ./gradlew scoreSnapshotExport --quiet --console=
 회귀 Java 도구는 0=대표 대조·현재 검산 성공, 1=기준선 차이/검산 실패, 2=설정·접속·안전 조건 등 미완료입니다. 내보내기·파일 검증은 0=성공, 2=오류입니다. Gradle은 비정상 종료를 작업 실패로 전달하므로 외부 Gradle 종료값만으로 1/2를 구분하지 말고 안전한 표준출력 단계도 확인합니다. **0도 R03 완전 재현이나 공개 승인은 아닙니다.** 도구 결과는 `publication=NOT_APPROVED`, `sourceTrust=NOT_ESTABLISHED`, `R03_COMPLETE=false`를 유지합니다.
 
 표준출력은 수·제외·해시·읽기 전용/롤백·미승인 상태와 안전한 실패 단계만 담습니다. Gradle 오류에 로컬 Java 경로가 섞일 수 있어 위 명령은 표준오류를 버립니다. 실패 시 `--debug`·`--info`·`--stacktrace` 로그나 접속 설정을 공유하지 않습니다. 새 해시·기대 결과까지 함께 변조한 파일은 신뢰할 수 있는 외부 기준/서명 없이 탐지할 수 없습니다.
+
+### 6.9 오프라인 Trust 사전 진단
+
+`scoreTrustPreflight`는 기존 Trust Record → manifest → 구·동 스냅샷 검증 흐름을 명시적으로 실행합니다. 파일 읽기에는 6.7절의 `ScoreSnapshotFiles.read()`를 사용합니다. DB·웹 서버·실제 승인 발급·파일 저장을 수행하지 않고 제품 JAR·Service·Controller와 분리합니다. Gradle 자체의 빌드/캐시 산출물은 진단 입력·결과 파일과 별개입니다.
+
+| 환경변수                               | 조건                                                                       |
+| -------------------------------------- | -------------------------------------------------------------------------- |
+| `SCORE_TRUST_PREFLIGHT_ENABLED`        | 정확히 `1`일 때만 실행                                                     |
+| `SCORE_TRUST_RECORD_PATH`              | 필수: 현재 Trust Record JSON의 외부 정규 절대 경로                         |
+| `SCORE_APPROVAL_MANIFEST_PATH`         | 필수: 승인 manifest JSON의 외부 정규 절대 경로                             |
+| `SCORE_SNAPSHOT_INPUT_PATH`            | 필수: 기존 구·동 입력 스냅샷 묶음의 외부 정규 절대 경로                    |
+| `SCORE_TRUST_RECORD_EXPECTED_SHA256`   | 필수: **독립적으로 지정한 현재 기록의 정규 바이트 SHA-256**, 소문자 64자리 |
+| `SCORE_TRUST_PREVIOUS_RECORD_PATH`     | 선택: 독립적으로 신뢰할 수 있는 이전 기록. 지정 시 아래 해시도 필수        |
+| `SCORE_TRUST_PREVIOUS_EXPECTED_SHA256` | 이전 기록의 독립 정규 SHA-256. 지정 시 이전 경로도 필수                    |
+
+필수 설정과 선택 쌍을 전부 검사한 뒤 첫 파일에 접근합니다. 경로·해시 누락/빈 값·잘못된 형식은 오류이며, 현재 기록에서 기대값을 계산하거나 manifest/입력에서 승인 ID를 만들어 채우지 않습니다. 두 기대 해시는 원시 JSON 파일의 `shasum` 결과가 아니라 기존 `ScoreTrustRecordCodec.sha256()` 정규화 규칙의 식별값입니다. 검증 대상과 별도로 보호·검토한 배포 기준에서 확보해야 합니다. 대상 파일을 지금 해시해 그대로 환경변수에 넣는 절차는 독립 검증이 아닙니다. 실제 배포 경로·권한·승인 주체는 아직 확정하지 않았습니다.
+
+`backend/`에서 필요한 환경변수를 안전하게 준비한 뒤 실행합니다. `.env`를 자동 로드하지 않고 명령행 인자를 받지 않습니다. 도구는 설정된 DB 환경변수를 사용하지 않습니다.
+
+```bash
+# 위 필수 경로·독립 기대 해시를 사전에 준비합니다. 파일이나 승인 기준을 생성하지 않습니다.
+SCORE_TRUST_PREFLIGHT_ENABLED=1 ./gradlew scoreTrustPreflight --quiet --console=plain 2>/dev/null
+```
+
+성공은 종료값 0과 `PREFLIGHT_VERIFIED binding=TRUST_BINDING_VERIFIED externalTrustPin=MATCHED`입니다. `revisionCheck=NOT_PROVIDED`는 이전 기록 미제공으로 이력 검증을 하지 않았다는 뜻이고, `CHECKED`도 지정한 이전 기록과의 비교만 뜻합니다. 원천 비교 가능성과 실제 공개 승인은 각각 `sourceComparabilityApproval=NOT_ESTABLISHED`, `publicationApproval=NOT_APPROVED`입니다. 공통 상태 `publication=NOT_APPROVED sourceTrust=NOT_ESTABLISHED R03_COMPLETE=false`는 바뀌지 않습니다.
+
+실패는 Java 종료값 2와 `NOT_COMPLETED: phase=...` 또는 비활성의 `NOT_EXECUTED`로 표시합니다. 단계는 `CONFIGURATION`, `INPUT_FILES`, `TRUST_PIN`, `PREVIOUS_TRUST_PIN`, `BINDING`, `FILE_STABILITY`뿐이며 원문·경로·예외는 출력하지 않습니다. Gradle은 비정상 종료를 작업 실패로 전달하므로 표준출력의 단계를 함께 확인합니다. 파일 변경·접근 실패·검증 실패를 이전 파일이나 캐시된 성공으로 대체하지 않습니다. 성공 직전 모든 파일을 다시 대조하지만 복수 파일의 원자적 읽기·검증 종료 이후 최신성·전역 리비전 단조성을 보장하는 운영 게이트는 아닙니다.
+
+실제 공개까지는 [독립 신뢰·공개 조건](score-20262-publication-readiness.md#명시-실행-오프라인-사전-진단)의 공식 산정·경계 기준, 정책·원천·커버리지 승인, 보호된 운영 배포·철회·현재 DB 대조 게이트와 R03 전체 입력 재현이 필요합니다. 합성 테스트 성공으로 이 조건들을 대체하지 않습니다.
 
 ## 7. 구현할 테스트 계약
 

@@ -96,6 +96,15 @@ tasks.register('scoreSnapshotVerify', JavaExec) {
 	}
 }
 
+// 독립 기대 해시를 필수로 받는 오프라인 진단이다. 공개 API·일반 build에는 연결하지 않는다.
+tasks.register('scoreTrustPreflight', JavaExec) {
+	description = 'Runs opt-in offline trust/manifest/snapshot binding diagnostics without granting publication approval.'
+	group = 'verification'
+	classpath = sourceSets.scoreRegression.runtimeClasspath
+	mainClass = 'kr.ac.recycleyoungs.score.ScoreTrustPreflightMain'
+	systemProperty 'score.snapshot.repositoryRoot', rootProject.projectDir.parentFile.canonicalPath
+}
+
 tasks.named('test') {
 	useJUnitPlatform()
 }
