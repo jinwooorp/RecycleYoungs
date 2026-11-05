@@ -10,6 +10,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import ExploreApp from '@/App';
 import { AnalysisPanel } from './analysis-panel';
 import type { RegionExplorer } from '@/hooks/use-region-explorer';
+import * as comparison from '@/lib/statistic-comparison';
 import { MemoryRouter } from 'react-router';
 
 const sourceBatch = {
@@ -45,7 +46,9 @@ function statistic(url: string, data: unknown) {
   const dong = url.includes('/dongs/');
   return json({
     [dong ? 'dongCode' : 'districtCode']: url.split('/')[4],
-    quarterCode: '20262',
+    quarterCode: new URL(url, 'http://localhost').searchParams.get(
+      'quarterCode',
+    ),
     ...(url.includes('/foot-traffic') ? {} : { industryCode: 'CS100010' }),
     data,
   });
@@ -114,6 +117,7 @@ async function chooseDistrict(code = '11110') {
 }
 beforeEach(() => vi.stubEnv('VITE_KAKAO_MAP_APP_KEY', ''));
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
@@ -198,14 +202,16 @@ test('구 공식 통계·동 통계를 실제 DTO로 표시하고 정밀도·당
   )) {
     const parsed = new URL(url, 'http://localhost');
     expect(parsed.pathname).toContain('/districts/11110/stats/');
-    expect(parsed.searchParams.get('quarterCode')).toBe('20262');
+    expect(['20261', '20262']).toContain(
+      parsed.searchParams.get('quarterCode'),
+    );
     expect(parsed.searchParams.get('industryCode')).toBe(
       url.includes('foot-traffic') ? null : 'CS100010',
     );
   }
   expect(
     fetch.mock.calls.filter(([url]) => url.includes('/stats/')),
-  ).toHaveLength(3);
+  ).toHaveLength(6);
   expect(
     screen.getByRole('complementary', { name: '상권 분석' }),
   ).not.toHaveTextContent(/20262|CS100010/);
@@ -221,7 +227,7 @@ test('구 공식 통계·동 통계를 실제 DTO로 표시하고 정밀도·당
   await within(summary('점포 수')).findByText('9,007,199,254,740,993');
   expect(
     fetch.mock.calls.filter(([url]) => url.includes('/dongs/11110515/stats/')),
-  ).toHaveLength(3);
+  ).toHaveLength(6);
   expect(screen.getByText('종로구 · 선택동')).toBeVisible();
   fireEvent.change(screen.getByRole('combobox', { name: '행정동' }), {
     target: { value: '' },
@@ -231,7 +237,7 @@ test('구 공식 통계·동 통계를 실제 DTO로 표시하고 정밀도·당
       fetch.mock.calls.filter(([url]) =>
         url.includes('/districts/11110/stats/'),
       ),
-    ).toHaveLength(6),
+    ).toHaveLength(12),
   );
   expect(
     within(
@@ -246,7 +252,7 @@ test('API별 오류·재시도·data:null과 모든 필드 NULL인 실제 행을
   let fail = true;
   const fetch = mockApi(async (url) =>
     url.includes('/stores')
-      ? fail
+      ? fail && url.includes('quarterCode=20262')
         ? json({ code: 'DATA_NOT_READY' }, 503)
         : statistic(url, null)
       : statistic(
@@ -285,13 +291,13 @@ test('API별 오류·재시도·data:null과 모든 필드 NULL인 실제 행을
   ).toBeVisible();
   expect(
     fetch.mock.calls.filter(([url]) => url.includes('/stores')),
-  ).toHaveLength(2);
+  ).toHaveLength(3);
   expect(
     fetch.mock.calls.filter(([url]) => url.includes('/sales')),
-  ).toHaveLength(1);
+  ).toHaveLength(2);
   expect(
     fetch.mock.calls.filter(([url]) => url.includes('/foot-traffic')),
-  ).toHaveLength(1);
+  ).toHaveLength(2);
 });
 
 test('빠른 지역 변경·닫기·메뉴 전환은 요청을 취소하고 늦은 지역 응답을 표시하지 않는다', async () => {
@@ -313,20 +319,20 @@ test('빠른 지역 변경·닫기·메뉴 전환은 요청을 취소하고 늦�
   const view = render(<App />);
   await chooseDistrict();
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
-  await waitFor(() => expect(pending).toHaveLength(3));
+  await waitFor(() => expect(pending).toHaveLength(6));
   fireEvent.click(screen.getByRole('button', { name: '상권 분석 패널 닫기' }));
-  expect(pending.slice(0, 3).every((p) => p.signal.aborted)).toBe(true);
+  expect(pending.slice(0, 6).every((p) => p.signal.aborted)).toBe(true);
   fireEvent.change(screen.getByRole('combobox', { name: '자치구' }), {
     target: { value: '11140' },
   });
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
-  await waitFor(() => expect(pending).toHaveLength(6));
+  await waitFor(() => expect(pending).toHaveLength(12));
   await act(async () => {
-    for (const p of pending.slice(0, 3)) p.finish(statistic(p.url, stores));
+    for (const p of pending.slice(0, 6)) p.finish(statistic(p.url, stores));
   });
   expect(screen.queryByText('9,007,199,254,740,993')).not.toBeInTheDocument();
   await act(async () => {
-    for (const p of pending.slice(3))
+    for (const p of pending.slice(6))
       p.finish(
         statistic(
           p.url,
@@ -342,7 +348,7 @@ test('빠른 지역 변경·닫기·메뉴 전환은 요청을 취소하고 늦�
   fireEvent.click(screen.getByRole('button', { name: '상권 분석 패널 닫기' }));
   expect(pending.every((p) => p.signal.aborted)).toBe(true);
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
-  await waitFor(() => expect(pending).toHaveLength(9));
+  await waitFor(() => expect(pending).toHaveLength(18));
   view.unmount();
   expect(pending.every((p) => p.signal.aborted)).toBe(true);
 });
@@ -357,7 +363,7 @@ test('세 핵심 지표의 로딩은 독립적이며 먼저 완료된 요약은 
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
   for (const label of ['점포 수', '당월 추정매출액', '지역 전체 유동인구']) {
     expect(summary(label)).toHaveAttribute('aria-busy', 'true');
-    expect(within(summary(label)).getByRole('status')).toHaveTextContent(
+    expect(within(summary(label)).getAllByRole('status')[0]).toHaveTextContent(
       '불러오는 중',
     );
   }
@@ -392,7 +398,7 @@ test.each([
     const data = (url: string) =>
       url.includes('/stores') ? stores : url.includes('/sales') ? sales : foot;
     const fetch = mockApi(async (url) =>
-      url.includes('/' + kind) && fail
+      url.includes('/' + kind) && url.includes('quarterCode=20262') && fail
         ? json({ code: 'DATA_NOT_READY' }, 503)
         : statistic(url, data(url)),
     );
@@ -424,10 +430,10 @@ test.each([
     );
     expect(
       fetch.mock.calls.filter(([url]) => url.includes('/' + kind)),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
     expect(
       fetch.mock.calls.filter(([url]) => url.includes('/stats/')),
-    ).toHaveLength(4);
+    ).toHaveLength(7);
   },
 );
 
@@ -535,7 +541,7 @@ test('탭은 좌우·Home·End 키로 포커스와 선택을 함께 이동하고
   ).toBeVisible();
   expect(
     fetch.mock.calls.filter(([url]) => url.includes('/stats/')),
-  ).toHaveLength(3);
+  ).toHaveLength(6);
   expect(fetch.mock.calls.some(([url]) => /score/i.test(url))).toBe(false);
   expect(
     screen.getByRole('complementary', { name: '상권 분석' }),
@@ -565,9 +571,9 @@ test('같은 지역의 패널을 빠르게 재열어도 취소한 응답이 새 
   fireEvent.click(screen.getByRole('button', { name: '상권 분석 패널 닫기' }));
   expect(pending.every((p) => p.signal.aborted)).toBe(true);
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
-  expect(pending).toHaveLength(6);
+  expect(pending).toHaveLength(12);
   await act(async () => {
-    for (const p of pending.slice(3))
+    for (const p of pending.slice(6))
       p.finish(
         statistic(
           p.url,
@@ -578,7 +584,7 @@ test('같은 지역의 패널을 빠르게 재열어도 취소한 응답이 새 
               : foot,
         ),
       );
-    for (const p of pending.slice(0, 3))
+    for (const p of pending.slice(0, 6))
       p.finish(
         statistic(
           p.url,
@@ -608,3 +614,152 @@ function App() {
     </MemoryRouter>
   );
 }
+
+test('두 분기 세 지표를 한 번씩 조회하며 미검증 증감을 숨기고 각 분기 출처와 사유를 표시한다', async () => {
+  const fetch = mockApi();
+  render(<App />);
+  await chooseDistrict();
+  fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
+  await within(summary('점포 수')).findByText(/비교 불가: 두 분기의 지역 경계/);
+  expect(
+    screen.getByText(/전분기 비교: 2026년 2분기 · 이전 2026년 1분기/),
+  ).toBeVisible();
+  expect(
+    within(summary('당월 추정매출액')).getByText(
+      /비교 불가: 당월 추정매출액의 두 분기 기간/,
+    ),
+  ).toBeVisible();
+  expect(
+    within(summary('지역 전체 유동인구')).getByText(
+      /비교 불가: 유동인구의 두 분기 공간/,
+    ),
+  ).toBeVisible();
+  expect(screen.queryByText(/↑ 증가|↓ 감소|변동 없음/)).not.toBeInTheDocument();
+  const queries = fetch.mock.calls
+    .filter(([u]) => u.includes('/stats/'))
+    .map(([u]) => u);
+  expect(queries).toHaveLength(6);
+  for (const quarter of ['20261', '20262'])
+    expect(
+      queries.filter((u) => u.includes('quarterCode=' + quarter)),
+    ).toHaveLength(3);
+  expect(new Set(queries).size).toBe(6);
+  expect(
+    within(screen.getByRole('tabpanel')).getAllByText(
+      /2026년 10월 2일 오후 9:34:56/,
+    ),
+  ).toHaveLength(2);
+  for (const name of ['추정매출', '유동인구', '점포 현황'])
+    fireEvent.click(screen.getByRole('tab', { name }));
+  expect(fetch.mock.calls.filter(([u]) => u.includes('/stats/'))).toHaveLength(
+    6,
+  );
+  expect(fetch.mock.calls.some(([u]) => u.includes('/scores'))).toBe(false);
+});
+test.each([
+  ['stores', '점포 수'],
+  ['sales', '당월 추정매출액'],
+  ['foot-traffic', '지역 전체 유동인구'],
+])(
+  '이전 분기 %s만 실패하면 현재 통계는 유지하고 실패 요청만 재시도한다',
+  async (kind, label) => {
+    let fail = true;
+    const fetch = mockApi(async (url) =>
+      url.includes('/' + kind) && url.includes('quarterCode=20261') && fail
+        ? json({ code: 'DATA_NOT_READY' }, 503)
+        : statistic(
+            url,
+            url.includes('/stores')
+              ? stores
+              : url.includes('/sales')
+                ? sales
+                : foot,
+          ),
+    );
+    render(<App />);
+    await chooseDistrict();
+    fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
+    await within(summary(label)).findByText(
+      /이전 분기 통계: 통계 데이터가 아직 준비되지/,
+    );
+    expect(
+      within(summary('점포 수')).getByText('9,007,199,254,740,993'),
+    ).toBeVisible();
+    expect(
+      within(summary('당월 추정매출액')).getByText('9,223,372,036,854,775,807'),
+    ).toBeVisible();
+    fail = false;
+    fireEvent.click(
+      within(summary(label)).getByRole('button', {
+        name: '이전 분기 통계 다시 시도',
+      }),
+    );
+    await within(summary(label)).findByText(/비교 불가:/);
+    expect(
+      fetch.mock.calls.filter(
+        ([u]) => u.includes('/' + kind) && u.includes('quarterCode=20261'),
+      ),
+    ).toHaveLength(2);
+    expect(
+      fetch.mock.calls.filter(([u]) => u.includes('quarterCode=20262')),
+    ).toHaveLength(3);
+    expect(
+      fetch.mock.calls.filter(([u]) => u.includes('/stats/')),
+    ).toHaveLength(7);
+  },
+);
+test('이전 분기 자료가 없으면 0으로 대체하지 않고 비교 불가 사유를 표시한다', async () => {
+  mockApi(async (url) =>
+    statistic(
+      url,
+      url.includes('quarterCode=20261')
+        ? null
+        : url.includes('/stores')
+          ? stores
+          : url.includes('/sales')
+            ? sales
+            : foot,
+    ),
+  );
+  render(<App />);
+  await chooseDistrict();
+  fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
+  await within(summary('점포 수')).findByText(
+    '비교 불가: 한 분기의 통계 자료가 없습니다.',
+  );
+  expect(
+    within(summary('점포 수')).getByText('9,007,199,254,740,993'),
+  ).toBeVisible();
+  expect(screen.queryByText(/변동 없음|0.0%/)).not.toBeInTheDocument();
+});
+
+test.each([
+  ['increase', '10', '10.0', '↑ 증가 · 10 개 · 10.0%'],
+  ['decrease', '-10', '-10.0', '↓ 감소 · 10 개 · -10.0%'],
+  ['unchanged', '0', '0.0', '변동 없음 · 0 개 · 0.0%'],
+  ['increase', '1', null, '↑ 증가 · 1 개 · 증감률 계산 불가 (이전 값 0)'],
+] as const)(
+  '검증된 비교 결과의 %s 표시는 색상과 무관하게 방향·수치·계산 불가를 전달한다',
+  async (direction, delta, rate, text) => {
+    // 원천 공개 정책은 변경하지 않고 검증된 계산 결과의 UI 표현만 별도로 확인합니다.
+    vi.spyOn(comparison, 'compareStatistic').mockReturnValue({
+      status: 'available',
+      direction,
+      delta,
+      rate,
+    });
+    mockApi();
+    render(<App />);
+    await chooseDistrict();
+    fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
+    await within(summary('점포 수')).findByText(text);
+    expect(
+      within(summary('점포 수')).getByText(
+        /증감률은 소수 둘째 자리에서 반올림/,
+      ),
+    ).toBeVisible();
+    expect(
+      within(summary('점포 수')).getByText(/창업 유불리 평가가 아닙니다/),
+    ).toBeVisible();
+  },
+);

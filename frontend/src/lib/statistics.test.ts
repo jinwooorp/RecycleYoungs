@@ -274,3 +274,70 @@ test('네트워크·취소·잘못된 지역 코드·잘못된 JSON을 구분한
     fetchStoreStatistics(target, new AbortController().signal),
   ).rejects.toThrow('응답');
 });
+
+test.each(cases)(
+  '%s는 이전 분기에도 구·동·업종 계약을 유지하고 다른 분기 응답을 거부한다',
+  async (kind, load, data) => {
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    const signal = new AbortController().signal;
+    for (const target of [
+      { kind: 'district', code: '11440' },
+      { kind: 'dong', code: '11440660' },
+    ] as const) {
+      const result = {
+        ...body(target, data, kind === 'foot-traffic'),
+        quarterCode: '20261',
+      };
+      fetch.mockResolvedValueOnce(new Response(JSON.stringify(result)));
+      expect(await load(target, signal, '20261')).toEqual(result);
+      const url = new URL(fetch.mock.calls.at(-1)![0], 'http://localhost');
+      expect(url.searchParams.get('quarterCode')).toBe('20261');
+      expect(url.searchParams.get('industryCode')).toBe(
+        kind === 'foot-traffic' ? null : 'CS100010',
+      );
+      fetch.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify(body(target, data, kind === 'foot-traffic')),
+        ),
+      );
+      await expect(load(target, signal, '20261')).rejects.toThrow('응답');
+    }
+  },
+);
+test.each(['20260', '20265', '2026', '20261&industryCode=CS100001'])(
+  '잘못된 분기 %s는 요청 전에 거부한다',
+  async (quarter) => {
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    await expect(
+      fetchStoreStatistics(
+        { kind: 'district', code: '11440' },
+        new AbortController().signal,
+        quarter,
+      ),
+    ).rejects.toThrow('분기');
+    expect(fetch).not.toHaveBeenCalled();
+  },
+);
+
+test.each(['20261', '20262'])(
+  '분기 %s 응답의 구·동 식별자가 혼재하면 집계 단위를 거부한다',
+  async (quarter) => {
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    const target = { kind: 'district', code: '11440' } as const;
+    fetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ...body(target, stores),
+          quarterCode: quarter,
+          dongCode: '11440660',
+        }),
+      ),
+    );
+    await expect(
+      fetchStoreStatistics(target, new AbortController().signal, quarter),
+    ).rejects.toThrow('응답');
+  },
+);

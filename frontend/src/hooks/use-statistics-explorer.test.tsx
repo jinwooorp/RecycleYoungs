@@ -8,7 +8,9 @@ function response(url: string, count: string | null = null) {
     JSON.stringify({
       [url.includes('/dongs/') ? 'dongCode' : 'districtCode']:
         url.split('/')[4],
-      quarterCode: '20262',
+      quarterCode: new URL(url, 'http://localhost').searchParams.get(
+        'quarterCode',
+      ),
       ...(url.includes('/foot-traffic') ? {} : { industryCode: 'CS100010' }),
       data:
         count === null || !url.includes('/stores')
@@ -110,4 +112,47 @@ test('StrictMode에서 각 API 요청 수명을 정리하고 지역이 없으면
   expect(fetch.mock.calls.every(([, options]) => options.signal?.aborted)).toBe(
     true,
   );
+});
+
+test('분기 변경은 요청을 구분·취소하고 늦은 응답을 차단하며 같은 조건 재렌더는 재조회하지 않는다', async () => {
+  const pending: {
+    url: string;
+    signal: AbortSignal;
+    finish: (response: Response) => void;
+  }[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      (url: string, options: RequestInit) =>
+        new Promise<Response>((finish) =>
+          pending.push({ url, signal: options.signal as AbortSignal, finish }),
+        ),
+    ),
+  );
+  const view = renderHook(
+    ({ quarter, active }) =>
+      useStatisticsExplorer('11440', '', active, quarter),
+    { initialProps: { quarter: '20261', active: true } },
+  );
+  expect(pending).toHaveLength(3);
+  view.rerender({ quarter: '20262', active: true });
+  expect(pending).toHaveLength(6);
+  expect(pending.slice(0, 3).every((p) => p.signal.aborted)).toBe(true);
+  await act(async () =>
+    pending.slice(3).forEach((p) => p.finish(response(p.url, '42'))),
+  );
+  await act(async () =>
+    pending.slice(0, 3).forEach((p) => p.finish(response(p.url, '777'))),
+  );
+  expect(view.result.current.stores.data?.quarterCode).toBe('20262');
+  expect(view.result.current.stores.data?.data?.storeCount).toBe('42');
+  view.rerender({ quarter: '20262', active: true });
+  expect(pending).toHaveLength(6);
+  view.rerender({ quarter: '20262', active: false });
+  expect(pending.every((p) => p.signal.aborted)).toBe(true);
+  view.rerender({ quarter: '20261', active: true });
+  expect(pending).toHaveLength(9);
+  expect(view.result.current.stores.data).toBeNull();
+  view.unmount();
+  expect(pending.every((p) => p.signal.aborted)).toBe(true);
 });

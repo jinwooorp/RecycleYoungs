@@ -1,4 +1,5 @@
 export const STATISTICS_QUARTER = '20262';
+export const PREVIOUS_STATISTICS_QUARTER = '20261';
 export const STATISTICS_INDUSTRY = 'CS100010';
 
 export interface RegionStatTarget {
@@ -40,7 +41,7 @@ export interface FootTrafficStatistics {
 export interface StatisticsResponse<T> {
   districtCode?: string;
   dongCode?: string;
-  quarterCode: typeof STATISTICS_QUARTER;
+  quarterCode: string;
   industryCode?: typeof STATISTICS_INDUSTRY;
   data: T | null;
 }
@@ -93,6 +94,7 @@ export function formatStatistic(value: string | null): string {
 export function fetchStoreStatistics(
   target: RegionStatTarget,
   signal: AbortSignal,
+  quarter: string = STATISTICS_QUARTER,
 ): Promise<StatisticsResponse<StoreStatistics>> {
   return fetchStatistics(
     target,
@@ -100,21 +102,31 @@ export function fetchStoreStatistics(
     storeIntegers,
     storeDecimals,
     signal,
+    quarter,
   );
 }
 
 export function fetchSalesStatistics(
   target: RegionStatTarget,
   signal: AbortSignal,
+  quarter: string = STATISTICS_QUARTER,
 ): Promise<StatisticsResponse<SalesStatistics>> {
-  return fetchStatistics(target, 'sales', salesIntegers, [], signal);
+  return fetchStatistics(target, 'sales', salesIntegers, [], signal, quarter);
 }
 
 export function fetchFootTrafficStatistics(
   target: RegionStatTarget,
   signal: AbortSignal,
+  quarter: string = STATISTICS_QUARTER,
 ): Promise<StatisticsResponse<FootTrafficStatistics>> {
-  return fetchStatistics(target, 'foot-traffic', [], footDecimals, signal);
+  return fetchStatistics(
+    target,
+    'foot-traffic',
+    [],
+    footDecimals,
+    signal,
+    quarter,
+  );
 }
 
 /** 요청 식별자·측정값·실제 통계 출처를 검증하며 유동인구에는 업종을 전달하지 않습니다. */
@@ -124,6 +136,7 @@ async function fetchStatistics<T>(
   integers: readonly string[],
   decimals: readonly string[],
   signal: AbortSignal,
+  quarter: string = STATISTICS_QUARTER,
 ): Promise<StatisticsResponse<T>> {
   const district = target.kind === 'district';
   if (
@@ -131,8 +144,10 @@ async function fetchStatistics<T>(
     !(district ? /^[0-9]{5}$/ : /^[0-9]{8}$/).test(target.code)
   )
     throw new Error('조회할 지역 코드를 확인해 주세요.');
+  if (!/^[0-9]{4}[1-4]$/.test(quarter))
+    throw new Error('조회할 분기를 확인해 주세요.');
   const footTraffic = kind === 'foot-traffic';
-  const params = new URLSearchParams({ quarterCode: STATISTICS_QUARTER });
+  const params = new URLSearchParams({ quarterCode: quarter });
   if (!footTraffic) params.set('industryCode', STATISTICS_INDUSTRY);
   let response: Response;
   try {
@@ -163,10 +178,12 @@ async function fetchStatistics<T>(
   }
   const body: unknown = await response.json().catch(invalid);
   const codeField = district ? 'districtCode' : 'dongCode';
+  const otherCodeField = district ? 'dongCode' : 'districtCode';
   if (
     !record(body) ||
     body[codeField] !== target.code ||
-    body.quarterCode !== STATISTICS_QUARTER ||
+    otherCodeField in body ||
+    body.quarterCode !== quarter ||
     (footTraffic
       ? 'industryCode' in body
       : body.industryCode !== STATISTICS_INDUSTRY) ||
@@ -175,7 +192,7 @@ async function fetchStatistics<T>(
     return invalid();
   const identifiers: Omit<StatisticsResponse<T>, 'data'> = {
     [codeField]: target.code,
-    quarterCode: STATISTICS_QUARTER,
+    quarterCode: quarter,
     ...(footTraffic ? {} : { industryCode: STATISTICS_INDUSTRY }),
   };
   if (body.data === null) return { ...identifiers, data: null };
