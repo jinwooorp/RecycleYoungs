@@ -154,6 +154,26 @@ class ScoreTrustVerificationTests {
   }
 
   @Test
+  void passesTheExactValidatedBundleToTheNextStageWithoutReopeningItsPath() throws Exception {
+    var original = Files.readAllBytes(files.snapshotBundle());
+    var inspection = verification.inspect(basis(null), files);
+    assertStatus(inspection.result(), ScoreTrustVerification.Status.BINDING_VERIFIED);
+    assertThat(inspection.reference().fileSha256()).isEqualTo(ScoreSnapshotCodec.sha256(original));
+    Files.writeString(files.snapshotBundle(), "changed-private-reference-sentinel");
+    var fixture = ScoreSnapshotToolTests.fixture();
+    assertThat(
+            ScoreInputComparison.compare(
+                inspection.reference(),
+                fixture.district().payload().input(),
+                fixture.dong().payload().input()))
+        .isEqualTo(ScoreInputComparison.Status.MATCHED);
+    var next = verification.inspect(basis(null), files);
+    assertStatus(next.result(), ScoreTrustVerification.Status.BINDING_FAILURE);
+    assertThat(next.reference()).isNull();
+    // 이전 불변 참조는 이전 바이트만 뜻한다. 새 검증 실패 뒤 공개 허용이나 최신성 증거로 쓰지 않는다.
+  }
+
+  @Test
   void revisionFloorIsIndependentButDoesNotClaimFullHistoryProtection() {
     var result = verification.verify(basis(2L), files);
     assertStatus(result, ScoreTrustVerification.Status.BINDING_VERIFIED);

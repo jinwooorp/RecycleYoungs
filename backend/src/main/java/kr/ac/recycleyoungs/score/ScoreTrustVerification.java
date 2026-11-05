@@ -52,6 +52,9 @@ public final class ScoreTrustVerification {
     }
   }
 
+  /** 후속 단계에는 검증한 동일 바이트의 참조를 전달한다. 공개 승인 토큰이 아니다. */
+  public record Inspection(Result result, ScoreSnapshotReference reference) {}
+
   @FunctionalInterface
   interface Reader {
     byte[] read(Path path, Path repository) throws IOException;
@@ -72,6 +75,11 @@ public final class ScoreTrustVerification {
 
   /** 매번 새로 읽고 검증한다. 성공은 읽은 바이트에 한정되며 이후 철회·현재 DB의 승인을 뜻하지 않는다. */
   public Result verify(TrustBasis basis, InputFiles files) {
+    return inspect(basis, files).result();
+  }
+
+  /** 결합 검증과 같은 바이트를 후속 DB 대조로 전달한다. 기존 verify()의 결과 계약은 유지한다. */
+  public Inspection inspect(TrustBasis basis, InputFiles files) {
     var phase = Phase.CONFIGURATION;
     try {
       configuration(basis, files);
@@ -94,6 +102,7 @@ public final class ScoreTrustVerification {
       if (basis.minimumRevision() != null && currentRecord.revision() < basis.minimumRevision())
         return stopped(Status.REVOCATION_OR_REVISION_FAILURE, phase);
       var binding = new ScoreTrustRecordVerifier().verify(trust, manifest, bundle, previousRecord);
+      var reference = ScoreSnapshotReference.decode(bundle);
 
       phase = Phase.FILE_STABILITY;
       unchanged(files.trustRecord(), trust);
@@ -107,7 +116,7 @@ public final class ScoreTrustVerification {
               : basis.minimumRevision() == null
                   ? HistoryCheck.NOT_PROVIDED
                   : HistoryCheck.REVISION_FLOOR_ONLY;
-      return new Result(Status.BINDING_VERIFIED, phase, history);
+      return new Inspection(new Result(Status.BINDING_VERIFIED, phase, history), reference);
     } catch (ScoreTrustRecordVerifier.VerificationFailure failure) {
       return stopped(
           switch (failure.kind()) {
@@ -159,7 +168,7 @@ public final class ScoreTrustVerification {
     if (!Arrays.equals(bytes, reader.read(path, repository))) throw new IOException();
   }
 
-  private static Result stopped(Status status, Phase phase) {
-    return new Result(status, phase, HistoryCheck.NOT_PROVIDED);
+  private static Inspection stopped(Status status, Phase phase) {
+    return new Inspection(new Result(status, phase, HistoryCheck.NOT_PROVIDED), null);
   }
 }

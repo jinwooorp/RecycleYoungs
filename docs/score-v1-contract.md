@@ -2,7 +2,7 @@
 
 이 문서는 **점수 백엔드를 구현·테스트하거나 검증 도구를 실행하는 개발자**를 위한 계산 명세와 실행 안내입니다. 모델의 목적·실험 해석은 [점수 설계](score-design.md), 원천 판본·승인 책임·manifest·Trust Record는 [공개 준비](score-20262-publication-readiness.md)에서 확인합니다.
 
-**현재 구현:** 순수 A 계산기, 전체 입력 Repository, 내부 ScoreService, R01·R02 스냅샷 코어, 명시 실행 회귀·내보내기·오프라인 검증·Trust 사전 진단 도구, 호출자가 제공한 기준에 대한 내부 신뢰 검증 진입점, REST 미승인 차단 경로입니다. **미구현:** 공개 200 응답, 최종 지역 404 연결, 운영 신뢰 기준 공급·철회 전파·현재 DB 대조 게이트와 `region_score`입니다.
+**현재 구현:** 순수 A 계산기, 전체 입력 Repository, 내부 ScoreService, R01·R02 스냅샷 코어, 명시 실행 회귀·내보내기·오프라인 검증·Trust 사전 진단 도구, 내부 신뢰 검증과 현재 DB 전체 입력 대조 진입점, REST 미승인 차단 경로입니다. **미구현:** 공개 200 응답, 최종 지역 404 연결, 운영 신뢰 기준 공급·철회 전파·현재 DB 대조의 공개 게이트 연결과 `region_score`입니다.
 
 A의 방향·비중·예외·표시 규칙은 승인 전 후보입니다. 내부 구현이 있다는 이유로 서비스 정책을 채택하지 않습니다. `NOT_APPROVED`, `sourceTrust=NOT_ESTABLISHED`, `R03_COMPLETE=false`를 유지하며 현재 판본의 분기·공간·업종 비교 가능성 확인 전에는 공개 점수를 제공하지 않습니다.
 
@@ -359,6 +359,8 @@ Java 21·Spring Boot와 `db` 프로필의 Controller → Service → JdbcClient 
 
 **공개 운영 권장안:** 전체 스냅샷과 독립 manifest를 읽기 전용 배포 아티팩트로 보관하고, 요청 시 DB 입력과 승인 스냅샷이 같은지 확인한 뒤 계산합니다. 현재 이 게이트는 미구현입니다. 과거 보존본을 현재 DB 대신 쓰는 폴백은 없으며, 재게시로 달라지면 새 판본·커버리지 검토 전까지 공개를 차단하는 안입니다. 요청마다 파일이나 DB 행을 쓰지 않습니다.
 
+[현재 DB 대조 진단](#611-현재-db-전체-입력-대조)은 구현했지만 위 운영 공개 흐름에 연결하지 않았습니다. 합성 기준에 대한 `MATCHED`를 실제 승인 스냅샷이나 공개 허용으로 취급하지 않습니다.
+
 스냅샷 코어는 파일·DB·HTTP·Spring Context를 사용하지 않고 Service 호출에도 자동 연결되지 않습니다. 정책·판본·커버리지 승인과 기대 아티팩트의 진위는 [공개 준비의 독립 신뢰 계약](score-20262-publication-readiness.md)에서 다룹니다.
 
 ### 6.3 스키마와 전체 집단 검증
@@ -550,6 +552,40 @@ var result = verifier.verify(basis, files); // BINDING_VERIFIED여도 공개 허
 이전 기록 미제공은 `NOT_PROVIDED`, 리비전 하한만 검증하면 `REVISION_FLOOR_ONLY`, 독립 해시와 이전 기록의 이력 대조까지 완료하면 `CHECKED`입니다. 어느 경우도 최신성 서버·영구 단조 저장소·전체 철회 이력의 검증을 뜻하지 않습니다. 성공 직전 파일을 재대조해도 복수 파일의 원자적 스냅샷·검증 이후 철회 전파·현재 DB 동일성은 보장하지 않습니다. 매 호출 새로 읽고 실패 시 캐시나 과거 정상 파일을 사용하지 않습니다.
 
 상세 결과·공급자 책임·운영에 남은 조건은 [공개 준비](score-20262-publication-readiness.md#backend-내부-신뢰-검증-진입점)를 따릅니다. `ScoreController`·`ScoreService`에는 연결하지 않으며 `NOT_APPROVED`, `sourceTrust=NOT_ESTABLISHED`, `R03_COMPLETE=false`를 유지합니다. [내부 진입점 테스트](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreTrustVerificationTests.java)는 합성 파일만 사용하고 기존 CLI·점수 API 회귀 테스트도 유지합니다.
+
+### 6.11 현재 DB 전체 입력 대조
+
+[ScoreCurrentInputVerification](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreCurrentInputVerification.java)은 명시적으로 전달한 DataSource와 보존 입력만 사용합니다. 생성 시 DB에 연결하거나 Spring Context·Flyway·ETL을 시작하지 않습니다. `ScoreController`·`ScoreService`·기존 CLI의 외부 동작도 바꾸지 않습니다.
+
+- `verify(byte[])`: 바이트를 방어적으로 복사하고 기존 `ScoreSnapshotBundle`·Codec의 형식·해시·재현 검사 후 DB에 접근합니다. 손상된 기준은 DB 접근 전 `REFERENCE_INVALID`입니다.
+- `verify(ScoreSnapshotReference)`: 이미 캡처한 불변 기준을 사용합니다. [ScoreSnapshotReference](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreSnapshotReference.java)는 구조 검증된 구·동 묶음과 정확한 파일 SHA-256을 연결하며 파일 경로를 재개방하지 않습니다. 공개 `decode()`는 임의 입력의 구조 검증일 뿐 독립 신뢰나 승인이 아닙니다.
+- `ScoreTrustVerification.inspect()`는 기존 결합 검증과 파일 안정성 검사를 통과한 **그 바이트의** 참조를 반환합니다. 실패 시 참조는 null입니다. 기존 `verify()` 결과 계약은 유지합니다. 후속 DB 대조에는 이 참조를 그대로 전달하고 파일을 다시 읽어 기준을 바꾸지 않습니다.
+
+```java
+var binding = trustVerifier.inspect(independentBasis, inputFiles);
+// 결합 성공 후의 별도 진단 단계다. 실패하면 reference가 null이며 DB 접근 없이 거부한다.
+var current = new ScoreCurrentInputVerification(dataSource).verify(binding.reference());
+// 두 결과 모두 공개 승인/REST 성공 응답을 의미하지 않는다.
+```
+
+구·동은 `20262`·`CS100010` 전체 Repository 조회를 각각 한 번 사용합니다. 유동인구의 업종 조건은 기존 Repository 계약대로 적용하지 않습니다. `REQUIRES_NEW`의 새 읽기 전용 `REPEATABLE_READ` 트랜잭션을 열고 `JdbcTransactionManager.setEnforceReadOnly(true)`로 **SQL `SET TRANSACTION READ ONLY`**를 강제합니다. PostgreSQL의 실제 `transaction_read_only=on`, `transaction_isolation=repeatable read`도 확인합니다. 구·동 조회 사이 재게시가 커밋돼도 같은 MVCC 입력을 읽으며 모든 경로를 롤백합니다. 호출자가 이미 가진 트랜잭션은 잠시 중단하고 별도 진단을 수행합니다.
+
+[ScoreInputComparison](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreInputComparison.java)은 파일·DB 없이 대조할 수 있습니다. 기존 `ScoreSnapshotArtifact.capture()`·`requireReady()`·`canonicalPayload()`를 재사용해 구·동 각각 입력 ID와 정규 payload 바이트를 모두 비교합니다. 스키마·알고리즘·후보 정책, 분기·업종·단위, 전체 지역 코드/명칭/부모 연결, 원본 문자열·행 존재·적격 상태·배치 메타데이터, 완비·제외 목록과 사유가 대상입니다. 요청 시각·파일 포장 공백·기대 점수 등 입력 해시 밖의 값은 현재 입력 비교 대상이 아닙니다. 기준의 기대 계산 결과는 사전 재현 검사에서 확인합니다.
+
+조회 순서는 기존 코드 정렬 규칙으로 정규화하고 배치 시각은 기존 UTC 규칙을 따릅니다. 숫자를 재포맷하거나 Number/부동소수점으로 비교하지 않으므로 `1.0`과 `1.00`, NULL·0·행 없음·부적격, 같은 값의 다른 실제 배치 UUID/체크섬/ETL 판본/게시 시각은 서로 다릅니다. 개별 행 결측은 제외 사유까지 대조하고, 전체 경계·데이터셋 미준비와 구분합니다. 자치구는 공식 구 통계이며 동 합계로 대체하지 않습니다.
+
+| 결과 `status`          | 의미                                                                 |
+| ---------------------- | -------------------------------------------------------------------- |
+| `MATCHED`              | 현재 구·동 전체 정규 입력과 보존 기준이 정확히 일치. 승인 아님       |
+| `INPUT_MISMATCH`       | 한 단위라도 범위·지역·원본·출처·커버리지/제외 등이 달라짐            |
+| `REFERENCE_INVALID`    | 기준 누락·형식·해시·재현 실패. DB 미접근                             |
+| `DATA_NOT_READY`       | 현재 전체 경계·지원 통계 자료가 준비되지 않음. 과거 게시본 폴백 없음 |
+| `DATABASE_UNAVAILABLE` | 연결·인증·자원/시간 초과·트랜잭션 완료 실패                          |
+| `INTERNAL_ERROR`       | 실제 트랜잭션 조건 불일치·SQL/매핑·모순된 출처/숫자 등 예상 밖 오류  |
+
+결과에는 상태와 사용한 기준의 `referenceFileSha256`만 담습니다. 원본값·SQL·인증정보·경로·원본 예외는 반환하지 않습니다. 매 호출 새로 조회하며 과거 정상 결과를 보관하지 않습니다. `MATCHED`도 원천/정책 승인·커버리지 수용·R03 재현을 뜻하지 않으며 `NOT_APPROVED`, `sourceTrust=NOT_ESTABLISHED`, `R03_COMPLETE=false`입니다.
+
+DB 일치는 해당 읽기 트랜잭션의 입력에 한정됩니다. 롤백 이후 재게시나 Trust Record 변경까지 잠그지 않으며 즉각적인 철회 전파·여러 파일의 원자적 읽기·운영 기준 공급·현재 DB와 신뢰 기준을 공개 응답 직전까지 결합하는 게이트는 미구현입니다. 파일 결합 성공과 DB 일치는 독립된 결과이고, 임의 스냅샷의 DB 일치만으로 신뢰 기준을 만들지 않습니다. 실제 승인된 실데이터 기준은 아직 없으며 [단위](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreInputComparisonTests.java)·[통합](../backend/src/integrationTest/java/kr/ac/recycleyoungs/score/ScoreCurrentInputVerificationIntegrationTests.java)은 합성 자료만 사용합니다.
 
 ## 7. 구현할 테스트 계약
 

@@ -383,7 +383,7 @@ public record ScoreSnapshotArtifact(
     return List.of(r.sales(), r.footTraffic(), r.storeCount(), r.closureRate());
   }
 
-  private static void requireReady(ScoreInputSnapshot input) {
+  static void requireReady(ScoreInputSnapshot input) {
     var ready = input.readiness();
     if (!"20262".equals(input.quarterCode())
         || !"CS100010".equals(input.industryCode())
