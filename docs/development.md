@@ -340,6 +340,8 @@ Frontend 명령은 **`frontend/`**, Backend 명령은 **`backend/`**, ETL 명령
 
 **현재 DB 전체 입력 대조:** `ScoreCurrentInputVerification`은 명시적으로 받은 DataSource와 불변 보존 기준을 사용합니다. [대조 계약](score-v1-contract.md#611-현재-db-전체-입력-대조)에 따라 PostgreSQL에서 실제 읽기 전용·`REPEATABLE_READ`를 확인하고 구·동 전체 입력을 한 트랜잭션에서 대조·롤백합니다. 기존 `ScoreTrustVerification.inspect()`의 참조를 그대로 전달하면 검증한 파일과 비교한 기준을 바꾸지 않습니다. `MATCHED`도 공개 승인이 아니며 자동 DB 조회·웹 서버·Flyway·ETL·파일 쓰기는 없습니다. `ScoreInputComparisonTests`와 `ScoreCurrentInputVerificationIntegrationTests`는 합성 fixture·일회용 PostGIS만 사용하며 실데이터 승인 기준이나 과거 R03을 대신하지 않습니다.
 
+**독립 기준 공급·변경 차단:** [공급 계약](score-v1-contract.md#612-독립-신뢰-기준-공급과-변경-차단)의 `ScoreTrustBasisProvider`는 외부 운영 주체가 일관된 불변 기준을 읽어 제공하는 인터페이스입니다. 실제 운영 구현·자동 환경변수 공급자는 없습니다. `ScoreTrustStateVerification`에 신뢰할 공급자를 명시적으로 주입하면 기존 신뢰 검증과 선택적 DB 대조의 시작/종료 기준을 확인하고 변경·철회·조회 실패를 차단합니다. 합성 테스트는 공급자의 양 끝 응답을 제어하며 운영 파일·DB가 필요하지 않습니다. 기준의 독립성·최신성·과거 보관과 변경 ID 재사용 방지는 공급자 책임이며 영구 저장·철회 전파·운영 공개 게이트와 실제 승인은 미구현입니다.
+
 환경변수 예시에는 로컬 개발용 값만 포함합니다. 실제 비밀번호가 포함된 `.env` 파일은 Git에서 제외됩니다.
 
 ## 배포 검토 항목

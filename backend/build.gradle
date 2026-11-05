@@ -120,7 +120,7 @@ tasks.register('verifyScorePackaging') {
 			new java.util.zip.ZipFile(archive.get().archiveFile.get().asFile).withCloseable { zip ->
 				def classes = zip.entries().collect { it.name.replaceFirst('^BOOT-INF/classes/', '') }
 				def prefix = 'kr/ac/recycleyoungs/score/'
-				def required = ['ScoreTrustVerification', 'ScoreTrustRecordVerifier', 'ScoreApprovalManifestVerifier', 'ScoreTrustRecordCodec', 'ScoreSnapshotBundle', 'ScoreSnapshotFiles', 'ScoreSnapshotReference', 'ScoreInputComparison', 'ScoreCurrentInputVerification']
+				def required = ['ScoreTrustVerification', 'ScoreTrustRecordVerifier', 'ScoreApprovalManifestVerifier', 'ScoreTrustRecordCodec', 'ScoreSnapshotBundle', 'ScoreSnapshotFiles', 'ScoreSnapshotReference', 'ScoreInputComparison', 'ScoreCurrentInputVerification', 'ScoreTrustBasisProvider', 'ScoreTrustStateVerification']
 				if (!required.every { classes.contains(prefix + it + '.class') }
 						|| classes.any { it ==~ /(?:BOOT-INF\/classes\/)?kr\/ac\/recycleyoungs\/score\/(?:ScoreRegression.*|Score.*Main(?:\$.*)?|ScoreSnapshotOutput(?:\$.*)?)\.class/ }) {
 					throw new GradleException('점수 내부 검증/CLI 제품 JAR 분리 실패')

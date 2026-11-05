@@ -2,7 +2,7 @@
 
 이 문서는 **점수 백엔드를 구현·테스트하거나 검증 도구를 실행하는 개발자**를 위한 계산 명세와 실행 안내입니다. 모델의 목적·실험 해석은 [점수 설계](score-design.md), 원천 판본·승인 책임·manifest·Trust Record는 [공개 준비](score-20262-publication-readiness.md)에서 확인합니다.
 
-**현재 구현:** 순수 A 계산기, 전체 입력 Repository, 내부 ScoreService, R01·R02 스냅샷 코어, 명시 실행 회귀·내보내기·오프라인 검증·Trust 사전 진단 도구, 내부 신뢰 검증과 현재 DB 전체 입력 대조 진입점, REST 미승인 차단 경로입니다. **미구현:** 공개 200 응답, 최종 지역 404 연결, 운영 신뢰 기준 공급·철회 전파·현재 DB 대조의 공개 게이트 연결과 `region_score`입니다.
+**현재 구현:** 순수 A 계산기, 전체 입력 Repository, 내부 ScoreService, R01·R02 스냅샷 코어, 명시 실행 도구, 내부 신뢰 검증·현재 DB 전체 입력 대조·독립 기준 공급 계약과 시작/종료 상태 검사, REST 미승인 차단 경로입니다. **미구현:** 공개 200 응답, 최종 지역 404 연결, 실제 운영 신뢰 공급자·영구 보관·철회 전파·공개 게이트 연결과 `region_score`입니다.
 
 A의 방향·비중·예외·표시 규칙은 승인 전 후보입니다. 내부 구현이 있다는 이유로 서비스 정책을 채택하지 않습니다. `NOT_APPROVED`, `sourceTrust=NOT_ESTABLISHED`, `R03_COMPLETE=false`를 유지하며 현재 판본의 분기·공간·업종 비교 가능성 확인 전에는 공개 점수를 제공하지 않습니다.
 
@@ -536,7 +536,7 @@ SCORE_TRUST_PREFLIGHT_ENABLED=1 ./gradlew scoreTrustPreflight --quiet --console=
 
 ### 6.10 Backend 내부 진입점
 
-[ScoreTrustVerification](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreTrustVerification.java)은 환경변수·Spring·DB에 의존하지 않는 명시 호출 컴포넌트입니다. 운영 신뢰 공급자는 아직 구현하지 않았습니다. 호출자는 검증 대상과 독립적으로 확보한 정규 기대 해시를 제공해야 하며, API 요청·manifest·현재 파일에서 기대값을 만들지 않습니다.
+[ScoreTrustVerification](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreTrustVerification.java)은 환경변수·Spring·DB에 의존하지 않는 명시 호출 컴포넌트입니다. [독립 기준 공급 계약과 상태 검사](#612-독립-신뢰-기준-공급과-변경-차단)는 구현했지만 실제 운영 공급자는 아직 없습니다. 호출자는 검증 대상과 독립적으로 확보한 정규 기대 해시를 제공해야 하며, API 요청·manifest·현재 파일에서 기대값을 만들지 않습니다.
 
 ```java
 var verifier = new ScoreTrustVerification(repositoryRoot);
@@ -586,6 +586,51 @@ var current = new ScoreCurrentInputVerification(dataSource).verify(binding.refer
 결과에는 상태와 사용한 기준의 `referenceFileSha256`만 담습니다. 원본값·SQL·인증정보·경로·원본 예외는 반환하지 않습니다. 매 호출 새로 조회하며 과거 정상 결과를 보관하지 않습니다. `MATCHED`도 원천/정책 승인·커버리지 수용·R03 재현을 뜻하지 않으며 `NOT_APPROVED`, `sourceTrust=NOT_ESTABLISHED`, `R03_COMPLETE=false`입니다.
 
 DB 일치는 해당 읽기 트랜잭션의 입력에 한정됩니다. 롤백 이후 재게시나 Trust Record 변경까지 잠그지 않으며 즉각적인 철회 전파·여러 파일의 원자적 읽기·운영 기준 공급·현재 DB와 신뢰 기준을 공개 응답 직전까지 결합하는 게이트는 미구현입니다. 파일 결합 성공과 DB 일치는 독립된 결과이고, 임의 스냅샷의 DB 일치만으로 신뢰 기준을 만들지 않습니다. 실제 승인된 실데이터 기준은 아직 없으며 [단위](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreInputComparisonTests.java)·[통합](../backend/src/integrationTest/java/kr/ac/recycleyoungs/score/ScoreCurrentInputVerificationIntegrationTests.java)은 합성 자료만 사용합니다.
+
+### 6.12 독립 신뢰 기준 공급과 변경 차단
+
+[ScoreTrustBasisProvider](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreTrustBasisProvider.java)는 인수 없는 읽기 전용 `read()` 하나만 제공합니다. 반환하는 불변 `Snapshot`의 의미는 다음과 같습니다. 실제 운영 구현·보호 경로·계정·자동 설정은 추가하지 않았습니다.
+
+| 필드                               | 공급자 책임과 조건                                                                     |
+| ---------------------------------- | -------------------------------------------------------------------------------------- |
+| `changeId`                         | 일관된 기준 판본의 식별자. 내용 변경·되돌림 때 새 식별자를 사용하고 재사용하지 않음    |
+| `activeReleaseId`, `releaseStatus` | 독립적으로 정한 활성 릴리스와 상태. 검증을 진행할 수 있는 주장은 `ACTIVE`뿐            |
+| `expectedTrustSha256`              | 현재 파일에서 자동 생성하지 않는 독립 정규 Trust Record SHA-256. 소문자 64자리         |
+| `minimumRevision`                  | 독립적으로 확보한 양의 리비전 하한. 이 컴포넌트의 메모리 최댓값으로 대체하지 않음      |
+| `previous`                         | 선택: 독립 `ScoreTrustRecord` 모델과 그 정규 기대 해시. 알려진 철회 이력도 그대로 포함 |
+
+식별자는 기존 manifest 식별자 규칙을 사용합니다. `previous`가 있으면 모델·해시가 모두 필수입니다. 공급자는 각 조회를 원자적으로 일관된 하나의 기준으로 구성하고 진위·최신성·과거 기준/철회 보존을 책임져야 합니다. 인터페이스 구현체를 주입했다는 사실, `ACTIVE` 문자열과 올바른 해시만으로 그 책임이 검증되지는 않습니다. HTTP 요청·사용자 헤더·일반 환경변수의 승인 주장을 공급원으로 삼지 않습니다. 제품에는 그런 자동 공급자나 가짜 운영 승인 파일이 없습니다.
+
+[ScoreTrustStateVerification](../backend/src/main/java/kr/ac/recycleyoungs/score/ScoreTrustStateVerification.java)은 신뢰할 애플리케이션 구성에서 공급자와 기존 `ScoreTrustVerification`을 명시적으로 주입받습니다.
+
+```java
+var diagnostic = new ScoreTrustStateVerification(
+    independentProvider, new ScoreTrustVerification(repositoryRoot));
+var result = diagnostic.verify(currentInputFiles); // previousRecord 경로는 null
+// DB 대조까지 같은 시작/종료 확인에 포함할 때는 위 호출 대신 아래 메서드를 사용한다.
+// diagnostic.verifyCurrentInputs(currentInputFiles, currentInputVerifier);
+```
+
+1. 공급자·검증기가 없거나 시작 기준이 불완전하면 기본 거부합니다. 시작 조회 오류·null을 이전 기준으로 대체하지 않습니다. 공급 기준이 비활성·철회이면 파일 검증 전에 차단합니다.
+2. 공급자의 해시·리비전 하한·활성 ID를 기존 `TrustBasis`로 전달합니다. 기존 세 인수 생성자는 유지하며 선택적 `expectedActiveReleaseId`만 추가했습니다. 기대 활성 ID가 다르면 `ScoreTrustVerification`은 `TRUST_BASIS_MISMATCH`를 반환합니다.
+3. 공급자가 이전 모델을 주면 새 `inspect(basis, files, previousRecord)` 오버로드가 기존 Codec으로 독립 해시를 대조하고 `ScoreTrustRecordVerifier`의 이력 검사를 재사용합니다. 별도 철회/이력 규칙을 복제하지 않습니다. 이 경로는 호출자의 `InputFiles.previousRecord` 파일 경로를 거부해 기준을 바꿔 끼울 수 없게 합니다. 기존 CLI의 이전 파일·해시 방식은 유지합니다.
+4. `verifyCurrentInputs()`를 명시적으로 호출하면 결합 성공의 같은 불변 참조를 기존 DB 대조기에 전달합니다. `MATCHED`와 참조 파일 해시가 모두 맞아야 이 단계가 완료됩니다. 일반 `verify()`는 DB를 조회하지 않습니다.
+5. 완전한 활성 시작 기준으로 검증을 진행했다면 중간 실패도 포함해 종료 시 공급자를 다시 읽습니다. `changeId`뿐 아니라 활성 ID·상태·기대 해시·최소 리비전·이전 모델/해시 전체가 같아야 합니다. 변경·불완전·종료 조회 오류이면 중간 결합/DB 성공을 폐기합니다.
+
+| 결과 `status`                                  | 의미                                                                                  |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `TRUST_BASIS_MISSING`                          | 공급자/검증기/입력/필수 기준 미설정·불완전, 호출자 이전 파일 경로 사용                |
+| `TRUST_BASIS_UNAVAILABLE`                      | 시작 공급자 조회 오류                                                                 |
+| `TRUST_BASIS_MISMATCH`                         | 활성 릴리스 또는 현재/이전 독립 pin·기록 대조 실패                                    |
+| `REVOCATION_OR_REVISION_FAILURE`               | 비활성·철회·리비전 하한·기존 이력 검증 위반                                           |
+| `TRUST_BASIS_CHANGED`                          | 종료 시 기준 변경·불완전·조회 오류. 중간 실패 사유보다 우선하며 성공 결과 재사용 없음 |
+| `FILE_OR_INTEGRITY_FAILURE`, `BINDING_FAILURE` | 기존 안전 읽기 또는 manifest/스냅샷 결합 실패                                         |
+| `CURRENT_INPUT_FAILURE`                        | 명시 DB 대조 미일치/오류 또는 다른 기준 파일에 대한 결과                              |
+| `VERIFIED`                                     | 요청한 진단이 완료되고 양 끝의 공급 기준이 같음. 공개 허용 아님                       |
+
+결과는 상태·이력 검사 범위·선택적 `currentInputStatus`만 담고 원본 기준·승인 ID·해시·경로·예외를 출력하지 않습니다. DB 미요청/미실행 또는 변경으로 무효화된 경우 `currentInputStatus`는 null이며 이를 DB 일치로 해석하지 않습니다. 이전 모델이 없으면 최소 리비전 검사만의 `REVISION_FLOOR_ONLY`, 독립 이전 모델의 이력 비교까지 통과하면 `CHECKED`입니다. 실제 원천 신뢰·공개 승인은 계속 `NOT_ESTABLISHED`·`NOT_APPROVED`, `R03_COMPLETE=false`입니다.
+
+이 검사는 관찰한 양 끝 사이의 제한된 진단입니다. 중간 변경 후 원래 내용으로 돌아오는 경우에는 공급자가 새 `changeId`를 보존해야 탐지할 수 있습니다. 공급자의 식별자/과거 기준 재사용, 누락된 더 최신 이력, 기준 저장소 전체의 악의적 교체를 독자적으로 탐지하지 못합니다. 영구 리비전 보호·종료 이후 즉시 철회 전파·다중 인스턴스 동기화·실제 승인과 REST 공개 게이트는 미구현입니다. [합성 공급자 테스트](../backend/src/test/java/kr/ac/recycleyoungs/score/ScoreTrustStateVerificationTests.java)의 성공은 운영 공급자나 공식 승인을 대신하지 않습니다.
 
 ## 7. 구현할 테스트 계약
 

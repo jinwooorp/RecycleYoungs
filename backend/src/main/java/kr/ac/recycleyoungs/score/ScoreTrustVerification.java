@@ -8,6 +8,7 @@ import java.util.Arrays;
 public final class ScoreTrustVerification {
   public enum Status {
     TRUST_BASIS_MISSING,
+    TRUST_BASIS_MISMATCH,
     FILE_OR_INTEGRITY_FAILURE,
     REVOCATION_OR_REVISION_FAILURE,
     BINDING_FAILURE,
@@ -31,7 +32,15 @@ public final class ScoreTrustVerification {
 
   /** 기대값의 출처·권한·최신성은 공급자 책임이다. 이전 기록 해시는 해당 경로와 함께 제공한다. */
   public record TrustBasis(
-      String expectedTrustSha256, String previousExpectedSha256, Long minimumRevision) {}
+      String expectedTrustSha256,
+      String previousExpectedSha256,
+      Long minimumRevision,
+      String expectedActiveReleaseId) {
+    public TrustBasis(
+        String expectedTrustSha256, String previousExpectedSha256, Long minimumRevision) {
+      this(expectedTrustSha256, previousExpectedSha256, minimumRevision, null);
+    }
+  }
 
   /** 경로 존재 여부는 신뢰 기준을 대신하지 않는다. 이전 기록이 없으면 previousRecord는 null이다. */
   public record InputFiles(
@@ -80,9 +89,15 @@ public final class ScoreTrustVerification {
 
   /** 결합 검증과 같은 바이트를 후속 DB 대조로 전달한다. 기존 verify()의 결과 계약은 유지한다. */
   public Inspection inspect(TrustBasis basis, InputFiles files) {
+    return inspect(basis, files, null);
+  }
+
+  /** 공급자가 독립 이전 모델을 제공할 때 파일을 다시 읽지 않는다. 이전 기대 해시는 여전히 필수다. */
+  public Inspection inspect(
+      TrustBasis basis, InputFiles files, ScoreTrustRecord independentlyTrustedPreviousRecord) {
     var phase = Phase.CONFIGURATION;
     try {
-      configuration(basis, files);
+      configuration(basis, files, independentlyTrustedPreviousRecord);
       phase = Phase.INPUT_FILES;
       byte[] trust = reader.read(files.trustRecord(), repository);
       byte[] manifest = reader.read(files.manifest(), repository);
@@ -92,10 +107,19 @@ public final class ScoreTrustVerification {
 
       phase = Phase.TRUST_PIN;
       var currentRecord = pinned(trust, basis.expectedTrustSha256());
+      if (basis.expectedActiveReleaseId() != null
+          && !basis.expectedActiveReleaseId().equals(currentRecord.activeReleaseId()))
+        return stopped(Status.TRUST_BASIS_MISMATCH, phase);
       ScoreTrustRecord previousRecord = null;
       if (previous != null) {
         phase = Phase.PREVIOUS_TRUST_PIN;
         previousRecord = pinned(previous, basis.previousExpectedSha256());
+      } else if (independentlyTrustedPreviousRecord != null) {
+        phase = Phase.PREVIOUS_TRUST_PIN;
+        previousRecord =
+            pinned(
+                new ScoreTrustRecordCodec().encode(independentlyTrustedPreviousRecord),
+                basis.previousExpectedSha256());
       }
       phase = Phase.BINDING;
       // 운영 측의 단조 기준은 최소 리비전만 검사한다. 철회 이력이나 동일 리비전 내용 검사를 대신하지 않는다.
@@ -135,14 +159,19 @@ public final class ScoreTrustVerification {
     }
   }
 
-  private void configuration(TrustBasis basis, InputFiles files) {
+  private void configuration(TrustBasis basis, InputFiles files, ScoreTrustRecord previous) {
     if (repository == null || reader == null || basis == null || files == null)
       throw new IllegalArgumentException();
     ScoreApprovalManifest.hash(basis.expectedTrustSha256());
     path(files.trustRecord());
     path(files.manifest());
     path(files.snapshotBundle());
-    if (files.previousRecord() != null || basis.previousExpectedSha256() != null) {
+    if (basis.expectedActiveReleaseId() != null)
+      ScoreApprovalManifest.identifier(basis.expectedActiveReleaseId());
+    if (previous != null) {
+      if (files.previousRecord() != null) throw new IllegalArgumentException();
+      ScoreApprovalManifest.hash(basis.previousExpectedSha256());
+    } else if (files.previousRecord() != null || basis.previousExpectedSha256() != null) {
       path(files.previousRecord());
       ScoreApprovalManifest.hash(basis.previousExpectedSha256());
     }
