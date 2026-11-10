@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { BarChart3, ChevronLeft, Coffee, GitCompareArrows } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -41,6 +41,15 @@ export default function App() {
   const menuRefs = useRef<
     Partial<Record<ExploreMenu, HTMLButtonElement | null>>
   >({});
+  const panelRef = useRef<HTMLElement>(null);
+  const panelTitleRef = useRef<HTMLHeadingElement>(null);
+  const focusPanelTitle = useRef(false);
+  useLayoutEffect(() => {
+    if (selectedMenu && focusPanelTitle.current) {
+      focusPanelTitle.current = false;
+      panelTitleRef.current?.focus({ preventScroll: true });
+    }
+  }, [selectedMenu]);
   const candidates = useCandidates();
   function selectCandidate(item: Candidate) {
     candidates.setSelected(item.slot);
@@ -61,7 +70,8 @@ export default function App() {
 
   function closePanel() {
     // 패널 안에 있던 키보드 포커스가 숨겨지지 않도록 메뉴로 돌려보냅니다.
-    if (selectedMenu) menuRefs.current[selectedMenu]?.focus();
+    if (selectedMenu && panelRef.current?.contains(document.activeElement))
+      menuRefs.current[selectedMenu]?.focus({ preventScroll: true });
     if (selectedMenu === 'compare') candidates.leave();
     setSelectedMenu(null);
   }
@@ -109,10 +119,18 @@ export default function App() {
                   aria-label={label}
                   aria-expanded={selectedMenu === id}
                   aria-controls="explore-panel"
-                  onClick={() => {
+                  onClick={(event) => {
+                    if (selectedMenu === id) {
+                      closePanel();
+                      return;
+                    }
+                    focusPanelTitle.current =
+                      event.detail === 0 ||
+                      panelRef.current?.contains(document.activeElement) ===
+                        true;
                     if (selectedMenu === 'compare') candidates.leave();
                     setPanelMenu(id);
-                    setSelectedMenu((current) => (current === id ? null : id));
+                    setSelectedMenu(id);
                   }}
                 >
                   <Icon aria-hidden="true" />
@@ -160,6 +178,7 @@ export default function App() {
           data-open={selectedMenu !== null}
         >
           <aside
+            ref={panelRef}
             id="explore-panel"
             aria-labelledby="explore-panel-title"
             aria-hidden={selectedMenu === null}
@@ -167,7 +186,12 @@ export default function App() {
             className="explore-panel flex min-h-0 flex-col overflow-hidden border-t bg-background md:border-t-0 md:border-r"
           >
             <div className="explore-panel-heading flex shrink-0 items-center justify-between gap-3">
-              <h2 id="explore-panel-title" className="text-base font-semibold">
+              <h2
+                ref={panelTitleRef}
+                id="explore-panel-title"
+                tabIndex={-1}
+                className="text-base font-semibold"
+              >
                 {selectedLabel ?? '탐색 도구'}
               </h2>
               <Button

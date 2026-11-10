@@ -655,6 +655,19 @@
 }
 
 @media (width < 48rem) {
+  .explore-search-error {
+    margin-top: 3.75rem;
+  }
+  .explore-search[data-panel-open='true'] .explore-search-error {
+    max-height: max(
+      4rem,
+      calc(
+        100dvh - var(--explore-nav-height) -
+          var(--explore-mobile-panel-height) - var(--explore-top) - 7.25rem
+      )
+    );
+    overflow-y: auto;
+  }
   /* 검색 결과는 지역 필터 버튼 아래에, 확대·축소 버튼 왼쪽에 머뭅니다. */
   .explore-search-results {
     top: calc(100% + 3.75rem);
@@ -667,7 +680,7 @@
       5rem,
       calc(
         100dvh - var(--explore-nav-height) -
-          var(--explore-mobile-panel-height) - var(--explore-top) - 8.75rem
+          var(--explore-mobile-panel-height) - var(--explore-top) - 7.25rem
       )
     );
   }
@@ -748,6 +761,8 @@
     max-height: min(36rem, calc(100dvh - 6rem));
   }
   .explore-search[data-panel-open='true'] .explore-search-results {
+    /* 결과를 상세 패널 옆에 배치해 두 닫기 버튼을 모두 사용할 수 있게 합니다. */
+    left: calc(100% + 2rem);
     max-height: min(36rem, calc(100dvh - 6rem));
   }
   .explore-search-error {

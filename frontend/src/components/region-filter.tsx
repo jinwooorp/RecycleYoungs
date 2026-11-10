@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { ChevronDown, MapPin, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type {
@@ -9,11 +16,6 @@ import type {
 const desktopQuery = '(min-width: 64rem)';
 const isDesktop = () =>
   !window.matchMedia || window.matchMedia(desktopQuery).matches;
-function subscribeLayout(listener: () => void) {
-  const media = window.matchMedia?.(desktopQuery);
-  media?.addEventListener('change', listener);
-  return () => media?.removeEventListener('change', listener);
-}
 
 function ResourceNotice({
   resource,
@@ -57,12 +59,42 @@ export function RegionFilter({
   onOpen: () => void;
   panelOpen: boolean;
 }) {
-  const desktop = useSyncExternalStore(subscribeLayout, isDesktop, () => true);
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const controls = useRef<HTMLDivElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
   const district = useRef<HTMLSelectElement>(null);
+  const focusAfterRender = useRef<'trigger' | 'fields' | null>(null);
+  const subscribeLayout = useCallback((listener: () => void) => {
+    const media = window.matchMedia?.(desktopQuery);
+    function onChange() {
+      const active = document.activeElement;
+      // 화면 전환으로 현재 포커스가 숨겨질 때만 새 레이아웃 안으로 옮깁니다.
+      if (media?.matches) {
+        if (active === trigger.current || active === closeButton.current)
+          focusAfterRender.current = 'fields';
+      } else if (controls.current?.contains(active)) {
+        focusAfterRender.current = 'trigger';
+      }
+      setOpen(false);
+      listener();
+    }
+    media?.addEventListener('change', onChange);
+    return () => media?.removeEventListener('change', onChange);
+  }, []);
+  const desktop = useSyncExternalStore(subscribeLayout, isDesktop, () => true);
   const expanded = desktop || open;
+  useLayoutEffect(() => {
+    const target = focusAfterRender.current;
+    focusAfterRender.current = null;
+    if (target === 'trigger') trigger.current?.focus();
+    if (target === 'fields' && expanded) {
+      const select = district.current;
+      if (select && !select.disabled) select.focus();
+      else (desktop ? controls.current : closeButton.current)?.focus();
+    }
+  }, [desktop, expanded]);
   const districtName = region.districts.data?.find(
     (item) => item.districtCode === region.districtCode,
   )?.districtName;
@@ -84,7 +116,6 @@ export function RegionFilter({
   }
   useEffect(() => {
     if (desktop || !open) return;
-    district.current?.focus();
     // 지도·검색창 등 다른 도구를 사용하면 팝오버만 닫고 해당 입력의 포커스를 유지합니다.
     function outside(event: PointerEvent) {
       if (event.target instanceof Node && !root.current?.contains(event.target))
@@ -118,10 +149,11 @@ export function RegionFilter({
           aria-label="지역 필터"
           aria-expanded={open}
           aria-controls="region-filter-controls"
-          onClick={() => {
+          onClick={(event) => {
             if (open) close();
             else {
               onOpen();
+              if (event.detail === 0) focusAfterRender.current = 'fields';
               setOpen(true);
             }
           }}
@@ -135,16 +167,19 @@ export function RegionFilter({
         </Button>
       )}
       <div
+        ref={controls}
         id="region-filter-controls"
         role="group"
         aria-label="지역 필터"
         className="region-filter-controls"
         hidden={!expanded}
+        tabIndex={-1}
       >
         {!desktop && (
           <div className="region-filter-heading">
             <h2>지역 필터</h2>
             <Button
+              ref={closeButton}
               variant="ghost"
               size="icon"
               aria-label="지역 필터 닫기"

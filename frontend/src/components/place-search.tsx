@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { LoaderCircle, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { PlaceSearchState } from '@/hooks/use-place-search';
@@ -23,11 +23,19 @@ export function PlaceSearch({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const nearbyRef = useRef<HTMLButtonElement>(null);
+  const focusSelectedResult = useRef(false);
   const ready = connection?.status === 'ready';
-  useEffect(() => {
-    if (search.isOpen && search.view === 'selection')
+  const resultsVisible = ready && search.isOpen;
+  useLayoutEffect(() => {
+    // 목록에서 선택한 버튼이 사라질 때만 다음 동작으로 포커스를 넘깁니다.
+    if (
+      focusSelectedResult.current &&
+      resultsVisible &&
+      search.view === 'selection'
+    )
       nearbyRef.current?.focus();
-  }, [search.isOpen, search.view, search.selected]);
+    focusSelectedResult.current = false;
+  }, [resultsVisible, search.view, search.selected]);
   function close() {
     search.close();
     inputRef.current?.focus();
@@ -39,7 +47,7 @@ export function PlaceSearch({
       className="explore-search"
       data-panel-open={panelOpen}
       onKeyDown={(event) => {
-        if (event.key === 'Escape' && search.isOpen) {
+        if (event.key === 'Escape' && resultsVisible) {
           event.preventDefault();
           event.stopPropagation();
           close();
@@ -73,15 +81,15 @@ export function PlaceSearch({
           disabled={!ready}
           placeholder="장소·주소·지하철역"
           aria-describedby="place-search-help"
-          aria-controls={
-            search.isOpen && ready ? 'place-search-results' : undefined
-          }
+          aria-controls={resultsVisible ? 'place-search-results' : undefined}
           className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none disabled:text-muted-foreground"
         />
         <Button
           type="submit"
           size="sm"
           aria-label="장소 검색 실행"
+          aria-expanded={resultsVisible}
+          aria-controls={resultsVisible ? 'place-search-results' : undefined}
           disabled={!ready || !search.query.trim()}
         >
           {search.status === 'loading' ? (
@@ -107,7 +115,7 @@ export function PlaceSearch({
           </Button>
         </div>
       )}
-      {search.isOpen && ready && (
+      {resultsVisible && (
         <section
           id="place-search-results"
           aria-label="장소 검색 결과"
@@ -182,7 +190,12 @@ export function PlaceSearch({
                             type="button"
                             aria-label={`${place.name} · ${place.address} · ${place.kind}${place.isSeoul ? '' : ' · 서울 서비스 범위 밖 또는 소재 확인 필요'}`}
                             className="flex w-full flex-col gap-1 rounded-lg p-3 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-                            onClick={() => search.selectResult(place)}
+                            onClick={(event) => {
+                              focusSelectedResult.current =
+                                event.detail === 0 ||
+                                document.activeElement === event.currentTarget;
+                              search.selectResult(place);
+                            }}
                           >
                             <span className="text-sm font-medium [overflow-wrap:anywhere]">
                               {place.name}

@@ -176,6 +176,9 @@ test('모바일은 세 메뉴와 접힌 필터를 제공하고 Escape·닫기·�
   compare.focus();
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
   expect(compare).toHaveFocus();
+  toggle.focus();
+  fireEvent.click(toggle, { detail: 1 });
+  expect(toggle).toHaveFocus();
 });
 
 test('StrictMode·화면 크기 전환·언마운트에서 필터 리스너와 목록 요청을 정리한다', async () => {
@@ -205,7 +208,10 @@ test('StrictMode·화면 크기 전환·언마운트에서 필터 리스너와 �
       <App />
     </StrictMode>,
   );
-  fireEvent.click(screen.getByRole('button', { name: '지역 필터' }));
+  const toggle = screen.getByRole('button', { name: '지역 필터' });
+  toggle.focus();
+  fireEvent.click(toggle, { detail: 0 });
+  expect(screen.getByRole('button', { name: '지역 필터 닫기' })).toHaveFocus();
   const pointerListener = add.mock.calls.find(
     ([type]) => type === 'pointerdown',
   )![1];
@@ -218,6 +224,17 @@ test('StrictMode·화면 크기 전환·언마운트에서 필터 리스너와 �
   ).not.toBeInTheDocument();
   expect(screen.getAllByRole('combobox')).toHaveLength(2);
   expect(remove).toHaveBeenCalledWith('pointerdown', pointerListener);
+  const controls = screen.getByRole('group', { name: '지역 필터' });
+  expect(controls).toHaveFocus();
+  act(() => {
+    desktop = false;
+    listeners.forEach((listener) => listener());
+  });
+  const compactToggle = screen.getByRole('button', { name: '지역 필터' });
+  expect(compactToggle).toHaveFocus();
+  expect(compactToggle).toHaveAttribute('aria-expanded', 'false');
+  expect(compactToggle).toHaveAttribute('aria-controls', controls.id);
+  expect(controls).not.toBeVisible();
   view.unmount();
   expect(listeners.size).toBe(0);
   expect(signals.every((signal) => signal.aborted)).toBe(true);

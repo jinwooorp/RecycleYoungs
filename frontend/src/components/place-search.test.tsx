@@ -44,11 +44,35 @@ function Harness({ status = 'ready' }: { status?: 'ready' | 'error' }) {
         regionFiltered
         onNearby={onNearby}
       />
+      <button onClick={search.showSelection}>지도에서 선택한 장소</button>
     </div>
   );
 }
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+test('지도 마커로 결과를 다시 열어도 현재 포커스를 옮기지 않는다', async () => {
+  searchApi.mockResolvedValue(data);
+  render(<Harness />);
+  const input = screen.getByRole('textbox', { name: '장소 검색' });
+  const submit = screen.getByRole('button', { name: '장소 검색 실행' });
+  expect(submit).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.change(input, { target: { value: '홍대입구역' } });
+  fireEvent.submit(input.closest('form')!);
+  const results = screen.getByRole('region', { name: '장소 검색 결과' });
+  expect(submit).toHaveAttribute('aria-expanded', 'true');
+  expect(submit).toHaveAttribute('aria-controls', results.id);
+  fireEvent.click(
+    await screen.findByRole('button', { name: /홍대입구역.*서울특별시/ }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: '검색 결과 닫기' }));
+  expect(input).toHaveFocus();
+  expect(submit).toHaveAttribute('aria-expanded', 'false');
+  expect(submit).not.toHaveAttribute('aria-controls');
+  fireEvent.click(screen.getByRole('button', { name: '지도에서 선택한 장소' }));
+  expect(screen.getByRole('heading', { name: '선택한 위치' })).toBeVisible();
+  expect(input).toHaveFocus();
 });
 
 test('입력은 자동 검색하지 않고 Enter 제출·선택·별도 반경 시작과 안전한 문자열 표시를 제공한다', async () => {

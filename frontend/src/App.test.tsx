@@ -122,6 +122,31 @@ test('닫기 버튼과 Escape는 패널을 접고 선택 메뉴로 포커스를 
   expect(menu).toHaveFocus();
 });
 
+test('키보드로 패널을 열거나 전환하면 제목으로 이동하고 마우스 클릭은 메뉴 포커스를 유지한다', () => {
+  render(<App />);
+  const cafes = screen.getByRole('button', { name: '주변 카페' });
+  const analysis = screen.getByRole('button', { name: '상권 분석' });
+  cafes.focus();
+  fireEvent.click(cafes, { detail: 0 });
+  expect(screen.getByRole('heading', { name: '주변 카페' })).toHaveFocus();
+  analysis.focus();
+  fireEvent.click(analysis, { detail: 0 });
+  expect(screen.getByRole('heading', { name: '상권 분석' })).toHaveFocus();
+  cafes.focus();
+  fireEvent.click(cafes, { detail: 1 });
+  expect(cafes).toHaveFocus();
+});
+
+test('패널 밖에서 Escape로 닫으면 현재 도구의 포커스를 유지한다', () => {
+  render(<App />);
+  fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
+  const home = screen.getByRole('link', { name: 'RecycleYoungs 홈으로' });
+  home.focus();
+  fireEvent.keyDown(home, { key: 'Escape' });
+  expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+  expect(home).toHaveFocus();
+});
+
 test('공통 지역 필터와 반경 입력·행정구역 전체 통계를 구분한다', () => {
   const fetch = vi.spyOn(globalThis, 'fetch');
   render(<App />);
