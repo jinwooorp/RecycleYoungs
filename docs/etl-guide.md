@@ -349,7 +349,7 @@ V7·적재 ETL과 [자치구 인구 REST API](data-design.md#자치구-유동인
 
 ```bash
 # etl/에서 실행. 합성 CSV/ZIP을 메모리에서 공급하고 DB 풀·소켓·fetch를 차단합니다.
-npm test -- src/district-foot-traffic-source.test.ts src/district-foot-traffic-cli.test.ts
+npm test -- src/domains/foot-traffic/district-foot-traffic-source.test.ts src/domains/foot-traffic/district-foot-traffic-cli.test.ts
 ```
 
 기존 행정동 유동인구와 다른 적재 명령의 회귀는 [전체 ETL 테스트](#유동인구-통계-적재)의 9개 일회용 DB 플래그와 빌드·린트·포맷 검사로 확인합니다. 이 probe의 확인 SQL은 없으며 실제 개발 DB를 조회하지 않습니다.
@@ -372,7 +372,7 @@ node --env-file=../.env --import tsx src/index.ts district-foot-traffic --api --
 - JSON 숫자는 원문 토큰으로 읽고 코드·NULL·정밀도는 기존 CSV 스키마로 검증합니다. 요청과 본문 읽기에 10초 제한을 두고, 연결·시간 초과와 일시적 HTTP 오류는 최대 한 번 재시도합니다. 페이지당 응답 4 MiB, 전체 100,000행, 정규화한 수치 문자열 합계 32 MiB를 상한으로 적용합니다. 리다이렉트는 따르지 않으며 외부 오류 원문·응답 메시지·요청 URL은 출력하지 않습니다.
 - 인증키가 없으면 요청 전에 `BLOCKED`와 종료 코드 1을 반환합니다. 이 모드에서는 API·CSV 판독만 하며 DB 접속·적재·배치 생성이 없습니다. 기존 CSV 체크섬·출처·게시 이력은 보존됩니다.
 
-합성 API 응답 검증은 `etl/`에서 `npm test -- src/district-foot-traffic-api.test.ts src/district-foot-traffic-cli.test.ts`로 실행합니다. 실제 인증키나 DB가 필요 없습니다.
+합성 API 응답 검증은 `etl/`에서 `npm test -- src/domains/foot-traffic/district-foot-traffic-api.test.ts src/domains/foot-traffic/district-foot-traffic-cli.test.ts`로 실행합니다. 실제 인증키나 DB가 필요 없습니다.
 
 **실제 API 전체 검증 `BLOCKED` (2026-11-10)**. 인증정보 없이 확인한 HTTPS 443은 시간 초과, 8088은 TLS 연결 실패였습니다. 실제 키를 사용한 전체 probe와 `--compare-csv`는 실행하지 않았습니다.
 
@@ -433,11 +433,11 @@ ORDER BY b.started_at;
 
 ```bash
 # etl/에서 실행. 일회용 PostGIS만 생성하며 개발 DB 설정은 사용하지 않습니다.
-RUN_DISTRICT_FOOT_TRAFFIC_DB_TESTS=1 npm test -- src/district-foot-traffic.integration.test.ts
+RUN_DISTRICT_FOOT_TRAFFIC_DB_TESTS=1 npm test -- src/domains/foot-traffic/district-foot-traffic.integration.test.ts
 
 # 실제 제공 CSV 전체 적재·측정값 대조도 선택적으로 실행합니다.
 DISTRICT_FOOT_TRAFFIC_REAL_CSV="$HOME/Downloads/서울시 상권분석서비스(길단위인구-자치구).csv" \
-RUN_DISTRICT_FOOT_TRAFFIC_DB_TESTS=1 npm test -- src/district-foot-traffic.integration.test.ts
+RUN_DISTRICT_FOOT_TRAFFIC_DB_TESTS=1 npm test -- src/domains/foot-traffic/district-foot-traffic.integration.test.ts
 ```
 
 **2026-11-01 격리 테스트 기록**
@@ -563,7 +563,7 @@ SELECT count(*), min(quarter_code), max(quarter_code)
 FROM district_sales_stat;
 ```
 
-`etl/`에서 `npm test -- src/district-sales-source.test.ts src/district-sales-cli.test.ts`로 메모리 합성 CSV/ZIP·정밀도·NULL/0·마지막 행 오류와 probe CLI의 DB/네트워크 차단을 검증합니다. `RUN_DISTRICT_SALES_DB_TESTS=1 npm test -- src/district-sales.integration.test.ts`는 개발 DB와 분리된 새 일회용 PostGIS에서 V1~V6·합성 기준 데이터를 사용해 실제 SQL·게시·재실행·롤백·기존 데이터 보존을 검증하는 명령입니다.
+`etl/`에서 `npm test -- src/domains/sales/district-sales-source.test.ts src/domains/sales/district-sales-cli.test.ts`로 메모리 합성 CSV/ZIP·정밀도·NULL/0·마지막 행 오류와 probe CLI의 DB/네트워크 차단을 검증합니다. `RUN_DISTRICT_SALES_DB_TESTS=1 npm test -- src/domains/sales/district-sales.integration.test.ts`는 개발 DB와 분리된 새 일회용 PostGIS에서 V1~V6·합성 기준 데이터를 사용해 실제 SQL·게시·재실행·롤백·기존 데이터 보존을 검증하는 명령입니다.
 
 2026-10-31에 위 SHA-256의 실제 CP949 CSV를 새 일회용 PostGIS 17-3.5에서 실제 `district-sales` CLI로 적재했습니다. `PUBLISHED`의 판독·유효 33,803행·거부 0행을 확인했고, 원본 CSV를 독립적으로 읽어 저장된 4개 측정값 **135,212개를 전수 문자열 대조해 불일치 0건**을 확인했습니다. 저장 결과는 `20211`~`20262`의 22분기·25구·63업종이며, 원본에 없는 **847개 조합**과 당월·주중/주말 합계 차이가 있는 **39행**을 생성·보정 없이 보존했습니다.
 
@@ -689,7 +689,7 @@ SELECT count(*), min(quarter_code), max(quarter_code)
 FROM district_store_stat;
 ```
 
-검증 로직과 실제 CLI의 DB 미접속 회귀는 `etl/`에서 `npm test -- src/district-store-source.test.ts src/district-store-cli.test.ts src/index.test.ts`로 실행합니다. 단위 테스트는 메모리 CSV·ZIP과 모의 파일 읽기·DB/네트워크 차단을 사용합니다. `RUN_DISTRICT_STORE_DB_TESTS=1 npm test -- src/district-stores.integration.test.ts`는 기존 ETL 방식대로 새 일회용 PostGIS 컨테이너에만 V1~V5와 합성 기준·통계를 적용해 실제 SQL·트랜잭션·실패 보존을 검증합니다. 개발 DB·공공 API에는 접속하지 않습니다.
+검증 로직과 실제 CLI의 DB 미접속 회귀는 `etl/`에서 `npm test -- src/domains/stores/district-store-source.test.ts src/domains/stores/district-store-cli.test.ts src/index.test.ts`로 실행합니다. 단위 테스트는 메모리 CSV·ZIP과 모의 파일 읽기·DB/네트워크 차단을 사용합니다. `RUN_DISTRICT_STORE_DB_TESTS=1 npm test -- src/domains/stores/district-stores.integration.test.ts`는 기존 ETL 방식대로 새 일회용 PostGIS 컨테이너에만 V1~V5와 합성 기준·통계를 적용해 실제 SQL·트랜잭션·실패 보존을 검증합니다. 개발 DB·공공 API에는 접속하지 않습니다.
 
 ### 실제 개발 DB 적용·적재 검증 (2026-10-31)
 
@@ -772,7 +772,7 @@ SELECT count(*), bool_and(ST_SRID(geom) = 4326 AND ST_SRID(label_point) = 4326
 FROM administrative_dong;
 ```
 
-파일·CLI 단위 테스트는 기존 `npm test`에 포함됩니다. DB 회귀 테스트는 합성 데이터를 새 일회용 PostGIS 컨테이너에서만 사용하며 기존 개발 DB는 변경하지 않습니다. Docker가 실행 중일 때 `etl/`에서 `RUN_BOUNDARY_DB_TESTS=1 npm test -- src/boundaries.integration.test.ts`로 실행합니다. 이 테스트는 원본의 실제 적재 검증을 대신하지 않습니다.
+파일·CLI 단위 테스트는 기존 `npm test`에 포함됩니다. DB 회귀 테스트는 합성 데이터를 새 일회용 PostGIS 컨테이너에서만 사용하며 기존 개발 DB는 변경하지 않습니다. Docker가 실행 중일 때 `etl/`에서 `RUN_BOUNDARY_DB_TESTS=1 npm test -- src/domains/boundaries/boundaries.integration.test.ts`로 실행합니다. 이 테스트는 원본의 실제 적재 검증을 대신하지 않습니다.
 
 ## 서비스 업종 기준 데이터 적재
 
@@ -826,7 +826,7 @@ FROM service_industry i JOIN etl_batch b ON b.batch_id = i.source_batch_id
 WHERE i.industry_code = 'CS100010';
 ```
 
-업종 DB 통합 테스트는 `etl/`에서 `RUN_INDUSTRY_DB_TESTS=1 npm test -- src/industries.integration.test.ts`로 실행합니다. 경계 회귀 테스트까지 함께 실행하려면 `RUN_INDUSTRY_DB_TESTS=1 RUN_BOUNDARY_DB_TESTS=1 npm test`를 사용합니다. 각 테스트는 새 일회용 PostGIS 컨테이너와 테스트별 스키마를 사용하며 실제 개발 DB는 변경하지 않습니다.
+업종 DB 통합 테스트는 `etl/`에서 `RUN_INDUSTRY_DB_TESTS=1 npm test -- src/domains/industries/industries.integration.test.ts`로 실행합니다. 경계 회귀 테스트까지 함께 실행하려면 `RUN_INDUSTRY_DB_TESTS=1 RUN_BOUNDARY_DB_TESTS=1 npm test`를 사용합니다. 각 테스트는 새 일회용 PostGIS 컨테이너와 테스트별 스키마를 사용하며 실제 개발 DB는 변경하지 않습니다.
 
 ## 점포 통계 적재
 
@@ -880,7 +880,7 @@ SELECT quarter_code, count(*) FROM dong_store_stat GROUP BY quarter_code ORDER B
 SELECT count(*) FROM dong_store_stat WHERE industry_code = 'CS100010';
 ```
 
-점포 DB 통합 테스트는 `etl/`에서 `RUN_STORE_DB_TESTS=1 npm test -- src/stores.integration.test.ts`로 실행합니다. 기존 ETL 회귀까지 포함한 전체 테스트는 `RUN_STORE_DB_TESTS=1 RUN_INDUSTRY_DB_TESTS=1 RUN_BOUNDARY_DB_TESTS=1 npm test`로 실행하며, DB 테스트는 개발 DB와 분리된 새 일회용 PostGIS 컨테이너만 사용합니다.
+점포 DB 통합 테스트는 `etl/`에서 `RUN_STORE_DB_TESTS=1 npm test -- src/domains/stores/stores.integration.test.ts`로 실행합니다. 기존 ETL 회귀까지 포함한 전체 테스트는 `RUN_STORE_DB_TESTS=1 RUN_INDUSTRY_DB_TESTS=1 RUN_BOUNDARY_DB_TESTS=1 npm test`로 실행하며, DB 테스트는 개발 DB와 분리된 새 일회용 PostGIS 컨테이너만 사용합니다.
 
 ## 추정매출 통계 적재
 
@@ -933,7 +933,7 @@ FROM etl_batch WHERE dataset_code = 'SEOUL_DONG_SALES_STAT' ORDER BY started_at 
 SELECT quarter_code, count(*) FROM dong_sales_stat GROUP BY quarter_code ORDER BY quarter_code;
 ```
 
-추정매출 DB 통합 테스트는 `etl/`에서 `RUN_SALES_DB_TESTS=1 npm test -- src/sales.integration.test.ts`로 실행합니다. 모든 ETL의 단위·격리 DB 통합 테스트 명령은 아래 유동인구 안내를 참고하세요. 합성 테스트 데이터는 새 일회용 PostGIS 컨테이너에만 적재하며 실제 개발 DB는 변경하지 않습니다.
+추정매출 DB 통합 테스트는 `etl/`에서 `RUN_SALES_DB_TESTS=1 npm test -- src/domains/sales/sales.integration.test.ts`로 실행합니다. 모든 ETL의 단위·격리 DB 통합 테스트 명령은 아래 유동인구 안내를 참고하세요. 합성 테스트 데이터는 새 일회용 PostGIS 컨테이너에만 적재하며 실제 개발 DB는 변경하지 않습니다.
 
 ## 유동인구 통계 적재
 
@@ -988,7 +988,7 @@ FROM etl_batch WHERE dataset_code = 'SEOUL_DONG_FOOT_TRAFFIC_STAT' ORDER BY star
 SELECT quarter_code, count(*) FROM dong_foot_traffic_stat GROUP BY quarter_code ORDER BY quarter_code;
 ```
 
-유동인구 DB 통합 테스트는 `etl/`에서 `RUN_FOOT_TRAFFIC_DB_TESTS=1 npm test -- src/foot-traffic.integration.test.ts`로 실행합니다. 전체 ETL 단위·격리 DB 통합 테스트는 다음 명령으로 실행합니다. 합성 테스트 데이터는 새 일회용 PostGIS 컨테이너에만 적재하며 실제 개발 DB는 변경하지 않습니다.
+유동인구 DB 통합 테스트는 `etl/`에서 `RUN_FOOT_TRAFFIC_DB_TESTS=1 npm test -- src/domains/foot-traffic/foot-traffic.integration.test.ts`로 실행합니다. 전체 ETL 단위·격리 DB 통합 테스트는 다음 명령으로 실행합니다. 합성 테스트 데이터는 새 일회용 PostGIS 컨테이너에만 적재하며 실제 개발 DB는 변경하지 않습니다.
 
 ```bash
 RUN_DISTRICT_FOOT_TRAFFIC_DB_TESTS=1 RUN_DISTRICT_SALES_DB_TESTS=1 RUN_DISTRICT_STORE_DB_TESTS=1 RUN_CAFE_DB_TESTS=1 RUN_FOOT_TRAFFIC_DB_TESTS=1 RUN_SALES_DB_TESTS=1 RUN_STORE_DB_TESTS=1 RUN_INDUSTRY_DB_TESTS=1 RUN_BOUNDARY_DB_TESTS=1 npm test
@@ -1083,4 +1083,4 @@ SELECT c.* FROM cafe_store c JOIN latest b ON c.source_batch_id = b.batch_id;
 
 별도의 `AND` 조건 나열은 평가 순서를 보장하지 않으므로 형 변환 보호 수단으로 사용하지 않습니다. 이 예시는 행의 TEXT 컬럼을 변환하며, `CASE`가 모든 상수식·집계식의 선행 평가까지 막는다는 의미는 아닙니다. 근거는 PostgreSQL 17의 [입력 유효성 검사](https://www.postgresql.org/docs/17/functions-info.html#FUNCTIONS-INFO-VALIDITY), [표현식 평가 순서](https://www.postgresql.org/docs/17/sql-expressions.html#SYNTAX-EXPRESS-EVAL), [JSON 타입 제약](https://www.postgresql.org/docs/17/datatype-json.html)입니다.
 
-모의 API 단위 테스트는 `npm test -- src/cafe-source.test.ts`, 카페 격리 DB 통합 테스트는 `RUN_CAFE_DB_TESTS=1 npm test -- src/cafes.integration.test.ts`로 실행합니다. API 인증키는 테스트에 필요하지 않습니다. DB 테스트는 새 일회용 PostGIS 컨테이너만 사용하며 개발 DB에 접근하지 않습니다.
+모의 API 단위 테스트는 `npm test -- src/domains/cafes/cafe-source.test.ts`, 카페 격리 DB 통합 테스트는 `RUN_CAFE_DB_TESTS=1 npm test -- src/domains/cafes/cafes.integration.test.ts`로 실행합니다. API 인증키는 테스트에 필요하지 않습니다. DB 테스트는 새 일회용 PostGIS 컨테이너만 사용하며 개발 DB에 접근하지 않습니다.

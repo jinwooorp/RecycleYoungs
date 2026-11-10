@@ -8,7 +8,7 @@ import {
   parseSalesArguments,
   parseStoreArguments,
 } from './index.js';
-import { assertLocalDatabaseUrl } from './boundaries.js';
+import { assertLocalDatabaseUrl } from './domains/boundaries/boundaries.js';
 
 // 실제 진입점을 실행해 명령별 전용 옵션이 올바른 파서에 전달되는지 확인합니다.
 describe('CLI dispatch', () => {

@@ -2,41 +2,50 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { z } from 'zod';
-import { importBoundaries, type BoundaryOptions } from './boundaries.js';
-import { createDatabasePool } from './database.js';
-import { importIndustries, type IndustryOptions } from './industries.js';
-import { importStoreStats, type StoreOptions } from './stores.js';
-import { importSalesStats, type SalesOptions } from './sales.js';
-import { importCafes, type CafeOptions } from './cafes.js';
-import { probeCafeSource } from './cafe-source.js';
-import { probeDistrictStoreSource } from './district-store-source.js';
-import { probeDistrictSalesSource } from './district-sales-source.js';
-import { probeDistrictFootTrafficSource } from './district-foot-traffic-source.js';
+import {
+  importBoundaries,
+  type BoundaryOptions,
+} from './domains/boundaries/boundaries.js';
+import { createDatabasePool } from './common/database.js';
+import {
+  importIndustries,
+  type IndustryOptions,
+} from './domains/industries/industries.js';
+import {
+  importStoreStats,
+  type StoreOptions,
+} from './domains/stores/stores.js';
+import { importSalesStats, type SalesOptions } from './domains/sales/sales.js';
+import { importCafes, type CafeOptions } from './domains/cafes/cafes.js';
+import { probeCafeSource } from './domains/cafes/cafe-source.js';
+import { probeDistrictStoreSource } from './domains/stores/district-store-source.js';
+import { probeDistrictSalesSource } from './domains/sales/district-sales-source.js';
+import { probeDistrictFootTrafficSource } from './domains/foot-traffic/district-foot-traffic-source.js';
 import {
   parseOfficialSourcesArguments,
   probeOfficialSources,
   type OfficialSourcesProbeOptions,
-} from './official-sources.js';
+} from './workflows/official-sources.js';
 import {
   probeDistrictFootTrafficApi,
   type DistrictFootTrafficApiProbeOptions,
-} from './district-foot-traffic-api.js';
+} from './domains/foot-traffic/district-foot-traffic-api.js';
 import {
   importDistrictFootTrafficStats,
   type DistrictFootTrafficOptions,
-} from './district-foot-traffic.js';
+} from './domains/foot-traffic/district-foot-traffic.js';
 import {
   importDistrictSalesStats,
   type DistrictSalesOptions,
-} from './district-sales.js';
+} from './domains/sales/district-sales.js';
 import {
   importDistrictStoreStats,
   type DistrictStoreOptions,
-} from './district-stores.js';
+} from './domains/stores/district-stores.js';
 import {
   importFootTrafficStats,
   type FootTrafficOptions,
-} from './foot-traffic.js';
+} from './domains/foot-traffic/foot-traffic.js';
 
 // 원본 버전별 기대 건수는 양의 안전한 정수로 제한합니다. 업종 수와 원본 행 수를 혼동하지 않습니다.
 const count = z
