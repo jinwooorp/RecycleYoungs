@@ -13,6 +13,11 @@ import { probeDistrictStoreSource } from './district-store-source.js';
 import { probeDistrictSalesSource } from './district-sales-source.js';
 import { probeDistrictFootTrafficSource } from './district-foot-traffic-source.js';
 import {
+  parseOfficialSourcesArguments,
+  probeOfficialSources,
+  type OfficialSourcesProbeOptions,
+} from './official-sources.js';
+import {
   probeDistrictFootTrafficApi,
   type DistrictFootTrafficApiProbeOptions,
 } from './district-foot-traffic-api.js';
@@ -397,6 +402,7 @@ if (
     const args = process.argv.slice(2);
     let options:
       | (DistrictFootTrafficOptions & { probe: boolean })
+      | OfficialSourcesProbeOptions
       | DistrictFootTrafficApiProbeOptions
       | FootTrafficOptions
       | SalesOptions
@@ -407,7 +413,9 @@ if (
       | (DistrictStoreOptions & { probe: boolean })
       | (DistrictSalesOptions & { probe: boolean })
       | null;
-    if (args[0] === 'district-foot-traffic') {
+    if (args[0] === 'official-sources') {
+      options = parseOfficialSourcesArguments(args.slice(1));
+    } else if (args[0] === 'district-foot-traffic') {
       options = parseDistrictFootTrafficArguments(args);
     } else if (args[0] === 'district-sales') {
       options = parseDistrictSalesArguments(args);
@@ -442,6 +450,13 @@ if (
       console.log(
         '  npm run dev -- district-foot-traffic --api --probe [--expected-rows <API 전체 행 수>] [--compare-csv /절대경로/자치구인구.csv]\n서울시 Open API 전체 수집 검증은 SEOUL_OPEN_API_KEY를 사용하며 DB·배치·적재를 사용하지 않습니다.',
       );
+      console.log(
+        '  npm run dev -- official-sources --probe --manifest /절대경로/official-sources.json\n공식 자치구 원본 세 종의 통합 검증은 로컬 CSV·ZIP만 읽습니다.',
+      );
+    } else if ('manifest' in options) {
+      const result = await probeOfficialSources(options.manifest);
+      console.log(JSON.stringify(result));
+      if (result.status === 'FAIL') process.exitCode = 1;
     } else if ('api' in options) {
       console.log(JSON.stringify(await probeDistrictFootTrafficApi(options)));
     } else if (

@@ -23,6 +23,7 @@ ETL(수집·검증·변환·적재)의 원본 동일성은 체크섬(원본 내�
 
 **공식 자치구 원본 검증·적재와 개발 DB 이력**
 
+- [공식 자치구 CSV 갱신 사전검증](#공식-자치구-csv-갱신-사전검증)
 - [자치구 길단위인구 읽기 전용 검증](#자치구-길단위인구-읽기-전용-검증)
 - [자치구 길단위인구 적재와 게시](#자치구-길단위인구-적재와-게시)
   - [개발 DB 적용·적재 검증 (2026-11-01)](#자치구-길단위인구-개발-db-적용적재-검증-2026-11-01)
@@ -194,6 +195,7 @@ ETL(수집·검증·변환·적재)의 원본 동일성은 체크섬(원본 내�
 | `district-stores --probe`       | 로컬 CSV·ZIP 전체 형식 검증         | DB 준비·환경변수·인증키·네트워크 요청 불필요. DB 변경 없음  |
 | `district-sales --probe`        | 로컬 CSV·ZIP 전체 형식 검증         | DB·인증키·네트워크 불필요. DB 변경 없음                     |
 | `district-foot-traffic --probe` | 로컬 CSV·ZIP 전체 형식 검증         | DB·인증키·네트워크 불필요. DB 변경 없음                     |
+| `official-sources --probe` | 로컬 manifest로 자치구 CSV·ZIP 3종 전체 검증 | DB·인증키·네트워크 불필요. DB 변경 없음 |
 | `district-foot-traffic --api --probe` | 서울시 Open API 전체 페이지 및 선택적 CSV 대조 | 서버 측 `SEOUL_OPEN_API_KEY` 필요. DB 준비·접속·변경 없음 |
 | 카페 `--probe`                  | 실제 API의 공식 분류·첫 페이지 확인 | API 인증키·공식 카페 분류 변수 필요. DB 준비·접속·변경 없음 |
 | 실제 적재                       | 각 ETL의 전체 검증 후 DB 반영       | DB 설정·Flyway·기준 데이터 필요. 대상 DB 변경               |
@@ -217,7 +219,7 @@ source .env
 set +a
 ```
 
-`--probe`만 실행할 때는 DB 준비와 위 DB 환경변수 내보내기가 필요하지 않습니다. 카페 probe에만 API 인증키·카페 분류 변수를 별도로 준비합니다. 자치구 점포·매출·인구 probe에는 인증키도 필요하지 않습니다.
+`--probe`만 실행할 때는 DB 준비와 위 DB 환경변수 내보내기가 필요하지 않습니다. 카페 probe는 API 인증키·카페 분류 변수를 별도로 준비합니다. 자치구 점포·매출·인구의 로컬 파일 probe와 통합 사전검증에는 인증키가 필요 없습니다.
 
 ### 설치와 도움말
 
@@ -266,6 +268,45 @@ Compose DB를 공유하려면 [개발 가이드](development.md#로컬-db-준비
 - ETL만 별도로 설정할 때는 `etl/`에서 `cp -n .env.example .env`로 기존 파일을 보존하며 준비할 수 있습니다. `npm run dev`와 `npm start`는 Node.js의 환경변수 파일 기능으로 이 `etl/.env`를 읽습니다.
 - DB 연결 시 `DATABASE_URL`, `DB_POOL_MAX`, `DB_CONNECTION_TIMEOUT_MS`를 Zod로 검증하고 `pg.Pool`을 생성합니다. 설정은 실제 사용할 때 검증하며 풀 생성만으로 DB에 접속하지 않습니다.
 - 아래 확인 SQL은 `etl/`의 npm 명령이 아닙니다. 저장소 루트의 별도 터미널에서 [DB 접속 명령](development.md#로컬-db-준비)을 실행한 뒤 `psql` 안에서 실행합니다. 테스트 명령은 `etl/`에서 실행합니다.
+
+## 공식 자치구 CSV 갱신 사전검증
+
+`official-sources --probe`는 점포·추정매출·길단위인구의 새 로컬 판본을 DB 없이 검증합니다. 서울시는 상권분석서비스 CSV 제공 경로로 열린데이터광장을 안내합니다. 각 HTTPS 데이터셋 페이지의 파일 제공 영역과 Sheet의 CSV 내려받기를 확인해 전체 파일을 확보합니다. Sheet 미리보기의 행 수로 전체 건수를 정하지 않습니다. [서울시 상권분석서비스 다운로드 안내](https://golmok.seoul.go.kr/introduce.do), [점포 OA-22173](https://data.seoul.go.kr/dataList/OA-22173/S/1/datasetView.do), [추정매출 OA-22176](https://data.seoul.go.kr/dataList/OA-22176/S/1/datasetView.do), [길단위인구 OA-22179](https://data.seoul.go.kr/dataList/OA-22179/S/1/datasetView.do)
+
+사전검증은 받은 파일을 로컬에서만 읽습니다. 현재 공식 인증 Open API 경로는 [HTTPS 검증 결과](#서울시-open-api-전체-수집-probe)에 따라 `BLOCKED`입니다.
+
+### manifest와 실행
+
+저장소 밖에 UTF-8 JSON manifest를 준비합니다. 각 데이터셋 ID를 한 번씩 지정하고, 그 판본에서 확인한 양의 정수 행 수를 입력합니다. 경로는 절대경로 또는 manifest 파일이 있는 디렉터리 기준 상대경로입니다. CSV와 CSV 하나를 담은 ZIP을 지원합니다.
+
+다음 건수는 형식 설명용입니다. 실제 판본의 원본과 건수로 바꿉니다.
+
+```json
+{
+  "datasets": [
+    { "datasetId": "OA-22173", "source": "stores.csv", "expectedRows": 3 },
+    { "datasetId": "OA-22176", "source": "sales.zip", "expectedRows": 2 },
+    { "datasetId": "OA-22179", "source": "foot-traffic.csv", "expectedRows": 2 }
+  ]
+}
+```
+
+독립적으로 확보한 SHA-256이 있으면 해당 항목에 `expectedSha256`을 64자리 16진수 문자열로 추가합니다. ZIP도 기존 배치와 같은 내부 CSV 바이트의 해시를 사용합니다. 원본 파일과 로컬 manifest는 Git에 올리지 않습니다.
+
+```bash
+# etl/에서 실행
+npm --silent run dev -- official-sources --probe --manifest /절대경로/official-sources.json
+```
+
+빌드한 경우 같은 인자를 `npm --silent start --`에 전달합니다. `--probe`와 `--manifest`는 각각 한 번씩 지정합니다.
+
+### 결과와 검증 한계
+
+- 기존 판독기로 각 파일의 전체 행, 필수 컬럼과 복합키, 코드·수치·NULL·0을 검증합니다. 성공 JSON에는 데이터셋별 실제·유효·거부 건수, 체크섬, 분기 범위, 관찰된 분기·자치구와 분기별 자치구 목록을 담습니다.
+- `checksumVerification=MATCHED`는 제공한 기대 해시와의 바이트 일치입니다. 기대 해시가 없으면 `NOT_PROVIDED`, 불일치하면 `MISMATCH`, 기대 해시는 있으나 원본 해시를 계산하지 못하면 `NOT_CHECKED`입니다. 형식 통과나 해시 대조만으로 공식 판본의 출처나 게시 가능 상태를 확정할 수 없습니다.
+- 세 입력이 통과하면 `coverageComparison`에 분기 집합, 자치구 집합, 분기별 자치구 집합의 일치 여부를 각각 표시합니다. 업종별 집계 행 수, 관찰 범위 차이, 원천 수치를 보정하거나 서로 맞추지 않습니다.
+- 파일 누락·형식 오류, 예상 건수 또는 해시 불일치는 해당 데이터셋과 전체 결과를 `FAIL`로 표시하고 종료 코드 1을 반환합니다. 판독이 완료되지 않은 파일의 전체 건수·기간·커버리지는 `null`입니다. 잘못된 manifest는 원본 판독 전에 오류를 반환합니다. JSON에는 원본 경로·ZIP entry·행 값이 포함되지 않습니다.
+- DB 접속·FK 확인·적재·배치 생성은 수행하지 않습니다. 운영 갱신에는 새 판본의 출처와 독립 기대값을 확인하고, 기존 적재·게시 검증 절차를 별도로 거쳐야 합니다.
 
 ## 자치구 길단위인구 읽기 전용 검증
 
