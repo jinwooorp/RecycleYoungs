@@ -18,7 +18,7 @@ export interface KakaoCircleOptions {
   strokeWeight: number;
   strokeColor: string;
   strokeOpacity: number;
-  strokeStyle: 'dashed';
+  strokeStyle: 'dash';
   fillColor: string;
   fillOpacity: number;
 }

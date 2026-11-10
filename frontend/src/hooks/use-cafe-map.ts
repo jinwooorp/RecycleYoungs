@@ -172,7 +172,7 @@ export function useCafeMap(
       strokeColor: '#23513F',
       strokeOpacity: 0.9,
       strokeWeight: 2,
-      strokeStyle: 'dashed',
+      strokeStyle: 'dash',
       fillColor: '#23513F',
       fillOpacity: 0.08,
     });

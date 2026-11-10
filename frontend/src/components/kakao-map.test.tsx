@@ -1845,7 +1845,7 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
   expect(screen.getByText(/최대 200곳만/)).toBeVisible();
   expect(maps.Circle.mock.calls[0][0]).toMatchObject({
     radius: 500,
-    strokeStyle: 'dashed',
+    strokeStyle: 'dash',
     fillOpacity: 0.08,
   });
   expect(maps.Circle.mock.calls[0][0].center.getLat()).toBe(37.5665);
