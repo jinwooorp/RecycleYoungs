@@ -443,7 +443,7 @@ document.cookie = "ry-e2e-scenario=sales-error; Path=/; SameSite=Strict";
 
 [Playwright webServer](https://playwright.dev/docs/test-webserver)가 위 Vite·Mock 서버를 자동 시작·종료합니다. `Frontend E2E` Job만 `npx playwright install --with-deps chromium`을 실행합니다. `test:e2e`의 실제 브라우저 실행은 GitHub-hosted Linux Runner에서만 허용하며, 로컬에서는 `npm run test:e2e:list`로 브라우저 없이 테스트 수집만 확인합니다. 로컬 Chromium 설치·별도 브라우저 실행은 하지 않습니다.
 
-현재 시나리오는 11개를 데스크톱 1440×900·모바일 390×844에서 각각 실행하는 총 22개입니다.
+데스크톱 1440×900·모바일 390×844 두 프로젝트에서 각각 13개 시나리오를 실행합니다. 기본 크기를 사용하는 11개와 각 테스트에서 뷰포트를 조정하는 반응형 시나리오 2개를 합쳐 총 26개입니다.
 
 - 랜딩 표시·시작하기 이동·직접 `/explore`·404와 홈 복귀
 - SDK 키 누락 안내·세 메뉴·패널 닫기·Escape와 포커스·모바일 지역 필터
@@ -451,6 +451,7 @@ document.cookie = "ry-e2e-scenario=sales-error; Path=/; SameSite=Strict";
 - 개별 매출 오류와 재시도·자료 없음·지역 API 오류와 재시도
 - 후보지 빈 상태·합성 세 곳 복원·삭제·500m/1km·세 곳 초과 저장 데이터 거부
 - 큰 수·소수 후행 0·미승인 증감 숫자와 점수 API/점수 표시 차단·가로 넘침·예상하지 않은 콘솔/네트워크 오류
+- 320×568에서 패널 키보드 포커스·지역 필터와 오류 안내의 겹침·상세 패널 스크롤, 768×1024 ↔ 1024×768 전환에서 지역 선택값·포커스·필터 닫힘 유지
 
 각 테스트는 새 context·저장 상태에서 시작합니다. 접근성 역할·이름과 조건 대기를 사용하고 자동 재시도는 0, `forbidOnly`는 활성화했습니다. Playwright 실패와 별도로 JUnit 보고서 누락·실행 0건·오류·건너뜀도 Job을 실패시킵니다. 실패 시 `playwright-report/`와 `test-results/`의 HTML·trace·스크린샷·JUnit을 [공식 upload-artifact Action](https://github.com/actions/upload-artifact/releases/tag/v7.0.2)으로 7일 보존합니다. 설치나 서버 시작 전에 실패하면 브라우저 trace가 생성되지 않을 수 있으며 해당 Step 로그로 원인을 확인합니다.
 
