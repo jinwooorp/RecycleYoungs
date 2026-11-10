@@ -12,13 +12,13 @@ const syntheticCsv = [
   ),
 ].join('\n');
 
-// 메모리의 CSV·API 응답만 공급하고 실제 CLI의 DB 풀·소켓·외부 요청은 차단한다.
+// 메모리의 CSV만 공급하고 실제 CLI가 DB 풀·소켓·fetch에 접근하면 실패시킵니다.
 function runProbe(
   contents: string,
   args: string[],
   databaseUrl?: string,
   forbidInput = false,
-  api?: { key?: string; body?: object },
+  apiKey?: string,
 ) {
   const preload = `
     import fs from 'node:fs/promises';
@@ -41,12 +41,7 @@ function runProbe(
       constructor() { throw new Error('DB_POOL_FORBIDDEN'); }
     }});
     net.Socket.prototype.connect = function () { throw new Error('NETWORK_FORBIDDEN'); };
-    const apiBody = ${JSON.stringify(api?.body ?? null)};
-    globalThis.fetch = async (url) => {
-      if (!apiBody || url !== 'http://openapi.seoul.go.kr:8088/cli-test-key/json/VwsmSignguFlpopW/1/100/')
-        throw new Error('PUBLIC_API_FORBIDDEN');
-      return Response.json(apiBody);
-    };
+    globalThis.fetch = async () => { process.exit(97); };
   `;
   return spawnSync(
     process.execPath,
@@ -66,7 +61,7 @@ function runProbe(
         ...process.env,
         DATABASE_URL: databaseUrl,
         SEMAS_API_KEY: undefined,
-        SEOUL_OPEN_API_KEY: api?.key,
+        SEOUL_OPEN_API_KEY: apiKey,
       },
     },
   );
@@ -161,41 +156,19 @@ describe('자치구 길단위인구 읽기 전용 CLI', () => {
     expect(result.stderr).toBe('');
   });
 
-  it('명시적인 API probe만 DB 풀 없이 합성 응답 전체를 검증한다', () => {
+  it('기본 HTTP 주소의 인증 probe는 fetch 호출 없이 BLOCKED로 종료한다', () => {
     const result = runProbe(
       '',
       ['--api', '--probe'],
       'invalid-database-url',
       true,
-      {
-        key: 'cli-test-key',
-        body: {
-          VwsmSignguFlpopW: {
-            list_total_count: 1,
-            RESULT: { CODE: 'INFO-000' },
-            row: [
-              {
-                SIGNGU_CD: '11110',
-                STDR_YYQU_CD: '20262',
-                TOT_FLPOP_CO: '1.00',
-                ML_FLPOP_CO: null,
-                FML_FLPOP_CO: 0,
-              },
-            ],
-          },
-        },
-      },
+      'cli-test-key',
     );
-    expect(result.status).toBe(0);
-    expect(result.stderr).toBe('');
-    expect(JSON.parse(result.stdout)).toMatchObject({
-      validationScope: 'OPEN_API_FULL_COLLECTION',
-      validRows: 1,
-      databaseChecked: false,
-      batchCreated: false,
-      loadedRows: 0,
-    });
-    expect(result.stdout).not.toMatch(/cli-test-key|openapi\.seoul\.go\.kr/);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr.trim()).toBe(
+      'BLOCKED: 서울시 Open API 인증 요청에는 검증된 HTTPS 주소가 필요합니다.',
+    );
   });
 
   it('API 키가 없으면 DB나 API에 접근하지 않고 BLOCKED로 종료한다', () => {
@@ -221,17 +194,19 @@ describe('자치구 길단위인구 읽기 전용 CLI', () => {
   ])(
     '부적절한 API 인자는 외부 요청과 DB 분기 전에 거부한다 (%#)',
     (...args) => {
-      const result = runProbe('', args, 'invalid-database-url', true, {
-        key: 'cli-test-key',
-      });
+      const result = runProbe(
+        '',
+        args,
+        'invalid-database-url',
+        true,
+        'cli-test-key',
+      );
       expect(result.status).toBe(1);
       expect(result.stdout).toBe('');
       expect(result.stderr).toMatch(
         /--api|--compare-csv|옵션은 중복|API 예상 행 수/,
       );
-      expect(result.stderr).not.toMatch(
-        /cli-test-key|DATABASE_URL|PUBLIC_API_FORBIDDEN/,
-      );
+      expect(result.stderr).not.toMatch(/cli-test-key|DATABASE_URL/);
     },
   );
 
@@ -269,7 +244,7 @@ describe('자치구 길단위인구 읽기 전용 CLI', () => {
     expect(result.stdout).toBe('');
     expect(result.stderr).not.toBe('');
     expect(result.stderr).not.toMatch(
-      /DB_POOL_FORBIDDEN|NETWORK_FORBIDDEN|PUBLIC_API_FORBIDDEN|password|invalid-database-url/,
+      /DB_POOL_FORBIDDEN|NETWORK_FORBIDDEN|password|invalid-database-url/,
     );
   });
 
@@ -287,9 +262,7 @@ describe('자치구 길단위인구 읽기 전용 CLI', () => {
       expect(result.status).toBe(1);
       expect(result.stdout).toBe('');
       expect(result.stderr).not.toBe('');
-      expect(result.stderr).not.toMatch(
-        /DB_POOL_FORBIDDEN|NETWORK_FORBIDDEN|PUBLIC_API_FORBIDDEN/,
-      );
+      expect(result.stderr).not.toMatch(/DB_POOL_FORBIDDEN|NETWORK_FORBIDDEN/);
     },
   );
 });

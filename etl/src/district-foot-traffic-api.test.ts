@@ -4,8 +4,17 @@ import { probeDistrictFootTrafficApi } from './district-foot-traffic-api.js';
 
 vi.mock('node:fs/promises', () => ({ readFile: vi.fn() }));
 
+// 합성 응답은 테스트 모듈에서만 HTTPS 주소와 fetch를 대체해 공급합니다.
+const testEndpoint = vi.hoisted(() => ({ url: 'https://seoul-api.test' }));
+vi.mock('./config.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./config.js')>()),
+  get seoulOpenApiEndpoint() {
+    return testEndpoint.url;
+  },
+}));
+
 const fakeKey = 'test-key-never-send';
-const privateUrl = `http://openapi.seoul.go.kr:8088/${fakeKey}/json/VwsmSignguFlpopW`;
+const privateUrl = `https://seoul-api.test/${fakeKey}/json/VwsmSignguFlpopW`;
 const fetchPage = vi.fn<typeof fetch>();
 const probe = (options: { expectedRows?: number; compareCsv?: string } = {}) =>
   probeDistrictFootTrafficApi({ api: true, probe: true, ...options });
@@ -31,6 +40,7 @@ const page = (total: number, rows: string[]) =>
   );
 
 beforeEach(() => {
+  testEndpoint.url = 'https://seoul-api.test';
   vi.stubEnv('SEOUL_OPEN_API_KEY', fakeKey);
   fetchPage.mockReset();
   vi.stubGlobal('fetch', fetchPage);
@@ -44,6 +54,21 @@ afterEach(() => {
 });
 
 describe('자치구 길단위인구 서울시 API probe', () => {
+  it.each(['http://openapi.seoul.go.kr:8088', 'invalid-endpoint'])(
+    'HTTPS가 아닌 주소는 설정된 키가 있어도 fetch 전에 차단한다 (%#)',
+    async (endpoint) => {
+      testEndpoint.url = endpoint;
+      const error: unknown = await probe().catch((error: unknown) => error);
+      expect(error).toBeInstanceOf(Error);
+      expect(String(error)).toContain('BLOCKED:');
+      expect(String(error)).toContain('HTTPS');
+      expect(String(error)).not.toContain(fakeKey);
+      expect(String(error)).not.toContain(endpoint);
+      expect(error).not.toHaveProperty('cause');
+      expect(fetchPage).not.toHaveBeenCalled();
+    },
+  );
+
   it('페이지 전체를 수집하고 원문 숫자 정밀도·NULL·실제 0을 보존한다', async () => {
     fetchPage
       .mockResolvedValueOnce(page(101, [preciseRow, ...firstPageRows.slice(1)]))

@@ -317,7 +317,9 @@ npm test -- src/district-foot-traffic-source.test.ts src/district-foot-traffic-c
 
 OA-22179의 `VwsmSignguFlpopW`를 공식 `/{KEY}/json/{SERVICE}/{START_INDEX}/{END_INDEX}/` 형식으로 요청합니다. 시작과 끝 번호는 1부터 세며 양끝을 포함합니다. 서울시 명세의 페이지 상한은 1,000행이며, 이 probe는 페이지당 최대 100행을 순차 수집합니다. 공식 주소는 HTTP이며 인증키가 요청 경로에 들어갑니다. [서울시 OA-22179 API 명세](https://data.seoul.go.kr/dataList/OA-22179/S/1/datasetView.do?tab=A), [서울시 Open API 이용안내](https://data.seoul.go.kr/together/guide/useGuide.do)
 
-[개발 가이드의 인증키 설정](development.md#서울시-open-api-인증키)을 마친 뒤 **`etl/`에서** 실행합니다.
+인증 전체 probe에는 검증된 HTTPS 주소가 필요합니다. 현재 공식 주소는 HTTP이므로 인증키가 설정되어 있어도 CLI는 인증 URL 생성과 네트워크 요청 전에 `BLOCKED`와 종료 코드 1을 반환합니다.
+
+서울시가 제공하는 HTTPS 주소를 검증해 수집기에 반영한 뒤, [개발 가이드의 인증키 설정](development.md#서울시-open-api-인증키)을 마치고 **`etl/`에서** 다음 명령을 실행합니다.
 
 ```bash
 node --env-file=../.env --import tsx src/index.ts district-foot-traffic --api --probe
@@ -330,6 +332,10 @@ node --env-file=../.env --import tsx src/index.ts district-foot-traffic --api --
 - 인증키가 없으면 요청 전에 `BLOCKED`와 종료 코드 1을 반환합니다. 이 모드에서는 API·CSV 판독만 하며 DB 접속·적재·배치 생성이 없습니다. 기존 CSV 체크섬·출처·게시 이력은 보존됩니다.
 
 합성 API 응답 검증은 `etl/`에서 `npm test -- src/district-foot-traffic-api.test.ts src/district-foot-traffic-cli.test.ts`로 실행합니다. 실제 인증키나 DB가 필요 없습니다.
+
+**실제 API 전체 검증 `BLOCKED` (2026-11-10)**. 인증정보 없이 확인한 HTTPS 443은 시간 초과, 8088은 TLS 연결 실패였습니다. 실제 키를 사용한 전체 probe와 `--compare-csv`는 실행하지 않았습니다.
+
+공개 HTTP sample은 전체 건수 메타데이터 550과 함께 요청한 5행을 반환했습니다. 별도 2~5행 요청에서 받은 4개 키와 세 수치씩 12개는 기존 체크섬과 일치한 로컬 CSV의 해당 값과 모두 일치했습니다. 로컬 CSV는 550행, 25개 자치구, 22분기(`20211`~`20262`)였습니다. 표본 대조 범위는 4행이며 API 전체의 분기 범위와 CSV 일치 여부는 확인하지 못했습니다.
 
 ## 자치구 길단위인구 적재와 게시
 

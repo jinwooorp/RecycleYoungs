@@ -1,7 +1,7 @@
 import { setTimeout as wait } from 'node:timers/promises';
 import { z } from 'zod';
+import { seoulOpenApiEndpoint } from './config.js';
 
-const endpoint = 'http://openapi.seoul.go.kr:8088';
 const pageSize = 100;
 const maxRows = 100_000;
 const maxResponseBytes = 4 * 1024 * 1024;
@@ -164,9 +164,14 @@ export async function collectSeoulOpenApiRows<Row>(options: {
     );
   if (!/^[A-Za-z0-9_-]{1,256}$/.test(apiKey))
     throw new SeoulOpenApiError('SEOUL_OPEN_API_KEY 형식이 올바르지 않습니다.');
+  // 인증키가 들어간 URL을 만들기 전에 HTTPS 여부를 확인하고 설정값은 오류에 포함하지 않습니다.
+  if (URL.parse(seoulOpenApiEndpoint)?.protocol !== 'https:')
+    throw new SeoulOpenApiError(
+      'BLOCKED: 서울시 Open API 인증 요청에는 검증된 HTTPS 주소가 필요합니다.',
+    );
   const { serviceName, expectedRows, parseRow, rowKey } = options;
   const pageUrl = (start: number, end: number) =>
-    `${endpoint}/${encodeURIComponent(apiKey)}/json/${encodeURIComponent(serviceName)}/${start}/${end}/`;
+    `${seoulOpenApiEndpoint}/${encodeURIComponent(apiKey)}/json/${encodeURIComponent(serviceName)}/${start}/${end}/`;
   let page = await requestPage(pageUrl(1, pageSize), serviceName);
   const totalRows = page.list_total_count;
   if (expectedRows !== undefined && expectedRows !== totalRows)
