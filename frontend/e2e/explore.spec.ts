@@ -3,6 +3,7 @@ import {
   test,
   expect,
   scenario,
+  openRegionFilter,
   selectDistrict,
   noOverflow,
 } from './test-support';
@@ -171,8 +172,7 @@ test('지역 API 오류와 재시도', async ({ page, allowHttpErrors }) => {
   allowHttpErrors.add('/api/v1/districts');
   await scenario(page, 'districts-error');
   await page.goto('/explore');
-  const filter = page.getByRole('button', { name: '지역 필터', exact: true });
-  if (await filter.isVisible()) await filter.click();
+  await openRegionFilter(page);
   await expect(
     page.getByRole('button', { name: '자치구 목록 다시 시도' }),
   ).toBeVisible();

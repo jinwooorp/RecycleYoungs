@@ -63,17 +63,35 @@ export async function scenario(page: Page, value: string) {
   ]);
 }
 
+/** 모바일 필터를 열고, 선택 후 포커스 복귀를 확인할 버튼을 반환합니다. */
+export async function openRegionFilter(page: Page) {
+  // RegionFilter와 같은 기준으로 분기해 버튼이 렌더링되기 전에도 모바일을 판별합니다.
+  const desktop = await page.evaluate(
+    () => window.matchMedia('(min-width: 64rem)').matches,
+  );
+  const trigger = desktop
+    ? null
+    : page.getByRole('button', { name: '지역 필터', exact: true });
+  if (trigger) {
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  }
+  await expect(
+    page.getByRole('group', { name: '지역 필터', exact: true }),
+  ).toBeVisible();
+  return trigger;
+}
+
 export async function selectDistrict(page: Page, code = '11440') {
-  const trigger = page.getByRole('button', { name: '지역 필터', exact: true });
-  if (await trigger.isVisible()) await trigger.click();
+  const trigger = await openRegionFilter(page);
   const select = page.getByRole('combobox', { name: '자치구', exact: true });
   await expect(select).toBeEnabled();
   await select.selectOption(code);
-  if (await trigger.isVisible()) {
-    await page
-      .getByRole('combobox', { name: '행정동', exact: true })
-      .press('Escape');
+  if (trigger) {
+    await select.press('Escape');
     await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await expect(trigger).toBeFocused();
   }
 }
 
