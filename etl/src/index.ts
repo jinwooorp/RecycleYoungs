@@ -13,6 +13,10 @@ import { probeDistrictStoreSource } from './district-store-source.js';
 import { probeDistrictSalesSource } from './district-sales-source.js';
 import { probeDistrictFootTrafficSource } from './district-foot-traffic-source.js';
 import {
+  probeDistrictFootTrafficApi,
+  type DistrictFootTrafficApiProbeOptions,
+} from './district-foot-traffic-api.js';
+import {
   importDistrictFootTrafficStats,
   type DistrictFootTrafficOptions,
 } from './district-foot-traffic.js';
@@ -39,7 +43,10 @@ const count = z
 /** 자치구 길단위인구의 적재·probe 인자를 파일·DB 처리 전에 검증합니다. */
 export function parseDistrictFootTrafficArguments(
   args: string[],
-): (DistrictFootTrafficOptions & { probe: boolean }) | null {
+):
+  | (DistrictFootTrafficOptions & { probe: boolean })
+  | DistrictFootTrafficApiProbeOptions
+  | null {
   let parsed;
   try {
     parsed = parseArgs({
@@ -50,6 +57,8 @@ export function parseDistrictFootTrafficArguments(
         source: { type: 'string' },
         'expected-rows': { type: 'string' },
         probe: { type: 'boolean' },
+        api: { type: 'boolean' },
+        'compare-csv': { type: 'string' },
         help: { type: 'boolean', short: 'h' },
       },
     });
@@ -65,23 +74,53 @@ export function parseDistrictFootTrafficArguments(
     throw new Error(
       '지원 명령은 district-foot-traffic입니다. --help를 확인하세요.',
     );
-  for (const name of ['source', 'expected-rows', 'probe']) {
+  for (const name of [
+    'source',
+    'expected-rows',
+    'probe',
+    'api',
+    'compare-csv',
+  ]) {
     if (
       tokens.filter((token) => token.kind === 'option' && token.name === name)
         .length > 1
     )
       throw new Error('자치구 길단위인구 옵션은 중복해서 전달할 수 없습니다.');
   }
+  const sourcePath = z
+    .string()
+    .min(1)
+    .refine((value) => value.trim().length > 0);
+  const expectedRows = z
+    .string()
+    .regex(/^[1-9][0-9]*(?![\s\S])/)
+    .pipe(count);
+  if (values.api) {
+    if (!values.probe || values.source !== undefined)
+      throw new Error(
+        '서울시 API는 --api --probe로만 검증하며 --source 대신 --compare-csv를 사용하세요.',
+      );
+    const apiOptions = z
+      .object({
+        expectedRows: expectedRows.optional(),
+        compareCsv: sourcePath.optional(),
+      })
+      .safeParse({
+        expectedRows: values['expected-rows'],
+        compareCsv: values['compare-csv'],
+      });
+    if (!apiOptions.success)
+      throw new Error(
+        '자치구 길단위인구 API 예상 행 수 또는 비교 CSV 경로가 올바르지 않습니다.',
+      );
+    return { api: true, probe: true, ...apiOptions.data };
+  }
+  if (values['compare-csv'] !== undefined)
+    throw new Error('--compare-csv는 --api --probe와 함께 사용하세요.');
   const options = z
     .object({
-      source: z
-        .string()
-        .min(1)
-        .refine((value) => value.trim().length > 0),
-      expectedRows: z
-        .string()
-        .regex(/^[1-9][0-9]*(?![\s\S])/)
-        .pipe(count),
+      source: sourcePath,
+      expectedRows,
       probe: z.boolean(),
     })
     .safeParse({
@@ -358,6 +397,7 @@ if (
     const args = process.argv.slice(2);
     let options:
       | (DistrictFootTrafficOptions & { probe: boolean })
+      | DistrictFootTrafficApiProbeOptions
       | FootTrafficOptions
       | SalesOptions
       | StoreOptions
@@ -399,6 +439,11 @@ if (
       console.log(
         '  npm run dev -- district-foot-traffic [--probe] --source /절대경로/자치구인구.csv --expected-rows <원본 전체 행 수>\n자치구 길단위인구는 CSV/단일 CSV ZIP을 적재하며 --probe에서는 DB·배치·적재·네트워크 요청을 사용하지 않습니다.',
       );
+      console.log(
+        '  npm run dev -- district-foot-traffic --api --probe [--expected-rows <API 전체 행 수>] [--compare-csv /절대경로/자치구인구.csv]\n서울시 Open API 전체 수집 검증은 SEOUL_OPEN_API_KEY를 사용하며 DB·배치·적재를 사용하지 않습니다.',
+      );
+    } else if ('api' in options) {
+      console.log(JSON.stringify(await probeDistrictFootTrafficApi(options)));
     } else if (
       args[0] === 'district-foot-traffic' &&
       'source' in options &&

@@ -187,13 +187,14 @@ ETL(수집·검증·변환·적재)의 원본 동일성은 체크섬(원본 내�
 
 ### 작업 디렉터리와 환경변수
 
-**먼저 실행 모드를 선택합니다.** `--probe`를 지원하는 명령에서 이를 생략하면 실제 적재 모드가 됩니다.
+**먼저 실행 모드를 선택합니다.** 기존 CSV·카페 명령에서 `--probe`를 생략하면 적재 모드가 됩니다. 서울시 Open API 검증에는 `--api --probe`가 모두 필요합니다.
 
 | 실행 모드                       | 확인·처리 범위                      | 사전 조건과 DB 변경 여부                                    |
 | ------------------------------- | ----------------------------------- | ----------------------------------------------------------- |
 | `district-stores --probe`       | 로컬 CSV·ZIP 전체 형식 검증         | DB 준비·환경변수·인증키·네트워크 요청 불필요. DB 변경 없음  |
 | `district-sales --probe`        | 로컬 CSV·ZIP 전체 형식 검증         | DB·인증키·네트워크 불필요. DB 변경 없음                     |
 | `district-foot-traffic --probe` | 로컬 CSV·ZIP 전체 형식 검증         | DB·인증키·네트워크 불필요. DB 변경 없음                     |
+| `district-foot-traffic --api --probe` | 서울시 Open API 전체 페이지 및 선택적 CSV 대조 | 서버 측 `SEOUL_OPEN_API_KEY` 필요. DB 준비·접속·변경 없음 |
 | 카페 `--probe`                  | 실제 API의 공식 분류·첫 페이지 확인 | API 인증키·공식 카페 분류 변수 필요. DB 준비·접속·변경 없음 |
 | 실제 적재                       | 각 ETL의 전체 검증 후 DB 반영       | DB 설정·Flyway·기준 데이터 필요. 대상 DB 변경               |
 
@@ -311,6 +312,24 @@ npm test -- src/district-foot-traffic-source.test.ts src/district-foot-traffic-c
 ```
 
 기존 행정동 유동인구와 다른 적재 명령의 회귀는 [전체 ETL 테스트](#유동인구-통계-적재)의 9개 일회용 DB 플래그와 빌드·린트·포맷 검사로 확인합니다. 이 probe의 확인 SQL은 없으며 실제 개발 DB를 조회하지 않습니다.
+
+### 서울시 Open API 전체 수집 probe
+
+OA-22179의 `VwsmSignguFlpopW`를 공식 `/{KEY}/json/{SERVICE}/{START_INDEX}/{END_INDEX}/` 형식으로 요청합니다. 시작과 끝 번호는 1부터 세며 양끝을 포함합니다. 서울시 명세의 페이지 상한은 1,000행이며, 이 probe는 페이지당 최대 100행을 순차 수집합니다. 공식 주소는 HTTP이며 인증키가 요청 경로에 들어갑니다. [서울시 OA-22179 API 명세](https://data.seoul.go.kr/dataList/OA-22179/S/1/datasetView.do?tab=A), [서울시 Open API 이용안내](https://data.seoul.go.kr/together/guide/useGuide.do)
+
+[개발 가이드의 인증키 설정](development.md#서울시-open-api-인증키)을 마친 뒤 **`etl/`에서** 실행합니다.
+
+```bash
+node --env-file=../.env --import tsx src/index.ts district-foot-traffic --api --probe
+```
+
+- `--expected-rows <건수>`로 독립적으로 확인한 API 전체 건수를 추가 대조할 수 있습니다. CSV 판본의 550행은 고정 기대값이 아닙니다.
+- 로컬 CSV나 단일 CSV ZIP이 준비된 경우 `--compare-csv /절대경로/자치구인구.csv`를 추가합니다. 두 원본의 자치구·분기 키 전체와 공통 키의 세 측정값을 대조합니다. 지수 표기나 소수 후행 0이 달라도 정규화한 십진수 값이 같으면 일치로 보며, NULL과 0은 구분합니다. 차이가 있으면 원문·경로 없이 API 전용·CSV 전용·수치 불일치 행 수를 보고하고 실패합니다.
+- 성공 조건은 서비스의 `RESULT.CODE=INFO-000`, 모든 페이지에서 동일한 `list_total_count`, 구간별 정확한 행 수, 유효하고 중복 없는 자치구·분기 키입니다. 결과는 페이지 수·건수·분기 범위와 최대 5행을 반환합니다. 전체 수집 검증만으로 모든 구·분기가 제공되었거나 CSV와 같은 판본임을 확인할 수는 없습니다.
+- JSON 숫자는 원문 토큰으로 읽고 코드·NULL·정밀도는 기존 CSV 스키마로 검증합니다. 요청과 본문 읽기에 10초 제한을 두고, 연결·시간 초과와 일시적 HTTP 오류는 최대 한 번 재시도합니다. 페이지당 응답 4 MiB, 전체 100,000행, 정규화한 수치 문자열 합계 32 MiB를 상한으로 적용합니다. 리다이렉트는 따르지 않으며 외부 오류 원문·응답 메시지·요청 URL은 출력하지 않습니다.
+- 인증키가 없으면 요청 전에 `BLOCKED`와 종료 코드 1을 반환합니다. 이 모드에서는 API·CSV 판독만 하며 DB 접속·적재·배치 생성이 없습니다. 기존 CSV 체크섬·출처·게시 이력은 보존됩니다.
+
+합성 API 응답 검증은 `etl/`에서 `npm test -- src/district-foot-traffic-api.test.ts src/district-foot-traffic-cli.test.ts`로 실행합니다. 실제 인증키나 DB가 필요 없습니다.
 
 ## 자치구 길단위인구 적재와 게시
 

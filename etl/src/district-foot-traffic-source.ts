@@ -44,12 +44,21 @@ export type DistrictFootTrafficProbeResult = {
 };
 
 // 기존 NUMERIC 정규화·범위·NULL 규칙은 그대로 사용하고 행정동 대신 자치구만 검증합니다.
-const rowSchema = footTrafficRowSchema.omit({ dongCode: true }).extend({
-  districtCode: z
-    .string()
-    .length(5)
-    .regex(/^[0-9]{5}$/),
-});
+export const districtFootTrafficRowSchema = footTrafficRowSchema
+  .omit({ dongCode: true })
+  .extend({
+    districtCode: z
+      .string()
+      .length(5)
+      .regex(/^[0-9]{5}$/),
+  });
+
+export function districtFootTrafficKey(
+  row: DistrictFootTrafficStatRow,
+): string {
+  return `${row.districtCode}:${row.quarterCode}`;
+}
+
 const aliases: Record<keyof DistrictFootTrafficStatRow, readonly string[]> = {
   districtCode: ['자치구_코드', 'SIGNGU_CD'],
   quarterCode: ['기준_년분기_코드', 'STDR_YYQU_CD'],
@@ -143,7 +152,7 @@ export async function readDistrictFootTrafficSource(
             throw new ProbeValidationError(
               `자치구 길단위인구 CSV의 ${fetchedRows}번째 데이터 행 구조가 올바르지 않습니다.`,
             );
-          const parsed = rowSchema.safeParse(
+          const parsed = districtFootTrafficRowSchema.safeParse(
             Object.fromEntries(
               Object.entries(columns).map(([field, index]) => [
                 field,
@@ -156,7 +165,7 @@ export async function readDistrictFootTrafficSource(
               `자치구 길단위인구 CSV의 ${fetchedRows}번째 데이터 행 필수 코드 또는 수치 형식이 올바르지 않습니다.`,
             );
           const row = parsed.data;
-          const key = `${row.districtCode}:${row.quarterCode}`;
+          const key = districtFootTrafficKey(row);
           if (keys.has(key))
             throw new ProbeValidationError(
               `자치구 길단위인구 CSV의 ${fetchedRows}번째 데이터 행 복합키가 중복되었습니다.`,

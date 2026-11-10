@@ -116,6 +116,12 @@ docker compose restart db     # 재시작, 데이터 유지
 
 기존 Testcontainers 통합 테스트는 Compose와 독립된 일회용 DB를 계속 사용합니다.
 
+### 서울시 Open API 인증키
+
+서울 열린데이터광장에서 일반 인증키를 발급받아 저장소 루트의 로컬 `.env`에 `SEOUL_OPEN_API_KEY`를 설정합니다. 새 환경에서는 루트 `.env.example`을 참고합니다. 이 값은 ETL의 서버 측 요청에 사용하므로 커밋이나 브라우저 환경변수에 포함하지 않습니다. 공식 주소는 HTTP이며 요청 경로에 키가 들어갑니다. [서울시 Open API 이용안내](https://data.seoul.go.kr/together/guide/useGuide.do)
+
+`etl/`에서 `node --env-file=../.env --import tsx src/index.ts district-foot-traffic --api --probe`를 실행하면 루트 환경변수 파일을 명시적으로 읽고 DB 없이 전체 API 응답을 검증합니다. 키가 이미 셸에 설정되어 있으면 `npm run dev -- district-foot-traffic --api --probe`로도 실행할 수 있습니다. 로컬 CSV 대조 옵션은 [ETL 가이드](etl-guide.md#서울시-open-api-전체-수집-probe)를 참고합니다.
+
 ## 2. Frontend
 
 ### 실행 절차

@@ -12,12 +12,13 @@ const syntheticCsv = [
   ),
 ].join('\n');
 
-// 파일은 메모리에서만 공급하고 실제 CLI의 DB 풀·소켓·공공 API 사용은 즉시 실패시킨다.
+// 메모리의 CSV·API 응답만 공급하고 실제 CLI의 DB 풀·소켓·외부 요청은 차단한다.
 function runProbe(
   contents: string,
   args: string[],
   databaseUrl?: string,
   forbidInput = false,
+  api?: { key?: string; body?: object },
 ) {
   const preload = `
     import fs from 'node:fs/promises';
@@ -40,7 +41,12 @@ function runProbe(
       constructor() { throw new Error('DB_POOL_FORBIDDEN'); }
     }});
     net.Socket.prototype.connect = function () { throw new Error('NETWORK_FORBIDDEN'); };
-    globalThis.fetch = async () => { throw new Error('PUBLIC_API_FORBIDDEN'); };
+    const apiBody = ${JSON.stringify(api?.body ?? null)};
+    globalThis.fetch = async (url) => {
+      if (!apiBody || url !== 'http://openapi.seoul.go.kr:8088/cli-test-key/json/VwsmSignguFlpopW/1/100/')
+        throw new Error('PUBLIC_API_FORBIDDEN');
+      return Response.json(apiBody);
+    };
   `;
   return spawnSync(
     process.execPath,
@@ -60,6 +66,7 @@ function runProbe(
         ...process.env,
         DATABASE_URL: databaseUrl,
         SEMAS_API_KEY: undefined,
+        SEOUL_OPEN_API_KEY: api?.key,
       },
     },
   );
@@ -150,8 +157,83 @@ describe('자치구 길단위인구 읽기 전용 CLI', () => {
     const result = runProbe('', ['--help'], 'invalid-database-url');
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('district-foot-traffic [--probe]');
+    expect(result.stdout).toContain('district-foot-traffic --api --probe');
     expect(result.stderr).toBe('');
   });
+
+  it('명시적인 API probe만 DB 풀 없이 합성 응답 전체를 검증한다', () => {
+    const result = runProbe(
+      '',
+      ['--api', '--probe'],
+      'invalid-database-url',
+      true,
+      {
+        key: 'cli-test-key',
+        body: {
+          VwsmSignguFlpopW: {
+            list_total_count: 1,
+            RESULT: { CODE: 'INFO-000' },
+            row: [
+              {
+                SIGNGU_CD: '11110',
+                STDR_YYQU_CD: '20262',
+                TOT_FLPOP_CO: '1.00',
+                ML_FLPOP_CO: null,
+                FML_FLPOP_CO: 0,
+              },
+            ],
+          },
+        },
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      validationScope: 'OPEN_API_FULL_COLLECTION',
+      validRows: 1,
+      databaseChecked: false,
+      batchCreated: false,
+      loadedRows: 0,
+    });
+    expect(result.stdout).not.toMatch(/cli-test-key|openapi\.seoul\.go\.kr/);
+  });
+
+  it('API 키가 없으면 DB나 API에 접근하지 않고 BLOCKED로 종료한다', () => {
+    const result = runProbe(
+      '',
+      ['--api', '--probe'],
+      'invalid-database-url',
+      true,
+    );
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('BLOCKED: 전체 수집용 SEOUL_OPEN_API_KEY');
+  });
+
+  it.each([
+    ['--api'],
+    ['--api', ...validArgs],
+    ['--api', '--probe', '--api'],
+    ['--api', '--probe', '--expected-rows', '0'],
+    ['--api', '--probe', '--compare-csv', ' '],
+    ['--api', '--probe', '--compare-csv', 'a.csv', '--compare-csv', 'b.csv'],
+    [...validArgs, '--compare-csv', 'a.csv'],
+  ])(
+    '부적절한 API 인자는 외부 요청과 DB 분기 전에 거부한다 (%#)',
+    (...args) => {
+      const result = runProbe('', args, 'invalid-database-url', true, {
+        key: 'cli-test-key',
+      });
+      expect(result.status).toBe(1);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toMatch(
+        /--api|--compare-csv|옵션은 중복|API 예상 행 수/,
+      );
+      expect(result.stderr).not.toMatch(
+        /cli-test-key|DATABASE_URL|PUBLIC_API_FORBIDDEN/,
+      );
+    },
+  );
 
   it.each([
     ['--probe'],
