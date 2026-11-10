@@ -9,7 +9,7 @@
 3. 별도 터미널에서 [Frontend](#2-frontend)와 [Backend](#3-backend)를 실행합니다. Backend는 DB 사용 여부에 맞는 실행 방법을 선택합니다.
 4. 각 프로젝트 디렉터리에서 [빌드·테스트·품질 검사](#빌드테스트품질-검사)를 실행합니다.
 
-로컬 개발 환경과 [GitHub Actions CI](#github-actions-ci)를 구성했습니다. GitHub-hosted Runner의 최초 검증은 Push 이후 확인해야 합니다. 실제 운영 배포와 CD는 미구성이며, [배포 검토 항목](#배포-검토-항목)은 향후 계획입니다.
+로컬 개발 환경과 [GitHub Actions CI](#github-actions-ci)를 구성했습니다. GitHub-hosted Runner의 최초 검증은 Push 이후 확인해야 합니다. [배포 검토 항목](#배포-검토-항목)에서 개발 환경과 분리된 Compose 구성, DB를 시작하지 않는 검증 방법, 실제 배포 전 남은 작업을 확인할 수 있습니다.
 
 ## 목차
 
@@ -459,85 +459,106 @@ document.cookie = "ry-e2e-scenario=sales-error; Path=/; SameSite=Strict";
 
 ## 배포 검토 항목
 
-### 배포 구성안 (계획)
+### 배포 구성안
 
-로컬 개발용 PostgreSQL·PostGIS는 Docker Compose로 실행합니다. 서비스 전체의 컨테이너 배포는 후속 단계에서 검토할 예정입니다.
+[compose.deploy.yaml](../compose.deploy.yaml)은 배포용 프로젝트 `recycleyoungs-deploy`를 구성합니다. 개발용 `compose.yaml`과 별개로 실행하며, 배포 DB는 `recycleyoungs-deploy_deploy_postgres_data` 볼륨에 저장합니다.
 
-클라우드 환경은 AWS EC2 또는 다른 클라우드 서비스를 후보로 두고 있으며, Nginx와 CD 도입도 고려 중입니다. 자동 검증 CI는 위 GitHub Actions 워크플로와 별개로 배포 기능을 갖지 않습니다.
-
-**아직 실제 배포 환경이나 배포 자동화는 구성되지 않았습니다.**
+```text
+.
+├── compose.deploy.yaml
+├── .env.deploy.example
+├── frontend/
+│   ├── Dockerfile
+│   └── .dockerignore
+├── backend/
+│   ├── Dockerfile
+│   └── .dockerignore
+└── nginx/
+    └── default.conf
+```
 
 ```mermaid
-flowchart TB
-    USER(["사용자"])
-    GITHUB["GitHub Repository"]
-    CICD["배포 자동화 CD<br/>(계획)"]
-
-    subgraph SERVER["클라우드 서버 · Docker Compose"]
-        direction TB
-        NGINX["Nginx<br/>React 정적 파일 · HTTPS"]
-        API["Spring Boot API"]
-        DB[("PostgreSQL + PostGIS")]
-        ETL["ETL 작업"]
-
-        NGINX -->|"/api"| API
-        API -->|데이터 조회| DB
-        ETL -->|데이터 적재| DB
-    end
-
-    SOURCE["외부 공공데이터 API"]
-
-    USER -->|HTTPS| NGINX
-    GITHUB -.-> CICD
-    CICD -.->|배포| SERVER
-    SOURCE -->|데이터 수집| ETL
+flowchart LR
+    HOST["호스트 127.0.0.1"] -->|HTTP| NGINX["Nginx · React 정적 파일"]
+    NGINX -->|"/api · app 내부 네트워크"| API["Spring Boot · db 프로필"]
+    API -->|"JDBC · data 내부 네트워크"| DB[("PostgreSQL 17 · PostGIS 3.5")]
 ```
 
-위 구성은 배포 방향을 설명하기 위한 예시입니다. 실제 환경에서는 프론트엔드 정적 파일 제공 방식, 데이터베이스 호스팅 위치, ETL 실행 방법 및 보안 구성을 별도로 결정할 예정입니다.
+- Frontend는 `./frontend`를 빌드 컨텍스트로 사용하며 Node.js 24·npm 11.19.1과 기존 잠금 파일로 빌드합니다. 실행 이미지는 비권한 Nginx에서 정적 파일을 제공합니다. Compose는 루트의 `nginx/default.conf`를 컨테이너의 `/etc/nginx/conf.d/default.conf`에 읽기 전용으로 마운트합니다.
+- Backend는 Java 21과 기존 Gradle Wrapper로 `verifyScorePackaging`을 실행합니다. 내부 검증 클래스와 CLI 분리 계약을 검사한 뒤, 실행 JAR만 Java 21 런타임에 복사하고 UID·GID 10001로 실행합니다.
+- Nginx 포트만 호스트 루프백에 게시합니다. Backend와 DB에는 호스트 포트가 없으며, Nginx는 DB의 내부 네트워크에 참가하지 않습니다.
+- DB가 TCP 연결을 수락하면 Backend가 `db` 프로필로 기동해 기존 Flyway V1~V7 중 미적용 버전을 실행합니다. 스키마 적용 후 실제 조회 데이터는 별도 게시 절차로 준비합니다. ETL 실행 서비스와 점수 공개 설정은 구성에 포함되지 않습니다.
 
-#### Nginx의 SPA 경로 처리 예시
+#### Nginx의 SPA 경로 처리
 
-정적 빌드 `dist/`를 제공하는 `server` 블록에서 아래처럼 경로를 나눕니다. `root`와 Backend 주소는 배포 환경에 맞게 지정합니다.
+[Nginx 설정](../nginx/default.conf)은 요청 경로에 따라 다음과 같이 처리합니다.
 
-```nginx
-root /var/www/recycleyoungs/dist;
-index index.html;
+| 요청 | 응답 |
+| --- | --- |
+| `/`, `/explore`, 알 수 없는 문서 경로 | `index.html`을 제공하고 브라우저가 캐시를 재검증합니다. 알 수 없는 문서 경로는 HTTP 200으로 HTML을 받고 React Router가 404 화면을 표시합니다. |
+| `/api`, `/api/` 하위 경로 | Backend에 경로와 쿼리를 전달하고 응답 상태를 유지합니다. 배포 구성은 점수 요청의 승인 상태와 REST 503 차단을 유지합니다. |
+| `/assets/` 아래의 해시 파일 | 성공 응답을 1년간 캐시합니다. 누락된 파일이나 확장자가 있는 다른 정적 경로는 실제 HTTP 404를 반환합니다. |
 
-location = /api {
-    proxy_pass http://127.0.0.1:8080;
+### 배포 환경변수와 Kakao SDK
+
+설정·빌드 검증은 [.env.deploy.example](../.env.deploy.example)로 실행합니다. 기동을 준비할 때는 이 파일을 `.env.deploy`로 복사하고 개발 DB와 분리된 값을 설정합니다. `.env.deploy`는 Git에서 제외됩니다. 항상 배포 파일과 배포용 환경변수 파일을 명시합니다. Compose에서는 셸에 이미 설정된 같은 이름의 변수가 파일보다 우선하므로 배포 명령을 실행할 셸의 `DEPLOY_*` 설정도 확인합니다.
+
+| 변수 | 용도 |
+| --- | --- |
+| `DEPLOY_DB_NAME`, `DEPLOY_DB_USER` | 배포 DB 이름과 사용자입니다. 영문 소문자·숫자·밑줄로 된 식별자를 사용합니다. |
+| `DEPLOY_DB_PASSWORD` | 배포 DB 초기화와 Backend 연결에 전달할 별도 비밀번호입니다. 예시의 값은 설정 검사용입니다. |
+| `DEPLOY_HTTP_PORT` | 호스트 루프백의 HTTP 포트입니다. 기본값은 8080이며 로컬 Backend와 동시에 실행할 때는 다른 포트를 지정합니다. |
+| `DEPLOY_KAKAO_MAP_APP_KEY` | 선택 항목입니다. Compose가 Frontend 빌드 인수 `VITE_KAKAO_MAP_APP_KEY`로 전달합니다. |
+
+Compose는 `DEPLOY_DB_NAME`을 내부 주소 `jdbc:postgresql://db:5432/<DB 이름>`에 결합해 Backend의 `DB_JDBC_URL`로 전달합니다. `DEPLOY_DB_USER`와 `DEPLOY_DB_PASSWORD`는 Backend의 `DB_USER`, `DB_PASSWORD` 및 DB 초기화 설정에 전달됩니다. 이미 초기화된 볼륨의 DB 계정 정보는 환경변수만 바꿔도 갱신되지 않습니다.
+
+Docker 빌드는 Frontend의 로컬 `.env*` 파일을 제외합니다. Vite는 `VITE_KAKAO_MAP_APP_KEY`를 빌드할 때 브라우저 번들에 포함하므로 값을 바꾸면 이미지를 다시 빌드해야 합니다. 빌드 인수는 이미지 빌드 메타데이터에도 남을 수 있으므로 **브라우저 공개용 JavaScript 키**만 전달합니다. Kakao Developers에 브라우저가 접속하는 origin을 등록합니다. 기본 확인 주소는 `http://127.0.0.1:8080`입니다. 키를 비워 두면 앱의 키 미설정 상태를 확인할 수 있습니다. [Kakao 지도 공식 가이드](https://apis.map.kakao.com/web/guide/), [Vite 환경변수 문서](https://vite.dev/guide/env-and-mode)
+
+### DB 없이 배포 사전 검증
+
+저장소 루트에서 로컬 Docker 컨텍스트를 확인하고 다음 명령을 실행합니다. 예시 변수만 사용하도록 셸 환경을 분리합니다. `config --quiet`는 보간된 비밀번호를 출력하지 않습니다. 빌드와 Nginx 설정 검사는 배포 DB 컨테이너나 볼륨을 만들지 않습니다.
+
+```bash
+deploy_check() {
+  env -i PATH="$PATH" HOME="$HOME" docker compose -p recycleyoungs-deploy-preflight \
+    --env-file .env.deploy.example -f compose.deploy.yaml "$@"
 }
-
-location ^~ /api/ {
-    proxy_pass http://127.0.0.1:8080;
-}
-
-location ^~ /assets/ {
-    try_files $uri =404;
-}
-
-location ~ \.[^/]+$ {
-    try_files $uri =404;
-}
-
-location / {
-    try_files $uri $uri/ /index.html;
-}
+deploy_check config --quiet &&
+  deploy_check build frontend backend &&
+  env -i PATH="$PATH" HOME="$HOME" docker run --rm --network none \
+    --mount "type=bind,source=$PWD/nginx/default.conf,target=/etc/nginx/conf.d/default.conf,readonly" \
+    recycleyoungs-deploy-preflight-frontend nginx -t
 ```
 
-문서 경로는 `index.html`을 받아 React Router가 화면을 선택합니다. 알 수 없는 문서 경로도 HTML 응답은 HTTP 200일 수 있으며, 앱 안에서 404 화면을 표시합니다. `/api`는 원래 경로로 Backend에 전달하고, 누락된 정적 파일은 HTTP 404로 응답합니다. [Nginx try_files 문서](https://nginx.org/en/docs/http/ngx_http_core_module.html#try_files)
+라우팅은 별도 Docker 내부 네트워크에서 같은 Nginx 설정 파일을 읽기 전용으로 마운트해 확인합니다. 호스트 포트와 DB 볼륨은 연결하지 않습니다. `backend`라는 네트워크 별칭을 가진 합성 HTTP 서버로 `/api`와 `/api/`의 경로·쿼리 전달 및 503 응답 보존을 확인합니다. `/explore`와 알 수 없는 문서 경로의 HTML, 해시 파일의 캐시 헤더, 누락된 정적 리소스의 HTTP 404도 확인합니다. 실제 배포 Compose의 `up`은 DB 초기화와 Flyway를 시작하므로 사전 검증에 사용하지 않습니다.
+
+`postgis/postgis:17-3.5`는 기존 개발·CI와 같은 판본입니다. ARM64 Docker 호스트에서는 이 서비스에 AMD64 에뮬레이션이 필요합니다. [PostGIS 이미지 지원 범위](https://github.com/postgis/docker-postgis#versions-2026-11-05)
+
+### 승인 후 기동과 종료
+
+DB 대상·계정·백업과 Flyway 적용을 검토한 뒤, 별도의 배포 자격증명을 담은 `.env.deploy`로 실행합니다. 기동 시 Docker 호스트에 읽을 수 있는 `nginx/default.conf`가 필요합니다. 다음 명령은 배포 전 검토를 마친 환경의 저장소 루트에서 실행합니다.
+
+```bash
+deploy_compose() {
+  docker compose -p recycleyoungs-deploy --env-file .env.deploy -f compose.deploy.yaml "$@"
+}
+test -r nginx/default.conf &&
+  deploy_compose config --quiet &&
+  deploy_compose build frontend backend &&
+  deploy_compose up -d --no-build &&
+  deploy_compose ps
+```
+
+기동 후 `http://127.0.0.1:<DEPLOY_HTTP_PORT>`에서 확인합니다. 종료할 때는 같은 셸에서 `deploy_compose stop`을 실행하면 배포 DB 볼륨이 유지됩니다.
 
 ### 검토 항목
 
-| 항목         | 검토 방향                                    |
-| ------------ | -------------------------------------------- |
-| 컨테이너     | Docker 및 Docker Compose 활용                |
-| 클라우드     | AWS EC2 또는 대체 클라우드 서비스            |
-| 웹 서버      | Nginx를 통한 정적 파일 제공 및 API 요청 전달 |
-| HTTPS        | 도메인과 TLS 인증서 적용                     |
-| 데이터베이스 | PostgreSQL·PostGIS 운영 및 데이터 보존 정책  |
-| ETL          | 데이터 갱신 주기에 맞춘 실행 및 실패 처리    |
-| CD           | CI 검증 이후의 배포 자동화 방식 검토         |
-| 환경변수     | 인증키, DB 접속 정보 등 비밀정보의 분리 관리 |
-| 운영         | 로그, 오류 확인, 백업 및 장애 복구 방식 검토 |
+| 항목 | 실제 배포 전 남은 작업 |
+| --- | --- |
+| 외부 접속 | 호스트·도메인·TLS 인증서·HTTPS 진입점 구성, Kakao origin 등록과 실제 SDK 확인 |
+| DB | 비밀정보 보관 및 조회·Flyway 계정 분리, 백업·복구와 첫 마이그레이션 리허설, 업데이트가 종료된 PostGIS 3.5 이미지의 운영 판본 검토 |
+| 게시 데이터 | 데이터 적재 시점과 담당자를 정하고, 이전 게시본과 배치 이력을 기존 [ETL 검증·게시 절차](etl-guide.md)에 따라 보존합니다. [점수 공개 요건](score-20262-publication-readiness.md)은 별도로 검토합니다. |
+| 운영·CD | 이미지 배포·롤백 절차와 로그·장애 감시 확정, Frontend 설치 시 보고된 npm 보안 권고와 배포 자동화 검토 |
+| 회귀 검증 | GitHub-hosted Runner에서 Frontend E2E 26건 실행 확인. `kakao-map.test.tsx`의 간헐적 마커 생성 실패는 재현 조건을 별도로 조사 |
 
-실제 배포 방식과 구성 요소는 MVP 개발 및 테스트 결과를 바탕으로 확정할 계획입니다.
+배포 기반 1단계에서는 설정·이미지·격리 라우팅을 검증 대상으로 삼습니다. 운영 데이터 적재·마이그레이션·외부 공개는 후속 승인 후 진행합니다.
