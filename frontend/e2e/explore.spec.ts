@@ -142,9 +142,10 @@ test('매출 API 오류는 독립 표시하고 사용자 재시도로 복구', a
   await selectDistrict(page);
   await page.getByRole('button', { name: '상권 분석', exact: true }).click();
   const sales = page.getByRole('region', { name: '당월 추정매출액 요약' });
-  await expect(sales.getByRole('alert')).toContainText(
-    '통계 데이터가 아직 준비되지 않았습니다.',
-  );
+  const retry = { name: '당월 추정매출액 다시 시도', exact: true };
+  await expect(
+    sales.getByRole('alert').filter({ has: page.getByRole('button', retry) }),
+  ).toContainText('통계 데이터가 아직 준비되지 않았습니다.');
   await expect(
     page.getByRole('region', { name: '점포 수 요약' }),
   ).toContainText('120');
@@ -152,9 +153,7 @@ test('매출 API 오류는 독립 표시하고 사용자 재시도로 복구', a
     page.getByRole('region', { name: '지역 전체 유동인구 요약' }),
   ).toContainText('123,456.7800');
   await scenario(page, 'normal');
-  await sales
-    .getByRole('button', { name: '당월 추정매출액 다시 시도', exact: true })
-    .click();
+  await sales.getByRole('button', retry).click();
   await expect(sales).toContainText('9,007,199,254,740,993');
 });
 
