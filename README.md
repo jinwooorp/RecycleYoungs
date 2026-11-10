@@ -110,10 +110,10 @@ PostGIS는 PostgreSQL에 공간 좌표·경계 연산을 더하는 확장입니�
 | Testing (Frontend / ETL) | Vitest, React Testing Library      | TypeScript 로직 및 React 컴포넌트 테스트 |
 | Testing (Backend)        | JUnit, Spring Boot Test, Mockito   | 비즈니스 로직 및 API 단위·통합 테스트    |
 | Testing (Database)       | Testcontainers                     | PostgreSQL·PostGIS 기반 통합 테스트      |
-| Testing (E2E)            | Playwright (추후 도입)             | 실제 브라우저 기반 사용자 흐름 테스트    |
+| Testing (E2E)            | Playwright                         | 실제 브라우저 기반 사용자 흐름 테스트    |
 | Code Quality             | ESLint, Prettier, Spotless         | 코드 품질 검사 및 포맷팅                 |
 
-프론트엔드 개발 기반·기본 탐색 화면·Kakao Maps와 DB·ETL·백엔드 조회 기술은 적용되어 있습니다. Playwright는 추후 검토 대상입니다.
+프론트엔드 개발 기반·기본 탐색 화면·Kakao Maps와 DB·ETL·백엔드 조회 기술은 적용되어 있습니다. Playwright E2E 테스트와 `Frontend E2E` CI Job을 추가했고, 로컬 브라우저 검증은 ego(lite)로 완료했습니다. Playwright의 실제 Chromium 실행 결과는 GitHub Actions에서 확인해야 합니다.
 
 ## 시스템 아키텍처
 
@@ -444,15 +444,18 @@ ETL 설치·원본 준비·9개 적재 명령과 자치구 점포·매출·인�
 
 ## 자동 검증 CI
 
-[GitHub Actions CI](.github/workflows/ci.yml)는 `project-upgrade` Push와 해당 브랜치를 대상으로 하는 PR 생성·수정 시 실행됩니다. Frontend·Backend·Backend 통합 테스트·ETL을 독립 Job으로 검증하며, 같은 브랜치 또는 PR의 이전 실행은 취소합니다.
+[GitHub Actions CI](.github/workflows/ci.yml)는 `project-upgrade` Push와 해당 브랜치를 대상으로 하는 PR 생성·수정 시 실행됩니다. 기존 Frontend·Backend·Backend 통합 테스트·ETL Job을 유지하고 `Frontend E2E`를 추가했습니다. 같은 브랜치 또는 PR의 이전 실행은 취소합니다.
 
 - Frontend·ETL: Node.js 24·npm 11.19.1에서 각 잠금 파일로 `npm ci`, 린트·포맷·테스트·빌드를 실행합니다.
 - Backend: Java 21·Gradle Wrapper로 단위 테스트·Spotless·빌드와 기존 제품 JAR 구성 검사를 실행합니다.
 - Backend 통합 테스트: Runner의 Docker와 일회용 PostGIS에서 실행하며 실패·건너뜀을 허용하지 않습니다.
+- Frontend E2E: GitHub-hosted Runner에만 Playwright Chromium을 설치합니다. 1440px·390px에서 합성 API로 라우팅·탐색·통계·저장 후보지를 검증하고, 실패 시 trace·스크린샷을 7일 보존합니다. 신규 Job의 실제 성공 여부는 이번 변경을 Push한 뒤 별도 확인해야 합니다.
 
 Secrets·실제 `.env`·개발 DB·공공데이터 API 없이 실행합니다. ETL은 기본 `npm test` 범위이며 별도 opt-in DB·실제 CSV 테스트나 실제 적재를 실행하지 않습니다. CI는 변경 사항의 자동 검증이고, 서비스 배포를 수행하는 CD는 포함하지 않습니다.
 
 로컬의 동일 검증 명령과 Job별 범위는 [개발 가이드](docs/development.md#github-actions-ci)를 참고하세요. Push 이후 저장소의 **Actions → CI** 또는 PR의 **Checks**에서 각 Job 로그를 확인합니다. GitHub-hosted Runner의 최초 실행 결과는 Push 이후에만 확인할 수 있으며, 워크플로 파일 추가만으로 CI 성공을 의미하지 않습니다.
+
+로컬 브라우저 검증은 **ego(lite)**의 별도 에이전트 Space에서 수행합니다. `frontend/`의 `npm run e2e:serve`가 실제 Backend·키 없이 테스트 Vite와 Mock API를 실행합니다. Playwright 브라우저는 로컬에 설치·실행하지 않습니다. [ego(lite) 절차와 SDK 미검증 범위](docs/development.md#브라우저-e2e-검증)를 확인하세요.
 
 ## 상세 기술 문서
 

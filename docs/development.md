@@ -22,6 +22,7 @@
   - [마이그레이션 적용 상태와 V5~V7 검증 기록](#마이그레이션-적용-상태-확인)
 - [빌드·테스트·품질 검사](#빌드테스트품질-검사)
 - [GitHub Actions CI](#github-actions-ci)
+- [브라우저 E2E 검증](#브라우저-e2e-검증)
 - [배포 검토 항목](#배포-검토-항목)
 
 ## 1. 개발 도구
@@ -352,6 +353,7 @@ Frontend 명령은 **`frontend/`**, Backend 명령은 **`backend/`**, ETL 명령
 | Job                 | 환경·제한 시간                               | 검증 내용                                                                         |
 | ------------------- | -------------------------------------------- | --------------------------------------------------------------------------------- |
 | Frontend            | Node.js 24·npm 11.19.1 / 15분                | `npm ci` → `npm run lint` → `npm run format:check` → `npm test` → `npm run build` |
+| Frontend E2E        | Node.js 24·npm 11.19.1·Chromium / 20분       | `npm ci` → `npm run e2e:check` → Chromium 설치 → `npm run test:e2e` → JUnit 검사  |
 | Backend             | Temurin Java 21·Gradle Wrapper / 20분        | `./gradlew test` → `./gradlew spotlessCheck` → `./gradlew build`                  |
 | Backend integration | Temurin Java 21·Gradle Wrapper·Docker / 30분 | Docker 확인·테스트 이미지 준비 → `./gradlew integrationTest` → JUnit 결과 검사    |
 | ETL                 | Node.js 24·npm 11.19.1 / 15분                | `npm ci` → `npm run lint` → `npm run format:check` → `npm test` → `npm run build` |
@@ -394,9 +396,65 @@ GitHub의 `ubuntu-24.04` Job은 x64 환경입니다. ARM64 로컬 Docker에서 �
 
 ### 실행 결과와 배포 범위
 
-Push 후 GitHub 저장소의 **Actions → CI → 실행 → Job/Step 로그** 또는 PR의 **Checks**에서 결과를 확인합니다. 취소된 이전 실행과 최신 실행을 구분하고 네 Job이 모두 성공했는지 확인합니다. 실패 시 해당 단계의 npm·Gradle·Docker 로그를 확인하며 테스트를 생략하거나 실패를 무시하지 않습니다.
+Push 후 GitHub 저장소의 **Actions → CI → 실행 → Job/Step 로그** 또는 PR의 **Checks**에서 결과를 확인합니다. 취소된 이전 실행과 최신 실행을 구분하고 다섯 Job이 모두 성공했는지 확인합니다. 실패 시 해당 단계의 npm·Gradle·Docker 로그를 확인하며 테스트를 생략하거나 실패를 무시하지 않습니다.
 
 워크플로의 YAML·로컬 검증 성공과 GitHub-hosted Runner의 성공은 별개입니다. 최초 Runner 실행은 Push 이후에만 확인할 수 있으며 Actions 실행 권한·의존성 캐시·Docker 이미지 다운로드도 그때 확인합니다. CI는 자동 품질 검증이며 서버 배포·운영 이미지 생성·데이터 갱신을 수행하는 CD는 이번 범위에 없습니다. 점수 공개 미승인 상태도 변경하지 않습니다.
+
+## 브라우저 E2E 검증
+
+로컬 탐색·디버깅은 **ego(lite)**, GitHub Actions 자동 회귀는 **Playwright Chromium**으로 구분합니다. 브라우저 테스트 코드는 `frontend/e2e/`, 설정은 `frontend/playwright.config.ts`에 있으며 기존 Vitest의 `src/**/*.test.{ts,tsx}`와 분리되어 있습니다. 제품 API·점수 공개 계약은 변경하지 않습니다.
+
+키 없이 `/explore`에서 패널을 열면 기존 검색 서비스 오류 배너가 데스크톱 닫기 버튼을 덮는 문제를 발견했습니다. 오류 배너가 있는 데스크톱에서만 패널 상단 여백을 확보하는 CSS 보정을 적용했고, 포인터로 닫기·재열기를 회귀 시나리오에 포함합니다. 오류를 숨기거나 강제 클릭으로 통과시키지 않습니다.
+
+키 미설정 모바일 화면의 검색 오류 배너와 지역 필터 버튼에는 일부 시각적 겹침이 남아 있습니다. 필터·닫기 조작은 검증했으며, 이 별도 레이아웃 개선까지 이번 작업을 확대하지 않습니다.
+
+### 공통 합성 환경
+
+`frontend/`에서 Node.js 24·npm 11.19.1로 실행합니다.
+
+```bash
+npm ci
+npm run e2e:check
+npm run e2e:serve
+```
+
+`http://127.0.0.1:4173`은 테스트 전용 Vite, `127.0.0.1:4174`는 loopback 전용 Mock API입니다. 기존 Vite 설정의 `/api` 프록시 방식을 재사용하되 대상을 Mock 서버로 고정합니다. 포트 충돌 시 다른 서버를 재사용하지 않고 실패합니다. 종료는 `Ctrl+C`이며 두 서버를 함께 정리합니다.
+
+테스트 Vite는 `.env` 로딩을 끄고 Kakao 키를 빈 값으로 고정합니다. 테스트 HTML의 위치 조회는 합성 권한 거부 응답만 반환하고 CSP로 외부 연결을 제한합니다. 실제 위치·키·DB·ETL·공공 API가 필요하지 않습니다. Mock은 파일·외부 URL·개발 DB를 읽지 않으며 정의하지 않은 API는 404로 거부합니다. 이 서버·합성 fixture·HTML 주입은 `src/` 및 제품 빌드 진입점 밖에 있습니다. 일반 `npm run dev`나 `npm run build`에는 테스트 응답을 주입하지 않습니다.
+
+정상 응답은 기본 상태입니다. 아래처럼 **테스트 origin의 쿠키 하나만** 바꿔 오류·빈 응답을 재현합니다. 변경 후 지역이나 패널을 다시 선택해 새 요청을 발생시키고, 오류에서 복구할 때는 쿠키를 `normal`로 바꾼 후 화면의 `다시 시도`를 누릅니다. 공유 서버 상태를 변경하지 않으므로 CI의 각 새 브라우저 context는 서로 격리됩니다.
+
+```js
+document.cookie = "ry-e2e-scenario=sales-error; Path=/; SameSite=Strict";
+// normal / sales-error / sales-empty / districts-error
+```
+
+후보지 복원은 기존 `recycleyoungs.candidates`의 `{ version: 1, items: [...] }` 형식과 `e2e/fixtures.ts`의 합성 A·B·C를 사용합니다. 새 탭·새 테스트 context에서 시작하고, 로컬 재현 시에는 해당 탭의 이 저장 키와 위 테스트 쿠키만 초기화합니다. 사용자 프로필 전체 쿠키·캐시를 지우지 않습니다.
+
+### 로컬 ego(lite)
+
+1. 설치된 `ego-browser` 스킬을 읽고 `ego-browser skill`을 실행합니다. macOS 앱 연결이 차단되면 앱 접근 권한을 확인합니다. 사용할 수 없으면 다른 브라우저로 대체하지 않고 `BLOCKED`로 기록합니다.
+2. `ego-browser nodejs`에서 `taskSpace("RecycleYoungs E2E")`로 별도 에이전트 Space를 한 번 만들고 반환된 ID를 계속 재사용합니다. `task.page("p1").goto("http://127.0.0.1:4173")`로 접속합니다.
+3. `page.snapshot()`으로 화면을 관찰하고 실제 링크·메뉴·필터·탭·재시도·삭제를 조작합니다. 크기는 `page.cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false })`와 390×844·`mobile: true`를 사용합니다. 모바일 터치는 필요 시 CDP의 터치 에뮬레이션을 활성화합니다.
+4. 콘솔 관찰은 스킬에 따라 `egoAutomated.disable` 후 `Runtime.enable`, 네트워크는 `Network.enable`과 `page.events()`를 사용합니다. 의도한 503과 예상하지 않은 요청 실패·예외를 구분합니다. 권한 창·사용자 제어 전환이 나타나면 중단하고 사용자 확인 후 같은 Space를 재개합니다.
+5. 오류 재현은 위 쿠키, 수행 단계, 화면 스크린샷을 함께 남깁니다. 스크린샷은 Git에서 제외되는 `frontend/test-results/` 등에 보존하고 결과를 `PASS`·`FAIL`·`BLOCKED`로 구분합니다. 완료 시 스킬에 따라 `task.finish({ keep: [] })`로 종료합니다.
+
+### GitHub Actions Playwright
+
+[Playwright webServer](https://playwright.dev/docs/test-webserver)가 위 Vite·Mock 서버를 자동 시작·종료합니다. `Frontend E2E` Job만 `npx playwright install --with-deps chromium`을 실행합니다. `test:e2e`의 실제 브라우저 실행은 GitHub-hosted Linux Runner에서만 허용하며, 로컬에서는 `npm run test:e2e:list`로 브라우저 없이 테스트 수집만 확인합니다. 로컬 Chromium 설치·별도 브라우저 실행은 하지 않습니다.
+
+현재 시나리오는 11개를 데스크톱 1440×900·모바일 390×844에서 각각 실행하는 총 22개입니다.
+
+- 랜딩 표시·시작하기 이동·직접 `/explore`·404와 홈 복귀
+- SDK 키 누락 안내·세 메뉴·패널 닫기·Escape와 포커스·모바일 지역 필터
+- 구·동 선택·지역별 갱신·세 지표와 세부 탭·탭 변경 시 중복 통계 요청 방지
+- 개별 매출 오류와 재시도·자료 없음·지역 API 오류와 재시도
+- 후보지 빈 상태·합성 세 곳 복원·삭제·500m/1km·세 곳 초과 저장 데이터 거부
+- 큰 수·소수 후행 0·미승인 증감 숫자와 점수 API/점수 표시 차단·가로 넘침·예상하지 않은 콘솔/네트워크 오류
+
+각 테스트는 새 context·저장 상태에서 시작합니다. 접근성 역할·이름과 조건 대기를 사용하고 자동 재시도는 0, `forbidOnly`는 활성화했습니다. Playwright 실패와 별도로 JUnit 보고서 누락·실행 0건·오류·건너뜀도 Job을 실패시킵니다. 실패 시 `playwright-report/`와 `test-results/`의 HTML·trace·스크린샷·JUnit을 [공식 upload-artifact Action](https://github.com/actions/upload-artifact/releases/tag/v7.0.2)으로 7일 보존합니다. 설치나 서버 시작 전에 실패하면 브라우저 trace가 생성되지 않을 수 있으며 해당 Step 로그로 원인을 확인합니다.
+
+**미검증 범위:** 실제 Kakao SDK 지도·검색·마커·클러스터·지도 클릭/검색을 통한 후보지 신규 등록·네 번째 신규 등록 차단은 키 없이 성공한 것으로 처리하지 않습니다. 후보지 최대 3곳 테스트는 저장 데이터의 복원 제한입니다. 전체 회귀와 신규 E2E Job의 실제 성공·실패·증거 업로드는 Push 후 Actions에서 별도로 확인해야 합니다. CI 성공도 CD·공식 원천 승인·창업 점수 공개 승인을 의미하지 않습니다.
 
 ## 배포 검토 항목
 

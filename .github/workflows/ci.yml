@@ -51,6 +51,60 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  frontend-e2e:
+    name: Frontend E2E
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Set npm version
+        run: |
+          npm install --global npm@11.19.1
+          node --version
+          npm --version
+          test "$(node -p 'process.versions.node.split(".")[0]')" = 24
+          test "$(npm --version)" = 11.19.1
+      - run: npm ci
+      - run: npm run e2e:check
+      # Chromium와 OS 의존성 설치는 GitHub-hosted Runner에서만 수행한다.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Require executed E2E tests without skips
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          report = Path('test-results/e2e.xml')
+          if not report.is_file():
+              raise SystemExit('E2E test report is missing.')
+          root = ET.parse(report).getroot()
+          totals = {key: int(root.attrib[key]) for key in ('tests', 'failures', 'errors', 'skipped')}
+          print('E2E test results:', totals)
+          if totals['tests'] == 0 or any(totals[key] for key in ('failures', 'errors', 'skipped')):
+              raise SystemExit('E2E tests must execute without failures, errors, or skips.')
+          PY
+      - name: Preserve failed browser evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: frontend-e2e-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+          if-no-files-found: warn
+
   backend:
     name: Backend
     runs-on: ubuntu-24.04

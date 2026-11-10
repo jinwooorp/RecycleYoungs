@@ -8,7 +8,7 @@ import prettier from 'eslint-config-prettier';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
 export default defineConfig([
-  globalIgnores(['dist', 'coverage']),
+  globalIgnores(['dist', 'coverage', 'playwright-report', 'test-results']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [js.configs.recommended, tseslint.configs.recommended],
@@ -36,7 +36,7 @@ export default defineConfig([
     },
   },
   {
-    files: ['*.{js,ts}'],
+    files: ['*.{js,ts}', 'e2e/**/*.ts'],
     languageOptions: { globals: globals.node },
   },
   prettier,

@@ -724,6 +724,10 @@
   .explore-app .explore-panel-shell {
     margin-top: calc(var(--explore-top) + 4rem);
   }
+  /* SDK 오류 안내가 두 줄로 표시돼도 패널 제목·닫기 버튼을 덮지 않게 합니다. */
+  .explore-app:has(.explore-search-error) .explore-panel-shell {
+    margin-top: calc(var(--explore-top) + 12rem);
+  }
   .explore-app .explore-panel {
     max-height: none;
     border-radius: 0;
