@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
-import { parseDistrictFootTrafficArguments } from '../../index.js';
+import { parseDistrictFootTrafficArguments } from '../../cli/arguments.js';
 
 const header = 'STDR_YYQU_CD,SIGNGU_CD,TOT_FLPOP_CO,ML_FLPOP_CO,FML_FLPOP_CO';
 const syntheticCsv = [

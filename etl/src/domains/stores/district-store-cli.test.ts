@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
-import { parseDistrictStoreArguments } from '../../index.js';
+import { parseDistrictStoreArguments } from '../../cli/arguments.js';
 
 // 실제 CLI를 실행하되 원본 파일은 메모리로 공급하고 DB 풀·네트워크 생성을 즉시 실패시킨다.
 const header =
