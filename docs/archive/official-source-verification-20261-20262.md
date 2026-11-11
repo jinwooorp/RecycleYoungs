@@ -2,7 +2,7 @@
 
 **확인일: 2026-11-05 KST. 공식 출력과 로컬 원본의 연결은 확인했지만, 두 분기의 산정·공간 기준은 아직 승인할 수 없습니다.** `NOT_APPROVED`, `sourceTrust=NOT_ESTABLISHED`, `R03_COMPLETE=false`와 Frontend의 세 지표 `unverified`를 유지합니다.
 
-이 표는 [전분기 초기 검증](quarter-comparison-verification.md)의 DB·API 관찰과 [2026-11-03 공식 조사](score-20262-publication-readiness.md#2-검토-범위와-공식-근거별-확인-결과)에서 부족했던 **실제 파일 대응과 변경 공지의 적용 범위**를 보완합니다. 과거 테스트·R03 실행을 재수행한 것으로 기록하지 않습니다. 이메일은 발송하지 않았습니다.
+이 표는 [전분기 초기 검증](quarter-comparison-verification.md)의 DB·API 관찰과 [2026-11-03 공식 조사](../score.md#공식-원천-조사와-남은-비교-조건)에서 부족했던 **실제 파일 대응과 변경 공지의 적용 범위**를 보완합니다. 과거 테스트·R03 실행을 재수행한 것으로 기록하지 않습니다. 이메일은 발송하지 않았습니다.
 
 ## 1. 공식 데이터셋과 이번 조회 판본
 
@@ -47,9 +47,9 @@
 | 행정동 경계 ZIP   |  1,676,539 | `969f7033bd3609a5fd586790f5b2cfedc638d7647ef45c78f9c75e1dabf79f68`                         |
 | 자치구 경계 ZIP   |    488,551 | `abd34d82897f0c2191fe4095df55a4aacfe8fce815fa4dacf730cc34c6dd962c` (이번 공식 응답만 식별) |
 
-**문서 정정:** 행정동 경계 배치의 `source_checksum=07c8d3b3e3de3e3c7ab10cd703d826c465e95084031b8813d261346fcb462f47`은 ZIP 전체 SHA-256이 아닙니다. [기존 경계 파서](../etl/src/domains/boundaries/boundary-source.ts)의 `parseBoundaryFiles()`는 `shp`, `dbf`, `prj`, `cpg` 각각의 `확장자:바이트길이:`와 내용 바이트를 순서대로 해시합니다. `shx`·ZIP 포장·파일명은 이 체크섬에 포함하지 않습니다. `readBoundarySource()`로 실제 로컬 ZIP을 다시 읽어 425개 경계와 이 체크섬의 DB 일치를 확인했습니다. ZIP 해시와 값이 다른 것은 손상의 증거가 아닙니다. 과거 기록의 체크섬 값은 유지하고 ZIP 해시라는 해석을 정정합니다.
+**문서 정정:** 행정동 경계 배치의 `source_checksum=07c8d3b3e3de3e3c7ab10cd703d826c465e95084031b8813d261346fcb462f47`은 ZIP 전체 SHA-256이 아닙니다. [기존 경계 파서](../../etl/src/domains/boundaries/boundary-source.ts)의 `parseBoundaryFiles()`는 `shp`, `dbf`, `prj`, `cpg` 각각의 `확장자:바이트길이:`와 내용 바이트를 순서대로 해시합니다. `shx`·ZIP 포장·파일명은 이 체크섬에 포함하지 않습니다. `readBoundarySource()`로 실제 로컬 ZIP을 다시 읽어 425개 경계와 이 체크섬의 DB 일치를 확인했습니다. ZIP 해시와 값이 다른 것은 손상의 증거가 아닙니다. 과거 기록의 체크섬 값은 유지하고 ZIP 해시라는 해석을 정정합니다.
 
-현재 DB의 자치구 도형은 [기존 경계 ETL](../etl/src/domains/boundaries/boundaries.ts)이 행정동 도형을 같은 구별로 결합한 결과입니다. 별도 OA-22161 ZIP을 직접 적재한 것으로 표현하지 않습니다. 이는 **자치구 통계**를 행정동 합계로 대체하는 것과도 다릅니다. 두 공식 경계 파일 간 도형 동등성이나 각 분기의 통계 배분 기준은 이번에 검증하지 않았습니다.
+현재 DB의 자치구 도형은 [기존 경계 ETL](../../etl/src/domains/boundaries/boundaries.ts)이 행정동 도형을 같은 구별로 결합한 결과입니다. 별도 OA-22161 ZIP을 직접 적재한 것으로 표현하지 않습니다. 이는 **자치구 통계**를 행정동 합계로 대체하는 것과도 다릅니다. 두 공식 경계 파일 간 도형 동등성이나 각 분기의 통계 배분 기준은 이번에 검증하지 않았습니다.
 
 ## 2. 새 공식 근거와 적용 범위
 

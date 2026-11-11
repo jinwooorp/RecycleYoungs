@@ -10,14 +10,14 @@
 - 문서는 역할에 맞게 관리한다.
   - [README.md](README.md): 프로젝트 소개·핵심 기능·개발 현황·빠른 시작
   - [docs/service-spec.md](docs/service-spec.md): 상세 요구사항과 서비스 이용 정책
-  - [docs/data-design.md](docs/data-design.md): DB·API·데이터 계약
-  - [docs/district-statistics-policy.md](docs/district-statistics-policy.md): 공식 자치구 원천 우선 원칙, 지표별 집계 제한과 검증 근거
-  - [docs/score-design.md](docs/score-design.md): 점수 목적·A~E 모델·정책 후보·주요 실험 결과 요약
-  - [docs/score-v1-contract.md](docs/score-v1-contract.md): 계산·조회·REST API 계약, 스냅샷·재현 규칙과 검증 도구 사용법
-  - [docs/score-20262-publication-readiness.md](docs/score-20262-publication-readiness.md): 원천 판본·승인 책임·manifest·Trust Record·철회·제공기관 문의
+  - [docs/data-design.md](docs/data-design.md): DB·API·데이터 계약과 공식 자치구 원천·지표별 집계 정책
+  - [docs/score.md](docs/score.md): 점수 설계·계산·REST 계약, 스냅샷·재현 도구, 원천 신뢰·공개 승인·철회
   - `docs/archive/score-*.md` 3개: 과거 실험·실제 입력 보존·원천 조사 기록. 서로 다른 실행 시점과 현재 구현 상태를 구분해 보존
-  - [docs/etl-guide.md](docs/etl-guide.md): ETL 출처·검증 기록·수집·적재·재실행
+  - [docs/etl-guide.md](docs/etl-guide.md): ETL 출처·수집·검증·적재·재실행 절차
+  - [docs/archive/etl-validation-history.md](docs/archive/etl-validation-history.md): 날짜별 probe·격리 시험·실제 적재 및 게시 이력
   - [docs/development.md](docs/development.md): 개발 환경·실행·테스트
+  - [전분기 비교 검증](docs/archive/quarter-comparison-verification.md): 당시 통계·API 대조와 증감 공개 판단의 근거
+  - [공식 원천 후속 검증](docs/archive/official-source-verification-20261-20262.md): 공식 출력·로컬 원본·DB 대조와 판본 비교의 미확인 사항
 - 코드·API·데이터 계약 변경 시 관련 문서의 정합성도 확인한다.
 - 문서 정리 과정에서 기존 검증 결과와 중요한 설계 결정을 누락하지 않는다.
 - 문서 작성·정리 시 가독성과 정확성을 함께 확인한다.

@@ -1,25 +1,15 @@
 # 개발 가이드
 
-- [README의 상세 기술 문서 안내](../README.md#상세-기술-문서)
-
-이 문서는 로컬 개발 환경의 준비·실행·테스트 순서를 안내합니다. DB 없이 기본 탐색 화면과 웹 서버를 확인할 수 있으며, 지도에는 Kakao JavaScript 키가 필요합니다. 행정구역 API·ETL을 사용하려면 DB 연결을 준비해야 합니다. 명령은 안내한 디렉터리에서 실행합니다.
-
-1. [개발 도구](#1-개발-도구)를 준비합니다.
-2. DB가 필요하면 [환경변수 설정과 로컬 DB 준비](#로컬-db-준비)를 완료합니다.
-3. 별도 터미널에서 [Frontend](#2-frontend)와 [Backend](#3-backend)를 실행합니다. Backend는 DB 사용 여부에 맞는 실행 방법을 선택합니다.
-4. 각 프로젝트 디렉터리에서 [빌드·테스트·품질 검사](#빌드테스트품질-검사)를 실행합니다.
-
-로컬 개발 환경과 [GitHub Actions CI](#github-actions-ci)를 구성했습니다. GitHub-hosted Runner의 최초 검증은 Push 이후 확인해야 합니다. [배포 검토 항목](#배포-검토-항목)에서 개발 환경과 분리된 Compose 구성, DB를 시작하지 않는 검증 방법, 실제 배포 전 남은 작업을 확인할 수 있습니다.
+로컬에서 지도와 웹 서버를 확인하려면 개발 도구를 준비한 뒤 Frontend와 기본 Backend를 실행합니다. 행정구역·상권 API나 ETL이 필요하면 로컬 DB와 게시 데이터를 준비합니다. 사용자에게 보이는 화면 동작은 [서비스 명세](service-spec.md), API 계약은 [데이터 설계](data-design.md)에 있습니다. [README의 상세 기술 문서](../README.md#상세-기술-문서)
 
 ## 목차
 
 - [1. 개발 도구](#1-개발-도구)
   - [로컬 DB 준비](#로컬-db-준비)
+  - [서울시 Open API 인증키](#서울시-open-api-인증키)
 - [2. Frontend](#2-frontend)
 - [3. Backend](#3-backend)
-  - [DB 없는 기본 실행](#db-없는-기본-실행)
-  - [DB를 사용하는 `db` 프로필 실행](#db를-사용하는-db-프로필-실행)
-  - [마이그레이션 적용 상태와 V5~V7 검증 기록](#마이그레이션-적용-상태-확인)
+  - [마이그레이션 적용 상태 확인](#마이그레이션-적용-상태-확인)
 - [빌드·테스트·품질 검사](#빌드테스트품질-검사)
 - [GitHub Actions CI](#github-actions-ci)
 - [브라우저 E2E 검증](#브라우저-e2e-검증)
@@ -27,55 +17,36 @@
 
 ## 1. 개발 도구
 
-현재 개발·검증 환경은 **macOS 및 Linux(Windows의 WSL 포함)**입니다. 아래 명령은 해당 환경의 셸을 기준으로 합니다.
+명령은 macOS 또는 Linux 셸(Windows의 WSL 포함)을 기준으로 합니다. 네이티브 Windows는 현재 지원 범위 밖입니다.
 
-네이티브 Windows(PowerShell·CMD)는 현재 지원하지 않습니다. **프로젝트의 전체 기능 구현이 완료된 이후 지원할 예정**이며, 구체적인 지원 시점은 확정하지 않았습니다.
-
-- Node.js **24 LTS**, npm **11**: `frontend/`, `etl/`에서 각각 `nvm use`와 `npm ci`를 실행합니다. 두 프로젝트는 독립적인 잠금 파일을 사용합니다.
-- Java **21**: 백엔드는 포함된 Gradle Wrapper(`./gradlew`)를 사용합니다.
-- Docker와 Docker Compose: 로컬 PostgreSQL/PostGIS DB 및 백엔드 DB 통합 테스트에 사용합니다. Backend·ETL은 호스트에서 실행합니다.
-
-| 확인할 대상               | 필요한 준비                                        | 다음 단계                               |
-| ------------------------- | -------------------------------------------------- | --------------------------------------- |
-| 기본 탐색·DB 없는 웹 서버 | Node.js·npm, Java                                  | Frontend와 Backend 기본 실행            |
-| 행정구역 API·ETL          | 위 도구와 로컬 DB·환경변수, 해당 ETL의 기준 데이터 | DB 준비 후 Backend `db` 프로필·ETL 실행 |
-| DB 통합 테스트            | 해당 프로젝트의 도구·의존성과 실행 중인 Docker     | 개발 DB와 분리된 일회용 DB에서 테스트   |
+| 대상                     | 필요한 도구                                                                                                      |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| Frontend·ETL             | Node.js 24 LTS·npm 11. 각 디렉터리의 `.nvmrc`와 잠금 파일을 사용합니다. CI와 맞출 때는 npm 11.19.1을 사용합니다. |
+| Backend                  | Java 21과 저장소의 Gradle Wrapper(`./gradlew`)                                                                   |
+| DB·통합 테스트·배포 검증 | Docker와 Docker Compose. 로컬 개발에서는 Backend와 ETL을 호스트에서 실행합니다.                                  |
 
 ### 로컬 DB 준비
 
-#### 환경변수 파일 준비
+루트 [환경변수 예시](../.env.example)를 `.env`로 복사하고 DB 이름·사용자·비밀번호·포트를 확인합니다. `cp -n`은 기존 파일을 유지합니다.
 
-기본 로컬 개발 환경에서는 저장소 루트의 `.env.example`로 `.env`를 준비합니다. 루트 `.env`는 Docker Compose·Backend·ETL의 공통 DB 설정이며, 아래 DB 시작 절차의 `cp -n`은 기존 파일을 덮어쓰지 않습니다.
+| 설정                                                      | 읽는 위치와 용도                                                                                                                                                                |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 루트 `.env`                                               | 개발 Compose가 자동으로 읽습니다. `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`로 로컬 DB를 준비합니다.                                                                        |
+| `DB_JDBC_URL`, `DB_USER`, `DB_PASSWORD`                   | Backend의 `db` 프로필이 실행 셸에서 읽습니다. 별도 환경은 [Backend 예시](../backend/.env.example)를 참고합니다.                                                                 |
+| `DATABASE_URL`, `DB_POOL_MAX`, `DB_CONNECTION_TIMEOUT_MS` | ETL 연결 설정입니다. ETL 실행 위치의 `.env`도 읽으며 셸에서 내보낸 값이 우선합니다. 비밀번호의 URL 예약 문자는 `DATABASE_URL`에서 인코딩합니다. [ETL 예시](../etl/.env.example) |
+| `SEMAS_API_KEY`, `SEOUL_OPEN_API_KEY`                     | 각 공공데이터 ETL의 서버 측 인증키입니다. 실제 키·비밀번호·접속 URL은 Git이나 로그에 남기지 않습니다. [ETL 환경변수와 실행](etl-guide.md#설치-및-공통-실행)                     |
 
-| 예시 파일               | 사용할 때                                                                                                                            |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `backend/.env.example`  | Backend를 독립적인 DB 환경에서 실행할 때 참고합니다. 기본 환경에서는 복사할 필요가 없습니다.                                         |
-| `etl/.env.example`      | ETL을 별도로 설정할 때만 사용합니다. `etl/.env`가 있으면 Node.js가 해당 파일도 읽으므로 공통 DB 설정과 불필요하게 중복하지 않습니다. |
-| `frontend/.env.example` | Vite의 API 프록시 주소를 기본값인 `http://localhost:8080`과 다르게 설정할 때만 `frontend/.env`로 복사합니다.                         |
-
-#### DB 시작
-
-다음 블록은 **저장소 루트**에서 실행합니다. 기존 `.env`가 있으면 필요한 설정만 확인합니다.
+루트에서 `.env`를 준비한 뒤 개발 DB를 시작합니다. DB는 `127.0.0.1`의 `DB_PORT`(기본 5432)에 게시됩니다. 포트가 이미 사용 중이면 로컬 설정을 바꿉니다.
 
 ```bash
 cp -n .env.example .env
-# .env의 로컬 DB 이름·사용자·비밀번호·포트를 설정합니다.
+# .env의 로컬 DB 설정을 확인합니다.
 docker compose config --quiet
 docker compose up -d --wait db
 docker compose ps db
 ```
 
-DB 이미지는 Testcontainers와 동일한 `postgis/postgis:17-3.5`입니다. `DB_PORT`의 기본값은 `5432`이며 `127.0.0.1`에만 공개합니다. 이미 사용 중인 포트이면 `.env`의 `DB_PORT`를 변경합니다.
-
-실제 `.env`는 Git에서 제외되며, 예시 비밀번호는 로컬 개발용입니다.
-
-#### 실행 터미널에 환경변수 적용
-
-Docker Compose는 루트 `.env`를 자동으로 읽습니다. Spring Boot는 읽지 않고, ETL은 npm 실행 시 `etl/.env`만 읽습니다. 공통 루트 설정은 **Backend·ETL을 실행할 각 터미널에서**, 앱 디렉터리로 이동하기 전에 내보냅니다.
-
-- 아래 명령은 저장소 루트에서 실행합니다. 이미 `backend/`나 `etl/`에 있다면 해당 디렉터리 기준으로 `source ../.env`를 사용합니다.
-- 내보낸 값은 현재 셸과 그 셸에서 실행한 자식 프로세스에만 적용됩니다. 새 터미널에는 자동으로 전달되지 않습니다.
-- 두 연결 URL은 같은 `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_PORT`에서 구성됩니다. 비밀번호에 URL 예약 문자가 있으면 `DATABASE_URL`의 비밀번호 부분을 URL 인코딩합니다.
+공통 설정은 **Backend 또는 ETL을 실행할 각 셸**에서 다음과 같이 내보냅니다. 이미 `backend/`나 `etl/`이면 `source ../.env`를 사용합니다. 두 앱의 연결 URL은 같은 로컬 DB를 가리켜야 합니다.
 
 ```bash
 set -a
@@ -83,50 +54,21 @@ source .env
 set +a
 ```
 
-#### 접속·공간 확장 확인
-
-DB에 접속하거나 PostgreSQL·PostGIS 동작을 확인하려면 다음 명령을 사용합니다. `psql`은 컨테이너에 포함되어 있습니다. 호스트 DB 도구에서는 `127.0.0.1`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`를 사용합니다.
-
-다음 셸 명령은 **저장소 루트**, 이어지는 SQL은 접속한 **`psql` 안**에서 실행합니다.
+루트에서 다음 명령으로 접속한 뒤 `psql`에서 `SELECT version(), PostGIS_Version();`을 실행하고 `\q`로 종료합니다. 호스트 DB 도구도 동일한 루프백 주소와 `.env`의 DB 정보를 사용합니다.
 
 ```bash
 docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 ```
 
-```sql
-SELECT version(), PostGIS_Version();
-SELECT ST_SRID(ST_SetSRID(ST_MakePoint(127, 37), 4326));
-```
-
-`\q`로 접속을 종료합니다.
-
-DB 데이터는 named volume `recycleyoungs_postgres_data`에 유지됩니다. **초기화된 볼륨에서는 `.env`의 DB 이름·사용자·비밀번호를 바꿔도 기존 DB 계정과 데이터가 자동 변경되지 않습니다.**
-
-#### 종료·재시작과 데이터 보존
-
-다음 명령은 **저장소 루트**에서 실행합니다.
-
-```bash
-docker compose stop db        # 종료, 컨테이너·볼륨 유지
-docker compose up -d --wait db # 다시 실행
-docker compose restart db     # 재시작, 데이터 유지
-```
-
-**일반적인 종료·재시작에는 볼륨을 삭제하는 옵션을 사용하지 않습니다.** 아래 Backend의 `db` 프로필은 미적용 Flyway 마이그레이션만 적용합니다. 2026-11-01 기준 V1~V7의 개발 DB 적용을 완료했으며, 재시작 전후 `flyway_schema_history`를 조회해 이력 유지를 확인할 수 있습니다.
-
-기존 Testcontainers 통합 테스트는 Compose와 독립된 일회용 DB를 계속 사용합니다.
+개발 데이터는 `recycleyoungs_postgres_data`에 남습니다. `docker compose stop db`로 중지하고 `docker compose up -d --wait db`로 다시 시작합니다. 일반 종료·재시작 시 볼륨을 삭제하지 않습니다. 초기화된 볼륨의 DB·계정·비밀번호는 `.env` 값만 바꿔도 자동으로 갱신되지 않습니다.
 
 ### 서울시 Open API 인증키
 
-서울 열린데이터광장에서 일반 인증키를 발급받아 저장소 루트의 로컬 `.env`에 `SEOUL_OPEN_API_KEY`를 설정합니다. 새 환경에서는 루트 `.env.example`을 참고합니다. 이 값은 ETL의 서버 측 요청에 사용하므로 커밋이나 브라우저 환경변수에 포함하지 않습니다. 공식 주소는 HTTP이며 요청 경로에 키가 들어갑니다. [서울시 Open API 이용안내](https://data.seoul.go.kr/together/guide/useGuide.do)
-
-인증 전체 probe에는 검증된 HTTPS 주소가 필요합니다. 현재 공식 HTTP 주소에서는 키가 설정되어 있어도 네트워크 요청 전에 `BLOCKED`로 종료합니다. 실행 조건과 로컬 CSV 대조 옵션은 [ETL 가이드](etl-guide.md#서울시-open-api-전체-수집-probe)를 참고합니다.
+발급받은 `SEOUL_OPEN_API_KEY`는 루트의 로컬 `.env`에 설정합니다. 인증 전체 probe에는 검증된 HTTPS 주소가 필요합니다. 현재 공식 HTTP 주소에서는 키가 있어도 인증 요청 전 `BLOCKED`로 종료합니다. [서울시 Open API 이용안내](https://data.seoul.go.kr/together/guide/useGuide.do) · [ETL probe 실행](etl-guide.md#서울시-open-api-전체-수집-probe) · [HTTPS 확인 기록](archive/etl-validation-history.md#oa-22179-공개-표본과-https-확인-2026-11-10)
 
 ## 2. Frontend
 
-### 실행 절차
-
-**새 터미널의 저장소 루트**에서 실행합니다. 이미 `frontend/`라면 `cd frontend`를 반복하지 않습니다.
+저장소 루트에서 실행합니다. Vite는 기본 포트 5173을 사용하며 사용 중이면 기동 오류가 납니다.
 
 ```bash
 cd frontend
@@ -135,130 +77,46 @@ npm ci
 npm run dev
 ```
 
-[메인 랜딩](http://localhost:5173/)에서 서비스 소개를, [상권 탐색](http://localhost:5173/explore)에서 지도를 확인합니다. `npm run build`는 타입 검사 후 정적 파일을 `dist/`에 생성하고, `npm run preview`로 빌드 결과를 확인할 수 있습니다.
-
-### 프론트엔드 경로
-
-React Router의 [Declarative Mode](https://reactrouter.com/start/declarative/routing)로 `/`(랜딩), `/explore`(탐색), `*`(404 화면)를 구성합니다. 탐색 컴포넌트는 `React.lazy`로 분리해 해당 경로에서만 지도 SDK와 API를 사용합니다. Vite 개발 서버는 탐색 주소의 직접 접속과 새로고침을 지원합니다.
+랜딩은 `/`, 탐색은 `/explore`이며 알 수 없는 경로는 React Router의 404 화면으로 연결됩니다. 탐색 경로에서 지도와 탐색 코드를 불러옵니다. `npm run build`는 타입 검사 후 `dist/`를 생성하고 `npm run preview`는 결과를 확인하는 명령입니다. [로컬 랜딩](http://localhost:5173/) · [탐색 화면](http://localhost:5173/explore)
 
 ### Kakao Maps 설정
 
-1. `frontend/.env.example`을 참고해 `frontend/.env.local`에 `VITE_KAKAO_MAP_APP_KEY`를 설정합니다. 키가 없으면 지도 설정 안내를 표시하고 SDK를 요청하지 않습니다.
-2. [Kakao 지도 공식 가이드](https://apis.map.kakao.com/web/guide/)에 따라 Kakao Developers에서 앱을 생성하고 카카오맵 사용 설정을 활성화합니다. [앱 설정] → [앱] → [플랫폼 키]에서 **JavaScript 키**를 확인합니다.
-3. 해당 키의 JavaScript SDK 도메인에 `http://localhost:5173`을 등록합니다. `http://127.0.0.1:5173`, preview 주소(기본 `http://localhost:4173`), 배포 주소를 사용하면 각각의 origin도 등록합니다.
-4. 환경변수 변경 후 개발 서버를 재시작합니다. 배포 빌드에는 빌드 시점의 값이 포함되므로 변경 후 다시 빌드합니다.
+1. Kakao Developers에서 앱의 카카오맵 사용을 활성화하고 **JavaScript 키**를 확인합니다. [Kakao 지도 공식 가이드](https://apis.map.kakao.com/web/guide/)
+2. [Frontend 환경변수 예시](../frontend/.env.example)를 참고해 `frontend/.env.local`에 `VITE_KAKAO_MAP_APP_KEY`를 지정합니다. JavaScript SDK 도메인에 실제 접속 origin을 등록합니다. 개발 기본값은 `http://localhost:5173`이며 `127.0.0.1`이나 preview(기본 4173)를 사용하면 해당 origin도 등록합니다.
+3. 키 변경 후 Vite를 재시작합니다. `VITE_*` 값은 브라우저에 노출되고 제품 빌드에 포함됩니다. REST API 키·Admin 키·DB 비밀번호는 사용하지 않습니다.
 
-JavaScript 키는 브라우저 공개용이며 **REST API 키나 Admin 키를 사용하지 않습니다.** 실제 키와 환경변수 파일은 커밋하지 않습니다.
-
-지도는 위치 조회 중 서울시청(위도 `37.5665`, 경도 `126.978`), 레벨 `5`를 먼저 표시합니다. `/explore` 첫 진입에서 Geolocation 권한을 요청하며, Kakao `Geocoder.coord2RegionCode(경도, 위도)`의 법정동·행정동 시·도 결과가 서울특별시로 일치한 경우 현재 위치로 레벨 `3` 이동하고 별도 파란 원 표식을 표시합니다.
-
-브라우저 위치 조회는 `timeout=8000`, `maximumAge=60000`, `enableHighAccuracy=false`이며 행정구역 확인도 8초로 제한합니다. 거부·시간 초과·미지원·잘못된 좌표·서울 외부·지역 확인 실패는 짧게 안내하고 현재 지도 중심과 확대 수준을 유지합니다. 최초 자동 조회 실패 시에는 서울시청 기본 지도를 유지하며, 수동 재조회 실패 시에는 선택 지역 경계·검색 장소·카페 마커·후보지 선택도 유지합니다.
-
-SDK를 비동기 로딩하고 15초 안에 준비되지 않으면 오류와 재시도 버튼을 제공합니다. 연결·키·등록 도메인·카카오맵 사용 설정을 확인한 뒤 재시도합니다. 확대·축소 버튼은 SDK 준비 후 활성화됩니다.
-
-지도 컨트롤의 `내 위치로 이동`으로 재조회할 수 있고 조회 중 중복 실행은 차단합니다. 지역·검색·후보지 선택과 직접 지도 조작은 진행 중인 위치 이동보다 우선합니다. 명시적 내 위치 이동은 자동 시작보다 우선하지만, 요청 후 새로 수행한 사용자 선택을 덮어쓰지 않습니다. 초기 위치 요청은 StrictMode에서 공유하고 패널 전환으로 반복하지 않습니다. 취소할 수 없는 브라우저·SDK 콜백은 수명·요청 식별자로 차단하며 SDK 재초기화 시 검증된 위치·표식을 정리·복원합니다. 지역 필터와 반경 중심점은 자동 변경하지 않습니다.
-
-위치 좌표는 메모리에서만 사용하고 localStorage·sessionStorage·쿠키·로그에 저장하지 않습니다. 별도 Backend 위치 수집 API는 호출하지 않으며 서울 확인에 필요한 Kakao SDK 요청만 사용합니다. 기존 지도 영역 카페 조회의 사각 영역 전달 계약은 유지합니다. Geolocation은 HTTPS 또는 localhost 같은 보안 컨텍스트와 브라우저 권한이 필요합니다.
-
-초기 진입 시 상세 패널을 닫고 지도를 넓게 표시합니다. 데스크톱은 72px 아이콘 사이드바, 모바일은 하단 내비게이션을 제공합니다. 브랜드 아이콘은 두 화면 모두 홈(`/`)으로 연결하며 후보지의 탭 저장 목록은 유지합니다. 주변 카페·상권 분석·후보지 분석 3개 메뉴를 선택하면 패널이 열리고, 같은 메뉴·닫기 버튼·Escape로 접습니다. 다른 메뉴를 누르면 내용을 전환하며 닫기 버튼과 Escape는 선택 메뉴로 포커스를 돌립니다. 패널 크기가 바뀌면 기존 ResizeObserver로 지도를 재배치하고 중심을 유지합니다.
-
-장소 검색은 지도·상세 패널 밖의 고정 레이어에 배치합니다. 검색창은 데스크톱 사이드바 바로 오른쪽 상단에 고정되고 상세 패널은 검색창 아래에서 열립니다. 모바일은 상단 홈 링크·검색창과 하단 확장형 패널을 유지합니다. 검색 결과는 검색창과 왼쪽 정렬을 맞춰 아래에 유지하며, 데스크톱에서는 열린 상세 패널 위에 표시합니다. 패널 개폐로 결과를 옆으로 이동시키지 않습니다. 모바일은 지역 필터 버튼 아래·지도 컨트롤 왼쪽에서 높이를 제한하고 닫기 버튼과 내부 스크롤을 분리합니다. 검색 마커가 결과에 가려지면 화면 크기가 안정된 뒤 여유 공간으로 보정하며, 직접 이동한 지도는 되돌리지 않습니다. 모션 감소에서는 이 보정을 즉시 적용합니다. 패널은 크기·투명도·위치를 부드럽게 전환하고, 모션 감소 설정에서는 전환을 생략합니다. 닫는 동안에도 마지막 내용을 유지하되 키보드·스크린리더 접근은 즉시 차단합니다.
-
-자치구·행정동은 지역 탐색 패널 대신 지도 오른쪽 상단의 단일 공통 필터에서 선택합니다. 1024px 미만에서는 `지역 필터` 버튼으로 펼치며, 모바일은 검색창 아래에 배치합니다. 필터를 펼치면 검색 팝오버를 닫고, 외부 입력·Escape·닫기 버튼으로 필터만 접습니다. Escape·닫기는 필터 버튼으로 포커스를 돌리고 패널 선택은 유지합니다. 지역 필터는 업종 코드에 의존하지 않습니다. 선택은 기존 `/api` 프록시로 목록·경계 API를 조회합니다. Backend의 `db` 프로필과 정상 게시 경계 데이터가 필요합니다. 구 변경 시 동을 초기화하고, 동 `전체`는 선택 구 경계로, 구 `전체`는 서울시청 중심·레벨 5로 돌아갑니다. 코드는 문자열로 유지하며, Polygon·MultiPolygon의 경도·위도 범위로 지도 위치를 조정합니다. 선택 경계는 브랜드 녹색 선과 낮은 불투명도 채움으로 강조합니다. MultiPolygon은 영역별 Polygon으로 표시하고 내부 링은 구멍으로 보존합니다.
-
-SDK는 기존 JavaScript 키로 `autoload=false&libraries=services,clusterer`를 로드합니다. `Places.keywordSearch()`와 `Geocoder.addressSearch()`를 Enter·검색 버튼 제출 시 각각 첫 페이지 15건으로 호출하며 직접 REST 요청이나 추가 비밀 키를 사용하지 않습니다. 두 결과를 정규화·중복 제거하고 서울 소재를 우선해 합계 최대 15개만 표시합니다. 일부 페이지·부분 실패·빈 결과·오류·재시도를 구분하며 서울 밖 결과는 원래 좌표와 서비스 범위 안내를 유지합니다. 콜백은 AbortController로 취소한다고 가정하지 않고 검색 세대·지도 세대로 오래된 응답을 차단합니다.
-
-키워드 검색은 고정 좌표·반경·지도 영역 없이 정확도순으로 요청합니다. 서울 우선 정렬 안에서 도로명·지번과 번지까지 일치하는 주소 결과를 먼저 표시합니다. Kakao 응답의 대표·도로명·지번 주소를 대조하며 공백·서울특별시/서울 표기 차이와 생략된 상위 행정구역은 허용합니다. 장소명 검색이나 다른 번지·도로의 유사 주소는 승격하지 않습니다. 정확한 주소가 기존 장소와 중복이면 주소를 대표 결과로 보존합니다. 중복 제거 후 15개를 넘거나 SDK의 다음 페이지가 있으면 일부 표시 상태를 유지합니다.
-
-검색 결과 선택은 검색 마커와 지도 이동만 적용합니다. 구·동 필터를 자동 변경하지 않고 기존 필터 유지 안내를 표시합니다. 지역을 새로 선택하면 선택 버전이 바뀌어 이전 검색 마커를 제거하고 지역 이동을 우선합니다. 검색 마커 클릭은 선택 위치 안내를 다시 열며 지도 중심점 지정으로 전파하지 않습니다. `이 위치 주변 카페 보기`를 누를 때만 기존 주변 카페 패널·반경 방식·중심점을 연결하고 500m/1km 선택을 유지합니다. 같은 지점이 반경 중심점이 되면 검색 핀 대신 기존 중심점 마커를 사용해 중복을 피합니다. 검색 결과의 외부 문자열은 React 텍스트로 표시하며 Escape는 검색 목록을 먼저 닫고 입력창으로 포커스를 돌립니다.
-
-목록·경계의 로딩·빈 목록·오류·재시도를 구분합니다. 400·404·503과 네트워크 오류를 안내하며 이전 선택의 요청은 취소하고 늦은 응답도 무시합니다. 패널을 닫거나 다른 메뉴로 전환해도 선택은 유지됩니다. 지도 이동은 화면 크기가 안정된 뒤 적용하고, 지도 조작만으로 필터가 변경되지는 않습니다. 경계 조회 중·실패·전체 선택 시 이전 오버레이를 제거하며, 지도 재초기화·SDK 재시도·언마운트에서도 정리합니다.
-
-현재 지도 영역 카페는 `getBounds()`의 서·남·동·북 좌표로 `/api/v1/cafes/viewport?limit=200&offset=0`을 조회합니다. 선택 구·동은 `districtCodes`·`dongCodes`로 전달하며 `전체`인 코드는 생략합니다. 서버가 최신 정상 구·동 경계의 `ST_Covers`로 판정한 결과를 사용하며 반경 조회는 적용하지 않습니다. 구 미선택 시 지도 레벨 4 이하에서만 조회하고, 초기 레벨 5나 축소 상태는 조회 전 안내와 함께 마커를 비웁니다. `idle`·크기 변경·지역 이동 완료 알림을 200ms로 묶고 동일 영역의 중복 조회를 막습니다. 이전 요청은 취소하며 늦은 응답은 무시합니다.
-
-주변 카페 패널은 전체 건수·표시 건수·추가 결과 여부와 게시 시점을 안내합니다. 업소번호 `bizesId`로 마커를 관리하며, 이름 선택·마커 클릭 시 DOM 텍스트로 만든 정보창 하나를 표시합니다. 상호·지점·업종·기존 경쟁 카페 안내와 도로명 우선 주소를 제공하며, 브랜드는 추정하지 않습니다. 정보창은 모바일 폭과 높이에 맞춰 줄바꿈하고 긴 내용은 스크롤합니다. 동일 지역의 지도 이동 중에는 기존 마커를 유지하다 최신 결과와 대조하고, 제거된 마커의 리스너·정보창을 정리합니다. 지역 선택 변경·API 실패·지도 재초기화·언마운트에서도 정리합니다. 카페 API 실패는 지도와 행정구역 탐색을 막지 않습니다.
-
-카페 마커는 공식 `MarkerClusterer`로 관리합니다. 레벨 3 이상에서 60px 격자·최소 2개·평균 중심으로 묶고 레벨 2 이하는 개별 핀으로 표시합니다. 묶음 숫자는 현재 로드된 최대 200개 마커 중 해당 묶음에 속한 개수이며 API `totalCount`와 다릅니다. 전체 분포를 뜻하지 않습니다. 기본 확대를 끄고 `clusterclick`에서 한 레벨씩 확대하며 기존 `idle` 조회를 재사용합니다. 목록에서 선택한 핀은 묶음에서 분리해 정보창 앵커를 유지하고, 데이터 갱신만으로 카메라를 다시 이동하지 않습니다.
-
-이름 라벨은 클러스터가 해제되는 레벨 1·2에서만 화면 안의 최대 40개에 표시합니다. 너비는 144px 이하로 제한하고, 라벨 중심 간 가로 152px 또는 세로 32px 이상 떨어질 때만 표시합니다. 선택한 카페는 고정 정보창에서 이름을 제공합니다. 라벨은 `CustomOverlay`의 DOM 텍스트이며 지도 클릭을 가로채지 않습니다. 일반 핀(0)·선택 핀(2)·중심점(3)·검색(4)·후보지(6/7)의 우선순위를 유지합니다.
-
-개별 마커의 `mouseover`·`mouseout`은 지연 생성한 임시 정보창 하나를 재사용하며 지도 이동·확대·카페 선택을 일으키지 않습니다. 고정 정보창이 열려 있으면 Hover를 표시하지 않습니다. 클릭·모바일 탭·목록 버튼은 기존 선택 경로로 고정 정보를 열며, 명시적 닫기 버튼은 선택을 해제하고 핀을 클러스터에 돌려줍니다. 두 정보창은 상호·지점·업종·주소·서버가 제공한 거리만 DOM 텍스트로 표시합니다. 마커 갱신·제거·조회 범위 변경·SDK 재시도·언마운트 때 Hover 리스너와 정보창, 이름 오버레이와 프레임을 정리합니다. SDK 마커의 키보드 접근은 카페 목록 버튼으로 보완합니다.
-
-클러스터러는 지도당 하나를 유지하고 마커 변경을 일괄 반영합니다. 공식 SDK에 dispose가 없어 같은 지도에서는 비워 둔 인스턴스를 재사용하며 WeakMap으로 지도 폐기 시 함께 회수되도록 합니다. 구·동/방식/반경 변경, 오류·빈 결과, SDK 재초기화와 언마운트에서 마커·정보창·앱이 등록한 이벤트를 정리합니다. 후보지·검색·반경 중심 마커와 Circle·Polygon은 클러스터에 포함하지 않습니다. 라이브러리 목록의 쉼표는 SDK 호환성을 위해 URL에서 인코딩하지 않습니다.
-
-`선택 지점 주변`은 `/api/v1/cafes/nearby`에 지도 클릭 중심점·500m/1km·200건 상한을 전달합니다. 구·동 선택을 유지하지만 요청 필터에는 포함하지 않습니다. 별도 요청 키로 취소·늦은 응답을 차단하고, 거리순 결과와 `distanceM`을 재계산·재정렬하지 않습니다. 같은 지도 인스턴스에 미터 단위 Circle과 구별되는 중심점 마커를 표시하고 방식 전환·중심점 해제·SDK 재초기화·언마운트 시 정리합니다. 중심점 클릭 리스너는 주변 카페 패널이 열린 반경 방식에서만 연결합니다. 카페 마커는 지도 클릭 전파를 막습니다. 임시 중심점·반경은 패널 개폐 후에도 유지하며 후보지로 저장하지 않습니다.
-
-중심점 좌표와 표시용 `CenterPlace`는 별도로 보관합니다. 검색 결과로 시작하면 기존 이름·주소를 재사용하며 역지오코딩하지 않습니다. 지도 클릭은 카페 조회를 즉시 시작하고, 독립적인 `Geocoder.coord2Address(경도, 위도, 콜백)`으로 도로명주소·지번주소 순서로 확인합니다. 조회 중에는 `주소 확인 중…`, 빈 결과·SDK 오류·8초 시간 초과에는 `지도에서 선택한 위치`를 표시합니다. 좌표·SDK와 응답을 연결하고 정리된 구독의 콜백은 무시합니다. StrictMode와 같은 SDK의 재연결은 요청을 공유하며 타이머는 정리합니다. 검색 결과 닫기·500m/1km 변경은 이름을 보존하고, 새 좌표 선택·중심점 해제는 이전 이름을 제거합니다. 표시 정보의 변경만으로 카페 API를 재조회하거나 선택 카페를 해제하지 않습니다. Backend 계약은 바꾸지 않습니다.
-
-상권 분석은 현재 `quarterCode=20262`와 이전 `20261`의 구·동 점포·추정매출·유동인구 API 6개를 연결합니다. 행정동이 선택되면 동 API, 구만 선택되면 공식 자치구 API를 사용하며 행정동 값을 합산하지 않습니다. 점포·매출만 `industryCode=CS100010`을 전달하고 유동인구 요청에는 업종을 포함하지 않습니다. 분석 패널이 열린 동안 분기별 세 요청(총 6개)을 독립적으로 병렬 실행하고 지역 변경·닫기·메뉴 전환·언마운트 시 취소합니다. 각 탭의 오류·재시도는 다른 통계에 영향을 주지 않습니다.
-
-`analysis-panel.tsx`는 실제 선택 지역명·자치구/행정동 범위·분기·업종을 먼저 안내하고 점포 수, 당월 추정매출액, 지역 전체 유동인구의 세 요약 카드를 표시합니다. 내부 지역·분기·업종 코드는 사용자 문구로 노출하지 않고, 지역명이 준비되지 않으면 이름 확인 중으로 안내합니다. 요약과 세부 탭은 같은 응답을 공유하므로 탭 전환으로 재조회하지 않습니다. 세 요약의 로딩·오류·자료 없음과 재시도는 독립적입니다. 좁은 패널에서는 카드를 세로로 배치하고 긴 숫자는 축약 없이 줄바꿈합니다. 방향키·Home·End의 탭 선택·포커스 동작을 유지합니다.
-
-모든 측정값을 문자열로 유지하고 문자열 연산으로만 천 단위 구분을 적용합니다. NULL은 자료 없음, 실제 0과 소수 후행 0은 원문대로 표시합니다. 조건별 `data: null`과 모든 필드가 NULL인 실제 행을 구분하며 각 통계의 게시 시점을 표시합니다. 매출은 당월 의미를 보존하고 유동인구는 카페 업종 전용이 아닌 지역 전체 통계임을 안내합니다.
-
-출처는 서울시 상권분석서비스로 표시합니다. 각 상세 탭은 해당 원천의 `publishedAt`을 `time`의 `dateTime` 속성에 그대로 보존하고, 화면에는 `Asia/Seoul` 기준 한국어 날짜·시간과 한국시간 안내를 제공합니다. 통계별 게시 시각을 하나로 합치거나 내부 배치 ID를 표시하지 않습니다. 현재·이전 분기의 출처를 각각 표시합니다. 전분기 증감은 [검증 문서](quarter-comparison-verification.md)와 `statistic-comparison.ts`의 정책으로 차단하며 현재 세 지표 모두 미검증 사유를 표시합니다. 계산은 BigInt 십진수 연산을 사용하고 증감률만 소수 첫째 자리로 반올림합니다(정확히 절반이면 0에서 먼 방향). 이전 값 0·NULL·누락·식별자 불일치는 별도로 처리합니다. 원천 검증과 계산 테스트는 구분하며 평가·점수는 제공하지 않습니다.
-
-행정구역 전체 통계는 상권 분석에, 선택 위치의 반경 카페 정보는 주변 카페에 구분해 표시합니다. 점수 API 호출과 점수 표시는 없으며 공개 미승인 상태를 유지합니다.
-
-`npm test`는 실제 키·외부 SDK 요청 없이 로더의 성공·실패·재시도·시간 초과와 StrictMode 초기화·이벤트 정리·주요 화면 상태를 검증합니다. 지역 조회의 문자열 코드·경계 범위·선택 초기화·비동기 요청 경합·API 오류·재시도와 Polygon 좌표 변환·내부 링·오버레이 교체·정리도 검증합니다. 카페 DTO·200건 상한·구·동 필터·초기 확대 정책·요청 경합·오류·재시도·마커 수명·HTML 안전 출력·목록 연계도 검증합니다. 반경 파라미터·거리 보존·중심점과 Circle·방식 전환·패널 클릭 비활성화·반경 요청 경합도 검증합니다. 통계 API의 구·동 경로·업종 파라미터·정밀도·NULL·독립 재시도·지역 변경 경합·닫기 정리·탭 키보드 동작도 검증합니다. Services 라이브러리·키워드/주소 결과 정규화·좌표·페이지 상한·콜백 경합·검색 이동·필터 유지·반경 연계·Escape와 포커스·마커 정리도 검증합니다. 실제 지도·검색은 등록된 도메인과 유효한 JavaScript 키로 별도 확인해야 합니다.
-
-후보지 분석은 `candidate-panel.tsx`의 요약 카드·주변 경쟁 환경·행정동 전체 통계 영역으로 구성합니다. `use-candidate-analysis.ts`가 A·B·C 슬롯의 좌표·반경별 요청을 관리하고 기존 `fetchContainingRegions`, `fetchNearbyCafes`, `useStatisticsExplorer`를 재사용합니다. 같은 행정동은 하나의 현재 분기 응답을 공유합니다. 이름·선택 변경이나 1개에서 여러 후보지로 전환할 때 기존 분석을 재조회하지 않습니다. 삭제·좌표/반경 변경·비활성화·언마운트에서는 요청을 정리하고 취소를 무시한 응답도 차단합니다.
-
-경쟁 카페 전체 수는 `totalCount`, 가까운 최대 3곳은 반환된 최대 200개 목록의 서버 순서·거리로 표시합니다. 행정동을 유일하게 확정하지 못하면 통계만 비교 불가로 두며 서울 소속이 확인된 후보지의 반경 분석은 계속합니다. 게시 시각은 자료마다 원본 ISO를 보존하고 한국시간으로 표시합니다. 후보지의 `sessionStorage` 키·version 1 형식은 유지하며 좌표는 접힌 상세로 옮깁니다. 선택은 텍스트·`aria-pressed`로 전달하고, 이름 저장 시 포커스를 유지하며 삭제 후 다음 카드 또는 제목으로 옮깁니다. 점수·미검증 전분기 증감은 호출·표시하지 않습니다.
+키가 비어 있으면 설정 안내를 표시하며 SDK를 요청하지 않습니다. 로딩 오류나 시간 초과가 발생하면 키 종류·카카오맵 활성화·등록 origin·네트워크를 확인한 후 화면의 재시도를 사용합니다. 현재 위치 기능은 브라우저 권한과 HTTPS 또는 localhost 같은 보안 컨텍스트가 필요합니다. [지도 이용 동작](service-spec.md#탐색-페이지)
 
 ### 프록시와 주의사항
 
-- 프록시 대상을 바꾸려면 `frontend/`에서 `cp -n .env.example .env`로 파일을 준비하고 `API_PROXY_TARGET`을 설정합니다.
-- 생략하면 `/api` 요청을 `http://localhost:8080`으로 전달합니다. 지역 선택은 이 프록시로 행정구역 목록·경계를 조회합니다.
-- `API_PROXY_TARGET`은 Vite 개발 서버 전용입니다. `VITE_*` 변수는 브라우저에 공개되므로 비밀정보를 넣지 않습니다.
-
-Tailwind CSS 4와 shadcn/ui 설정 및 기본 Button 컴포넌트가 포함되어 있습니다. 추가 UI는 `frontend/`에서 `npx shadcn@latest add <컴포넌트>`로 설치할 수 있습니다.
+Vite는 `/api`를 기본적으로 `http://localhost:8080`에 전달합니다. 대상 변경은 `frontend/.env` 또는 실행 환경의 `API_PROXY_TARGET`으로 설정합니다. 이는 개발 서버 설정입니다. 지도는 뜨지만 지역·상권 데이터가 로드되지 않으면 프록시 주소, Backend의 `db` 프로필, 정상 게시 데이터를 차례로 확인합니다. [Vite 설정](../frontend/vite.config.ts)
 
 ## 3. Backend
 
 ### DB 없는 기본 실행
 
-**새 터미널의 저장소 루트**에서 실행합니다. 이미 `backend/`라면 `cd backend`를 반복하지 않습니다.
+별도 터미널의 저장소 루트에서 다음 명령을 실행합니다. 기본 포트는 8080이며 Backend 루트의 HTTP 404는 정상입니다. 기본 프로필에서는 DataSource·JdbcClient·Flyway 없이 실행됩니다.
 
 ```bash
 cd backend
 ./gradlew bootRun
 ```
 
-기본 포트는 **8080**이며 루트 경로의 **404 응답은 정상**입니다. 기본 실행에는 DataSource·JdbcClient·Flyway가 필요 없습니다.
-
-행정구역 API는 `db` 프로필에서만 활성화됩니다. DB 조회 기반은 Spring JDBC·JdbcClient로 구성했습니다.
-
 ### DB를 사용하는 `db` 프로필 실행
 
-로컬 DB를 먼저 실행하고 **대상 DB·백업·마이그레이션 적용 권한을 확인합니다.** `db` 프로필을 시작하면 미적용 Flyway 마이그레이션이 자동 적용됩니다.
-
-다음 블록은 **새 터미널의 저장소 루트**에서 환경변수를 내보내고 `backend/`로 이동합니다. Spring Boot는 `.env`를 자동으로 읽지 않습니다. 이미 `backend/`에 있다면 `set -a`, `source ../.env`, `set +a` 후 마지막 Gradle 명령만 실행합니다.
+기본 Backend가 실행 중이면 종료합니다. [로컬 DB 준비](#로컬-db-준비)에서 DB를 시작하고 해당 실행 셸에 환경변수를 내보낸 뒤 `backend/`에서 실행합니다. **기동 전에 대상 DB, 백업, 마이그레이션 권한을 확인합니다.**
 
 ```bash
-set -a
-source .env
-set +a
-cd backend
 ./gradlew bootRun --args='--spring.profiles.active=db'
 ```
 
-### 연결 설정과 주의사항
+[프로필 설정](../backend/src/main/resources/application-db.yaml)은 서비스용 Hikari DataSource·JdbcClient와 별도 Flyway 연결을 같은 DB 환경변수로 구성합니다. 계정을 분리할 때는 `spring.datasource.*`와 `spring.flyway.*`를 외부 설정으로 지정합니다. 외부 로컬 DB에는 PostGIS와 확장 생성 권한이 필요합니다.
 
-- `application-db.yaml`은 `DB_JDBC_URL`, `DB_USER`, `DB_PASSWORD`로 서비스용 Hikari DataSource(조회 연결 풀)와 JdbcClient를 구성합니다. Flyway는 같은 DB 설정을 별도의 전용 연결로 사용합니다.
-- 운영에서 계정을 분리하려면 `spring.datasource.*`와 `spring.flyway.*`를 각각 외부 설정으로 지정합니다.
-- Flyway는 DB 스키마 변경 이력을 관리합니다. `db` 프로필 시작 시 V1~V7 중 미적용 버전을 순서대로 적용하고 이미 적용된 마이그레이션은 다시 실행하지 않습니다. 현재 개발 DB는 V7까지 적용했습니다. 다른 DB에서도 미적용 버전이 자동 적용되므로 위 사전 확인이 필요합니다.
-- Compose DB는 공간 연산용 PostGIS 확장을 포함합니다. 외부 로컬 DB는 `backend/.env.example`을 참고하고 PostGIS 설치 및 확장 생성 권한을 확인합니다.
-- 스키마 적용만으로 조회 데이터가 생기지 않습니다. 행정구역 API는 [경계 ETL](etl-guide.md#행정동자치구-경계-적재)의 정상 게시본이 필요합니다.
+기동 시 Flyway V1~V7 중 미적용 버전을 적용합니다. 조회에는 정상 게시 데이터가 별도로 필요합니다. 예를 들어 행정구역 API는 [경계 ETL](etl-guide.md#행정동자치구-경계-적재)의 게시본을 사용합니다. [REST API 준비 상태와 오류 계약](data-design.md#행정구역-rest-api-계약)
 
 ### 마이그레이션 적용 상태 확인
 
-Backend를 실행한 후 위의 `docker compose exec db …` 명령으로 DB에 접속합니다. 아래 읽기 전용 SQL의 기대 결과는 다음과 같습니다.
-
-- V7까지 적용한 DB: 버전 `1`~`7`이 모두 `success = true`.
-- 프로젝트 모델 테이블 조회: 11행(데이터 테이블 10개와 `etl_batch`).
-
-SQL 사용 예시와 아래의 과거 V5·V6·V7 실제 개발 DB 검증 기록을 구분합니다.
+DB를 확인한 후 `psql`에서 아래 읽기 전용 SQL을 실행합니다. V7까지 적용된 DB의 기대 결과는 버전 1~7의 `success=true`와 프로젝트 테이블 11개입니다. 적용된 마이그레이션 파일과 기존 DB 이력을 보존합니다.
 
 ```sql
 SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;
@@ -270,259 +128,104 @@ WHERE schemaname = 'public'
 ORDER BY tablename;
 ```
 
-기존 마이그레이션 파일의 수정이나 DB 초기화 없이 적용·검증합니다.
+**과거 개발 DB 검증.** V5·V6은 2026-10-31, V7은 2026-11-01에 실제 적용했습니다. CSV·FK·게시 배치·재실행·API·기존 데이터 보존 결과는 각 ETL 검증 기록을 따릅니다. [V5 점포](archive/etl-validation-history.md#자치구-점포-개발-db-적용적재-검증-2026-10-31) · [V6 추정매출](archive/etl-validation-history.md#자치구-추정매출-개발-db-적용적재-검증-2026-10-31) · [V7 길단위인구](archive/etl-validation-history.md#자치구-길단위인구-개발-db-적용적재-검증-2026-11-01)
 
-**V5 자치구 점포 — 2026-10-31 실제 개발 DB 검증**
+V6 적용 시 추정매출 테이블의 복합키·FK 3개·CHECK 7개와 측정값의 NULL 허용·기본값 없음도 확인했습니다.
 
-Compose·ETL·Backend의 연결 대상이 같은 로컬 인스턴스임을 확인하고, 저장소 밖 `$HOME/Downloads/RecycleYoungs-backups/`에 적용 전 custom-format 백업을 생성했습니다. `pg_dump` 성공, `pg_restore --list`와 전체 아카이브 SQL 판독을 확인했으며 백업 권한은 `600`입니다.
+**적용 전 백업 기록.** 당시 같은 로컬 DB에 대한 custom-format 백업을 저장소 외부 `$HOME/Downloads/RecycleYoungs-backups/`에 권한 `600`으로 보존했습니다. 세 적용 모두 `pg_dump`, `pg_restore --list`, 전체 아카이브의 SQL 판독을 확인했습니다. V6의 목록 조기 종료로 생긴 입력 파이프 오류는 파일을 직접 표준입력에 연결해 재검증했습니다. 실제 DB 복원은 세 기록 모두 미실시입니다.
 
-백업을 실제 DB에 복원하는 작업은 수행하지 않았습니다. 원본 CSV와 백업은 Git에 포함하지 않습니다.
-
-기존 V1~V4 이력은 그대로 유지되고 `db` 프로필이 V5 한 건만 신규 적용했습니다. 공식 자치구 점포 CSV 54,765행 적재·재실행과 실제 API 대조도 완료했습니다. 적용 전후 기존 7개 데이터 테이블 및 기존 배치 14건의 건수·전체 행 지문을 대조해 보존을 확인했습니다. [적재·API 검증 결과](etl-guide.md#실제-개발-db-적용적재-검증-2026-10-31)를 참고하세요.
-
-이후 변경을 적용할 때도 대상 확인·백업·기존 데이터 보존 절차를 따르며 초기화·볼륨 삭제로 대체하지 않습니다.
-
-**V6 자치구 추정매출 — 2026-10-31 실제 개발 DB 검증**
-
-2026-10-31의 후속 자치구 추정매출 적용에서는 Compose·Backend·ETL이 같은 로컬 인스턴스임을 다시 확인하고 신규 백업을 생성했습니다.
-
-- 백업: `$HOME/Downloads/RecycleYoungs-backups/recycleyoungs-before-v6-20261031T144432Z.dump`, 8,751,707바이트, 권한 `600`.
-- SHA-256: `1fe19fb2b95a2cd926a234bef492dbded845bbd01d4ad35a3df2103b62976a14`.
-- `pg_dump` 성공 및 `pg_restore --list`·전체 아카이브 SQL 판독을 확인했습니다. 목록 판독의 조기 종료로 발생한 입력 파이프 오류는 백업 파일을 직접 표준입력에 연결해 재검증했습니다. 실제 DB 복원 테스트는 수행하지 않았습니다.
-
-**스키마 적용·적재·보존 결과**
-
-- 기존 `db` 프로필이 V6 한 건만 신규 적용했고 V1~V6 모두 `success=true`입니다. V1~V5의 전체 이력·체크섬을 보존했으며 V6의 테이블·복합키·FK 3개·CHECK 7개와 측정값의 NULL 허용·기본값 없음도 확인했습니다.
-- 실제 CP949 CSV 33,803행의 자치구 25개·업종 63개를 개발 DB 기준 코드와 전수 대조해 FK 불일치 0건을 확인한 뒤 적재했습니다. 135,212개 측정값 전수 대조·재실행 `SKIPPED`·기존 출처 보존·실제 API 대조를 완료했습니다.
-- 적용 전후 기존 8개 데이터 테이블 및 배치 16건의 건수·전체 행 지문이 동일합니다. 자치구 매출의 `PUBLISHED`·`SKIPPED` 각 1건이 추가돼 전체 배치는 18건입니다. 초기화·볼륨 삭제·DROP/TRUNCATE나 기존 데이터셋 재적재는 하지 않았습니다.
-
-배치 ID·게시 시각·실제 API 응답은 [자치구 추정매출 개발 DB 검증 기록](etl-guide.md#자치구-추정매출-개발-db-적용적재-검증-2026-10-31)에 있습니다. 코드·Flyway 파일·ETL·API 구현은 수정하지 않았습니다.
-
-**V7 자치구 길단위인구 — 2026-11-01 실제 개발 DB 검증**
-
-공식 자치구 길단위인구의 V7 적용·550행 적재·실제 API 검증도 완료했습니다.
-
-- Compose·Backend·ETL의 DB 연결을 실제 인스턴스 식별자·DB·사용자로 대조해 같은 의도된 로컬 개발 DB임을 확인했습니다. 접속정보·식별자 원문은 공개하지 않습니다.
-- 신규 백업: `$HOME/Downloads/RecycleYoungs-backups/recycleyoungs-before-v7-20261101T040416Z.dump`, 9,579,979바이트, 권한 `600`, custom-format.
-- 백업 SHA-256: `b4cf4041275809ae1de61b58cdbe5261ab4a7f081984ec48dc6e6dbbee2437eb`. `pg_dump`·`pg_restore --list`·전체 아카이브 SQL 판독을 통과했으며 **실제 DB 복원 테스트는 미실시**입니다.
-
-**스키마 적용·적재·보존 결과**
-
-- 기존 `db` 프로필로 V7 한 건만 신규 적용했습니다. V1~V7 모두 `success=true`, V7 체크섬은 `194220786`이며 V1~V6 파일·전체 이력·체크섬은 보존했습니다. 신규 테이블 6개 컬럼·구/분기 PK·FK 2개·CHECK 5개, 세 NUMERIC의 NULL 허용·정밀도/scale 제한과 기본값 없음·유한 비음수 제약을 확인했습니다.
-- 실제 CP949 CSV 550행·자치구 25개를 개발 DB 기준 코드와 전수 대조해 FK 불일치 0건을 확인한 뒤 적재했습니다. 세 측정값 1,650개 전수 문자열 대조·불일치 0건, 성별 합계 차이 269행 보존, 재실행 `SKIPPED`·수치·최초 게시 출처·전체 행 지문 보존과 실제 API 대조를 완료했습니다.
-- 기존 데이터 테이블 9개와 배치 18건의 건수·전체 행 지문을 보존했습니다. 신규 인구의 `PUBLISHED`·`SKIPPED` 각 1건만 추가해 전체 배치는 20건이며 프로젝트 모델 테이블은 11개입니다. 검증용 Backend는 정상 종료했고 Compose DB·볼륨은 유지했습니다.
-
-배치 ID·게시 시각·실제 API 및 예외 응답은 [자치구 길단위인구 개발 DB 검증 기록](etl-guide.md#자치구-길단위인구-개발-db-적용적재-검증-2026-11-01)에 있습니다. 기존 데이터 재적재·초기화·DROP/TRUNCATE나 코드·설정·Flyway·ETL 변경은 하지 않았습니다. 원본 CSV·백업·`.env`는 저장소에 포함하지 않습니다.
-
-행정구역 API의 파라미터·DTO·오류·게시 배치 계약은 [데이터 설계](data-design.md#행정구역-rest-api-계약)를 참고하세요. ETL 설치·적재·재실행 명령은 [ETL 가이드](etl-guide.md#설치-및-공통-실행)에서 관리합니다.
+| 적용 | 당시 파일·크기                                                    | SHA-256                                                            |
+| ---- | ----------------------------------------------------------------- | ------------------------------------------------------------------ |
+| V6   | `recycleyoungs-before-v6-20261031T144432Z.dump` · 8,751,707바이트 | `1fe19fb2b95a2cd926a234bef492dbded845bbd01d4ad35a3df2103b62976a14` |
+| V7   | `recycleyoungs-before-v7-20261101T040416Z.dump` · 9,579,979바이트 | `b4cf4041275809ae1de61b58cdbe5261ab4a7f081984ec48dc6e6dbbee2437eb` |
 
 ## 빌드·테스트·품질 검사
 
-Frontend 명령은 **`frontend/`**, Backend 명령은 **`backend/`**, ETL 명령은 **`etl/`**에서 실행합니다. 이 표의 명령에는 추가 `cd`가 필요하지 않습니다.
-
-각 프로젝트의 도구·의존성을 준비한 뒤 필요한 검사를 선택합니다. Backend DB 통합 테스트는 일반 `build`와 분리되어 있으므로, 전체 검증 시에는 아래의 통합 실행 명령을 사용합니다.
-
-| 프로젝트       | 명령                        | 검증 내용                                                                      |
-| -------------- | --------------------------- | ------------------------------------------------------------------------------ |
-| Frontend       | `npm run build`             | TypeScript 타입 검사 · Vite 빌드                                               |
-| Frontend       | `npm test`                  | Vitest · React Testing Library 렌더링 테스트                                   |
-| Frontend / ETL | `npm run lint`              | ESLint                                                                         |
-| Frontend / ETL | `npm run format:check`      | Prettier 검사                                                                  |
-| Backend        | `./gradlew build`           | Java 컴파일 · JUnit/Spring Boot Test · Spotless 검사 · 실행 JAR                |
-| Backend        | `./gradlew integrationTest` | 별도 PostgreSQL/PostGIS 컨테이너에서 서비스·Flyway 연결, 스키마·공간 확장 검증 |
-| ETL            | `npm run build`             | TypeScript 빌드                                                                |
-| ETL            | `npm test`                  | Vitest 환경설정·CSV/ZIP·경계·업종·통계·카페 API 검증 테스트                    |
-
-**실행 전제:** 백엔드 통합 테스트에는 실행 중인 Docker가 필요합니다. 로컬 Compose DB는 필요하지 않으며, 통합 테스트는 서비스 DataSource와 Flyway 설정을 모두 일회용 PostGIS 컨테이너로 덮어씁니다. 로컬 개발 DB나 실제 공공 API에 접근하지 않습니다.
-
-백엔드 전체 검증은 `backend/`에서 `./gradlew build integrationTest`로 실행합니다.
-
-- 단위·MVC 테스트: 기본 프로필의 DB 없는 기동, 코드 검증·응답 계약과 공통 오류를 검증합니다.
-- 행정구역 통합 테스트: 최신 게시본·과거 출처 제외·GeoJSON·게시 중 조회 일관성과 주변 검색의 복수 구 교차·중심점 경계·반경 접촉·구 필터·빈 결과도 확인합니다.
-
-**선택 실행:** `npm run test:watch`로 테스트 감시 모드를 사용합니다. 포맷 수정은 TypeScript 프로젝트의 `npm run format`, Java의 `./gradlew spotlessApply`로 수행합니다.
-
-**점수 오프라인 사전 진단:** `backend/`에서 보호된 외부 Trust Record·승인 manifest·구/동 스냅샷 경로와 독립 기대 해시를 준비하고 `SCORE_TRUST_PREFLIGHT_ENABLED=1 ./gradlew scoreTrustPreflight --quiet --console=plain 2>/dev/null`로 실행합니다. 필수 환경변수·이전 기록의 선택 쌍·해시의 독립 출처는 [실행 계약](score-v1-contract.md#69-오프라인-trust-사전-진단)을 따릅니다. 비활성·설정 누락은 파일 읽기 전에 중단하며 DB·웹 서버·파일 쓰기는 사용하지 않습니다. 일반 `build`에서 도구를 실행하지 않고, 단위 테스트는 JUnit 소유 임시 디렉터리의 합성 입력만 사용합니다. 종료값 0도 결합 진단일 뿐 `NOT_APPROVED`, `sourceTrust=NOT_ESTABLISHED`, `R03_COMPLETE=false`를 바꾸지 않으며 운영 공개 게이트를 완성한 것이 아닙니다.
-
-**점수 내부 신뢰 검증:** `ScoreTrustVerification`은 호출자가 명시한 신뢰 기준·입력 경로만 받아 CLI와 같은 검증 흐름을 실행합니다. [호출 계약](score-v1-contract.md#610-backend-내부-진입점)의 독립 해시·선택적 이전 기준을 사용하며 환경변수나 Spring 기동으로 자동 실행하지 않습니다. 공통 검증·안전 읽기는 제품 JAR에 포함하고 CLI·DB 회귀·파일 출력은 제외합니다. `./gradlew build`의 `verifyScorePackaging`이 두 JAR의 구성을 검사합니다. 보호된 운영 기준 공급·발급·철회 전파·DB 대조의 공개 경로 연결과 REST 공개 허용은 미구현입니다.
-
-**현재 DB 전체 입력 대조:** `ScoreCurrentInputVerification`은 명시적으로 받은 DataSource와 불변 보존 기준을 사용합니다. [대조 계약](score-v1-contract.md#611-현재-db-전체-입력-대조)에 따라 PostgreSQL에서 실제 읽기 전용·`REPEATABLE_READ`를 확인하고 구·동 전체 입력을 한 트랜잭션에서 대조·롤백합니다. 기존 `ScoreTrustVerification.inspect()`의 참조를 그대로 전달하면 검증한 파일과 비교한 기준을 바꾸지 않습니다. `MATCHED`도 공개 승인이 아니며 자동 DB 조회·웹 서버·Flyway·ETL·파일 쓰기는 없습니다. `ScoreInputComparisonTests`와 `ScoreCurrentInputVerificationIntegrationTests`는 합성 fixture·일회용 PostGIS만 사용하며 실데이터 승인 기준이나 과거 R03을 대신하지 않습니다.
-
-**독립 기준 공급·변경 차단:** [공급 계약](score-v1-contract.md#612-독립-신뢰-기준-공급과-변경-차단)의 `ScoreTrustBasisProvider`는 외부 운영 주체가 일관된 불변 기준을 읽어 제공하는 인터페이스입니다. 실제 운영 구현·자동 환경변수 공급자는 없습니다. `ScoreTrustStateVerification`에 신뢰할 공급자를 명시적으로 주입하면 기존 신뢰 검증과 선택적 DB 대조의 시작/종료 기준을 확인하고 변경·철회·조회 실패를 차단합니다. 합성 테스트는 공급자의 양 끝 응답을 제어하며 운영 파일·DB가 필요하지 않습니다. 기준의 독립성·최신성·과거 보관과 변경 ID 재사용 방지는 공급자 책임이며 영구 저장·철회 전파·운영 공개 게이트와 실제 승인은 미구현입니다.
-
-환경변수 예시에는 로컬 개발용 값만 포함합니다. 실제 비밀번호가 포함된 `.env` 파일은 Git에서 제외됩니다.
-
-## GitHub Actions CI
-
-[워크플로](../.github/workflows/ci.yml)는 `project-upgrade` Push와 해당 브랜치를 대상으로 하는 PR의 생성·커밋 추가·재열기·수정·검토 준비 전환 시 실행됩니다. 같은 브랜치 또는 PR의 중복 실행은 최신 실행만 남깁니다. 모든 Job은 `ubuntu-24.04`, `contents: read` 권한을 사용하며 checkout 후 인증정보를 남기지 않습니다.
-
-| Job                 | 환경·제한 시간                               | 검증 내용                                                                         |
-| ------------------- | -------------------------------------------- | --------------------------------------------------------------------------------- |
-| Frontend            | Node.js 24·npm 11.19.1 / 15분                | `npm ci` → `npm run lint` → `npm run format:check` → `npm test` → `npm run build` |
-| Frontend E2E        | Node.js 24·npm 11.19.1·Chromium / 20분       | `npm ci` → `npm run e2e:check` → Chromium 설치 → `npm run test:e2e` → JUnit 검사  |
-| Backend             | Temurin Java 21·Gradle Wrapper / 20분        | `./gradlew test` → `./gradlew spotlessCheck` → `./gradlew build`                  |
-| Backend integration | Temurin Java 21·Gradle Wrapper·Docker / 30분 | Docker 확인·테스트 이미지 준비 → `./gradlew integrationTest` → JUnit 결과 검사    |
-| ETL                 | Node.js 24·npm 11.19.1 / 15분                | `npm ci` → `npm run lint` → `npm run format:check` → `npm test` → `npm run build` |
-
-Node 버전은 각 `.nvmrc`를 사용하고 npm은 명시적으로 설치·확인합니다. 기존 두 `package-lock.json`과 Gradle Wrapper를 그대로 사용합니다. npm 다운로드 캐시는 프로젝트별 잠금 파일, Gradle 의존성·Wrapper 캐시는 Gradle 설정·Wrapper 속성 파일을 기준으로 재사용합니다. GitHub 공식 [checkout v7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1)·[setup-node v7.1.0](https://github.com/actions/setup-node/releases/tag/v7.1.0)·[setup-java v6.2.0](https://github.com/actions/setup-java/releases/tag/v6.2.0)을 전체 커밋 SHA로 고정했습니다.
-
-Frontend 테스트는 Kakao SDK·API 응답을 모의하므로 실제 키가 필요하지 않습니다. Backend `build`는 기존 `verifyScorePackaging`을 실행해 공통 내부 검증 클래스의 포함과 CLI·스냅샷 출력 클래스의 제외를 확인합니다. 점수 회귀·스냅샷 내보내기·Trust 사전 진단 CLI 작업은 자동 실행하지 않습니다.
-
-Backend 통합 Job은 기존 `postgis/postgis:17-3.5`를 준비한 뒤 Testcontainers로 일회용 DB를 생성합니다. 기존 Flyway와 합성 fixture만 적용하며 개발·운영 DB에 연결하지 않습니다. Docker 사용 불가·이미지 다운로드 실패·테스트 실패는 Job 실패입니다. JUnit 보고서 누락·실행 0건·건너뜀도 실패로 처리합니다.
-
-ETL은 기존 기본 `npm test`만 실행합니다. `RUN_*_DB_TESTS`로 활성화하는 별도 DB 통합 테스트와 실제 CSV 테스트는 기본적으로 건너뛰며 CI 검증 완료 범위에 포함하지 않습니다. 공공데이터 재다운로드·실제 ETL 적재는 실행하지 않습니다. 모든 Job은 Secrets나 실제 `.env` 생성 없이 실행하며, 의존성·테스트 이미지 다운로드 외에 운영 DB·공공데이터 API 접근이 필요하지 않습니다.
-
-### 로컬에서 같은 검증 실행
-
-Node.js 24를 선택하고 `npm install --global npm@11.19.1`로 npm 버전을 맞춥니다. 아래 명령을 `frontend/`와 `etl/`에서 각각 실행합니다. 실제 `.env`나 DB·공공 API용 환경변수를 적용할 필요가 없습니다.
+`frontend/`와 `etl/`에서 각각 `nvm use`와 `npm ci`로 준비한 뒤 동일한 명령을 실행합니다. Frontend는 Kakao SDK·API를 모의하고 ETL의 기본 테스트는 opt-in DB 통합·실제 CSV 적재를 포함하지 않습니다.
 
 ```bash
-node --version
-npm --version
-npm ci
 npm run lint
 npm run format:check
 npm test
 npm run build
 ```
 
-Java 21과 실행 중인 Docker를 준비하고 `backend/`에서 실행합니다. CI는 각 Gradle 호출에 `--no-daemon --console=plain`을 붙이며, 통합 테스트 결과의 실패·오류·건너뜀이 모두 0인지도 검사합니다.
+`backend/`에서는 `./gradlew build`로 단위·MVC·Spotless와 제품 JAR 검사(`verifyScorePackaging`)를 실행합니다. 전체 검증은 Docker를 준비하고 `./gradlew build integrationTest`를 실행합니다. 통합 테스트는 Testcontainers가 만든 `postgis/postgis:17-3.5`에 서비스·Flyway 연결을 모두 지정합니다. ARM64에서 해당 이미지 판본을 찾지 못하면 `docker pull --platform linux/amd64 postgis/postgis:17-3.5`와 AMD64 에뮬레이션을 확인합니다. 로컬 개발 DB 대신 일회용 DB를 사용합니다.
 
-```bash
-java -version
-./gradlew test
-./gradlew spotlessCheck
-./gradlew build
-docker version
-docker pull postgis/postgis:17-3.5
-./gradlew integrationTest
-```
+테스트 감시는 `npm run test:watch`, 포맷 수정은 TypeScript 프로젝트의 `npm run format`이나 Java의 `./gradlew spotlessApply`를 사용합니다. ETL의 개별 DB 테스트는 [격리 DB 통합 테스트](etl-guide.md#격리-db-통합-테스트)를 참고합니다.
 
-GitHub의 `ubuntu-24.04` Job은 x64 환경입니다. ARM64 로컬 Docker에서 위 이미지에 맞는 판본을 찾지 못하면 `docker pull --platform linux/amd64 postgis/postgis:17-3.5`로 같은 이미지의 AMD64 판본을 준비하고 에뮬레이션 지원을 확인합니다. 실패 시 다른 이미지로 대체하거나 통합 테스트를 생략하지 않습니다.
+제품 JAR에는 공통 점수 검증·안전 읽기가 포함되고 회귀·스냅샷 출력·사전 진단 CLI는 분리됩니다. 점수 도구는 명시 실행하며 준비 조건·환경변수·종료값은 [점수 도구 계약](score.md#5-입력-스냅샷재현검증-도구), 내부 신뢰·DB 대조와 운영 승인 범위는 [원천 신뢰 검증](score.md#6-원천-신뢰-검증)에 있습니다.
 
-### 실행 결과와 배포 범위
+## GitHub Actions CI
 
-Push 후 GitHub 저장소의 **Actions → CI → 실행 → Job/Step 로그** 또는 PR의 **Checks**에서 결과를 확인합니다. 취소된 이전 실행과 최신 실행을 구분하고 다섯 Job이 모두 성공했는지 확인합니다. 실패 시 해당 단계의 npm·Gradle·Docker 로그를 확인하며 테스트를 생략하거나 실패를 무시하지 않습니다.
+`78d2d3a526d4`의 2026-11-11 실행에서 아래 5개 Job이 모두 성공했습니다. 워크플로는 `project-upgrade` Push 및 해당 브랜치 대상 PR의 열기·동기화·재열기·수정·검토 준비 전환에서 실행하며, 같은 브랜치나 PR의 이전 실행을 취소합니다. [실행 결과](https://github.com/jinwooorp/RecycleYoungs/actions/runs/42937924388) · [워크플로](../.github/workflows/ci.yml)
 
-워크플로의 YAML·로컬 검증 성공과 GitHub-hosted Runner의 성공은 별개입니다. 최초 Runner 실행은 Push 이후에만 확인할 수 있으며 Actions 실행 권한·의존성 캐시·Docker 이미지 다운로드도 그때 확인합니다. CI는 자동 품질 검증이며 서버 배포·운영 이미지 생성·데이터 갱신을 수행하는 CD는 이번 범위에 없습니다. 점수 공개 미승인 상태도 변경하지 않습니다.
+| Job                 | 실행과 확인                                                                  |
+| ------------------- | ---------------------------------------------------------------------------- |
+| Frontend            | Node.js 24·npm 11.19.1에서 설치, 린트·포맷·Vitest·빌드                       |
+| Frontend E2E        | E2E 타입·Mock 검사, Chromium 설치, `npm run test:e2e`, JUnit 검사            |
+| Backend             | Java 21에서 `./gradlew test`, `./gradlew spotlessCheck`, `./gradlew build`   |
+| Backend integration | Docker와 PostGIS 이미지를 확인하고 `./gradlew integrationTest` 및 JUnit 검사 |
+| ETL                 | Node.js 24·npm 11.19.1에서 설치, 린트·포맷·기본 테스트·빌드                  |
+
+모든 Job은 `ubuntu-24.04`와 `contents: read`를 사용합니다. 의존성은 기존 잠금 파일·Wrapper로 준비하며 checkout 인증정보를 남기지 않습니다. E2E·DB 통합은 JUnit 누락·실행 0건·실패·오류·건너뜀을 실패로 처리합니다. 실패 원인은 **Actions → CI → Job/Step 로그** 또는 PR의 **Checks**에서 확인합니다. CI는 품질 검증을 수행하며 실제 환경변수·운영 DB·공공데이터 수집·서비스 배포는 사용하지 않습니다.
 
 ## 브라우저 E2E 검증
 
-로컬 탐색·디버깅은 **ego(lite)**, GitHub Actions 자동 회귀는 **Playwright Chromium**으로 구분합니다. 브라우저 테스트 코드는 `frontend/e2e/`, 설정은 `frontend/playwright.config.ts`에 있으며 기존 Vitest의 `src/**/*.test.{ts,tsx}`와 분리되어 있습니다. 제품 API·점수 공개 계약은 변경하지 않습니다.
+[테스트 구성](../frontend/playwright.config.ts)과 [테스트 코드](../frontend/e2e/)는 제품 빌드 및 Vitest와 분리됩니다. 로컬에서는 `frontend/`에서 설치 후 타입·Mock 검사와 테스트 목록을 확인할 수 있습니다.
 
-키 없이 `/explore`에서 패널을 열면 기존 검색 서비스 오류 배너가 데스크톱 닫기 버튼을 덮는 문제를 발견했습니다. 오류 배너가 있는 데스크톱에서만 패널 상단 여백을 확보하는 CSS 보정을 적용했고, 포인터로 닫기·재열기를 회귀 시나리오에 포함합니다. 오류를 숨기거나 강제 클릭으로 통과시키지 않습니다.
-
-키 미설정 모바일 화면의 검색 오류 배너와 지역 필터 버튼에는 일부 시각적 겹침이 남아 있습니다. 필터·닫기 조작은 검증했으며, 이 별도 레이아웃 개선까지 이번 작업을 확대하지 않습니다.
+```bash
+npm run e2e:check
+npm run test:e2e:list
+```
 
 ### 공통 합성 환경
 
-`frontend/`에서 Node.js 24·npm 11.19.1로 실행합니다.
+로컬에서 화면을 조작할 때는 `frontend/`에서 `npm run e2e:serve`를 실행합니다. 테스트 Vite는 `http://127.0.0.1:4173`, Mock API는 `127.0.0.1:4174`입니다. 포트가 사용 중이면 실패하며 `Ctrl+C`로 두 서버를 종료합니다. 테스트 전용 서버는 `.env` 로딩을 끄고 Kakao 키를 비우며 위치 권한 거부 응답과 외부 연결 제한을 적용합니다. 등록되지 않은 Mock API는 404로 응답합니다.
 
-```bash
-npm ci
-npm run e2e:check
-npm run e2e:serve
-```
-
-`http://127.0.0.1:4173`은 테스트 전용 Vite, `127.0.0.1:4174`는 loopback 전용 Mock API입니다. 기존 Vite 설정의 `/api` 프록시 방식을 재사용하되 대상을 Mock 서버로 고정합니다. 포트 충돌 시 다른 서버를 재사용하지 않고 실패합니다. 종료는 `Ctrl+C`이며 두 서버를 함께 정리합니다.
-
-테스트 Vite는 `.env` 로딩을 끄고 Kakao 키를 빈 값으로 고정합니다. 테스트 HTML의 위치 조회는 합성 권한 거부 응답만 반환하고 CSP로 외부 연결을 제한합니다. 실제 위치·키·DB·ETL·공공 API가 필요하지 않습니다. Mock은 파일·외부 URL·개발 DB를 읽지 않으며 정의하지 않은 API는 404로 거부합니다. 이 서버·합성 fixture·HTML 주입은 `src/` 및 제품 빌드 진입점 밖에 있습니다. 일반 `npm run dev`나 `npm run build`에는 테스트 응답을 주입하지 않습니다.
-
-정상 응답은 기본 상태입니다. 아래처럼 **테스트 origin의 쿠키 하나만** 바꿔 오류·빈 응답을 재현합니다. 변경 후 지역이나 패널을 다시 선택해 새 요청을 발생시키고, 오류에서 복구할 때는 쿠키를 `normal`로 바꾼 후 화면의 `다시 시도`를 누릅니다. 공유 서버 상태를 변경하지 않으므로 CI의 각 새 브라우저 context는 서로 격리됩니다.
+오류·자료 없음은 테스트 origin의 `ry-e2e-scenario` 쿠키로 재현합니다. 값은 `normal`, `sales-error`, `sales-empty`, `districts-error`입니다. 값을 바꾼 뒤 지역이나 패널을 재선택합니다. 오류 복구는 `normal`로 돌린 뒤 화면에서 재시도합니다.
 
 ```js
 document.cookie = "ry-e2e-scenario=sales-error; Path=/; SameSite=Strict";
-// normal / sales-error / sales-empty / districts-error
 ```
 
-후보지 복원은 기존 `recycleyoungs.candidates`의 `{ version: 1, items: [...] }` 형식과 `e2e/fixtures.ts`의 합성 A·B·C를 사용합니다. 새 탭·새 테스트 context에서 시작하고, 로컬 재현 시에는 해당 탭의 이 저장 키와 위 테스트 쿠키만 초기화합니다. 사용자 프로필 전체 쿠키·캐시를 지우지 않습니다.
+후보지 복원은 [합성 fixture](../frontend/e2e/fixtures.ts)의 A·B·C와 `sessionStorage`의 `recycleyoungs.candidates` 버전 1을 사용합니다. 로컬 재현은 새 탭에서 시작하거나 해당 테스트 탭의 키와 쿠키만 초기화합니다.
 
 ### 로컬 ego(lite)
 
-1. 설치된 `ego-browser` 스킬을 읽고 `ego-browser skill`을 실행합니다. macOS 앱 연결이 차단되면 앱 접근 권한을 확인합니다. 사용할 수 없으면 다른 브라우저로 대체하지 않고 `BLOCKED`로 기록합니다.
-2. `ego-browser nodejs`에서 `taskSpace("RecycleYoungs E2E")`로 별도 에이전트 Space를 한 번 만들고 반환된 ID를 계속 재사용합니다. `task.page("p1").goto("http://127.0.0.1:4173")`로 접속합니다.
-3. `page.snapshot()`으로 화면을 관찰하고 실제 링크·메뉴·필터·탭·재시도·삭제를 조작합니다. 크기는 `page.cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false })`와 390×844·`mobile: true`를 사용합니다. 모바일 터치는 필요 시 CDP의 터치 에뮬레이션을 활성화합니다.
-4. 콘솔 관찰은 스킬에 따라 `egoAutomated.disable` 후 `Runtime.enable`, 네트워크는 `Network.enable`과 `page.events()`를 사용합니다. 의도한 503과 예상하지 않은 요청 실패·예외를 구분합니다. 권한 창·사용자 제어 전환이 나타나면 중단하고 사용자 확인 후 같은 Space를 재개합니다.
-5. 오류 재현은 위 쿠키, 수행 단계, 화면 스크린샷을 함께 남깁니다. 스크린샷은 Git에서 제외되는 `frontend/test-results/` 등에 보존하고 결과를 `PASS`·`FAIL`·`BLOCKED`로 구분합니다. 완료 시 스킬에 따라 `task.finish({ keep: [] })`로 종료합니다.
+설치된 ego-browser 안내(`ego-browser skill`)에 따라 별도 작업 Space에서 합성 서버에 접속합니다. 링크·필터·탭·재시도는 실제 화면을 조작해 확인하고 데스크톱·모바일 크기를 각각 검증합니다. 콘솔과 네트워크에서 의도한 오류와 예상하지 않은 오류를 구분합니다. 실패 증거는 재현 단계·쿠키 값과 함께 Git에서 제외되는 `frontend/test-results/`에 보존합니다. 앱이나 권한 문제로 실행할 수 없으면 `BLOCKED`로 기록합니다.
+
+기존 로컬 검증에서 데스크톱 오류 배너가 패널 닫기를 가리는 문제를 보정해 회귀 시나리오에 포함했습니다. 당시 키 미설정 모바일 화면의 오류 배너와 지역 필터에 일부 시각적 겹침이 있었으며, 필터와 닫기 조작은 확인했습니다.
 
 ### GitHub Actions Playwright
 
-[Playwright webServer](https://playwright.dev/docs/test-webserver)가 위 Vite·Mock 서버를 자동 시작·종료합니다. `Frontend E2E` Job만 `npx playwright install --with-deps chromium`을 실행합니다. `test:e2e`의 실제 브라우저 실행은 GitHub-hosted Linux Runner에서만 허용하며, 로컬에서는 `npm run test:e2e:list`로 브라우저 없이 테스트 수집만 확인합니다. 로컬 Chromium 설치·별도 브라우저 실행은 하지 않습니다.
+실제 Chromium 실행은 GitHub-hosted Linux Runner에서 수행합니다. Playwright가 합성 서버를 시작·종료하고 데스크톱 1440×900과 모바일 390×844에서 13개씩 총 26개를 검증합니다. 라우팅·키 누락 안내·반응형 패널과 포커스·지역 통계·오류와 재시도·후보지 복원·미검증 증감과 점수 차단을 포함합니다. 실패 시 HTML·trace·스크린샷·JUnit을 7일 보존합니다. 브라우저 시작 전 실패는 Step 로그로 확인합니다.
 
-데스크톱 1440×900·모바일 390×844 두 프로젝트에서 각각 13개 시나리오를 실행합니다. 기본 크기를 사용하는 11개와 각 테스트에서 뷰포트를 조정하는 반응형 시나리오 2개를 합쳐 총 26개입니다.
-
-- 랜딩 표시·시작하기 이동·직접 `/explore`·404와 홈 복귀
-- SDK 키 누락 안내·세 메뉴·패널 닫기·Escape와 포커스·모바일 지역 필터
-- 구·동 선택·지역별 갱신·세 지표와 세부 탭·탭 변경 시 중복 통계 요청 방지
-- 개별 매출 오류와 재시도·자료 없음·지역 API 오류와 재시도
-- 후보지 빈 상태·합성 세 곳 복원·삭제·500m/1km·세 곳 초과 저장 데이터 거부
-- 큰 수·소수 후행 0·미승인 증감 숫자와 점수 API/점수 표시 차단·가로 넘침·예상하지 않은 콘솔/네트워크 오류
-- 320×568에서 패널 키보드 포커스·지역 필터와 오류 안내의 겹침·상세 패널 스크롤, 768×1024 ↔ 1024×768 전환에서 지역 선택값·포커스·필터 닫힘 유지
-
-각 테스트는 새 context·저장 상태에서 시작합니다. 접근성 역할·이름과 조건 대기를 사용하고 자동 재시도는 0, `forbidOnly`는 활성화했습니다. Playwright 실패와 별도로 JUnit 보고서 누락·실행 0건·오류·건너뜀도 Job을 실패시킵니다. 실패 시 `playwright-report/`와 `test-results/`의 HTML·trace·스크린샷·JUnit을 [공식 upload-artifact Action](https://github.com/actions/upload-artifact/releases/tag/v7.0.2)으로 7일 보존합니다. 설치나 서버 시작 전에 실패하면 브라우저 trace가 생성되지 않을 수 있으며 해당 Step 로그로 원인을 확인합니다.
-
-**미검증 범위:** 실제 Kakao SDK 지도·검색·마커·클러스터·지도 클릭/검색을 통한 후보지 신규 등록·네 번째 신규 등록 차단은 키 없이 성공한 것으로 처리하지 않습니다. 후보지 최대 3곳 테스트는 저장 데이터의 복원 제한입니다. 전체 회귀와 신규 E2E Job의 실제 성공·실패·증거 업로드는 Push 후 Actions에서 별도로 확인해야 합니다. CI 성공도 CD·공식 원천 승인·창업 점수 공개 승인을 의미하지 않습니다.
+실제 Kakao 지도·검색·마커·클러스터 및 지도 클릭이나 검색에서 후보지를 새로 등록하는 흐름은 키가 있는 환경에서 별도 확인합니다. 세 곳 초과 E2E는 저장 데이터의 복원 제한을 검증합니다. `kakao-map.test.tsx`의 간헐적 마커 생성 실패는 기존 후속 검증 항목입니다.
 
 ## 배포 검토 항목
 
-### 배포 구성안
+[배포 Compose](../compose.deploy.yaml)와 [Nginx 설정](../nginx/default.conf)은 구현됐습니다. 실제 운영 배포·도메인·HTTPS·CD는 남아 있습니다. 배포 프로젝트는 `recycleyoungs-deploy`, DB 볼륨은 `recycleyoungs-deploy_deploy_postgres_data`입니다. 개발 Compose와 분리합니다.
 
-[compose.deploy.yaml](../compose.deploy.yaml)은 배포용 프로젝트 `recycleyoungs-deploy`를 구성합니다. 개발용 `compose.yaml`과 별개로 실행하며, 배포 DB는 `recycleyoungs-deploy_deploy_postgres_data` 볼륨에 저장합니다.
-
-```text
-.
-├── compose.deploy.yaml
-├── .env.deploy.example
-├── frontend/
-│   ├── Dockerfile
-│   └── .dockerignore
-├── backend/
-│   ├── Dockerfile
-│   └── .dockerignore
-└── nginx/
-    └── default.conf
-```
-
-```mermaid
-flowchart LR
-    HOST["호스트 127.0.0.1"] -->|HTTP| NGINX["Nginx · React 정적 파일"]
-    NGINX -->|"/api · app 내부 네트워크"| API["Spring Boot · db 프로필"]
-    API -->|"JDBC · data 내부 네트워크"| DB[("PostgreSQL 17 · PostGIS 3.5")]
-```
-
-- Frontend는 `./frontend`를 빌드 컨텍스트로 사용하며 Node.js 24·npm 11.19.1과 기존 잠금 파일로 빌드합니다. 실행 이미지는 비권한 Nginx에서 정적 파일을 제공합니다. Compose는 루트의 `nginx/default.conf`를 컨테이너의 `/etc/nginx/conf.d/default.conf`에 읽기 전용으로 마운트합니다.
-- Backend는 Java 21과 기존 Gradle Wrapper로 `verifyScorePackaging`을 실행합니다. 내부 검증 클래스와 CLI 분리 계약을 검사한 뒤, 실행 JAR만 Java 21 런타임에 복사하고 UID·GID 10001로 실행합니다.
-- Nginx 포트만 호스트 루프백에 게시합니다. Backend와 DB에는 호스트 포트가 없으며, Nginx는 DB의 내부 네트워크에 참가하지 않습니다.
-- DB가 TCP 연결을 수락하면 Backend가 `db` 프로필로 기동해 기존 Flyway V1~V7 중 미적용 버전을 실행합니다. 스키마 적용 후 실제 조회 데이터는 별도 게시 절차로 준비합니다. ETL 실행 서비스와 점수 공개 설정은 구성에 포함되지 않습니다.
-
-#### Nginx의 SPA 경로 처리
-
-[Nginx 설정](../nginx/default.conf)은 요청 경로에 따라 다음과 같이 처리합니다.
-
-| 요청 | 응답 |
-| --- | --- |
-| `/`, `/explore`, 알 수 없는 문서 경로 | `index.html`을 제공하고 브라우저가 캐시를 재검증합니다. 알 수 없는 문서 경로는 HTTP 200으로 HTML을 받고 React Router가 404 화면을 표시합니다. |
-| `/api`, `/api/` 하위 경로 | Backend에 경로와 쿼리를 전달하고 응답 상태를 유지합니다. 배포 구성은 점수 요청의 승인 상태와 REST 503 차단을 유지합니다. |
-| `/assets/` 아래의 해시 파일 | 성공 응답을 1년간 캐시합니다. 누락된 파일이나 확장자가 있는 다른 정적 경로는 실제 HTTP 404를 반환합니다. |
+- Frontend는 비권한 Nginx로 정적 파일을 제공하며 `nginx/default.conf`를 읽기 전용으로 마운트합니다. Nginx HTTP만 호스트 루프백에 게시하고 `/api`는 내부 Backend로 전달합니다. Backend와 DB는 호스트에 직접 게시하지 않습니다.
+- Backend 이미지는 Java 21 빌드에서 제품 JAR을 검사하고 UID·GID 10001로 실행합니다. 배포 DB가 준비되면 `db` 프로필이 미적용 Flyway를 적용합니다. ETL 적재는 별도 절차이며 점수 REST 차단을 유지합니다.
+- `/explore`와 알 수 없는 문서 경로에는 브라우저가 재검증하는 SPA HTML을 제공합니다. 알 수 없는 문서 경로는 HTML HTTP 200과 React Router의 404 화면을 반환합니다. 해시 자산은 성공 응답을 1년간 캐시하고 누락된 정적 파일은 HTTP 404를 반환합니다. `/api`와 `/api/` 하위는 경로·쿼리·Backend 응답 상태를 보존합니다.
 
 ### 배포 환경변수와 Kakao SDK
 
-설정·빌드 검증은 [.env.deploy.example](../.env.deploy.example)로 실행합니다. 기동을 준비할 때는 이 파일을 `.env.deploy`로 복사하고 개발 DB와 분리된 값을 설정합니다. `.env.deploy`는 Git에서 제외됩니다. 항상 배포 파일과 배포용 환경변수 파일을 명시합니다. Compose에서는 셸에 이미 설정된 같은 이름의 변수가 파일보다 우선하므로 배포 명령을 실행할 셸의 `DEPLOY_*` 설정도 확인합니다.
+[배포 예시](../.env.deploy.example)는 설정·빌드 확인용입니다. 기동 시에는 별도 `.env.deploy`에 배포 전용 자격증명을 준비하고 항상 파일을 명시합니다. 셸의 같은 이름 변수가 파일보다 우선하므로 실행 전에 `DEPLOY_*`를 확인합니다.
 
-| 변수 | 용도 |
-| --- | --- |
-| `DEPLOY_DB_NAME`, `DEPLOY_DB_USER` | 배포 DB 이름과 사용자입니다. 영문 소문자·숫자·밑줄로 된 식별자를 사용합니다. |
-| `DEPLOY_DB_PASSWORD` | 배포 DB 초기화와 Backend 연결에 전달할 별도 비밀번호입니다. 예시의 값은 설정 검사용입니다. |
-| `DEPLOY_HTTP_PORT` | 호스트 루프백의 HTTP 포트입니다. 기본값은 8080이며 로컬 Backend와 동시에 실행할 때는 다른 포트를 지정합니다. |
-| `DEPLOY_KAKAO_MAP_APP_KEY` | 선택 항목입니다. Compose가 Frontend 빌드 인수 `VITE_KAKAO_MAP_APP_KEY`로 전달합니다. |
+| 변수                                                     | 용도                                                                                                                      |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `DEPLOY_DB_NAME`, `DEPLOY_DB_USER`, `DEPLOY_DB_PASSWORD` | 배포 DB 초기화와 Backend의 내부 `db:5432` 연결에 사용합니다. 이미 초기화한 볼륨의 계정은 변수 변경으로 갱신되지 않습니다. |
+| `DEPLOY_HTTP_PORT`                                       | Nginx가 게시할 루프백 포트. 기본 8080이며 로컬 Backend와 충돌하면 변경합니다.                                             |
+| `DEPLOY_KAKAO_MAP_APP_KEY`                               | 선택적인 브라우저 공개용 JavaScript 키. Compose가 빌드 인수 `VITE_KAKAO_MAP_APP_KEY`로 전달합니다.                        |
 
-Compose는 `DEPLOY_DB_NAME`을 내부 주소 `jdbc:postgresql://db:5432/<DB 이름>`에 결합해 Backend의 `DB_JDBC_URL`로 전달합니다. `DEPLOY_DB_USER`와 `DEPLOY_DB_PASSWORD`는 Backend의 `DB_USER`, `DB_PASSWORD` 및 DB 초기화 설정에 전달됩니다. 이미 초기화된 볼륨의 DB 계정 정보는 환경변수만 바꿔도 갱신되지 않습니다.
-
-Docker 빌드는 Frontend의 로컬 `.env*` 파일을 제외합니다. Vite는 `VITE_KAKAO_MAP_APP_KEY`를 빌드할 때 브라우저 번들에 포함하므로 값을 바꾸면 이미지를 다시 빌드해야 합니다. 빌드 인수는 이미지 빌드 메타데이터에도 남을 수 있으므로 **브라우저 공개용 JavaScript 키**만 전달합니다. Kakao Developers에 브라우저가 접속하는 origin을 등록합니다. 기본 확인 주소는 `http://127.0.0.1:8080`입니다. 키를 비워 두면 앱의 키 미설정 상태를 확인할 수 있습니다. [Kakao 지도 공식 가이드](https://apis.map.kakao.com/web/guide/), [Vite 환경변수 문서](https://vite.dev/guide/env-and-mode)
+Frontend의 로컬 `.env*`는 Docker 빌드에 들어가지 않습니다. 키는 브라우저 번들과 빌드 메타데이터에 남을 수 있습니다. 키를 바꾸면 이미지를 다시 빌드하고 Kakao Developers에 접속 origin을 등록합니다. 기본 확인 주소는 `http://127.0.0.1:8080`입니다.
 
 ### DB 없이 배포 사전 검증
 
-저장소 루트에서 로컬 Docker 컨텍스트를 확인하고 다음 명령을 실행합니다. 예시 변수만 사용하도록 셸 환경을 분리합니다. `config --quiet`는 보간된 비밀번호를 출력하지 않습니다. 빌드와 Nginx 설정 검사는 배포 DB 컨테이너나 볼륨을 만들지 않습니다.
+저장소 루트에서 로컬 Docker 컨텍스트를 확인합니다. 예시 환경변수만 사용하고 `config --quiet`로 보간값을 출력하지 않습니다. 아래 명령은 DB 컨테이너와 볼륨을 기동하지 않습니다.
 
 ```bash
 deploy_check() {
@@ -536,13 +239,11 @@ deploy_check config --quiet &&
     recycleyoungs-deploy-preflight-frontend nginx -t
 ```
 
-라우팅은 별도 Docker 내부 네트워크에서 같은 Nginx 설정 파일을 읽기 전용으로 마운트해 확인합니다. 호스트 포트와 DB 볼륨은 연결하지 않습니다. `backend`라는 네트워크 별칭을 가진 합성 HTTP 서버로 `/api`와 `/api/`의 경로·쿼리 전달 및 503 응답 보존을 확인합니다. `/explore`와 알 수 없는 문서 경로의 HTML, 해시 파일의 캐시 헤더, 누락된 정적 리소스의 HTTP 404도 확인합니다. 실제 배포 Compose의 `up`은 DB 초기화와 Flyway를 시작하므로 사전 검증에 사용하지 않습니다.
-
-`postgis/postgis:17-3.5`는 기존 개발·CI와 같은 판본입니다. ARM64 Docker 호스트에서는 이 서비스에 AMD64 에뮬레이션이 필요합니다. [PostGIS 이미지 지원 범위](https://github.com/postgis/docker-postgis#versions-2026-11-05)
+라우팅 검증에는 호스트 포트나 DB 볼륨을 연결하지 않은 격리 네트워크와 `backend` 별칭의 합성 HTTP 서버를 사용합니다. SPA·캐시·정적 파일 404와 API 경로·쿼리·503 전달을 확인합니다. 실제 배포 Compose의 `up`은 DB 초기화와 Flyway를 시작하므로 사전 검증 절차에서 분리합니다.
 
 ### 승인 후 기동과 종료
 
-DB 대상·계정·백업과 Flyway 적용을 검토한 뒤, 별도의 배포 자격증명을 담은 `.env.deploy`로 실행합니다. 기동 시 Docker 호스트에 읽을 수 있는 `nginx/default.conf`가 필요합니다. 다음 명령은 배포 전 검토를 마친 환경의 저장소 루트에서 실행합니다.
+대상 DB·권한·백업과 Flyway 적용을 검토한 뒤 루트에서 실행합니다. 호스트에서 `nginx/default.conf`를 읽을 수 있어야 합니다. 배포 DB의 `postgis/postgis:17-3.5`는 AMD64로 지정되므로 ARM64 호스트에는 에뮬레이션이 필요합니다.
 
 ```bash
 deploy_compose() {
@@ -555,16 +256,12 @@ test -r nginx/default.conf &&
   deploy_compose ps
 ```
 
-기동 후 `http://127.0.0.1:<DEPLOY_HTTP_PORT>`에서 확인합니다. 종료할 때는 같은 셸에서 `deploy_compose stop`을 실행하면 배포 DB 볼륨이 유지됩니다.
+기동 후 `http://127.0.0.1:<DEPLOY_HTTP_PORT>`에서 확인합니다. 같은 셸에서 `deploy_compose stop`으로 중지하면 배포 DB 볼륨이 남습니다.
 
-### 검토 항목
+| 영역      | 운영 전 남은 작업                                                                                                         |
+| --------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 외부 접속 | 호스트·도메인·TLS·Kakao origin과 실제 SDK 검증                                                                            |
+| DB·데이터 | 비밀정보 보관, 조회·Flyway 계정 분리, 운영 PostGIS 판본, 백업 복원과 첫 마이그레이션 리허설, 게시 담당자와 적재 시점 결정 |
+| 운영·CD   | 이미지 배포·롤백, 로그·장애 감시, Frontend 의존성 보안 권고 검토와 배포 자동화                                            |
 
-| 항목 | 실제 배포 전 남은 작업 |
-| --- | --- |
-| 외부 접속 | 호스트·도메인·TLS 인증서·HTTPS 진입점 구성, Kakao origin 등록과 실제 SDK 확인 |
-| DB | 비밀정보 보관 및 조회·Flyway 계정 분리, 백업·복구와 첫 마이그레이션 리허설, 업데이트가 종료된 PostGIS 3.5 이미지의 운영 판본 검토 |
-| 게시 데이터 | 데이터 적재 시점과 담당자를 정하고, 이전 게시본과 배치 이력을 기존 [ETL 검증·게시 절차](etl-guide.md)에 따라 보존합니다. [점수 공개 요건](score-20262-publication-readiness.md)은 별도로 검토합니다. |
-| 운영·CD | 이미지 배포·롤백 절차와 로그·장애 감시 확정, Frontend 설치 시 보고된 npm 보안 권고와 배포 자동화 검토 |
-| 회귀 검증 | GitHub-hosted Runner에서 Frontend E2E 26건 실행 확인. `kakao-map.test.tsx`의 간헐적 마커 생성 실패는 재현 조건을 별도로 조사 |
-
-배포 기반 1단계에서는 설정·이미지·격리 라우팅을 검증 대상으로 삼습니다. 운영 데이터 적재·마이그레이션·외부 공개는 후속 승인 후 진행합니다.
+운영 데이터의 게시 절차는 [ETL 가이드](etl-guide.md), 별도 점수 공개 승인·철회 조건은 [점수 문서](score.md#7-공개-승인-조건과-차단-정책)에 있습니다.

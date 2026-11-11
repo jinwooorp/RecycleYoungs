@@ -15,7 +15,7 @@ export interface ComparisonPolicy {
   reason: string;
 }
 
-/** 공개 근거는 docs/quarter-comparison-verification.md에서 관리합니다. 존재 여부만으로 승인하지 않습니다. */
+/** 공개 근거는 docs/archive/quarter-comparison-verification.md에서 관리합니다. 존재 여부만으로 승인하지 않습니다. */
 export const STATISTICS_COMPARABILITY: Record<
   ComparisonMetric,
   ComparisonPolicy
