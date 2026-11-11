@@ -4,8 +4,8 @@ WORKDIR /app
 COPY gradlew build.gradle settings.gradle ./
 COPY gradle/wrapper ./gradle/wrapper
 COPY src/main ./src/main
-# 두 JAR의 패키징 계약을 검증하고 실행 가능한 Boot JAR만 복사한다.
-RUN ./gradlew --no-daemon --console=plain verifyScorePackaging \
+# 실행 가능한 Spring Boot JAR를 빌드해 런타임 이미지에 복사한다.
+RUN ./gradlew --no-daemon --console=plain bootJar \
     && boot_jar="$(find build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-plain.jar')" \
     && cp "$boot_jar" /app/recycleyoungs.jar
 

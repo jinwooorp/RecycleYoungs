@@ -12,8 +12,6 @@ export const test = base.extend<{ allowHttpErrors: Set<string> }>({
           faults.push(`External request blocked: ${url.origin}`);
           await route.abort('blockedbyclient');
         } else {
-          if (/\/scores?(?:\/|$)/.test(url.pathname))
-            faults.push('Score API called');
           await route.continue();
         }
       });

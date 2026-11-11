@@ -150,11 +150,9 @@ npm test
 npm run build
 ```
 
-`backend/`에서는 `./gradlew build`로 단위·MVC·Spotless와 제품 JAR 검사(`verifyScorePackaging`)를 실행합니다. 전체 검증은 Docker를 준비하고 `./gradlew build integrationTest`를 실행합니다. 통합 테스트는 Testcontainers가 만든 `postgis/postgis:17-3.5`에 서비스·Flyway 연결을 모두 지정합니다. ARM64에서 해당 이미지 판본을 찾지 못하면 `docker pull --platform linux/amd64 postgis/postgis:17-3.5`와 AMD64 에뮬레이션을 확인합니다. 로컬 개발 DB 대신 일회용 DB를 사용합니다.
+`backend/`에서는 `./gradlew build`로 단위·MVC 테스트와 Spotless 검사를 실행하고 Spring Boot JAR를 생성합니다. 전체 검증은 Docker를 준비하고 `./gradlew build integrationTest`를 실행합니다. 통합 테스트는 Testcontainers가 만든 `postgis/postgis:17-3.5`에 서비스·Flyway 연결을 모두 지정합니다. ARM64에서 해당 이미지 판본을 찾지 못하면 `docker pull --platform linux/amd64 postgis/postgis:17-3.5`와 AMD64 에뮬레이션을 확인합니다. 로컬 개발 DB 대신 일회용 DB를 사용합니다.
 
 테스트 감시는 `npm run test:watch`, 포맷 수정은 TypeScript 프로젝트의 `npm run format`이나 Java의 `./gradlew spotlessApply`를 사용합니다. ETL의 개별 DB 테스트는 [격리 DB 통합 테스트](etl-guide.md#격리-db-통합-테스트)를 참고합니다.
-
-제품 JAR에는 공통 점수 검증·안전 읽기가 포함되고 회귀·스냅샷 출력·사전 진단 CLI는 분리됩니다. 점수 도구는 명시 실행하며 준비 조건·환경변수·종료값은 [점수 도구 계약](score.md#5-입력-스냅샷재현검증-도구), 내부 신뢰·DB 대조와 운영 승인 범위는 [원천 신뢰 검증](score.md#6-원천-신뢰-검증)에 있습니다.
 
 ## GitHub Actions CI
 
@@ -199,7 +197,7 @@ document.cookie = "ry-e2e-scenario=sales-error; Path=/; SameSite=Strict";
 
 ### GitHub Actions Playwright
 
-실제 Chromium 실행은 GitHub-hosted Linux Runner에서 수행합니다. Playwright가 합성 서버를 시작·종료하고 데스크톱 1440×900과 모바일 390×844에서 13개씩 총 26개를 검증합니다. 라우팅·키 누락 안내·반응형 패널과 포커스·지역 통계·오류와 재시도·후보지 복원·미검증 증감과 점수 차단을 포함합니다. 실패 시 HTML·trace·스크린샷·JUnit을 7일 보존합니다. 브라우저 시작 전 실패는 Step 로그로 확인합니다.
+실제 Chromium 실행은 GitHub-hosted Linux Runner에서 수행합니다. Playwright가 합성 서버를 시작·종료하고 데스크톱 1440×900과 모바일 390×844에서 13개씩 총 26개를 검증합니다. 라우팅·키 누락 안내·반응형 패널과 포커스·지역 통계·오류와 재시도·후보지 복원·미검증 증감 비공개를 포함합니다. 실패 시 HTML·trace·스크린샷·JUnit을 7일 보존합니다. 브라우저 시작 전 실패는 Step 로그로 확인합니다.
 
 실제 Kakao 지도·검색·마커·클러스터 및 지도 클릭이나 검색에서 후보지를 새로 등록하는 흐름은 키가 있는 환경에서 별도 확인합니다. 세 곳 초과 E2E는 저장 데이터의 복원 제한을 검증합니다. `kakao-map.test.tsx`의 간헐적 마커 생성 실패는 기존 후속 검증 항목입니다.
 
@@ -208,7 +206,7 @@ document.cookie = "ry-e2e-scenario=sales-error; Path=/; SameSite=Strict";
 [배포 Compose](../compose.deploy.yaml)와 [Nginx 설정](../nginx/default.conf)은 구현됐습니다. 실제 운영 배포·도메인·HTTPS·CD는 남아 있습니다. 배포 프로젝트는 `recycleyoungs-deploy`, DB 볼륨은 `recycleyoungs-deploy_deploy_postgres_data`입니다. 개발 Compose와 분리합니다.
 
 - Frontend는 비권한 Nginx로 정적 파일을 제공하며 `nginx/default.conf`를 읽기 전용으로 마운트합니다. Nginx HTTP만 호스트 루프백에 게시하고 `/api`는 내부 Backend로 전달합니다. Backend와 DB는 호스트에 직접 게시하지 않습니다.
-- Backend 이미지는 Java 21 빌드에서 제품 JAR을 검사하고 UID·GID 10001로 실행합니다. 배포 DB가 준비되면 `db` 프로필이 미적용 Flyway를 적용합니다. ETL 적재는 별도 절차이며 점수 REST 차단을 유지합니다.
+- Backend 이미지는 Java 21에서 `bootJar`로 실행 JAR를 빌드하고 UID·GID 10001로 실행합니다. 배포 DB가 준비되면 `db` 프로필이 미적용 Flyway를 적용합니다. ETL 적재는 별도 절차입니다.
 - `/explore`와 알 수 없는 문서 경로에는 브라우저가 재검증하는 SPA HTML을 제공합니다. 알 수 없는 문서 경로는 HTML HTTP 200과 React Router의 404 화면을 반환합니다. 해시 자산은 성공 응답을 1년간 캐시하고 누락된 정적 파일은 HTTP 404를 반환합니다. `/api`와 `/api/` 하위는 경로·쿼리·Backend 응답 상태를 보존합니다.
 
 ### 배포 환경변수와 Kakao SDK
@@ -264,4 +262,4 @@ test -r nginx/default.conf &&
 | DB·데이터 | 비밀정보 보관, 조회·Flyway 계정 분리, 운영 PostGIS 판본, 백업 복원과 첫 마이그레이션 리허설, 게시 담당자와 적재 시점 결정 |
 | 운영·CD   | 이미지 배포·롤백, 로그·장애 감시, Frontend 의존성 보안 권고 검토와 배포 자동화                                            |
 
-운영 데이터의 게시 절차는 [ETL 가이드](etl-guide.md), 별도 점수 공개 승인·철회 조건은 [점수 문서](score.md#7-공개-승인-조건과-차단-정책)에 있습니다.
+운영 데이터의 게시 절차는 [ETL 가이드](etl-guide.md)에 있습니다.

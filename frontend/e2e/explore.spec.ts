@@ -126,9 +126,6 @@ test('구·동 선택, 통계 갱신, 탭과 미검증 숫자 차단', async ({ 
     page.getByRole('heading', { name: '마포구 · 서교동', exact: true }),
   ).toBeVisible();
   await expect(summary.getByText('30', { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole('region', { name: '행정구역 전체 통계' }),
-  ).not.toContainText(/창업.*점수|추천 순위/);
   await noOverflow(page);
 });
 

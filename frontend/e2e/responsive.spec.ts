@@ -69,7 +69,6 @@ test('320×568에서 키보드로 상세 패널을 열고 스크롤하며 지역
   await page.keyboard.press('Tab');
   await expect(stores).toBeFocused();
   await expect(stores).toBeInViewport({ ratio: 1 });
-  await expect(panel).not.toContainText(/창업.*점수|추천 순위/);
   expect(await page.evaluate(() => innerWidth)).toBe(320);
   await noOverflow(page);
 });

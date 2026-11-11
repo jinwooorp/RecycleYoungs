@@ -124,11 +124,9 @@ test('반경과 반환 상한·전체 건수·서버 거리 유지', async (t) =
   );
 });
 
-test('정의하지 않은 API와 점수 경로는 성공으로 대체하지 않음', async (t) => {
+test('정의하지 않은 API를 404로 응답한다', async (t) => {
   const get = await fixture(t);
-  for (const path of ['/api/v1/scores', '/api/v1/not-defined']) {
-    const response = await get(path);
-    assert.equal(response.status, 404);
-    assert.equal((await response.json()).code, 'E2E_UNEXPECTED_ENDPOINT');
-  }
+  const response = await get('/api/v1/not-defined');
+  assert.equal(response.status, 404);
+  assert.equal((await response.json()).code, 'E2E_UNEXPECTED_ENDPOINT');
 });

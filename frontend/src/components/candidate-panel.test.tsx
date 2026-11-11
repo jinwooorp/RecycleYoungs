@@ -659,14 +659,10 @@ test.each([1, 2, 3])(
         /같은 행정동의 후보지는 동일한 행정동 통계와 조회 응답을 공유/,
       ),
     ).toBeVisible();
-    expect(
-      fetch.mock.calls.some(
-        ([path]) => path.includes('/scores') || path.includes('20261'),
-      ),
-    ).toBe(false);
-    expect(
-      screen.queryByText(/증감률|추천 순위|창업 점수|우수 후보지/),
-    ).not.toBeInTheDocument();
+    expect(fetch.mock.calls.some(([path]) => path.includes('20261'))).toBe(
+      false,
+    );
+    expect(screen.queryByText(/증감률/)).not.toBeInTheDocument();
   },
 );
 

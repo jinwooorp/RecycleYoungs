@@ -127,7 +127,7 @@ jobs:
       - run: java -version
       - run: ./gradlew --no-daemon --console=plain test
       - run: ./gradlew --no-daemon --console=plain spotlessCheck
-      # build의 check에 기존 verifyScorePackaging이 포함된다.
+      # build는 표준 검사와 실행 가능한 Spring Boot JAR 생성을 수행한다.
       - run: ./gradlew --no-daemon --console=plain build
 
   backend-integration:

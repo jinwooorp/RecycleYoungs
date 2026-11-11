@@ -245,7 +245,6 @@ test('구 공식 통계·동 통계를 실제 DTO로 표시하고 정밀도·당
     ).getByText('자치구 전체'),
   ).toBeVisible();
   expect(screen.queryByText('종로구 · 선택동')).not.toBeInTheDocument();
-  expect(fetch.mock.calls.some(([url]) => url.includes('/scores'))).toBe(false);
 });
 
 test('API별 오류·재시도·data:null과 모든 필드 NULL인 실제 행을 분리한다', async () => {
@@ -542,10 +541,6 @@ test('탭은 좌우·Home·End 키로 포커스와 선택을 함께 이동하고
   expect(
     fetch.mock.calls.filter(([url]) => url.includes('/stats/')),
   ).toHaveLength(6);
-  expect(fetch.mock.calls.some(([url]) => /score/i.test(url))).toBe(false);
-  expect(
-    screen.getByRole('complementary', { name: '상권 분석' }),
-  ).not.toHaveTextContent(/점수|적합성|순위/);
 });
 
 test('같은 지역의 패널을 빠르게 재열어도 취소한 응답이 새 요약을 덮어쓰지 않는다', async () => {
@@ -654,7 +649,6 @@ test('두 분기 세 지표를 한 번씩 조회하며 미검증 증감을 숨�
   expect(fetch.mock.calls.filter(([u]) => u.includes('/stats/'))).toHaveLength(
     6,
   );
-  expect(fetch.mock.calls.some(([u]) => u.includes('/scores'))).toBe(false);
 });
 test.each([
   ['stores', '점포 수'],

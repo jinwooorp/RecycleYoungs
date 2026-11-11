@@ -92,8 +92,6 @@ flowchart LR
 
 요청 조건과 응답 형식은 [데이터 설계](docs/data-design.md#행정구역-rest-api-계약)에 정리했습니다.
 
-창업 환경 점수는 내부 계산·검증 단계입니다. 공개 승인은 `NOT_APPROVED`이며 `sourceTrust=NOT_ESTABLISHED`, `R03_COMPLETE=false` 상태입니다. 자치구·행정동 점수 REST 경로는 승인 전 유효한 요청에도 HTTP 503을 반환합니다. [점수 API 계약](docs/score.md#현재-점수-rest) · [공개 준비와 승인 기록](docs/score.md#7-공개-승인-조건과-차단-정책)
-
 ## 프로젝트 구조
 
 ```text
@@ -172,7 +170,7 @@ GitHub Actions는 `project-upgrade`에 Push하거나 이 브랜치를 대상으�
 | ------------------- | --------------------------------------------------------------- |
 | Frontend            | 린트·포맷·Vitest·제품 빌드                                      |
 | Frontend E2E        | E2E 타입·모의 API 검사와 Playwright Chromium 사용자 흐름 테스트 |
-| Backend             | Gradle 테스트·Spotless·제품 JAR 구성 검사와 빌드                |
+| Backend             | Gradle 테스트·Spotless·Spring Boot JAR 빌드                     |
 | Backend integration | Testcontainers의 일회용 PostGIS로 통합 테스트                   |
 | ETL                 | 린트·포맷·기본 Vitest 테스트와 빌드                             |
 
@@ -185,4 +183,3 @@ GitHub Actions는 `project-upgrade`에 Push하거나 이 브랜치를 대상으�
 | [ETL 가이드](docs/etl-guide.md) · [검증·적재 이력](docs/archive/etl-validation-history.md)                                                 | 원본 출처, 검증·적재 명령, 체크섬·게시 이력 |
 | [개발 가이드](docs/development.md)                                                                                                         | 환경변수, 로컬 실행, 테스트, 배포 구성      |
 | [자치구 통계 정책](docs/data-design.md#공식-자치구-통계와-집계-정책) · [전분기 비교 검증](docs/archive/quarter-comparison-verification.md) | 공식 원천과 집계 기준, 분기 간 비교 근거    |
-| [창업 환경 점수](docs/score.md)                                                                                                            | 내부 계산·재현, 공개 승인 및 원천 신뢰 조건 |
