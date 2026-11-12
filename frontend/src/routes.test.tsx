@@ -54,7 +54,7 @@ test('랜딩은 서비스 소개와 탐색 링크를 표시하며 SDK와 API를 
   expect(
     screen.getByRole('heading', {
       level: 1,
-      name: '카페 창업할 곳, 감으로만 고르지 마세요.',
+      name: '창업할 곳, 감으로만 고르지 마세요.',
     }),
   ).toBeVisible();
   expect(screen.getByRole('link', { name: '지도 탐색' })).toHaveAttribute(
@@ -81,13 +81,13 @@ test('랜딩은 서비스 소개와 탐색 링크를 표시하며 SDK와 API를 
     screen.getByRole('region', { name: '후보지를 같은 기준으로 비교하세요' }),
   ).toBeVisible();
   const heroPreview = screen.getByRole('img', {
-    name: /홍대입구역의 500m 반경/,
+    name: /홍대입구역 500m 주변 카페/,
   });
   expect(heroPreview).toHaveAttribute('fetchpriority', 'high');
   expect(
-    screen.getByRole('img', { name: /홍대입구역, 서울시청, 성수역 후보지/ }),
+    screen.getByRole('img', { name: /서울 지도에 표시된 후보지 A·B·C/ }),
   ).toHaveAttribute('loading', 'lazy');
-  expect(document.title).toBe('RecycleYoungs | 서울 카페 상권 탐색');
+  expect(document.title).toBe('여기 창업해도 돼? | 서울 창업 입지 탐색');
   expect(loadKakaoMaps).not.toHaveBeenCalled();
   expect(fetchApi).not.toHaveBeenCalled();
 });
@@ -109,14 +109,14 @@ test('탐색 CTA와 뒤로·앞으로 이동 후 탭에 저장된 후보지를 �
   );
   renderRoute('/');
   const hero = screen.getByRole('region', {
-    name: '카페 창업할 곳, 감으로만 고르지 마세요.',
+    name: '창업할 곳, 감으로만 고르지 마세요.',
   });
   fireEvent.click(within(hero).getByRole('link', { name: '시작하기' }));
   const explore = await screen.findByRole('main', {
     name: 'RecycleYoungs 탐색 화면',
   });
   expect(explore).toHaveFocus();
-  expect(document.title).toBe('상권 탐색 | RecycleYoungs');
+  expect(document.title).toBe('상권 탐색 | 여기 창업해도 돼?');
   expect(loadKakaoMaps).toHaveBeenCalledTimes(1);
   expect(fetchApi).toHaveBeenCalledTimes(1);
 
@@ -124,7 +124,7 @@ test('탐색 CTA와 뒤로·앞으로 이동 후 탭에 저장된 후보지를 �
   expect(
     await screen.findByRole('heading', {
       level: 1,
-      name: '카페 창업할 곳, 감으로만 고르지 마세요.',
+      name: '창업할 곳, 감으로만 고르지 마세요.',
     }),
   ).toBeVisible();
   expect(explore).not.toBeInTheDocument();
@@ -146,10 +146,12 @@ test('/explore에서 탐색 페이지를 바로 렌더링한다', async () => {
   expect(
     await screen.findByRole('main', { name: 'RecycleYoungs 탐색 화면' }),
   ).toBeVisible();
-  await waitFor(() => expect(document.title).toBe('상권 탐색 | RecycleYoungs'));
+  await waitFor(() =>
+    expect(document.title).toBe('상권 탐색 | 여기 창업해도 돼?'),
+  );
   expect(
     screen.queryByRole('heading', {
-      name: '카페 창업할 곳, 감으로만 고르지 마세요.',
+      name: '창업할 곳, 감으로만 고르지 마세요.',
     }),
   ).not.toBeInTheDocument();
 });
@@ -162,7 +164,8 @@ test('알 수 없는 경로에서 홈과 탐색 링크를 제공한다', async (
       name: '페이지를 찾을 수 없습니다',
     }),
   ).toBeVisible();
-  expect(document.title).toBe('페이지를 찾을 수 없습니다 | RecycleYoungs');
+  expect(document.title).toBe('페이지를 찾을 수 없습니다 | 여기 창업해도 돼?');
+  expect(screen.getByText('여기 창업해도 돼? · 404')).toBeVisible();
   expect(screen.getByRole('link', { name: '상권 탐색' })).toHaveAttribute(
     'href',
     '/explore',
@@ -172,7 +175,7 @@ test('알 수 없는 경로에서 홈과 탐색 링크를 제공한다', async (
   fireEvent.click(screen.getByRole('link', { name: '홈으로' }));
   expect(
     await screen.findByRole('heading', {
-      name: '카페 창업할 곳, 감으로만 고르지 마세요.',
+      name: '창업할 곳, 감으로만 고르지 마세요.',
     }),
   ).toBeVisible();
 });
@@ -198,7 +201,7 @@ test('탐색의 홈 링크로 랜딩에 돌아와도 후보지를 보존하고 �
   fireEvent.click(home);
   expect(
     await screen.findByRole('heading', {
-      name: '카페 창업할 곳, 감으로만 고르지 마세요.',
+      name: '창업할 곳, 감으로만 고르지 마세요.',
     }),
   ).toBeVisible();
   expect(sessionStorage.getItem('recycleyoungs.candidates')).toBe(saved);

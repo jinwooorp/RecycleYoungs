@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { useLandingMotion } from '@/hooks/use-landing-motion';
-import { ArrowRight, Coffee } from 'lucide-react';
+import { ArrowRight, MapPin } from 'lucide-react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
 import nearbyCafes from '@/assets/landing/nearby-cafes.webp';
@@ -9,6 +9,8 @@ import placeSearch from '@/assets/landing/place-search.webp';
 import districtAnalysis from '@/assets/landing/district-analysis.webp';
 import candidateComparison from '@/assets/landing/candidate-comparison.webp';
 import './landing-page.css';
+
+const brand = '여기 창업해도 돼?';
 
 const sections = [
   { id: 'features', label: '지도 탐색' },
@@ -19,16 +21,23 @@ const sections = [
 
 const steps = [
   ['장소 검색', '관심 있는 동네나 역 이름을 검색하세요.'],
-  ['상권 분석', '주변 카페와 지역의 점포·매출·유동인구를 살펴보세요.'],
+  ['상권 분석', '주변 카페와 행정구역별 상권 통계를 살펴보세요.'],
   ['후보지 등록', '지도나 검색 결과에서 다시 보고 싶은 위치를 추가하세요.'],
   ['후보지 비교', '같은 반경의 카페 수와 행정동 통계를 나란히 보세요.'],
+];
+
+// 프리뷰 이미지에 표시된 500m 조회 결과를 읽을 수 있는 텍스트로도 제공합니다.
+const candidatePreviewResults = [
+  ['A · 홍대입구역 2호선', '마포구 서교동 · 289곳'],
+  ['B · 서울특별시청', '중구 명동 · 187곳'],
+  ['C · 성수역 2호선', '성동구 성수2가3동 · 117곳'],
 ];
 
 function Brand() {
   return (
     <Link to="/" className="landing-brand">
-      <Coffee aria-hidden="true" size={24} />
-      RecycleYoungs
+      <MapPin aria-hidden="true" size={24} />
+      {brand}
     </Link>
   );
 }
@@ -52,7 +61,9 @@ function PreviewBar({ label }: { label: string }) {
         <i />
         <i />
       </span>
-      <span>{label}</span>
+      <span>
+        {brand} / {label}
+      </span>
       <span>실제 화면</span>
     </div>
   );
@@ -87,7 +98,7 @@ function ProductPreview({
         className="landing-map-stage"
       >
         <div className="landing-preview">
-          <PreviewBar label="RecycleYoungs / 장소 검색" />
+          <PreviewBar label="장소 검색" />
           <img
             src={placeSearch}
             width={1200}
@@ -113,7 +124,7 @@ function ProductPreview({
         className="landing-analysis-stage"
       >
         <div className="landing-preview">
-          <PreviewBar label="RecycleYoungs / 상권 분석" />
+          <PreviewBar label="상권 분석" />
           <img
             src={districtAnalysis}
             width={360}
@@ -123,41 +134,55 @@ function ProductPreview({
             alt={
               decorative
                 ? ''
-                : '용답동 상권 분석 화면. 점포 현황, 추정매출, 유동인구 탭과 2026년 2분기 카페 점포 통계가 표시됩니다.'
+                : '용답동의 2026년 2분기 카페 점포 수와 당월 추정매출, 전분기 점포 수 비교를 보류한 사유가 표시된 상권 분석 화면'
             }
           />
         </div>
-        <figcaption>성동구 용답동 · 2026년 2분기 점포 현황</figcaption>
+        <figcaption>성동구 용답동 · 2026년 2분기 상권 분석</figcaption>
       </figure>
     );
   return (
-    <figure data-landing-reveal={decorative ? undefined : ''}>
+    <figure
+      data-landing-reveal={decorative ? undefined : ''}
+      className="landing-candidate-preview"
+    >
       <div className="landing-preview">
-        <PreviewBar label="RecycleYoungs / 후보지 비교" />
+        <PreviewBar label="후보지 비교" />
         <div
           tabIndex={decorative ? undefined : 0}
           role={decorative ? undefined : 'region'}
-          aria-label={decorative ? undefined : '후보지 비교표 프리뷰'}
+          aria-label={decorative ? undefined : '후보지 요약 프리뷰'}
           className="landing-comparison-scroll"
         >
           <img
             src={candidateComparison}
-            width={903}
-            height={518}
+            width={1440}
+            height={900}
             loading="lazy"
             decoding="async"
             alt={
               decorative
                 ? ''
-                : '홍대입구역, 서울시청, 성수역 후보지의 500m 내 경쟁 카페 수와 행정동 상권 통계를 비교한 실제 조회 화면'
+                : '서울 지도에 표시된 후보지 A·B·C와 왼쪽 후보지 요약 패널'
             }
           />
         </div>
       </div>
       <figcaption>
-        후보지 A·B·C를 500m 반경으로 조회한 화면{' '}
+        <span>500m 내 경쟁 카페 조회 예시</span>
+        <span>지도 © Kakao</span>
+        <ul
+          aria-label="후보지 500m 조회 결과"
+          className="landing-candidate-summary"
+        >
+          {candidatePreviewResults.map(([place, result]) => (
+            <li key={place}>
+              <strong>{place}</strong> <span>{result}</span>
+            </li>
+          ))}
+        </ul>
         <span className="landing-scroll-note">
-          표를 좌우로 움직여 확인할 수 있어요.
+          화면을 좌우로 움직여 확인할 수 있어요.
         </span>
       </figcaption>
     </figure>
@@ -195,22 +220,21 @@ export default function LandingPage() {
           <div className="landing-shell landing-hero-inner">
             <div className="landing-hero-copy">
               <p className="landing-eyebrow">
-                서울 카페 창업을 위한 데이터 탐색
+                서울의 창업 후보지를 데이터로 탐색
               </p>
               <h1 id="landing-heading">
-                <span>카페 창업할 곳,</span>{' '}
-                <span>감으로만 고르지 마세요.</span>
+                <span>창업할 곳,</span> <span>감으로만 고르지 마세요.</span>
               </h1>
               <p className="landing-hero-description">
-                서울의 카페 분포부터 점포 현황, 추정매출, 유동인구까지.
-                공공데이터로 확인하고 관심 있는 후보지를 비교해 보세요.
+                서울의 상권 데이터를 확인하고 관심 있는 후보지를 비교해 보세요.
+                현재는 카페 업종을 지원합니다.
               </p>
               <ExploreLink />
             </div>
 
             <figure className="landing-hero-stage">
               <div className="landing-preview landing-preview-hero">
-                <PreviewBar label="RecycleYoungs / 주변 카페" />
+                <PreviewBar label="주변 카페" />
                 <picture>
                   <source
                     media="(width < 600px)"
@@ -223,12 +247,12 @@ export default function LandingPage() {
                     width={1200}
                     height={750}
                     fetchPriority="high"
-                    alt="홍대입구역의 500m 반경에 포함된 카페 마커와 거리순 카페 목록을 보여주는 실제 탐색 화면"
+                    alt="홍대입구역 500m 주변 카페를 지도에 묶어 표시하고 조회 건수와 거리순 목록을 보여주는 탐색 화면"
                   />
                 </picture>
               </div>
               <figcaption>
-                홍대입구역 주변 카페 조회 예시 <span>지도 © Kakao</span>
+                홍대입구역 500m 주변 카페 조회 예시 <span>지도 © Kakao</span>
               </figcaption>
             </figure>
           </div>
@@ -276,9 +300,9 @@ export default function LandingPage() {
                     지도에서 찾으세요
                   </h2>
                   <p>
-                    지역 탐색에서 자치구와 행정동을 선택하거나,
-                    장소·주소·지하철역을 검색해 관심 위치로 이동하세요. 선택한
-                    지점 주변의 카페도 확인할 수 있어요.
+                    자치구·행정동을 선택하거나 장소·주소·지하철역을 검색해 관심
+                    위치로 이동하세요. 선택한 지점 주변의 카페도 확인할 수
+                    있어요.
                   </p>
                 </div>
                 <ProductPreview kind={0} />
@@ -301,9 +325,8 @@ export default function LandingPage() {
                       범위부터 살펴보세요
                     </h2>
                     <p>
-                      점포 현황, 당월 추정매출, 유동인구를 지역 단위로
-                      살펴보세요. 화면에 표시된 기준 분기와 자료 게시 시점을
-                      함께 확인할 수 있습니다.
+                      화면에 표시된 기준 분기와 자료 게시 시점을 확인하고,
+                      지표마다 어떤 범위를 집계했는지 살펴보세요.
                     </p>
                     <dl className="landing-scope-list">
                       <div>
@@ -313,7 +336,8 @@ export default function LandingPage() {
                       <div>
                         <dt>행정구역 전체</dt>
                         <dd>
-                          선택한 자치구·행정동 전체의 상권 통계를 표시합니다.
+                          자치구·행정동의 카페 업종 점포 현황과 당월 추정매출,
+                          업종 구분 없는 지역 전체 유동인구를 표시합니다.
                         </dd>
                       </div>
                     </dl>
@@ -340,9 +364,8 @@ export default function LandingPage() {
                       </h2>
                     </div>
                     <p>
-                      후보지 세 곳까지 한눈에 살펴보세요. 같은 반경 안의 카페
-                      수와 후보지가 속한 행정동의 상권 통계를 나란히 확인할 수
-                      있습니다.
+                      후보지를 최대 세 곳(A·B·C)까지 등록해 같은 반경의 카페
+                      수와 각 후보지가 속한 행정동의 상권 통계를 비교하세요.
                     </p>
                   </div>
                   <ProductPreview kind={2} />
@@ -391,7 +414,7 @@ export default function LandingPage() {
         >
           <div className="landing-final-inner">
             <div>
-              <p>여기 창업해도 돼?</p>
+              <p>{brand}</p>
               <h2 id="final-heading">첫 후보지를 찾아보세요</h2>
             </div>
             <ExploreLink />

@@ -10,8 +10,16 @@ import {
 
 test('랜딩에서 시작하기로 탐색 이동', async ({ page }) => {
   await page.goto('/');
+  await expect(page).toHaveTitle('여기 창업해도 돼? | 서울 창업 입지 탐색');
+  await expect(
+    page.getByRole('banner').getByRole('link', { name: '여기 창업해도 돼?' }),
+  ).toHaveAttribute('href', '/');
+  await expect(page.locator('meta[name="description"]')).toHaveAttribute(
+    'content',
+    /현재 카페 업종을 지원/,
+  );
   const hero = page.getByRole('region', {
-    name: '카페 창업할 곳, 감으로만 고르지 마세요.',
+    name: '창업할 곳, 감으로만 고르지 마세요.',
   });
   await expect(hero.getByRole('heading', { level: 1 })).toBeVisible();
   await hero.getByRole('link', { name: '시작하기', exact: true }).click();

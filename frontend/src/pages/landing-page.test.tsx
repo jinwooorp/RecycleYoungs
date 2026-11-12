@@ -1,5 +1,5 @@
 import { StrictMode } from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, expect, test, vi } from 'vitest';
 import LandingPage from './landing-page';
@@ -113,6 +113,26 @@ function page() {
   );
 }
 
+test('랜딩은 입지 탐색 브랜드와 현재 카페 지원 범위를 안내한다', () => {
+  motionEnvironment({ reduced: true });
+  render(page());
+
+  expect(
+    screen.getAllByRole('link', { name: '여기 창업해도 돼?' }),
+  ).toHaveLength(2);
+  expect(
+    screen.getByRole('heading', {
+      level: 1,
+      name: '창업할 곳, 감으로만 고르지 마세요.',
+    }),
+  ).toBeVisible();
+  expect(screen.getByText(/현재는 카페 업종을 지원합니다/)).toBeVisible();
+  expect(screen.getByText(/업종 구분 없는 지역 전체 유동인구/)).toBeVisible();
+  for (const link of screen.getAllByRole('link', { name: '시작하기' })) {
+    expect(link).toHaveAttribute('href', '/explore');
+  }
+});
+
 test('반복 진입·퇴장에도 관찰을 유지하며 콘텐츠를 영구적으로 숨기지 않는다', () => {
   const env = motionEnvironment({ desktop: false });
   const view = render(page());
@@ -220,6 +240,22 @@ test('IntersectionObserver 미지원이면 정적 콘텐츠와 CTA를 제공한�
     screen.getByRole('heading', { name: '후보지를 같은 기준으로 비교하세요' }),
   ).toBeVisible();
   expect(screen.getAllByRole('link', { name: '시작하기' })).toHaveLength(3);
+});
+
+test('비교 프리뷰의 세 후보지와 조회 건수를 이미지 밖에서도 읽을 수 있다', () => {
+  motionEnvironment({ reduced: true });
+  render(page());
+
+  const results = screen.getByRole('list', { name: '후보지 500m 조회 결과' });
+  expect(
+    within(results)
+      .getAllByRole('listitem')
+      .map((item) => item.textContent),
+  ).toEqual([
+    'A · 홍대입구역 2호선 마포구 서교동 · 289곳',
+    'B · 서울특별시청 중구 명동 · 187곳',
+    'C · 성수역 2호선 성동구 성수2가3동 · 117곳',
+  ]);
 });
 
 test('StrictMode·언마운트에서 리스너·관찰·예약 프레임을 모두 정리한다', () => {

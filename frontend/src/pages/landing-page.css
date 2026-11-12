@@ -66,6 +66,30 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  /* 첫 프레임부터 내용을 읽을 수 있게 하고, 진입 모션이 배치나 스크롤 관찰에 관여하지 않게 합니다. */
+  .landing-hero-copy > :is(.landing-eyebrow, h1, .landing-hero-description) {
+    animation: landing-hero-copy-in 540ms cubic-bezier(0.2, 0.65, 0.3, 1)
+      backwards;
+    animation-delay: var(--landing-entrance-delay, 0ms);
+  }
+
+  .landing-hero h1 {
+    --landing-entrance-delay: 80ms;
+  }
+
+  .landing-hero-description {
+    --landing-entrance-delay: 160ms;
+  }
+
+  .landing-hero-copy > .landing-cta {
+    animation: landing-hero-cta-in 540ms ease-out 220ms backwards;
+  }
+
+  .landing-hero-stage {
+    animation: landing-hero-preview-in 640ms cubic-bezier(0.2, 0.65, 0.3, 1)
+      200ms backwards;
+  }
+
   .landing-page [data-landing-reveal] {
     transition:
       opacity 360ms ease,
@@ -99,6 +123,40 @@
   }
   .landing-workflow li:nth-child(4) {
     --landing-reveal-delay: 270ms;
+  }
+}
+
+@keyframes landing-hero-copy-in {
+  from {
+    opacity: 0.86;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes landing-hero-cta-in {
+  from {
+    opacity: 0.92;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes landing-hero-preview-in {
+  from {
+    opacity: 0.76;
+    transform: translateY(8px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 
@@ -443,6 +501,20 @@
   min-width: 54rem;
 }
 
+.landing-candidate-summary {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  word-break: keep-all;
+}
+
+.landing-candidate-summary strong {
+  display: block;
+  color: var(--landing-green);
+}
+
 .landing-scroll-note {
   display: none;
 }
@@ -569,6 +641,10 @@
     --landing-anchor-offset: 8rem;
   }
 
+  .landing-candidate-summary {
+    grid-template-columns: 1fr;
+  }
+
   .landing-header-inner {
     grid-template-columns: 1fr auto;
     gap: 0.25rem 0.85rem;
@@ -670,6 +746,24 @@
   [data-story-motion] .landing-story-steps figure {
     display: none;
   }
+
+  /* 고정 프리뷰는 장식용이므로 보조 기술에는 원본 캡션을 제공합니다. */
+  [data-story-motion] .landing-story-steps .landing-candidate-preview {
+    position: absolute;
+    display: block;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  [data-story-motion]
+    .landing-story-steps
+    .landing-candidate-preview
+    .landing-preview {
+    display: none;
+  }
+
   [data-story-motion] .landing-feature-copy,
   [data-story-motion] .landing-comparison-heading {
     opacity: var(--copy-opacity, 1);

@@ -35,7 +35,7 @@ function NotFoundPage() {
       className="mx-auto flex min-h-dvh max-w-2xl flex-col items-start justify-center px-6 py-12 focus:outline-none"
     >
       <p className="mb-3 text-sm font-semibold text-primary">
-        RecycleYoungs · 404
+        여기 창업해도 돼? · 404
       </p>
       <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
         페이지를 찾을 수 없습니다
@@ -61,7 +61,7 @@ export function AppRoutes() {
       <Route
         path="/"
         element={
-          <RoutePage title="RecycleYoungs | 서울 카페 상권 탐색">
+          <RoutePage title="여기 창업해도 돼? | 서울 창업 입지 탐색">
             <LandingPage />
           </RoutePage>
         }
@@ -76,7 +76,7 @@ export function AppRoutes() {
               </p>
             }
           >
-            <RoutePage title="상권 탐색 | RecycleYoungs">
+            <RoutePage title="상권 탐색 | 여기 창업해도 돼?">
               <ExplorePage />
             </RoutePage>
           </Suspense>
@@ -85,7 +85,7 @@ export function AppRoutes() {
       <Route
         path="*"
         element={
-          <RoutePage title="페이지를 찾을 수 없습니다 | RecycleYoungs">
+          <RoutePage title="페이지를 찾을 수 없습니다 | 여기 창업해도 돼?">
             <NotFoundPage />
           </RoutePage>
         }
