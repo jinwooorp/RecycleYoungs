@@ -234,7 +234,7 @@ export default function LandingPage() {
 
             <figure className="landing-hero-stage">
               <div className="landing-preview landing-preview-hero">
-                <PreviewBar label="주변 카페" />
+                <PreviewBar label="주변 탐색" />
                 <picture>
                   <source
                     media="(width < 600px)"

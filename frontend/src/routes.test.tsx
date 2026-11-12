@@ -113,7 +113,7 @@ test('탐색 CTA와 뒤로·앞으로 이동 후 탭에 저장된 후보지를 �
   });
   fireEvent.click(within(hero).getByRole('link', { name: '시작하기' }));
   const explore = await screen.findByRole('main', {
-    name: 'RecycleYoungs 탐색 화면',
+    name: '여기 창업해도 돼? 탐색 화면',
   });
   expect(explore).toHaveFocus();
   expect(document.title).toBe('상권 탐색 | 여기 창업해도 돼?');
@@ -131,7 +131,7 @@ test('탐색 CTA와 뒤로·앞으로 이동 후 탭에 저장된 후보지를 �
   expect(fetchApi).toHaveBeenCalledTimes(1);
 
   fireEvent.click(screen.getByRole('button', { name: '테스트 앞으로' }));
-  await screen.findByRole('main', { name: 'RecycleYoungs 탐색 화면' });
+  await screen.findByRole('main', { name: '여기 창업해도 돼? 탐색 화면' });
   fireEvent.click(screen.getByRole('button', { name: '후보지 분석' }));
   expect(
     await screen.findByRole('button', { name: '후보지 A 지도에서 위치 확인' }),
@@ -144,7 +144,7 @@ test('탐색 CTA와 뒤로·앞으로 이동 후 탭에 저장된 후보지를 �
 test('/explore에서 탐색 페이지를 바로 렌더링한다', async () => {
   renderRoute('/explore');
   expect(
-    await screen.findByRole('main', { name: 'RecycleYoungs 탐색 화면' }),
+    await screen.findByRole('main', { name: '여기 창업해도 돼? 탐색 화면' }),
   ).toBeVisible();
   await waitFor(() =>
     expect(document.title).toBe('상권 탐색 | 여기 창업해도 돼?'),
@@ -195,7 +195,7 @@ test('탐색의 홈 링크로 랜딩에 돌아와도 후보지를 보존하고 �
   sessionStorage.setItem('recycleyoungs.candidates', saved);
   renderRoute('/explore');
   const home = await screen.findByRole('link', {
-    name: 'RecycleYoungs 홈으로',
+    name: '여기 창업해도 돼? 홈으로',
   });
   expect(home).toHaveAttribute('href', '/');
   fireEvent.click(home);
@@ -208,7 +208,7 @@ test('탐색의 홈 링크로 랜딩에 돌아와도 후보지를 보존하고 �
   fireEvent.click(
     within(screen.getByRole('banner')).getByRole('link', { name: '시작하기' }),
   );
-  await screen.findByRole('main', { name: 'RecycleYoungs 탐색 화면' });
+  await screen.findByRole('main', { name: '여기 창업해도 돼? 탐색 화면' });
   fireEvent.click(screen.getByRole('button', { name: '후보지 분석' }));
   expect(
     await screen.findByRole('button', { name: '후보지 A 지도에서 위치 확인' }),

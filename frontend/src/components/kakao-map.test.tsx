@@ -871,7 +871,7 @@ test('최초 영역·idle 재조회와 목록 선택은 마커·안전한 정보
       <App />
     </StrictMode>,
   );
-  fireEvent.click(screen.getByRole('button', { name: '주변 카페' }));
+  fireEvent.click(screen.getByRole('button', { name: '주변 탐색' }));
   await waitFor(() =>
     expect(screen.getByRole('button', { name: '지도 확대' })).toBeEnabled(),
   );
@@ -1018,7 +1018,7 @@ test('카페 조회 실패는 지도·경계 탐색을 막지 않고 재시도�
   await screen.findByText('지도를 불러오지 못했습니다');
   load.mockResolvedValue(maps);
   fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
-  fireEvent.click(screen.getByRole('button', { name: '주변 카페' }));
+  fireEvent.click(screen.getByRole('button', { name: '주변 탐색' }));
   await waitFor(() =>
     expect(screen.getByRole('button', { name: '지도 확대' })).toBeEnabled(),
   );
@@ -1489,7 +1489,7 @@ test('상세 패널을 열고 전환하고 닫아도 같은 지도에서 크기�
     expect(screen.getByRole('button', { name: '지도 확대' })).toBeEnabled(),
   );
   const container = screen.getByLabelText('Kakao Maps 지도');
-  for (const name of ['주변 카페', '상권 분석', '상권 분석']) {
+  for (const name of ['주변 탐색', '상권 분석', '상권 분석']) {
     fireEvent.click(screen.getByRole('button', { name }));
     // jsdom에는 레이아웃이 없어 브라우저의 크기 변경 알림을 직접 전달합니다.
     act(() => resize([], {} as ResizeObserver));
@@ -1651,7 +1651,7 @@ test('구·동 변경은 즉시 이전 마커를 정리하고 늦은 동 응답�
     null,
   );
   await waitFor(() => expect(map.getLevel()).toBe(5));
-  fireEvent.click(screen.getByRole('button', { name: '주변 카페' }));
+  fireEvent.click(screen.getByRole('button', { name: '주변 탐색' }));
   await screen.findByText(/자치구를 선택하거나 지도를 확대하면/);
   expect(
     maps.Polygon.mock.results.at(-1)!.value.setMap,
@@ -1820,7 +1820,7 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
   });
   await waitFor(() => expect(maps.Marker).toHaveBeenCalled());
   const oldMarker = maps.Marker.mock.results.at(-1)!.value;
-  fireEvent.click(screen.getByRole('button', { name: '주변 카페' }));
+  fireEvent.click(screen.getByRole('button', { name: '주변 탐색' }));
   fireEvent.click(screen.getByRole('button', { name: '선택 지점 주변' }));
   expect(oldMarker.setMap).toHaveBeenLastCalledWith(null);
   expect(maps.Circle).not.toHaveBeenCalled();
@@ -1917,7 +1917,7 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
   );
   expect(maps.Circle.mock.calls.at(-1)![0].radius).toBe(1000);
   const currentClick = mapClick();
-  fireEvent.click(screen.getByRole('button', { name: '주변 카페 패널 닫기' }));
+  fireEvent.click(screen.getByRole('button', { name: '주변 탐색 패널 닫기' }));
   expect(maps.event.removeListener).toHaveBeenCalledWith(
     map,
     'click',
@@ -1932,7 +1932,7 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
       ([target, type]) => target === map && type === 'click',
     ),
   ).toHaveLength(clickRegistrations);
-  fireEvent.click(screen.getByRole('button', { name: '주변 카페' }));
+  fireEvent.click(screen.getByRole('button', { name: '주변 탐색' }));
   fireEvent.click(screen.getByRole('button', { name: '중심점 해제' }));
   expect(
     maps.Circle.mock.results.at(-1)!.value.setMap,
@@ -1983,7 +1983,7 @@ test('반경 API 실패에도 지도와 중심점을 유지하고 재시도로 �
     ),
   );
   render(<App />);
-  fireEvent.click(screen.getByRole('button', { name: '주변 카페' }));
+  fireEvent.click(screen.getByRole('button', { name: '주변 탐색' }));
   fireEvent.click(screen.getByRole('button', { name: '선택 지점 주변' }));
   await waitFor(() =>
     expect(maps.event.addListener).toHaveBeenCalledWith(
@@ -2397,7 +2397,7 @@ test('지도 추가 모드와 검색에서 후보지를 등록하고 명시적�
   expect(map.setCenter).toHaveBeenCalledTimes(moves);
   fireEvent.click(screen.getByRole('button', { name: '지도에서 후보지 추가' }));
   const pendingClick = mapClick();
-  fireEvent.click(screen.getByRole('button', { name: '주변 카페' }));
+  fireEvent.click(screen.getByRole('button', { name: '주변 탐색' }));
   expect(maps.event.removeListener).toHaveBeenCalledWith(
     map,
     'click',
@@ -2527,7 +2527,7 @@ test('카페 클러스터러는 지도당 한 번 초기화하고 패널·조회
     }),
   );
   for (const name of [
-    '주변 카페',
+    '주변 탐색',
     '선택 지점 주변',
     '상권 분석',
     '후보지 분석',

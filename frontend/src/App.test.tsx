@@ -23,16 +23,20 @@ afterEach(() => {
 test('초기에는 세 메뉴·공통 지역 필터와 지도를 표시하고 상세 패널은 닫는다', async () => {
   render(<App />);
   expect(screen.queryByRole('banner')).not.toBeInTheDocument();
-  const brand = screen.getByRole('link', { name: 'RecycleYoungs 홈으로' });
+  const brand = screen.getByRole('link', { name: '여기 창업해도 돼? 홈으로' });
   expect(brand).toBeVisible();
   expect(brand).toHaveAttribute('href', '/');
+  expect(brand).toHaveAttribute('title', '여기 창업해도 돼? 홈으로');
+  expect(
+    screen.getByRole('main', { name: '여기 창업해도 돼? 탐색 화면' }),
+  ).toBeVisible();
   expect(screen.queryByText('RecycleYoungs')).not.toBeInTheDocument();
   expect(
     screen.queryByText('서울시 카페 창업 상권 분석'),
   ).not.toBeInTheDocument();
   expect(screen.queryByText('상권 탐색')).not.toBeInTheDocument();
   expect(screen.getByRole('navigation', { name: '탐색 메뉴' })).toBeVisible();
-  for (const name of ['주변 카페', '상권 분석', '후보지 분석']) {
+  for (const name of ['주변 탐색', '상권 분석', '후보지 분석']) {
     expect(screen.getByRole('button', { name })).toHaveAttribute(
       'aria-expanded',
       'false',
@@ -54,14 +58,14 @@ test('초기에는 세 메뉴·공통 지역 필터와 지도를 표시하고 �
 
 test('같은 메뉴를 다시 누르면 닫고 다른 메뉴를 누르면 내용을 전환한다', () => {
   render(<App />);
-  const toggle = screen.getByRole('button', { name: '주변 카페' });
+  const toggle = screen.getByRole('button', { name: '주변 탐색' });
   const map = screen.getByRole('region', { name: '서울 상권 지도' });
   const search = screen.getByRole('textbox', { name: '장소 검색' });
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
   fireEvent.click(toggle);
   expect(toggle).toHaveAttribute('aria-expanded', 'true');
   expect(
-    screen.getByRole('complementary', { name: '주변 카페' }),
+    screen.getByRole('complementary', { name: '주변 탐색' }),
   ).toBeVisible();
   fireEvent.click(toggle);
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
@@ -87,11 +91,11 @@ test('장소 검색은 패널·지도 밖에 유지하고 닫는 동안 패널 �
   expect(
     screen.getByRole('region', { name: '서울 상권 지도' }),
   ).not.toContainElement(search);
-  fireEvent.click(screen.getByRole('button', { name: '주변 카페' }));
-  const panel = screen.getByRole('complementary', { name: '주변 카페' });
+  fireEvent.click(screen.getByRole('button', { name: '주변 탐색' }));
+  const panel = screen.getByRole('complementary', { name: '주변 탐색' });
   expect(panel).not.toContainElement(search);
   expect(search).toHaveTextContent('검색');
-  fireEvent.click(screen.getByRole('button', { name: '주변 카페 패널 닫기' }));
+  fireEvent.click(screen.getByRole('button', { name: '주변 탐색 패널 닫기' }));
   expect(panel).toHaveAttribute('inert');
   expect(panel).toHaveAttribute('aria-hidden', 'true');
   expect(panel).toHaveTextContent('현재 지도 영역 카페');
@@ -108,15 +112,15 @@ test('장소 검색은 패널·지도 밖에 유지하고 닫는 동안 패널 �
 
 test('닫기 버튼과 Escape는 패널을 접고 선택 메뉴로 포커스를 돌린다', () => {
   render(<App />);
-  const menu = screen.getByRole('button', { name: '주변 카페' });
+  const menu = screen.getByRole('button', { name: '주변 탐색' });
   fireEvent.click(menu);
-  const close = screen.getByRole('button', { name: '주변 카페 패널 닫기' });
+  const close = screen.getByRole('button', { name: '주변 탐색 패널 닫기' });
   close.focus();
   fireEvent.click(close);
   expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
   expect(menu).toHaveFocus();
   fireEvent.click(menu);
-  screen.getByRole('button', { name: '주변 카페 패널 닫기' }).focus();
+  screen.getByRole('button', { name: '주변 탐색 패널 닫기' }).focus();
   fireEvent.keyDown(screen.getByRole('complementary'), { key: 'Escape' });
   expect(menu).toHaveAttribute('aria-expanded', 'false');
   expect(menu).toHaveFocus();
@@ -124,11 +128,11 @@ test('닫기 버튼과 Escape는 패널을 접고 선택 메뉴로 포커스를 
 
 test('키보드로 패널을 열거나 전환하면 제목으로 이동하고 마우스 클릭은 메뉴 포커스를 유지한다', () => {
   render(<App />);
-  const cafes = screen.getByRole('button', { name: '주변 카페' });
+  const cafes = screen.getByRole('button', { name: '주변 탐색' });
   const analysis = screen.getByRole('button', { name: '상권 분석' });
   cafes.focus();
   fireEvent.click(cafes, { detail: 0 });
-  expect(screen.getByRole('heading', { name: '주변 카페' })).toHaveFocus();
+  expect(screen.getByRole('heading', { name: '주변 탐색' })).toHaveFocus();
   analysis.focus();
   fireEvent.click(analysis, { detail: 0 });
   expect(screen.getByRole('heading', { name: '상권 분석' })).toHaveFocus();
@@ -140,7 +144,7 @@ test('키보드로 패널을 열거나 전환하면 제목으로 이동하고 �
 test('패널 밖에서 Escape로 닫으면 현재 도구의 포커스를 유지한다', () => {
   render(<App />);
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
-  const home = screen.getByRole('link', { name: 'RecycleYoungs 홈으로' });
+  const home = screen.getByRole('link', { name: '여기 창업해도 돼? 홈으로' });
   home.focus();
   fireEvent.keyDown(home, { key: 'Escape' });
   expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
@@ -154,11 +158,19 @@ test('공통 지역 필터와 반경 입력·행정구역 전체 통계를 구�
   expect(screen.getByRole('combobox', { name: '자치구' })).toBeDisabled();
   expect(screen.getByRole('combobox', { name: '행정동' })).toBeDisabled();
   expect(screen.getByRole('textbox', { name: '장소 검색' })).toBeDisabled();
-  fireEvent.click(screen.getByRole('button', { name: '주변 카페' }));
+  fireEvent.click(screen.getByRole('button', { name: '주변 탐색' }));
+  const panel = screen.getByRole('complementary', { name: '주변 탐색' });
+  expect(panel).toHaveTextContent('현재는 카페 업종을 지원합니다.');
+  expect(panel).toHaveTextContent(
+    '구·동을 선택하면 해당 경계 안으로 범위를 좁힙니다.',
+  );
   expect(
     screen.queryByRole('combobox', { name: '탐색 반경' }),
   ).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '선택 지점 주변' }));
+  expect(panel).toHaveTextContent(
+    '선택한 지점과 설정한 반경만 기준으로 카페를 조회합니다.',
+  );
   expect(screen.getByRole('combobox', { name: '탐색 반경' })).toBeEnabled();
   expect(screen.getByRole('combobox', { name: '탐색 반경' })).toHaveValue(
     '500',

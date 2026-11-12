@@ -25,7 +25,7 @@ test('랜딩에서 시작하기로 탐색 이동', async ({ page }) => {
   await hero.getByRole('link', { name: '시작하기', exact: true }).click();
   await expect(page).toHaveURL('/explore');
   await expect(
-    page.getByRole('main', { name: 'RecycleYoungs 탐색 화면' }),
+    page.getByRole('main', { name: '여기 창업해도 돼? 탐색 화면' }),
   ).toBeFocused();
   await noOverflow(page);
 });
@@ -33,7 +33,7 @@ test('랜딩에서 시작하기로 탐색 이동', async ({ page }) => {
 test('직접 탐색 접속과 SDK 키 누락 안내', async ({ page }) => {
   await page.goto('/explore');
   await expect(
-    page.getByRole('main', { name: 'RecycleYoungs 탐색 화면' }),
+    page.getByRole('main', { name: '여기 창업해도 돼? 탐색 화면' }),
   ).toBeVisible();
   await expect(
     page.getByText(
@@ -60,7 +60,7 @@ test('잘못된 주소의 404와 홈 복귀', async ({ page }) => {
 
 test('세 메뉴 전환, 닫기와 Escape 포커스', async ({ page }) => {
   await page.goto('/explore');
-  for (const name of ['주변 카페', '상권 분석', '후보지 분석']) {
+  for (const name of ['주변 탐색', '상권 분석', '후보지 분석']) {
     const menu = page.getByRole('button', { name, exact: true });
     await menu.click();
     await expect(

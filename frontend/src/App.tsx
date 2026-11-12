@@ -1,6 +1,12 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { BarChart3, ChevronLeft, Coffee, GitCompareArrows } from 'lucide-react';
+import {
+  BarChart3,
+  ChevronLeft,
+  Compass,
+  GitCompareArrows,
+  MapPin,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ExplorePanel, type ExploreMenu } from '@/components/explore-panel';
 import { PlaceSearch } from '@/components/place-search';
@@ -16,7 +22,7 @@ import { CandidatePanel } from '@/components/candidate-panel';
 import type { Candidate } from '@/lib/candidates';
 
 const menus = [
-  { id: 'cafes', label: '주변 카페', Icon: Coffee },
+  { id: 'cafes', label: '주변 탐색', Icon: Compass },
   { id: 'analysis', label: '상권 분석', Icon: BarChart3 },
   { id: 'compare', label: '후보지 분석', Icon: GitCompareArrows },
 ] as const;
@@ -85,7 +91,7 @@ export default function App() {
       </a>
       <main
         id="explore-main"
-        aria-label="RecycleYoungs 탐색 화면"
+        aria-label="여기 창업해도 돼? 탐색 화면"
         tabIndex={-1}
         className="relative flex min-h-0 flex-1 flex-col outline-none md:flex-row"
         onKeyDown={(event) => {
@@ -97,11 +103,11 @@ export default function App() {
       >
         <Link
           to="/"
-          aria-label="RecycleYoungs 홈으로"
-          title="RecycleYoungs 홈으로"
+          aria-label="여기 창업해도 돼? 홈으로"
+          title="여기 창업해도 돼? 홈으로"
           className="explore-home"
         >
-          <Coffee aria-hidden="true" />
+          <MapPin aria-hidden="true" />
         </Link>
         <nav
           aria-label="탐색 메뉴"

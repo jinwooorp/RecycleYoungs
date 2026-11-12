@@ -75,8 +75,8 @@ test('실제 선택 UI에서 구·동 선택을 유지하고 메뉴 전환·닫�
       expect.anything(),
     ),
   );
-  fireEvent.click(screen.getByRole('button', { name: '주변 카페' }));
-  fireEvent.click(screen.getByRole('button', { name: '주변 카페 패널 닫기' }));
+  fireEvent.click(screen.getByRole('button', { name: '주변 탐색' }));
+  fireEvent.click(screen.getByRole('button', { name: '주변 탐색 패널 닫기' }));
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
   expect(screen.getByRole('combobox', { name: '자치구' })).toHaveValue('00110');
   expect(screen.getByRole('combobox', { name: '행정동' })).toHaveValue(

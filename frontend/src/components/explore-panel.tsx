@@ -78,7 +78,7 @@ function CafePanel({ cafes }: { cafes: CafeExplorer }) {
       <section aria-labelledby="nearby-heading" className="flex flex-col gap-4">
         <div
           role="group"
-          aria-label="카페 탐색 방식"
+          aria-label="주변 탐색 방식"
           className="grid grid-cols-2 gap-2"
         >
           <Button
@@ -102,9 +102,10 @@ function CafePanel({ cafes }: { cafes: CafeExplorer }) {
           {nearby ? '선택 지점 주변 카페' : '현재 지도 영역 카페'}
         </h3>
         <p className="text-sm leading-6 text-muted-foreground">
+          현재는 카페 업종을 지원합니다.{' '}
           {nearby
-            ? '선택 지점의 실제 반경으로 조회합니다. 구·동 필터를 적용하지 않습니다.'
-            : '지도 사각 영역과 선택한 구·동 경계에 포함된 카페입니다. 반경 검색 결과는 아닙니다.'}
+            ? '선택한 지점과 설정한 반경만 기준으로 카페를 조회합니다.'
+            : '현재 지도에 보이는 영역에서 카페를 조회합니다. 구·동을 선택하면 해당 경계 안으로 범위를 좁힙니다.'}
         </p>
         {nearby && (
           <>
@@ -177,7 +178,7 @@ function CafePanel({ cafes }: { cafes: CafeExplorer }) {
             {nearby
               ? '중심점을 선택하면 반경 내 카페를 조회합니다.'
               : cafes.needsZoom
-                ? '자치구를 선택하거나 지도를 확대하면 카페를 조회합니다. 아직 카페를 조회하지 않았습니다.'
+                ? '자치구를 선택하거나 지도를 확대하면 카페를 조회합니다.'
                 : '지도 준비 또는 지역 이동 후 현재 영역을 조회합니다.'}
           </p>
         )}
@@ -190,8 +191,8 @@ function CafePanel({ cafes }: { cafes: CafeExplorer }) {
               {cafes.items.length.toLocaleString('ko-KR')}곳 표시
             </p>
             <p className="text-xs leading-5 text-muted-foreground">
-              지도에는 조회된 최대 200곳의 분포만 표시합니다. 묶음 숫자는 현재
-              포함된 마커 수이며, 확대하면 개별 카페를 볼 수 있습니다.
+              지도에 표시된 묶음의 숫자는 포함된 카페 수입니다. 지도를 확대하면
+              개별 카페를 볼 수 있습니다.
             </p>
             {cafes.data.hasMore && (
               <p className="text-xs leading-5 text-muted-foreground">
