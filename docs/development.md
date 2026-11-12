@@ -19,11 +19,11 @@
 
 명령은 macOS 또는 Linux 셸(Windows의 WSL 포함)을 기준으로 합니다. 네이티브 Windows는 현재 지원 범위 밖입니다.
 
-| 대상                     | 필요한 도구                                                                                                      |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| Frontend·ETL             | Node.js 24 LTS·npm 11. 각 디렉터리의 `.nvmrc`와 잠금 파일을 사용합니다. CI와 맞출 때는 npm 11.19.1을 사용합니다. |
-| Backend                  | Java 21과 저장소의 Gradle Wrapper(`./gradlew`)                                                                   |
-| DB·통합 테스트·배포 검증 | Docker와 Docker Compose. 로컬 개발에서는 Backend와 ETL을 호스트에서 실행합니다.                                  |
+| 대상           | 필요한 도구                                                                                                      |
+| -------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Frontend·ETL   | Node.js 24 LTS·npm 11. 각 디렉터리의 `.nvmrc`와 잠금 파일을 사용합니다. CI와 맞출 때는 npm 11.19.1을 사용합니다. |
+| Backend        | Java 21과 저장소의 Gradle Wrapper(`./gradlew`)                                                                   |
+| DB·통합 테스트 | Docker와 Docker Compose. 로컬 개발에서는 Backend와 ETL을 호스트에서 실행합니다.                                  |
 
 ### 로컬 DB 준비
 
@@ -170,6 +170,8 @@ npm run build
 
 ## 브라우저 E2E 검증
 
+로컬 브라우저 UI 검증은 `ego-browser`를 우선 사용합니다. 자동 회귀 검증은 기존 합성 Playwright E2E와 GitHub Actions CI에서 수행합니다.
+
 [테스트 구성](../frontend/playwright.config.ts)과 [테스트 코드](../frontend/e2e/)는 제품 빌드 및 Vitest와 분리됩니다. 로컬에서는 `frontend/`에서 설치 후 타입·Mock 검사와 테스트 목록을 확인할 수 있습니다.
 
 ```bash
@@ -184,14 +186,17 @@ npm run test:e2e:list
 오류·자료 없음은 테스트 origin의 `ry-e2e-scenario` 쿠키로 재현합니다. 값은 `normal`, `sales-error`, `sales-empty`, `districts-error`입니다. 값을 바꾼 뒤 지역이나 패널을 재선택합니다. 오류 복구는 `normal`로 돌린 뒤 화면에서 재시도합니다.
 
 ```js
-document.cookie = "ry-e2e-scenario=sales-error; Path=/; SameSite=Strict";
+document.cookie = 'ry-e2e-scenario=sales-error; Path=/; SameSite=Strict';
 ```
 
 후보지 복원은 [합성 fixture](../frontend/e2e/fixtures.ts)의 A·B·C와 `sessionStorage`의 `recycleyoungs.candidates` 버전 1을 사용합니다. 로컬 재현은 새 탭에서 시작하거나 해당 테스트 탭의 키와 쿠키만 초기화합니다.
 
 ### 로컬 ego(lite)
 
-설치된 ego-browser 안내(`ego-browser skill`)에 따라 별도 작업 Space에서 합성 서버에 접속합니다. 링크·필터·탭·재시도는 실제 화면을 조작해 확인하고 데스크톱·모바일 크기를 각각 검증합니다. 콘솔과 네트워크에서 의도한 오류와 예상하지 않은 오류를 구분합니다. 실패 증거는 재현 단계·쿠키 값과 함께 Git에서 제외되는 `frontend/test-results/`에 보존합니다. 앱이나 권한 문제로 실행할 수 없으면 `BLOCKED`로 기록합니다.
+1. 실행 전에 `ego-browser skill`로 설치된 버전의 안내를 확인하고, 안내에 따라 별도 작업 Space를 사용합니다. 시스템 서비스 연결·권한·환경 문제로 실행할 수 없을 때만 연결된 Chrome으로 대체하고 사유를 기록합니다. 브라우저 실행 제한과 테스트 보호 정책을 준수합니다.
+2. 검증 목적에 맞는 서버에 접속합니다. 실제 데이터 연동은 Kakao 키가 설정된 개발 Frontend와 게시 데이터가 있는 Backend를 사용하고, 합성 시나리오는 위의 Mock 환경을 사용합니다. 해당 서버가 이미 실행 중이면 재사용하고 불필요한 재시작이나 중복 실행을 피합니다.
+3. 데스크톱·모바일에서 링크·필터·탭·재시도 등 해당 흐름을 직접 조작합니다. 실제로 조작하고 기대 결과를 확인한 항목만 `PASS`로 기록합니다. 결과에는 사용 도구와 데이터 환경(실제 데이터 또는 Mock)을 명시합니다.
+4. 재현한 애플리케이션 결함은 `FAIL`, 브라우저 연결·권한·환경 문제로 검증을 마칠 수 없는 항목은 `BLOCKED`로 기록합니다. 콘솔·네트워크에서 의도한 오류와 예상하지 않은 오류를 구분합니다. 실패 증거는 재현 단계 및 사용한 합성 시나리오의 쿠키 값과 함께 Git에서 제외되는 `frontend/test-results/`에 보존합니다.
 
 기존 로컬 검증에서 데스크톱 오류 배너가 패널 닫기를 가리는 문제를 보정해 회귀 시나리오에 포함했습니다. 당시 키 미설정 모바일 화면의 오류 배너와 지역 필터에 일부 시각적 겹침이 있었으며, 필터와 닫기 조작은 확인했습니다.
 
@@ -203,63 +208,6 @@ document.cookie = "ry-e2e-scenario=sales-error; Path=/; SameSite=Strict";
 
 ## 배포 검토 항목
 
-[배포 Compose](../compose.deploy.yaml)와 [Nginx 설정](../nginx/default.conf)은 구현됐습니다. 실제 운영 배포·도메인·HTTPS·CD는 남아 있습니다. 배포 프로젝트는 `recycleyoungs-deploy`, DB 볼륨은 `recycleyoungs-deploy_deploy_postgres_data`입니다. 개발 Compose와 분리합니다.
+운영 배포는 계획 단계입니다. 새 구성은 Nginx·Certbot·GitHub Actions CD를 목표로 합니다.
 
-- Frontend는 비권한 Nginx로 정적 파일을 제공하며 `nginx/default.conf`를 읽기 전용으로 마운트합니다. Nginx HTTP만 호스트 루프백에 게시하고 `/api`는 내부 Backend로 전달합니다. Backend와 DB는 호스트에 직접 게시하지 않습니다.
-- Backend 이미지는 Java 21에서 `bootJar`로 실행 JAR를 빌드하고 UID·GID 10001로 실행합니다. 배포 DB가 준비되면 `db` 프로필이 미적용 Flyway를 적용합니다. ETL 적재는 별도 절차입니다.
-- `/explore`와 알 수 없는 문서 경로에는 브라우저가 재검증하는 SPA HTML을 제공합니다. 알 수 없는 문서 경로는 HTML HTTP 200과 React Router의 404 화면을 반환합니다. 해시 자산은 성공 응답을 1년간 캐시하고 누락된 정적 파일은 HTTP 404를 반환합니다. `/api`와 `/api/` 하위는 경로·쿼리·Backend 응답 상태를 보존합니다.
-
-### 배포 환경변수와 Kakao SDK
-
-[배포 예시](../.env.deploy.example)는 설정·빌드 확인용입니다. 기동 시에는 별도 `.env.deploy`에 배포 전용 자격증명을 준비하고 항상 파일을 명시합니다. 셸의 같은 이름 변수가 파일보다 우선하므로 실행 전에 `DEPLOY_*`를 확인합니다.
-
-| 변수                                                     | 용도                                                                                                                      |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `DEPLOY_DB_NAME`, `DEPLOY_DB_USER`, `DEPLOY_DB_PASSWORD` | 배포 DB 초기화와 Backend의 내부 `db:5432` 연결에 사용합니다. 이미 초기화한 볼륨의 계정은 변수 변경으로 갱신되지 않습니다. |
-| `DEPLOY_HTTP_PORT`                                       | Nginx가 게시할 루프백 포트. 기본 8080이며 로컬 Backend와 충돌하면 변경합니다.                                             |
-| `DEPLOY_KAKAO_MAP_APP_KEY`                               | 선택적인 브라우저 공개용 JavaScript 키. Compose가 빌드 인수 `VITE_KAKAO_MAP_APP_KEY`로 전달합니다.                        |
-
-Frontend의 로컬 `.env*`는 Docker 빌드에 들어가지 않습니다. 키는 브라우저 번들과 빌드 메타데이터에 남을 수 있습니다. 키를 바꾸면 이미지를 다시 빌드하고 Kakao Developers에 접속 origin을 등록합니다. 기본 확인 주소는 `http://127.0.0.1:8080`입니다.
-
-### DB 없이 배포 사전 검증
-
-저장소 루트에서 로컬 Docker 컨텍스트를 확인합니다. 예시 환경변수만 사용하고 `config --quiet`로 보간값을 출력하지 않습니다. 아래 명령은 DB 컨테이너와 볼륨을 기동하지 않습니다.
-
-```bash
-deploy_check() {
-  env -i PATH="$PATH" HOME="$HOME" docker compose -p recycleyoungs-deploy-preflight \
-    --env-file .env.deploy.example -f compose.deploy.yaml "$@"
-}
-deploy_check config --quiet &&
-  deploy_check build frontend backend &&
-  env -i PATH="$PATH" HOME="$HOME" docker run --rm --network none \
-    --mount "type=bind,source=$PWD/nginx/default.conf,target=/etc/nginx/conf.d/default.conf,readonly" \
-    recycleyoungs-deploy-preflight-frontend nginx -t
-```
-
-라우팅 검증에는 호스트 포트나 DB 볼륨을 연결하지 않은 격리 네트워크와 `backend` 별칭의 합성 HTTP 서버를 사용합니다. SPA·캐시·정적 파일 404와 API 경로·쿼리·503 전달을 확인합니다. 실제 배포 Compose의 `up`은 DB 초기화와 Flyway를 시작하므로 사전 검증 절차에서 분리합니다.
-
-### 승인 후 기동과 종료
-
-대상 DB·권한·백업과 Flyway 적용을 검토한 뒤 루트에서 실행합니다. 호스트에서 `nginx/default.conf`를 읽을 수 있어야 합니다. 배포 DB의 `postgis/postgis:17-3.5`는 AMD64로 지정되므로 ARM64 호스트에는 에뮬레이션이 필요합니다.
-
-```bash
-deploy_compose() {
-  docker compose -p recycleyoungs-deploy --env-file .env.deploy -f compose.deploy.yaml "$@"
-}
-test -r nginx/default.conf &&
-  deploy_compose config --quiet &&
-  deploy_compose build frontend backend &&
-  deploy_compose up -d --no-build &&
-  deploy_compose ps
-```
-
-기동 후 `http://127.0.0.1:<DEPLOY_HTTP_PORT>`에서 확인합니다. 같은 셸에서 `deploy_compose stop`으로 중지하면 배포 DB 볼륨이 남습니다.
-
-| 영역      | 운영 전 남은 작업                                                                                                         |
-| --------- | ------------------------------------------------------------------------------------------------------------------------- |
-| 외부 접속 | 호스트·도메인·TLS·Kakao origin과 실제 SDK 검증                                                                            |
-| DB·데이터 | 비밀정보 보관, 조회·Flyway 계정 분리, 운영 PostGIS 판본, 백업 복원과 첫 마이그레이션 리허설, 게시 담당자와 적재 시점 결정 |
-| 운영·CD   | 이미지 배포·롤백, 로그·장애 감시, Frontend 의존성 보안 권고 검토와 배포 자동화                                            |
-
-운영 데이터의 게시 절차는 [ETL 가이드](etl-guide.md)에 있습니다.
+기존 배포 사전 검증에서는 격리된 DB에서 초기화 관리자·Flyway·Backend 조회 권한 분리를 확인했습니다. ETL의 loopback 제한을 유지하고 검증된 게시 데이터를 별도로 반입하는 방식을 검토했습니다. 로컬 적재와 게시 검증 결과는 [ETL 검증·적재 이력](archive/etl-validation-history.md)에 있습니다.

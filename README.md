@@ -50,7 +50,7 @@
 | Backend      | Java 21, Spring Boot 4, Spring MVC, Spring JDBC, Gradle                                   |
 | 데이터베이스 | PostgreSQL, PostGIS, Flyway                                                               |
 | ETL          | Node.js 24, TypeScript, Zod, node-postgres                                                |
-| 실행 및 검증 | Docker Compose, Nginx, GitHub Actions, Vitest, Playwright, JUnit, Testcontainers          |
+| 실행 및 검증 | Docker Compose, GitHub Actions CI, Vitest, Playwright, JUnit, Testcontainers              |
 
 ## 시스템 아키텍처
 
@@ -65,7 +65,7 @@ flowchart LR
     ETL -->|검증·변환 후 적재| DB
 ```
 
-배포용 Docker Compose와 Nginx 설정을 구현했습니다. 개발 환경과 분리된 구성에서 Nginx가 프론트엔드 정적 파일을 제공하고 `/api` 요청을 내부 백엔드에 전달합니다. 실제 운영 서버 배포, 도메인·HTTPS 연결, 배포 자동화는 남아 있습니다. [배포 구성과 확인 절차](docs/development.md#배포-검토-항목)
+로컬 개발 환경과 GitHub Actions CI를 제공합니다. 운영 배포는 계획 단계이며, Nginx·Certbot·GitHub Actions CD 구성을 목표로 합니다. [배포 계획](docs/development.md#배포-검토-항목)
 
 ## 공공데이터
 
@@ -106,9 +106,7 @@ RecycleYoungs/
 │       ├── domains/       # 경계, 업종, 카페, 점포, 매출, 유동인구
 │       └── workflows/     # 공식 원본 통합 사전검증
 ├── docs/                  # 서비스·데이터·개발 문서
-├── nginx/default.conf     # 배포용 정적 파일·API 프록시 설정
-├── compose.yaml           # 로컬 개발 DB
-└── compose.deploy.yaml    # 독립 배포용 Frontend·Backend·DB
+└── compose.yaml           # 로컬 개발 DB
 ```
 
 ## 빠른 시작
@@ -181,5 +179,5 @@ GitHub Actions는 `project-upgrade`에 Push하거나 이 브랜치를 대상으�
 | [서비스 명세](docs/service-spec.md)                                                                                                        | 탐색·비교 동작과 서비스 정책                |
 | [데이터 설계](docs/data-design.md)                                                                                                         | DB 모델·Flyway·게시 배치·REST API 계약      |
 | [ETL 가이드](docs/etl-guide.md) · [검증·적재 이력](docs/archive/etl-validation-history.md)                                                 | 원본 출처, 검증·적재 명령, 체크섬·게시 이력 |
-| [개발 가이드](docs/development.md)                                                                                                         | 환경변수, 로컬 실행, 테스트, 배포 구성      |
+| [개발 가이드](docs/development.md)                                                                                                         | 환경변수, 로컬 실행, 테스트, 배포 계획      |
 | [자치구 통계 정책](docs/data-design.md#공식-자치구-통계와-집계-정책) · [전분기 비교 검증](docs/archive/quarter-comparison-verification.md) | 공식 원천과 집계 기준, 분기 간 비교 근거    |
