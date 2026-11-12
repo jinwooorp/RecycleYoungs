@@ -1,11 +1,12 @@
 # 개발 가이드
 
-로컬에서 지도와 웹 서버를 확인하려면 개발 도구를 준비한 뒤 Frontend와 기본 Backend를 실행합니다. 행정구역·상권 API나 ETL이 필요하면 로컬 DB와 게시 데이터를 준비합니다. 사용자에게 보이는 화면 동작은 [서비스 명세](service-spec.md), API 계약은 [데이터 설계](data-design.md)에 있습니다. [README의 상세 기술 문서](../README.md#상세-기술-문서)
+로컬에서는 Frontend와 Backend를 호스트에서 실행하거나 Docker Compose의 `full` 프로필로 함께 시작할 수 있습니다. 행정구역·상권 API나 ETL이 필요하면 로컬 DB와 게시 데이터를 준비합니다. 사용자에게 보이는 화면 동작은 [서비스 명세](service-spec.md), API 계약은 [데이터 설계](data-design.md)에 있습니다. [README의 상세 기술 문서](../README.md#상세-기술-문서)
 
 ## 목차
 
 - [1. 개발 도구](#1-개발-도구)
   - [로컬 DB 준비](#로컬-db-준비)
+  - [전체 Docker 스택](#전체-docker-스택)
   - [서울시 Open API 인증키](#서울시-open-api-인증키)
 - [2. Frontend](#2-frontend)
 - [3. Backend](#3-backend)
@@ -19,11 +20,11 @@
 
 명령은 macOS 또는 Linux 셸(Windows의 WSL 포함)을 기준으로 합니다. 네이티브 Windows는 현재 지원 범위 밖입니다.
 
-| 대상           | 필요한 도구                                                                                                      |
-| -------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Frontend·ETL   | Node.js 24 LTS·npm 11. 각 디렉터리의 `.nvmrc`와 잠금 파일을 사용합니다. CI와 맞출 때는 npm 11.19.1을 사용합니다. |
-| Backend        | Java 21과 저장소의 Gradle Wrapper(`./gradlew`)                                                                   |
-| DB·통합 테스트 | Docker와 Docker Compose. 로컬 개발에서는 Backend와 ETL을 호스트에서 실행합니다.                                  |
+| 대상                    | 필요한 도구                                                                                                      |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Frontend·ETL            | Node.js 24 LTS·npm 11. 각 디렉터리의 `.nvmrc`와 잠금 파일을 사용합니다. CI와 맞출 때는 npm 11.19.1을 사용합니다. |
+| Backend                 | Java 21과 저장소의 Gradle Wrapper(`./gradlew`)                                                                   |
+| 컨테이너·DB 통합 테스트 | Docker와 Docker Compose. ETL은 호스트에서 실행합니다.                                                            |
 
 ### 로컬 DB 준비
 
@@ -36,7 +37,7 @@
 | `DATABASE_URL`, `DB_POOL_MAX`, `DB_CONNECTION_TIMEOUT_MS` | ETL 연결 설정입니다. ETL 실행 위치의 `.env`도 읽으며 셸에서 내보낸 값이 우선합니다. 비밀번호의 URL 예약 문자는 `DATABASE_URL`에서 인코딩합니다. [ETL 예시](../etl/.env.example) |
 | `SEMAS_API_KEY`, `SEOUL_OPEN_API_KEY`                     | 각 공공데이터 ETL의 서버 측 인증키입니다. 실제 키·비밀번호·접속 URL은 Git이나 로그에 남기지 않습니다. [ETL 환경변수와 실행](etl-guide.md#설치-및-공통-실행)                     |
 
-루트에서 `.env`를 준비한 뒤 개발 DB를 시작합니다. DB는 `127.0.0.1`의 `DB_PORT`(기본 5432)에 게시됩니다. 포트가 이미 사용 중이면 로컬 설정을 바꿉니다.
+루트에서 `.env`를 준비한 뒤 개발 DB를 시작합니다. [개발용 Compose](../docker-compose.yml)의 기본 실행은 DB만 시작하며, 호스트의 Vite HMR과 Spring Boot Gradle 실행을 함께 사용할 수 있습니다. DB는 `127.0.0.1`의 `DB_PORT`(기본 5432)에 게시됩니다. 포트가 이미 사용 중이면 로컬 설정을 바꿉니다.
 
 ```bash
 cp -n .env.example .env
@@ -61,6 +62,31 @@ docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 ```
 
 개발 데이터는 `recycleyoungs_postgres_data`에 남습니다. `docker compose stop db`로 중지하고 `docker compose up -d --wait db`로 다시 시작합니다. 일반 종료·재시작 시 볼륨을 삭제하지 않습니다. 초기화된 볼륨의 DB·계정·비밀번호는 `.env` 값만 바꿔도 자동으로 갱신되지 않습니다.
+
+### 전체 Docker 스택
+
+`full` 프로필은 개발 DB에 Frontend와 Backend를 추가합니다. Frontend는 Node.js 24로 빌드한 SPA를 Nginx에서 제공하고 `/api`를 Backend로 전달합니다. Backend는 Java 21 Gradle Wrapper로 빌드한 JAR를 JRE에서 실행합니다. Backend 포트는 Compose 네트워크 안에서만 사용합니다.
+
+루트 `.env`를 준비한 뒤 별도 프로젝트명과 사용 가능한 포트를 지정합니다. 예제의 DB 볼륨은 `recycleyoungs-full_postgres_data`입니다.
+
+```bash
+DB_PORT=15432 FRONTEND_PORT=18081 docker compose -p recycleyoungs-full --profile full up -d --build
+DB_PORT=15432 FRONTEND_PORT=18081 docker compose -p recycleyoungs-full --profile full ps
+```
+
+Nginx는 루프백의 `FRONTEND_PORT`(기본 8081)에 게시됩니다. Compose는 [루트의 개발용 Nginx 설정](../nginx/default-dev.conf) 한 파일을 컨테이너에 읽기 전용으로 연결합니다. Frontend 빌드 컨텍스트는 `frontend/`입니다.
+
+위 명령으로는 [홈](http://localhost:18081)과 [탐색 화면](http://localhost:18081/explore)을 엽니다. 소스가 바뀌면 이미지를 다시 빌드합니다. HMR이 필요하면 호스트에서 Vite를 실행합니다.
+
+- Backend는 DB가 준비되면 `db:5432`에 연결하고 Flyway를 실행합니다. 호스트용 `DB_JDBC_URL`은 컨테이너에 전달하지 않습니다. 새 볼륨에는 조회용 게시 데이터가 없으며 ETL은 자동 실행되지 않습니다.
+- Kakao 지도를 사용하려면 Compose가 읽는 루트 `.env` 또는 실행 셸에 `VITE_KAKAO_MAP_APP_KEY`를 지정하고, Kakao Developers에 실제 접속 origin(예: `http://localhost:18081`)을 등록합니다. 빌드 시 전달되는 JavaScript 키는 브라우저 번들에 공개됩니다. 키를 바꾸면 이미지를 다시 빌드합니다. 키가 비어 있으면 지도 설정 안내가 표시됩니다.
+- DB 비밀번호는 실행 시 DB와 Backend에만 전달됩니다. 이미지 빌드에는 로컬 환경 파일을 포함하지 않습니다.
+
+종료할 때도 같은 프로젝트명과 포트를 지정합니다. 아래 명령은 해당 스택의 볼륨을 유지합니다.
+
+```bash
+DB_PORT=15432 FRONTEND_PORT=18081 docker compose -p recycleyoungs-full --profile full down
+```
 
 ### 서울시 Open API 인증키
 
@@ -186,7 +212,7 @@ npm run test:e2e:list
 오류·자료 없음은 테스트 origin의 `ry-e2e-scenario` 쿠키로 재현합니다. 값은 `normal`, `sales-error`, `sales-empty`, `districts-error`입니다. 값을 바꾼 뒤 지역이나 패널을 재선택합니다. 오류 복구는 `normal`로 돌린 뒤 화면에서 재시도합니다.
 
 ```js
-document.cookie = 'ry-e2e-scenario=sales-error; Path=/; SameSite=Strict';
+document.cookie = "ry-e2e-scenario=sales-error; Path=/; SameSite=Strict";
 ```
 
 후보지 복원은 [합성 fixture](../frontend/e2e/fixtures.ts)의 A·B·C와 `sessionStorage`의 `recycleyoungs.candidates` 버전 1을 사용합니다. 로컬 재현은 새 탭에서 시작하거나 해당 테스트 탭의 키와 쿠키만 초기화합니다.
@@ -208,6 +234,6 @@ document.cookie = 'ry-e2e-scenario=sales-error; Path=/; SameSite=Strict';
 
 ## 배포 검토 항목
 
-운영 배포는 계획 단계입니다. 새 구성은 Nginx·Certbot·GitHub Actions CD를 목표로 합니다.
+개발 환경은 `docker-compose.yml`을 사용합니다. VPS용 `docker-compose.prod.yml`은 Nginx·Certbot·GitHub Actions CD와 함께 별도로 구현할 계획입니다. 운영 환경의 비밀정보, DB 권한과 백업·복구 절차도 해당 구성에서 다룹니다.
 
 기존 배포 사전 검증에서는 격리된 DB에서 초기화 관리자·Flyway·Backend 조회 권한 분리를 확인했습니다. ETL의 loopback 제한을 유지하고 검증된 게시 데이터를 별도로 반입하는 방식을 검토했습니다. 로컬 적재와 게시 검증 결과는 [ETL 검증·적재 이력](archive/etl-validation-history.md)에 있습니다.

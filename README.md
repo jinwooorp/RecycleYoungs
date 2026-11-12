@@ -65,7 +65,7 @@ flowchart LR
     ETL -->|검증·변환 후 적재| DB
 ```
 
-로컬 개발 환경과 GitHub Actions CI를 제공합니다. 운영 배포는 계획 단계이며, Nginx·Certbot·GitHub Actions CD 구성을 목표로 합니다. [배포 계획](docs/development.md#배포-검토-항목)
+로컬 개발 환경과 GitHub Actions CI를 제공합니다. VPS용 `docker-compose.prod.yml`은 Nginx·Certbot·GitHub Actions CD와 함께 구현할 계획입니다. [배포 계획](docs/development.md#배포-검토-항목)
 
 ## 공공데이터
 
@@ -106,7 +106,7 @@ RecycleYoungs/
 │       ├── domains/       # 경계, 업종, 카페, 점포, 매출, 유동인구
 │       └── workflows/     # 공식 원본 통합 사전검증
 ├── docs/                  # 서비스·데이터·개발 문서
-└── compose.yaml           # 로컬 개발 DB
+└── docker-compose.yml     # 로컬 개발 DB와 선택형 전체 스택
 ```
 
 ## 빠른 시작
@@ -137,7 +137,7 @@ cd backend
 
 ### 로컬 DB와 조회 API 실행
 
-저장소 루트에서 `.env`를 준비합니다. `cp -n`은 기존 파일을 덮어쓰지 않습니다. `.env`의 DB 이름·사용자·비밀번호·포트와 JDBC URL이 로컬 개발 DB를 가리키는지 확인합니다.
+저장소 루트에서 `.env`를 준비합니다. `cp -n`은 기존 파일을 덮어쓰지 않습니다. `.env`의 DB 이름·사용자·비밀번호·포트와 JDBC URL이 로컬 개발 DB를 가리키는지 확인합니다. 기본 [개발용 Compose](docker-compose.yml)는 DB만 시작합니다. Frontend는 Vite HMR, Backend는 Gradle로 호스트에서 실행합니다.
 
 ```bash
 cp -n .env.example .env
@@ -157,6 +157,16 @@ cd backend
 ```
 
 Compose는 루트 `.env`를 읽고 백엔드는 셸에서 내보낸 변수를 사용합니다. `db` 프로필은 Flyway로 미적용 스키마를 적용합니다. 조회에 필요한 경계·통계·카페 데이터는 ETL에서 별도로 게시합니다. 실제 환경변수 파일·인증키·원본 데이터는 저장소에 올리지 않습니다. [ETL 설치와 실행](docs/etl-guide.md#설치-및-공통-실행) · [개발 환경변수와 실행 절차](docs/development.md)
+
+### 전체 Docker 스택 실행
+
+기존 개발 DB와 분리하려면 별도 프로젝트명과 빈 루프백 포트를 지정합니다. `full`은 PostGIS와 함께 Nginx로 정적 빌드를 제공하는 Frontend와 Spring Boot JAR를 실행합니다.
+
+```bash
+DB_PORT=15432 FRONTEND_PORT=18081 docker compose -p recycleyoungs-full --profile full up -d --build
+```
+
+[홈](http://localhost:18081)에서 접속합니다. Kakao 지도 키 주입, 볼륨 분리와 종료 방법은 [전체 Docker 스택](docs/development.md#전체-docker-스택)을 참고합니다.
 
 ## 테스트 및 CI
 

@@ -32,6 +32,8 @@
 
 실제 키는 서버 측 환경변수로만 전달합니다. 키·원본·로컬 manifest·실제 `.env`는 저장소에 올리지 않으며 키나 인증 요청 URL을 로그에 남기지 않습니다.
 
+API 전환 후보와 인증·판본 검증 조건은 [공공데이터 ETL API 전환 계획](etl-api-migration-plan.md)에 정리했습니다.
+
 ### 추가 활용 검토 원천
 
 [상주인구 OA-22183](https://data.seoul.go.kr/dataList/OA-22183/S/1/datasetView.do), [직장인구 OA-22184](https://data.seoul.go.kr/dataList/OA-22184/S/1/datasetView.do), [집객시설 OA-22169](https://data.seoul.go.kr/dataList/OA-22169/S/1/datasetView.do), [상권변화지표 OA-15575](https://data.seoul.go.kr/dataList/OA-15575/S/1/datasetView.do), [상권 영역 OA-15560](https://data.seoul.go.kr/dataList/OA-15560/S/1/datasetView.do), [지하철 승하차 OA-12914](https://data.seoul.go.kr/dataList/OA-12914/S/1/datasetView.do)는 검토 대상입니다.
