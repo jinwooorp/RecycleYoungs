@@ -57,10 +57,38 @@ import {
   parseIndustryArguments,
 } from './arguments.js';
 import { printHelp } from './help.js';
+import { parseSeoulStatArguments } from './seoul-stat-arguments.js';
+import {
+  isSeoulStatCommand,
+  seoulStatDatasets,
+} from '../workflows/seoul-stat-api.js';
 
 /** CLI 인자를 검증한 뒤 선택된 도움말·probe·적재를 실행합니다. */
 export async function runCli(args: string[]): Promise<void> {
   try {
+    const command = args[0];
+    if (isSeoulStatCommand(command) && args.slice(1).includes('--api')) {
+      const options = parseSeoulStatArguments(args.slice(1));
+      if (!options) {
+        printHelp();
+      } else if (!options.publish) {
+        console.log(
+          JSON.stringify(await seoulStatDatasets[command].probe(options)),
+        );
+      } else {
+        const pool = createDatabasePool();
+        try {
+          console.log(
+            JSON.stringify(
+              await seoulStatDatasets[command].publish(pool, options),
+            ),
+          );
+        } finally {
+          await pool.end();
+        }
+      }
+      return;
+    }
     let options:
       | (DistrictFootTrafficOptions & { probe: boolean; compareDb?: boolean })
       | OfficialSourcesProbeOptions

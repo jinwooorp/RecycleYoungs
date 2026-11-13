@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import type { Pool } from 'pg';
+import type { StatApiSource } from '../../common/stat-api-publication.js';
 import {
   assertLocalDatabaseUrl,
   rollbackOrDiscard,
@@ -29,6 +30,7 @@ export async function importSalesStats(
     path: string,
     onRows: (rows: SalesStatRow[]) => Promise<void>,
   ) => Promise<SalesSource> = readSalesSource,
+  apiSource?: StatApiSource<SalesStatRow>,
 ) {
   assertLocalDatabaseUrl(pool.options.connectionString);
   const batchId = randomUUID();
@@ -43,15 +45,25 @@ export async function importSalesStats(
   let validRows = 0;
   let rejectedRows = 0;
   let stagedRows = 0;
-  let reference = JSON.stringify({ path: resolve(options.source) });
+  const sourceType = apiSource ? 'API' : 'CSV';
+  let reference = JSON.stringify(
+    apiSource?.reference ?? { path: resolve(options.source) },
+  );
 
   try {
     // 시작 이력은 반영 트랜잭션 밖에 확정해 파일·검증·DB 오류도 추적할 수 있게 합니다.
     await client.query(
       `INSERT INTO etl_batch
        (batch_id,dataset_code,source_type,scope_type,source_reference,etl_version,status,expected_rows,started_at)
-       VALUES ($1,$2,'CSV','SEOUL',$3,$4,'RUNNING',$5,now())`,
-      [batchId, datasetCode, reference, etlVersion, options.expectedRows],
+       VALUES ($1,$2,$6,'SEOUL',$3,$4,'RUNNING',$5,now())`,
+      [
+        batchId,
+        datasetCode,
+        reference,
+        etlVersion,
+        options.expectedRows,
+        sourceType,
+      ],
     );
     started = true;
     const schema = await client.query<{ present: boolean }>(
@@ -70,7 +82,7 @@ export async function importSalesStats(
       weekday_sales_amount BIGINT, weekend_sales_amount BIGINT,
       source_record BIGINT NOT NULL, PRIMARY KEY (dong_code,industry_code,quarter_code)
     ) ON COMMIT DROP`);
-    const source = await loadSource(options.source, async (rows) => {
+    const stageRows = async (rows: SalesStatRow[]) => {
       // JSON에도 수치를 문자열로 넣어 BIGINT·NUMERIC을 Number로 변환하지 않습니다.
       // 한 번에 최대 1000행만 전송하고 await해 빠른 파일 판독이 DB 쓰기를 앞질러 쌓이지 않게 합니다.
       for (let offset = 0; offset < rows.length; offset += 1000) {
@@ -92,14 +104,21 @@ export async function importSalesStats(
         );
         stagedRows += chunk.length;
       }
-    });
+    };
+    const source = apiSource
+      ? await apiSource.load(stageRows)
+      : await loadSource(options.source, stageRows);
     ({ checksum, fetchedRows, validRows, rejectedRows, periodFrom, periodTo } =
       source);
-    reference = JSON.stringify({
-      path: source.path,
-      ...(source.entry ? { entry: source.entry } : {}),
-      encoding: source.encoding,
-    });
+    reference = JSON.stringify(
+      'reference' in source
+        ? source.reference
+        : {
+            path: source.path,
+            ...(source.entry ? { entry: source.entry } : {}),
+            encoding: source.encoding,
+          },
+    );
     if (fetchedRows !== options.expectedRows)
       throw new Error(
         `원본 행 수가 --expected-rows와 다릅니다: 예상 ${options.expectedRows}, 실제 ${fetchedRows}`,
@@ -131,7 +150,7 @@ export async function importSalesStats(
        WHERE a.dong_code IS NULL OR i.industry_code IS NULL`,
     );
     rejectedRows = Number(invalid.rows[0]!.rejected);
-    validRows = fetchedRows - rejectedRows;
+    validRows = (apiSource ? stagedRows : fetchedRows) - rejectedRows;
     if (rejectedRows) {
       // 한 행에서 두 FK가 모두 빠져도 거부 건수는 한 번만 셉니다. 원본 이름으로 코드를 추측하거나
       // 과거 행정동을 임의 치환하지 않고, 코드별 영향 행·분기·첫 데이터 레코드를 제시합니다.
@@ -152,10 +171,12 @@ export async function importSalesStats(
       );
     }
 
+    await apiSource?.verifyIndustries(client);
     const previous = await client.query<{ batch_id: string }>(
       `SELECT batch_id FROM etl_batch WHERE dataset_code=$1 AND source_checksum=$2
-       AND etl_version=$3 AND status='PUBLISHED' ORDER BY published_at DESC LIMIT 1`,
-      [datasetCode, checksum, etlVersion],
+       AND etl_version=$3 AND source_type=$4 AND scope_type='SEOUL' AND scope_code IS NULL
+       AND status='PUBLISHED' AND published_at IS NOT NULL ORDER BY published_at DESC,batch_id DESC LIMIT 1`,
+      [datasetCode, checksum, etlVersion, sourceType],
     );
     let unchanged = false;
     if (previous.rows[0]) {

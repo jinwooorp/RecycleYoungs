@@ -120,8 +120,13 @@ class FootTrafficStatApiIntegrationTests {
         .update();
   }
 
-  @Test
-  void returnsExactNumericStringsAndNullWithPublication() throws Exception {
+  @ParameterizedTest
+  @ValueSource(strings = {"CSV", "API"})
+  void returnsExactNumericStringsAndNullWithPublication(String sourceType) throws Exception {
+    jdbc.sql("UPDATE etl_batch SET source_type=:sourceType WHERE batch_id=:batch")
+        .param("sourceType", sourceType)
+        .param("batch", FOOT_TRAFFIC)
+        .update();
     mvc.perform(get("/api/v1/dongs/00110001/stats/foot-traffic").param("quarterCode", "20262"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.dongCode").value("00110001"))
@@ -262,8 +267,7 @@ class FootTrafficStatApiIntegrationTests {
         Arguments.of("SEOUL_DONG_FOOT_TRAFFIC_STAT", "CSV", "SEOUL", null, "RUNNING", "2026-10-02"),
         Arguments.of("SEOUL_DONG_FOOT_TRAFFIC_STAT", "CSV", "SEOUL", null, "PUBLISHED", null),
         Arguments.of("SEOUL_DONG_STORE_STAT", "CSV", "SEOUL", null, "PUBLISHED", "2026-10-02"),
-        Arguments.of(
-            "SEOUL_DONG_FOOT_TRAFFIC_STAT", "API", "SEOUL", null, "PUBLISHED", "2026-10-02"),
+        Arguments.of("SEOUL_DONG_FOOT_TRAFFIC_STAT", "API", "SEOUL", null, "FAILED", "2026-10-02"),
         Arguments.of(
             "SEOUL_DONG_FOOT_TRAFFIC_STAT", "SHAPEFILE", "SEOUL", null, "PUBLISHED", "2026-10-02"),
         Arguments.of(

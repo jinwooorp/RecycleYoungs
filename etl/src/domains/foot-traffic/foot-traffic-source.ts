@@ -64,7 +64,7 @@ export class FootTrafficSourceError extends Error {
  * PostgreSQL의 정수부 131072자리·소수부 16383자리 한계를 적용하며 반올림하지 않습니다.
  * 표현 가능한 소수부 끝의 0도 보존하고, 정규화 후 소수 자릿수가 한계를 넘으면 거부합니다.
  */
-function normalizeNumeric(value: string): string {
+export function normalizeNumeric(value: string): string {
   const match =
     /^\+?(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:[eE]([+-]?\d+))?(?![\s\S])/.exec(
       value,
@@ -135,7 +135,7 @@ export const rowSchema = z.object({
   maleFootTraffic: nullableNumeric,
   femaleFootTraffic: nullableNumeric,
 });
-const aliases: Record<keyof FootTrafficStatRow, readonly string[]> = {
+export const aliases: Record<keyof FootTrafficStatRow, readonly string[]> = {
   dongCode: ['행정동_코드', 'ADSTRD_CD'],
   quarterCode: ['기준_년분기_코드', 'STDR_YYQU_CD'],
   // 원본의 총·성별 측정값을 독립적으로 보존하며 성별 합계 일치를 강제하지 않습니다.

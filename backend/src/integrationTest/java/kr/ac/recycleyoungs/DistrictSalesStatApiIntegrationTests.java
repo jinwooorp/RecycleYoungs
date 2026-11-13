@@ -124,8 +124,13 @@ class DistrictSalesStatApiIntegrationTests {
         .update();
   }
 
-  @Test
-  void returnsExactStringsNullAndRealZeroWithPublication() throws Exception {
+  @ParameterizedTest
+  @ValueSource(strings = {"CSV", "API"})
+  void returnsExactStringsNullAndRealZeroWithPublication(String sourceType) throws Exception {
+    jdbc.sql("UPDATE etl_batch SET source_type=:sourceType WHERE batch_id=:batch")
+        .param("sourceType", sourceType)
+        .param("batch", SALES)
+        .update();
     mvc.perform(request("00110", "20262", "CS100010"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.districtCode").value("00110"))
@@ -305,7 +310,7 @@ class DistrictSalesStatApiIntegrationTests {
         Arguments.of("SEOUL_DISTRICT_SALES_STAT", "CSV", "SEOUL", null, "PUBLISHED", null),
         Arguments.of("SEOUL_DONG_SALES_STAT", "CSV", "SEOUL", null, "PUBLISHED", "2026-10-02"),
         Arguments.of("SEOUL_DISTRICT_STORE_STAT", "CSV", "SEOUL", null, "PUBLISHED", "2026-10-02"),
-        Arguments.of("SEOUL_DISTRICT_SALES_STAT", "API", "SEOUL", null, "PUBLISHED", "2026-10-02"),
+        Arguments.of("SEOUL_DISTRICT_SALES_STAT", "API", "SEOUL", null, "FAILED", "2026-10-02"),
         Arguments.of(
             "SEOUL_DISTRICT_SALES_STAT", "SHAPEFILE", "SEOUL", null, "PUBLISHED", "2026-10-02"),
         Arguments.of(

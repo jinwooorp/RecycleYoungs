@@ -19,6 +19,9 @@ export function printHelp(): void {
     '  npm run dev -- district-foot-traffic --api --publish [--allow-insecure-http] --expected-rows <API 전체 행 수>\nAPI 게시는 SEOUL_OPEN_API_KEY와 로컬 DATABASE_URL을 사용합니다. 전체 수집 검증 뒤에 통계를 반영하며 --compare-csv는 probe에서 사용합니다.',
   );
   console.log(
+    '  npm run dev -- <foot-traffic|district-stores|district-sales|stores|sales> --api <--probe|--publish> --expected-rows <API 전체 건수> [--allow-insecure-http] [--compare-csv /절대경로/원본.csv [--csv-period]]\nAPI 게시에는 --compare-csv가 필요합니다. --csv-period는 CSV에 있는 분기만 대조·게시합니다.',
+  );
+  console.log(
     '  npm run dev -- official-sources --probe --manifest /절대경로/official-sources.json\n공식 자치구 원본 세 종의 통합 검증은 로컬 CSV·ZIP만 읽습니다.',
   );
 }

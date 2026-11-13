@@ -16,7 +16,7 @@ public class DistrictStoreStatRepository {
 
   private static final String PUBLISHED_STORE_BATCH =
       """
-      b.dataset_code = 'SEOUL_DISTRICT_STORE_STAT' AND b.source_type = 'CSV'
+      b.dataset_code = 'SEOUL_DISTRICT_STORE_STAT' AND b.source_type IN ('CSV', 'API')
         AND b.scope_type = 'SEOUL' AND b.scope_code IS NULL
         AND b.status = 'PUBLISHED' AND b.published_at IS NOT NULL
       """;

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import type { Pool } from 'pg';
+import type { StatApiSource } from '../../common/stat-api-publication.js';
 import {
   assertLocalDatabaseUrl,
   rollbackOrDiscard,
@@ -29,6 +30,7 @@ export async function importFootTrafficStats(
     path: string,
     onRows: (rows: FootTrafficStatRow[]) => Promise<void>,
   ) => Promise<FootTrafficSource> = readFootTrafficSource,
+  apiSource?: StatApiSource<FootTrafficStatRow>,
 ) {
   assertLocalDatabaseUrl(pool.options.connectionString);
   const batchId = randomUUID();
@@ -43,15 +45,25 @@ export async function importFootTrafficStats(
   let validRows = 0;
   let rejectedRows = 0;
   let stagedRows = 0;
-  let reference = JSON.stringify({ path: resolve(options.source) });
+  const sourceType = apiSource ? 'API' : 'CSV';
+  let reference = JSON.stringify(
+    apiSource?.reference ?? { path: resolve(options.source) },
+  );
 
   try {
     // 시작 이력은 반영 트랜잭션 밖에 남겨 파일·검증·DB 오류도 추적합니다.
     await client.query(
       `INSERT INTO etl_batch
        (batch_id,dataset_code,source_type,scope_type,source_reference,etl_version,status,expected_rows,started_at)
-       VALUES ($1,$2,'CSV','SEOUL',$3,$4,'RUNNING',$5,now())`,
-      [batchId, datasetCode, reference, etlVersion, options.expectedRows],
+       VALUES ($1,$2,$6,'SEOUL',$3,$4,'RUNNING',$5,now())`,
+      [
+        batchId,
+        datasetCode,
+        reference,
+        etlVersion,
+        options.expectedRows,
+        sourceType,
+      ],
     );
     started = true;
     const schema = await client.query<{ present: boolean }>(
@@ -69,7 +81,7 @@ export async function importFootTrafficStats(
       total_foot_traffic NUMERIC, male_foot_traffic NUMERIC, female_foot_traffic NUMERIC,
       source_record BIGINT NOT NULL, PRIMARY KEY (dong_code,quarter_code)
     ) ON COMMIT DROP`);
-    const source = await loadSource(options.source, async (rows) => {
+    const stageRows = async (rows: FootTrafficStatRow[]) => {
       // 소수와 큰 정수는 JSON에도 문자열로 넣어 Number의 반올림을 피합니다.
       // 각 쓰기를 기다리며 최대 1000행만 전송해 DB 쓰기가 밀려도 행이 계속 쌓이지 않게 합니다.
       for (let offset = 0; offset < rows.length; offset += 1000) {
@@ -89,14 +101,21 @@ export async function importFootTrafficStats(
         );
         stagedRows += chunk.length;
       }
-    });
+    };
+    const source = apiSource
+      ? await apiSource.load(stageRows)
+      : await loadSource(options.source, stageRows);
     ({ checksum, fetchedRows, validRows, rejectedRows, periodFrom, periodTo } =
       source);
-    reference = JSON.stringify({
-      path: source.path,
-      ...(source.entry ? { entry: source.entry } : {}),
-      encoding: source.encoding,
-    });
+    reference = JSON.stringify(
+      'reference' in source
+        ? source.reference
+        : {
+            path: source.path,
+            ...(source.entry ? { entry: source.entry } : {}),
+            encoding: source.encoding,
+          },
+    );
     if (fetchedRows !== options.expectedRows)
       throw new Error(
         `원본 행 수가 --expected-rows와 다릅니다: 예상 ${options.expectedRows}, 실제 ${fetchedRows}`,
@@ -124,7 +143,7 @@ export async function importFootTrafficStats(
        LEFT JOIN administrative_dong a USING(dong_code) WHERE a.dong_code IS NULL`,
     );
     rejectedRows = Number(invalid.rows[0]!.rejected);
-    validRows = fetchedRows - rejectedRows;
+    validRows = (apiSource ? stagedRows : fetchedRows) - rejectedRows;
     if (rejectedRows) {
       // 과거 행정동을 현재 코드로 임의 치환하지 않고 원본에서 확인할 위치를 진단에 포함합니다.
       const dongs = await client.query(
@@ -138,10 +157,12 @@ export async function importFootTrafficStats(
       );
     }
 
+    await apiSource?.verifyIndustries(client);
     const previous = await client.query<{ batch_id: string }>(
       `SELECT batch_id FROM etl_batch WHERE dataset_code=$1 AND source_checksum=$2
-       AND etl_version=$3 AND status='PUBLISHED' ORDER BY published_at DESC LIMIT 1`,
-      [datasetCode, checksum, etlVersion],
+       AND etl_version=$3 AND source_type=$4 AND scope_type='SEOUL' AND scope_code IS NULL
+       AND status='PUBLISHED' AND published_at IS NOT NULL ORDER BY published_at DESC,batch_id DESC LIMIT 1`,
+      [datasetCode, checksum, etlVersion, sourceType],
     );
     let unchanged = false;
     if (previous.rows[0]) {
@@ -150,9 +171,9 @@ export async function importFootTrafficStats(
         `SELECT NOT EXISTS (
           SELECT 1 FROM foot_traffic_stage s LEFT JOIN dong_foot_traffic_stat t USING(dong_code,quarter_code)
           WHERE t.dong_code IS NULL OR
-          ROW(t.total_foot_traffic,t.male_foot_traffic,t.female_foot_traffic,t.source_batch_id)
+          ROW(${apiSource ? 't.total_foot_traffic::text' : 't.total_foot_traffic'},${apiSource ? 't.male_foot_traffic::text' : 't.male_foot_traffic'},${apiSource ? 't.female_foot_traffic::text' : 't.female_foot_traffic'},t.source_batch_id)
           IS DISTINCT FROM
-          ROW(s.total_foot_traffic,s.male_foot_traffic,s.female_foot_traffic,$1::uuid)
+          ROW(${apiSource ? 's.total_foot_traffic::text' : 's.total_foot_traffic'},${apiSource ? 's.male_foot_traffic::text' : 's.male_foot_traffic'},${apiSource ? 's.female_foot_traffic::text' : 's.female_foot_traffic'},$1::uuid)
         ) AS unchanged`,
         [previous.rows[0].batch_id],
       );

@@ -119,7 +119,7 @@ const nullableInteger = z.preprocess(
   (value) => (value === '' ? null : value),
   integer.nullable(),
 );
-const rowSchema = z.object({
+export const rowSchema = z.object({
   dongCode: z
     .string()
     .length(8)
@@ -137,7 +137,7 @@ const rowSchema = z.object({
   weekdaySalesAmount: nullableInteger,
   weekendSalesAmount: nullableInteger,
 });
-const aliases: Record<keyof SalesStatRow, readonly string[]> = {
+export const aliases: Record<keyof SalesStatRow, readonly string[]> = {
   dongCode: ['행정동_코드', 'ADSTRD_CD'],
   industryCode: ['서비스_업종_코드', 'SVC_INDUTY_CD'],
   quarterCode: ['기준_년분기_코드', 'STDR_YYQU_CD'],

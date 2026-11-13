@@ -75,19 +75,21 @@ const nullableInteger = z.preprocess(
 );
 // 비율은 기존 점포 계약의 정밀도·NUMERIC 한계를 그대로 사용합니다.
 // 자치구를 행정동으로 보정하거나 FK 존재 여부를 추정하지 않습니다.
-const districtRowSchema = storeRowSchema.omit({ dongCode: true }).extend({
-  districtCode: z
-    .string()
-    .length(5)
-    .regex(/^[0-9]{5}$/),
-  storeCount: nullableInteger,
-  generalStoreCount: nullableInteger,
-  franchiseStoreCount: nullableInteger,
-  openedStoreCount: nullableInteger,
-  closedStoreCount: nullableInteger,
-});
+export const districtRowSchema = storeRowSchema
+  .omit({ dongCode: true })
+  .extend({
+    districtCode: z
+      .string()
+      .length(5)
+      .regex(/^[0-9]{5}$/),
+    storeCount: nullableInteger,
+    generalStoreCount: nullableInteger,
+    franchiseStoreCount: nullableInteger,
+    openedStoreCount: nullableInteger,
+    closedStoreCount: nullableInteger,
+  });
 
-const aliases: Record<keyof DistrictStoreStatRow, readonly string[]> = {
+export const aliases: Record<keyof DistrictStoreStatRow, readonly string[]> = {
   districtCode: ['자치구_코드', 'SIGNGU_CD'],
   industryCode: ['서비스_업종_코드', 'SVC_INDUTY_CD'],
   quarterCode: ['기준_년분기_코드', 'STDR_YYQU_CD'],

@@ -106,7 +106,7 @@ export const rowSchema = z.object({
   openingRate: nullable(rate),
   closureRate: nullable(rate),
 });
-const aliases: Record<keyof StoreStatRow, readonly string[]> = {
+export const aliases: Record<keyof StoreStatRow, readonly string[]> = {
   dongCode: ['행정동_코드', 'ADSTRD_CD'],
   industryCode: ['서비스_업종_코드', 'SVC_INDUTY_CD'],
   quarterCode: ['기준_년분기_코드', 'STDR_YYQU_CD'],

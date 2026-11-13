@@ -54,7 +54,7 @@ export class IndustrySourceError extends Error {
   }
 }
 
-const industrySchema = z.object({
+export const industrySchema = z.object({
   industryCode: z.string().regex(/^CS[0-9]{6}$/),
   // 앞뒤 공백을 자동 제거하면 서로 다른 원본 명칭의 충돌이 숨겨질 수 있어 그대로 거부합니다.
   industryName: z

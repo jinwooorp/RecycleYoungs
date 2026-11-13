@@ -114,8 +114,13 @@ class StoreStatApiIntegrationTests {
         .update();
   }
 
-  @Test
-  void returnsExactStringsNullAndRealZeroWithPublication() throws Exception {
+  @ParameterizedTest
+  @ValueSource(strings = {"CSV", "API"})
+  void returnsExactStringsNullAndRealZeroWithPublication(String sourceType) throws Exception {
+    jdbc.sql("UPDATE etl_batch SET source_type=:sourceType WHERE batch_id=:batch")
+        .param("sourceType", sourceType)
+        .param("batch", STORES)
+        .update();
     mvc.perform(
             get("/api/v1/dongs/00110001/stats/stores")
                 .param("quarterCode", "20262")
@@ -239,7 +244,7 @@ class StoreStatApiIntegrationTests {
         Arguments.of("SEOUL_DONG_STORE_STAT", "CSV", "SEOUL", null, "RUNNING", "2026-10-02"),
         Arguments.of("SEOUL_DONG_STORE_STAT", "CSV", "SEOUL", null, "PUBLISHED", null),
         Arguments.of("SEOUL_DONG_SALES_STAT", "CSV", "SEOUL", null, "PUBLISHED", "2026-10-02"),
-        Arguments.of("SEOUL_DONG_STORE_STAT", "API", "SEOUL", null, "PUBLISHED", "2026-10-02"),
+        Arguments.of("SEOUL_DONG_STORE_STAT", "API", "SEOUL", null, "FAILED", "2026-10-02"),
         Arguments.of(
             "SEOUL_DONG_STORE_STAT", "SHAPEFILE", "SEOUL", null, "PUBLISHED", "2026-10-02"),
         Arguments.of(

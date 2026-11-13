@@ -6,8 +6,15 @@ import {
   seoulOpenApiHttpsOrigins,
 } from './config.js';
 
-const pageSize = 100;
-const maxRows = 100_000;
+export const seoulStatPageSize = 1000;
+export const seoulStatMaxRows = 1_000_000;
+const statisticsServices = new Set([
+  'VwsmAdstrdFlpopW',
+  'VwsmSignguStorW',
+  'VwsmSignguSelngW',
+  'VwsmAdstrdStorW',
+  'VwsmAdstrdSelngW',
+]);
 const maxResponseBytes = 4 * 1024 * 1024;
 const retryableStatuses = new Set([408, 429, 500, 502, 503, 504]);
 const knownResultCodes = new Set([
@@ -31,14 +38,16 @@ class SeoulOpenApiError extends Error {}
 
 const objectSchema = z.record(z.string(), z.unknown());
 const resultSchema = z.object({ RESULT: z.object({ CODE: z.string() }) });
-const pageSchema = z.object({
-  list_total_count: z
-    .string()
-    .regex(/^[1-9][0-9]*(?![\s\S])/)
-    .transform(Number)
-    .pipe(z.number().int().positive().max(maxRows)),
-  row: z.array(objectSchema).max(pageSize),
-});
+function pageSchema(pageSize: number, maxRows: number) {
+  return z.object({
+    list_total_count: z
+      .string()
+      .regex(/^[1-9][0-9]*(?![\s\S])/)
+      .transform(Number)
+      .pipe(z.number().int().positive().max(maxRows)),
+    row: z.array(objectSchema).max(pageSize),
+  });
+}
 
 async function readBody(response: Response): Promise<string> {
   if (!response.body)
@@ -70,7 +79,11 @@ async function readBody(response: Response): Promise<string> {
   }
 }
 
-function parsePage(text: string, serviceName: string) {
+function parsePage(
+  text: string,
+  serviceName: string,
+  schema: ReturnType<typeof pageSchema>,
+) {
   let json: unknown;
   try {
     // Node 24의 숫자 토큰 원문을 사용해 안전한 정수 범위 밖 값과 소수 후행 0도 보존합니다.
@@ -101,7 +114,7 @@ function parsePage(text: string, serviceName: string) {
     const detail = knownResultCodes.has(code) ? `(${code})` : '';
     throw new SeoulOpenApiError(`서울시 Open API 응답 오류${detail}입니다.`);
   }
-  const page = pageSchema.safeParse(service);
+  const page = schema.safeParse(service);
   if (!page.success)
     throw new SeoulOpenApiError(
       '서울시 Open API 전체 건수 또는 페이지 구조가 올바르지 않습니다.',
@@ -110,7 +123,11 @@ function parsePage(text: string, serviceName: string) {
 }
 
 /** 페이지의 HTTP 요청과 본문 읽기에 같은 제한 시간을 적용하며 외부 예외 원문을 폐기합니다. */
-async function requestPage(url: string, serviceName: string) {
+async function requestPage(
+  url: string,
+  serviceName: string,
+  schema: ReturnType<typeof pageSchema>,
+) {
   for (let attempt = 0; ; attempt += 1) {
     let text: string;
     try {
@@ -150,18 +167,28 @@ async function requestPage(url: string, serviceName: string) {
       await wait(500);
       continue;
     }
-    return parsePage(text, serviceName);
+    return parsePage(text, serviceName, schema);
   }
 }
 
-/** 서비스별 행 검증을 적용하고, 전 구간의 건수와 복합키가 일치할 때만 결과를 반환합니다. */
-export async function collectSeoulOpenApiRows<Row>(options: {
+type CollectionOptions<Row> = {
   serviceName: string;
   allowInsecureHttp?: boolean;
   expectedRows?: number;
   parseRow: (value: Record<string, unknown>, rowNumber: number) => Row;
   rowKey: (row: Row) => string;
-}) {
+};
+
+async function collectPages<Row>(
+  options: CollectionOptions<Row>,
+  statistics: boolean,
+  onPage: (rows: Row[]) => Promise<void>,
+) {
+  const pageSize = statistics ? seoulStatPageSize : 100;
+  const maxRows = statistics ? seoulStatMaxRows : 100_000;
+  const schema = pageSchema(pageSize, maxRows);
+  if (statistics && !statisticsServices.has(options.serviceName))
+    throw new SeoulOpenApiError('지원하지 않는 서울시 통계 서비스입니다.');
   const apiKey = process.env.SEOUL_OPEN_API_KEY?.trim();
   if (!apiKey || apiKey.toLowerCase() === 'sample')
     throw new SeoulOpenApiError(
@@ -175,7 +202,7 @@ export async function collectSeoulOpenApiRows<Row>(options: {
   // 원문 origin을 정확히 대조해 인증 URL을 만들기 전에 경로·쿼리·다른 목적지를 거부합니다.
   if (
     endpoint === seoulOpenApiHttpOrigin &&
-    serviceName === 'VwsmSignguFlpopW'
+    (statistics || serviceName === 'VwsmSignguFlpopW')
   ) {
     if (options.allowInsecureHttp !== true)
       throw new SeoulOpenApiError(
@@ -192,17 +219,18 @@ export async function collectSeoulOpenApiRows<Row>(options: {
   }
   const pageUrl = (start: number, end: number) =>
     `${endpoint}/${encodeURIComponent(apiKey)}/json/${encodeURIComponent(serviceName)}/${start}/${end}/`;
-  let page = await requestPage(pageUrl(1, pageSize), serviceName);
+  let page = await requestPage(pageUrl(1, pageSize), serviceName, schema);
   const totalRows = page.list_total_count;
   if (expectedRows !== undefined && expectedRows !== totalRows)
     throw new SeoulOpenApiError(
       '예상 행 수와 서울시 Open API 전체 건수가 일치하지 않습니다.',
     );
 
-  const rows = new Map<string, Row>();
+  const keys = new Set<string>();
   for (let start = 1; start <= totalRows; start += pageSize) {
     const end = Math.min(totalRows, start + pageSize - 1);
-    if (start > 1) page = await requestPage(pageUrl(start, end), serviceName);
+    if (start > 1)
+      page = await requestPage(pageUrl(start, end), serviceName, schema);
     if (page.list_total_count !== totalRows)
       throw new SeoulOpenApiError(
         '서울시 Open API 전체 건수가 수집 중 변경되었습니다.',
@@ -211,20 +239,50 @@ export async function collectSeoulOpenApiRows<Row>(options: {
       throw new SeoulOpenApiError(
         `서울시 Open API ${start}~${end} 구간의 행 수가 일치하지 않습니다.`,
       );
+    const rows: Row[] = [];
+    let normalizedBytes = 0;
     for (const [offset, value] of page.row.entries()) {
       const row = parseRow(value, start + offset);
       // 변조된 응답이 인증키를 정상 형식의 수치로 되돌려도 probe 표본에 노출하지 않습니다.
-      if (JSON.stringify(row)?.includes(apiKey))
+      const serialized = JSON.stringify(row);
+      if (serialized?.includes(apiKey))
         throw new SeoulOpenApiError(
           '서울시 Open API 응답에 인증정보가 포함되어 있습니다.',
         );
+      // 지수 정규화로 요청 본문보다 커질 수 있는 페이지에도 별도 상한을 둡니다.
+      normalizedBytes += Buffer.byteLength(serialized ?? '');
+      if (statistics && normalizedBytes > 16 * 1024 * 1024)
+        throw new SeoulOpenApiError(
+          '서울시 API 정규화 페이지 크기 제한을 초과했습니다.',
+        );
       const key = rowKey(row);
-      if (rows.has(key))
+      if (keys.has(key))
         throw new SeoulOpenApiError(
           `서울시 Open API ${start + offset}번째 행의 복합키가 중복되었습니다.`,
         );
-      rows.set(key, row);
+      keys.add(key);
+      rows.push(row);
     }
+    await onPage(rows);
   }
-  return { rows, totalRows, pages: Math.ceil(totalRows / pageSize) };
+  return { totalRows, pages: Math.ceil(totalRows / pageSize) };
+}
+
+/** OA-22179의 기존 전체 수집과 결과 계약을 유지합니다. */
+export async function collectSeoulOpenApiRows<Row>(
+  options: CollectionOptions<Row>,
+) {
+  const rows = new Map<string, Row>();
+  const summary = await collectPages(options, false, async (page) => {
+    for (const row of page) rows.set(options.rowKey(row), row);
+  });
+  return { rows, ...summary };
+}
+
+/** 5종 통계는 페이지 처리가 끝난 뒤 다음 요청을 보내고 전체 복합키만 메모리에 유지합니다. */
+export function streamSeoulStatApiRows<Row>(
+  options: CollectionOptions<Row>,
+  onPage: (rows: Row[]) => Promise<void>,
+) {
+  return collectPages(options, true, onPage);
 }
