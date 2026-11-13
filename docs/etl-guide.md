@@ -55,7 +55,7 @@ npm run dev -- --help
 | --------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | 자치구 통계 3종의 `--probe`             | 지정 CSV 또는 단일 CSV ZIP 전체                                            | DB·인증키·네트워크 없이 검증                                      |
 | `official-sources --probe --manifest`   | manifest의 자치구 원본 3종 전체, 기대 행 수·선택적 해시·관찰 커버리지 대조 | DB·인증키·네트워크 없이 검증                                      |
-| `district-foot-traffic --api --probe`   | 서울시 API 전체 페이지, 선택적 CSV 대조                                    | DB 없이 검증. 공식 HTTP는 명시적 허용과 일반 키 필요              |
+| `district-foot-traffic --api --probe`   | 서울시 API 전체 페이지, 선택적 CSV·게시 DB 대조                            | 공식 HTTP는 명시적 허용과 일반 키 필요. `--compare-db`로만 로컬 DB 조회 |
 | `district-foot-traffic --api --publish` | OA-22179 전체 페이지 검증 후 staging·FK 검사·게시                          | 일반 키와 loopback DB 필요. 전체 수집 실패는 `FAILED` 배치로 기록 |
 | `cafes --probe`                         | 소진공 공식 분류와 첫 페이지 최대 5행                                      | `SEMAS_API_KEY`로 실제 HTTPS API 요청. DB·배치 생성 없음          |
 | 적재 명령 9개                           | 전체 원본 검증, FK·staging 검사 후 게시                                    | 대상 로컬 DB 변경. 카페는 실제 API 전체 수집                      |
@@ -113,7 +113,7 @@ BIGINT는 최댓값 `9223372036854775807`, NUMERIC은 정수부 131,072자리·�
 
 ## 읽기 전용 검증
 
-로컬 자치구 probe는 적재와 같은 파일 검증기를 사용합니다. 필수 옵션·중복 옵션·경로·예상 행 수를 검증하고 표본 제한 뒤 마지막 행까지 검사합니다. 성공 JSON은 `mode=PROBE`, `validationScope=LOCAL_FILE_FORMAT`, `databaseChecked=false`, `batchCreated=false`, `loadedRows=0`과 데이터셋, 인코딩·SHA-256·예상/판독/유효/거부 건수·관찰 분기 범위·최대 5행을 포함합니다. 원본 경로·ZIP entry·NULL별 집계·분기별 구 커버리지는 개별 probe 출력에 포함하지 않습니다. 실패는 종료 코드 1과 안전한 오류로 보고하며 부분 성공 JSON을 반환하지 않습니다. DB의 FK나 게시 준비 여부는 실제 적재에서 확인합니다.
+기본 로컬 자치구 probe는 적재와 같은 파일 검증기를 사용합니다. 필수 옵션·중복 옵션·경로·예상 행 수를 검증하고 표본 제한 뒤 마지막 행까지 검사합니다. 성공 JSON은 `mode=PROBE`, `validationScope=LOCAL_FILE_FORMAT`, `databaseChecked=false`, `batchCreated=false`, `loadedRows=0`과 데이터셋, 인코딩·SHA-256·예상/판독/유효/거부 건수·관찰 분기 범위·최대 5행을 포함합니다. 실패는 종료 코드 1과 안전한 오류로 보고하며 부분 성공 JSON을 반환하지 않습니다. 자치구 길단위인구의 `--compare-db`는 [게시 데이터 전수 대조](#oa-22179-550행-apicsv게시-db-대조)를 추가합니다.
 
 ### 자치구 점포 읽기 전용 검증
 
@@ -179,9 +179,34 @@ npm run dev -- district-foot-traffic \
 ```
 
 - 공식 요청 형식은 `/{KEY}/json/{SERVICE}/{START_INDEX}/{END_INDEX}/`입니다. 1부터 양끝을 포함해 공식 페이지 상한 1,000행 중 CLI는 최대 100행씩 순차 수집합니다. `RESULT.CODE=INFO-000`, 각 구간 행 수, 모든 페이지의 동일한 `list_total_count`와 유일한 자치구·분기 키가 필요합니다. 결과는 페이지 수·건수·분기 범위·최대 5행을 반환합니다. 전체 수집 검증은 다른 판본과의 일치나 모든 구·분기 제공을 확정하지 않습니다.
-- 선택적 `--expected-rows`는 독립적으로 확인한 API 전체 건수와 대조합니다. `--compare-csv /절대경로/자치구인구.csv`는 CSV 또는 단일 CSV ZIP의 전체 복합키와 공통 키의 세 수치를 비교합니다. 지수·후행 0이 달라도 정확한 십진수 값이 같으면 일치로 보고 NULL과 0은 구분합니다. 차이는 API 전용·CSV 전용·수치 불일치 행 수로 보고하며 원문·경로 없이 실패합니다.
-- 전체 수집과 요청한 CSV 대조가 모두 끝난 뒤에만 성공 JSON을 반환합니다. `databaseChecked=false`, `batchCreated=false`, `loadedRows=0`이며, 예시의 550행은 대상 판본의 기대 건수입니다.
+- 선택적 `--expected-rows`는 독립적으로 확인한 API 전체 건수와 대조합니다. `--compare-csv /절대경로/자치구인구.csv`는 CSV 또는 단일 CSV ZIP의 전체 복합키와 공통 키의 세 수치를 비교합니다. 지수·후행 0이 달라도 정확한 십진수 값이 같으면 일치로 보고 NULL과 0은 구분합니다. 차이는 API 전용·CSV 전용 키, 수치 불일치 행 및 필드 수로 보고하며 원문·경로 없이 실패합니다. 성공 시 `csvComparison.csvSha256`은 비교한 내부 CSV 바이트의 SHA-256이며 `representationDifferences`는 값이 같은 필드 중 정규화 문자열이 다른 개수입니다.
+- 요청한 모든 검증이 끝난 뒤에만 성공 JSON을 반환합니다. 기본값은 `databaseChecked=false`이고 `--compare-db` 성공 시 `true`입니다. 두 경우 모두 `batchCreated=false`, `loadedRows=0`입니다.
 - 숫자 원문 토큰을 유지해 기존 스키마로 검증합니다. 요청·본문 읽기 10초, 연결·타임아웃·일시적 HTTP 오류는 최대 한 번 재시도, 페이지당 4 MiB, 전체 100,000행, 정규화 수치 문자열 32 MiB를 적용합니다. 리다이렉트를 따르지 않으며 외부 오류 원문·응답 메시지·요청 URL을 출력하지 않습니다.
+
+#### OA-22179 550행 API·CSV·게시 DB 대조
+
+1. 공식 Sheet CSV 판본의 SHA-256을 확인합니다. 이번 기준은 CP949 파일 `b29fbba82196f94eff890782e904d55b50fb1de6e0a5907fffa432a9e042a4fb`입니다. `DATABASE_URL`은 대상 로컬 개발 DB로 설정합니다. 먼저 실키 없이 CSV·DB를 검증합니다.
+
+   ```bash
+   npm --silent run dev -- district-foot-traffic --probe \
+     --source /절대경로/자치구인구.csv --expected-rows 550 --compare-db
+   ```
+
+2. 공식 전송 주소와 호출 한도를 확인하고, 일반 서울시 키의 실제 전송을 승인받습니다. 공식 HTTPS 주소가 확인되어 허용 목록에 등록되면 HTTPS를 사용합니다. 현재 HTTP 주소를 사용하는 경우 `http://openapi.seoul.go.kr:8088`에 키와 응답을 평문 전송한다는 점과 6페이지, 일시적 실패 시 페이지당 재시도 1회까지를 명시적으로 승인받습니다. 키는 환경변수로 제공하고 URL이나 디버그 로그를 남기지 않습니다.
+
+3. 승인된 경우에만 아래 명령을 실행합니다. API와 비교한 CSV를 다시 읽어 해시가 같은지 확인한 뒤, `REPEATABLE READ READ ONLY` 트랜잭션으로 게시 DB 전체를 조회하고 `ROLLBACK`합니다. V7의 세 NUMERIC 컬럼을 text로 읽어 정밀도를 보존합니다.
+
+   ```bash
+   npm --silent run dev -- district-foot-traffic \
+     --api --probe --allow-insecure-http --expected-rows 550 \
+     --compare-csv /절대경로/자치구인구.csv --compare-db
+   ```
+
+   정상 게시 조건을 검사한 뒤 CSV 출처 행마다 배치에 기록된 SHA-256이 비교 CSV와 같은지 확인합니다. 체크섬 누락이나 불일치는 실패입니다. 정상 API 배치는 정규화된 행을 해시하므로 CSV 바이트 해시 대조에서 제외합니다. 혼합 출처에서는 `matchingCsvSourceRows`가 일치한 CSV 출처 행만 집계합니다.
+
+4. 종료 코드 0, `reportedRows=validRows=550`, `pages=6`, `periodFrom=20211`, `periodTo=20262`를 확인합니다. 두 대조의 `csvSha256`은 1단계 해시와 같아야 합니다. 두 대조 모두 `matchedRows=550`, `comparedValues=1650`이어야 하고, DB 대조는 `districtCount=25`, `quarterCount=22`, `missingDistrictQuarterPairs=0`이어야 합니다. 현재 CSV 게시본의 출처 해시도 `matchingCsvSourceRows=550`으로 확인합니다. `representationDifferences`는 소수 자릿수 표현 차이로 기록합니다.
+
+5. 건수·기간·키·수치·게시 출처가 다르면 게시를 보류합니다. CSV의 SHA-256과 제공기관 갱신 시점, API 수집 시점·실패 구간을 확인해 판본 변경과 페이지 오류를 조사합니다. 값이 모두 일치해도 검증 범위는 채택한 세 필드와 관찰한 응답입니다. HTTP 전송의 무결성, API의 원천 판본 식별자와 이후 재수집의 동일성에는 별도 근거가 필요합니다. 게시에는 별도의 쓰기 승인이 필요합니다.
 
 ### 카페 API 첫 페이지 probe
 
@@ -290,7 +315,7 @@ npm run dev -- district-foot-traffic \
   --expected-rows 550
 ```
 
-- `--api --probe`는 DB 없이 수집 및 선택적 CSV 대조를 수행합니다. `--api --publish`에는 `--probe`, `--source`, `--compare-csv`를 함께 사용할 수 없습니다.
+- `--api --probe`에서는 CSV 대조와 읽기 전용 DB 대조를 선택할 수 있습니다. `--api --publish`에는 `--probe`, `--source`, `--compare-csv`, `--compare-db`를 함께 사용할 수 없습니다.
 - 게시 명령은 `RUNNING` 배치를 먼저 기록합니다. 전체 페이지·행 수·복합키·분기·측정값 검증이 끝나면 staging과 FK 검사를 시작합니다. 수집 실패는 `FAILED` 이력을 남기고 기존 정상 통계와 출처를 보존합니다. staging 또는 Upsert 실패는 반영 트랜잭션을 롤백합니다.
 - API 배치에는 `source_type=API`, `scope_type=SEOUL`, 공식 데이터셋 ID·서비스명·전체 수집 범위를 기록합니다. 성공적으로 수집하면 보고 건수·페이지 수·분기 범위도 저장합니다. 정규화한 행을 자치구·분기 복합키 순으로 정렬한 뒤 고정 순서의 JSON 배열과 줄바꿈을 UTF-8로 해시합니다. 수치의 소수 자릿수와 NULL/0을 보존하며 요청 URL과 키는 출처·체크섬에서 제외합니다.
 - `SKIPPED` 판정은 동일 원본 유형의 정상 게시 배치와 현재 값·출처를 대조합니다. 같은 값의 CSV를 API로 교체하면 API 배치로 `PUBLISHED`되고 해당 행의 출처가 바뀝니다. 입력에 없는 키는 보존합니다.

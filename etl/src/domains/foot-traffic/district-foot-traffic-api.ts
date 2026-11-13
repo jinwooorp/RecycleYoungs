@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import {
+  comparableDistrictFootTrafficValue,
   districtFootTrafficKey,
+  districtFootTrafficMeasurements,
   districtFootTrafficRowSchema,
   readDistrictFootTrafficSource,
   type DistrictFootTrafficStatRow,
@@ -16,11 +18,6 @@ export const districtFootTrafficApiReference = {
   collectionMode: 'FULL',
 } as const;
 const maxMeasurementCharacters = 32 * 1024 * 1024;
-const measurementFields = [
-  'totalFootTraffic',
-  'maleFootTraffic',
-  'femaleFootTraffic',
-] as const;
 
 export type DistrictFootTrafficApiProbeOptions = {
   api: true;
@@ -28,6 +25,7 @@ export type DistrictFootTrafficApiProbeOptions = {
   allowInsecureHttp?: boolean;
   expectedRows?: number;
   compareCsv?: string;
+  compareDb?: boolean;
 };
 
 export type DistrictFootTrafficApiPublishOptions = {
@@ -55,42 +53,42 @@ function parseRow(
   return row.data;
 }
 
-/** 비교에만 소수부 후행 0을 제거하며 출력과 CSV 원본의 scale은 유지합니다. */
-function comparableNumeric(value: string | null) {
-  return value?.includes('.')
-    ? value.replace(/0+$/, '').replace(/\.$/, '')
-    : value;
-}
-
 async function compareCsv(
   path: string,
   apiRows: Map<string, DistrictFootTrafficStatRow>,
 ) {
   let matchedRows = 0;
   let mismatchedRows = 0;
+  let mismatchedValues = 0;
+  let representationDifferences = 0;
   const csv = await readDistrictFootTrafficSource(path, async (rows) => {
     for (const row of rows) {
       const apiRow = apiRows.get(districtFootTrafficKey(row));
       if (!apiRow) continue;
       matchedRows += 1;
-      if (
-        measurementFields.some(
-          (field) =>
-            comparableNumeric(apiRow[field]) !== comparableNumeric(row[field]),
-        )
-      )
-        mismatchedRows += 1;
+      const differences = districtFootTrafficMeasurements.filter(
+        (field) =>
+          comparableDistrictFootTrafficValue(apiRow[field]) !==
+          comparableDistrictFootTrafficValue(row[field]),
+      ).length;
+      if (differences) mismatchedRows += 1;
+      mismatchedValues += differences;
+      representationDifferences += districtFootTrafficMeasurements.filter(
+        (field) => apiRow[field] !== row[field],
+      ).length;
     }
   });
   const apiOnly = apiRows.size - matchedRows;
   const csvOnly = csv.validRows - matchedRows;
   if (apiOnly || csvOnly || mismatchedRows)
     throw new Error(
-      `자치구 길단위인구 API·CSV 대조 실패 (API 전용 ${apiOnly}행, CSV 전용 ${csvOnly}행, 수치 불일치 ${mismatchedRows}행)`,
+      `자치구 길단위인구 API·CSV 대조 실패 (API 전용 ${apiOnly}행, CSV 전용 ${csvOnly}행, 수치 불일치 ${mismatchedRows}행 / ${mismatchedValues}개)`,
     );
   return {
     matchedRows,
-    comparedValues: matchedRows * measurementFields.length,
+    comparedValues: matchedRows * districtFootTrafficMeasurements.length,
+    representationDifferences,
+    csvSha256: csv.checksum,
   };
 }
 
@@ -109,7 +107,7 @@ async function collectDistrictFootTrafficApi(
     parseRow(value, rowNumber) {
       const row = parseRow(value, rowNumber);
       // 짧은 지수 표기도 정규화 과정에서 길어질 수 있으므로 비교용 수치의 누적 크기를 제한합니다.
-      for (const field of measurementFields)
+      for (const field of districtFootTrafficMeasurements)
         measurementCharacters += row[field]?.length ?? 0;
       if (measurementCharacters > maxMeasurementCharacters)
         throw new Error(

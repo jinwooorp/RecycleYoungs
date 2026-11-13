@@ -331,7 +331,12 @@ describe('자치구 길단위인구 서울시 API probe', () => {
     await expect(
       probe({ compareCsv: '/private/source.csv' }),
     ).resolves.toMatchObject({
-      csvComparison: { matchedRows: 2, comparedValues: 6 },
+      csvComparison: {
+        matchedRows: 2,
+        comparedValues: 6,
+        representationDifferences: 4,
+        csvSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+      },
     });
   });
 

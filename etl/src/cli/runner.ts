@@ -17,6 +17,7 @@ import { probeCafeSource } from '../domains/cafes/cafe-source.js';
 import { probeDistrictStoreSource } from '../domains/stores/district-store-source.js';
 import { probeDistrictSalesSource } from '../domains/sales/district-sales-source.js';
 import { probeDistrictFootTrafficSource } from '../domains/foot-traffic/district-foot-traffic-source.js';
+import { compareDistrictFootTrafficDatabase } from '../domains/foot-traffic/district-foot-traffic-db-comparison.js';
 import {
   parseOfficialSourcesArguments,
   probeOfficialSources,
@@ -61,7 +62,7 @@ import { printHelp } from './help.js';
 export async function runCli(args: string[]): Promise<void> {
   try {
     let options:
-      | (DistrictFootTrafficOptions & { probe: boolean })
+      | (DistrictFootTrafficOptions & { probe: boolean; compareDb?: boolean })
       | OfficialSourcesProbeOptions
       | DistrictFootTrafficApiProbeOptions
       | DistrictFootTrafficApiPublishOptions
@@ -102,17 +103,43 @@ export async function runCli(args: string[]): Promise<void> {
       console.log(JSON.stringify(result));
       if (result.status === 'FAIL') process.exitCode = 1;
     } else if ('api' in options && 'probe' in options) {
-      console.log(JSON.stringify(await probeDistrictFootTrafficApi(options)));
+      const result = await probeDistrictFootTrafficApi(options);
+      const dbComparison =
+        options.compareDb && options.compareCsv && result.csvComparison
+          ? await compareDistrictFootTrafficDatabase(
+              options.compareCsv,
+              result.csvComparison.csvSha256,
+            )
+          : undefined;
+      console.log(
+        JSON.stringify(
+          dbComparison
+            ? { ...result, databaseChecked: true, dbComparison }
+            : result,
+        ),
+      );
     } else if (
       args[0] === 'district-foot-traffic' &&
       'source' in options &&
       'probe' in options &&
       options.probe
     ) {
-      // 자치구 인구는 점포·매출 probe와 DB 풀 생성 분기에 진입하지 않습니다.
+      const result = await probeDistrictFootTrafficSource({
+        ...options,
+        probe: true,
+      });
+      const dbComparison =
+        'compareDb' in options && options.compareDb
+          ? await compareDistrictFootTrafficDatabase(
+              options.source,
+              result.checksum,
+            )
+          : undefined;
       console.log(
         JSON.stringify(
-          await probeDistrictFootTrafficSource({ ...options, probe: true }),
+          dbComparison
+            ? { ...result, databaseChecked: true, dbComparison }
+            : result,
         ),
       );
     } else if (

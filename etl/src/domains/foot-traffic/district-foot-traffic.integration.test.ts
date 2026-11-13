@@ -16,6 +16,7 @@ import {
   vi,
 } from 'vitest';
 import { runCli } from '../../cli/runner.js';
+import { compareDistrictFootTrafficDatabase } from './district-foot-traffic-db-comparison.js';
 import {
   importDistrictFootTrafficApi,
   importDistrictFootTrafficStats,
@@ -501,6 +502,59 @@ describe.runIf(process.env.RUN_DISTRICT_FOOT_TRAFFIC_DB_TESTS === '1')(
         fetched_rows: '2',
         published_at: null,
       });
+    });
+
+    it('실제 DB에서 CSV·API 혼합 출처를 읽기 전용으로 대조하고 다른 CSV 체크섬을 차단한다', async () => {
+      const input = rows();
+      const csv = [
+        'STDR_YYQU_CD,SIGNGU_CD,TOT_FLPOP_CO,ML_FLPOP_CO,FML_FLPOP_CO',
+        ...input.map((row) =>
+          [
+            row.quarterCode,
+            row.districtCode,
+            row.totalFootTraffic,
+            row.maleFootTraffic,
+            row.femaleFootTraffic,
+          ].join(','),
+        ),
+      ].join('\n');
+      virtualFiles.set(options.source, Buffer.from(csv));
+      const checksum = createHash('sha256').update(csv).digest('hex');
+      const csvBatch = await importDistrictFootTrafficStats(pool, options);
+      stubApi(input.slice(1));
+      const apiBatch = await importDistrictFootTrafficApi(pool, {
+        ...apiOptions,
+        expectedRows: 1,
+      });
+      expect((await readBatch(apiBatch.batchId)).source_checksum).not.toBe(
+        checksum,
+      );
+      vi.stubEnv('DATABASE_URL', pool.options.connectionString);
+      const before = await snapshot();
+      const batchCount = () => pool.query('SELECT count(*) FROM etl_batch');
+      const batches = await batchCount();
+
+      await expect(
+        compareDistrictFootTrafficDatabase(options.source, checksum),
+      ).resolves.toMatchObject({
+        matchedRows: 2,
+        comparedValues: 6,
+        matchingCsvSourceRows: 1,
+        representationDifferences: 0,
+      });
+      expect(await snapshot()).toEqual(before);
+      expect((await batchCount()).rows).toEqual(batches.rows);
+
+      // 검증 입력은 그대로 두고 격리 스키마의 CSV 배치 체크섬만 교체합니다.
+      await pool.query(
+        'UPDATE etl_batch SET source_checksum=$1 WHERE batch_id=$2',
+        ['b'.repeat(64), csvBatch.batchId],
+      );
+      await expect(
+        compareDistrictFootTrafficDatabase(options.source, checksum),
+      ).rejects.toThrow('CSV 출처 체크섬 불일치 1행');
+      expect(await snapshot()).toEqual(before);
+      expect((await batchCount()).rows).toEqual(batches.rows);
     });
 
     it('publishes exact NUMERIC values, NULL, zero and source metadata without forcing sums', async () => {

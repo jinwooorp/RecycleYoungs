@@ -427,7 +427,7 @@ PK 외에 생성하는 조회 인덱스입니다.
 **검증 이력·probe·조회**
 
 - 실제 CP949 CSV 550행을 일회용 PostGIS에 적재해 채택 세 수치 1,650개를 원본 문자열과 전수 대조했고 불일치가 없었습니다. 동일 파일 재실행 `SKIPPED`·기존 출처와 합계 차이 269행을 보존했습니다. 테스트 FK는 관찰 코드의 합성 기준 행이며 개발 DB FK 검증은 아닙니다.
-- `--probe`의 DB·FK 조회·배치·적재·네트워크 미접속 계약은 유지합니다.
+- 기본 CSV `--probe`는 파일만 읽습니다. 명시적 `--compare-db`는 로컬 게시 테이블의 전체 키·수치를 읽기 전용으로 대조합니다. [OA-22179 전수 대조 절차](etl-guide.md#oa-22179-550행-apicsv게시-db-대조)
 - V7·적재 ETL·인구 조회 API를 구현했으며 2026-11-01 실제 개발 DB에서도 V7 적용·550행 적재·1,650개 측정값 전수 대조·재실행 `SKIPPED`·API 대조를 완료했습니다. 실제 자치구 FK와 기존 9개 데이터 테이블·배치 18건 보존 결과는 [개발 DB 검증 기록](archive/etl-validation-history.md#자치구-길단위인구-개발-db-적용적재-검증-2026-11-01)을 따릅니다. 실행 절차는 [ETL 가이드](etl-guide.md#자치구-길단위인구-적재와-게시), 당시 격리 시험은 [격리 DB 검증](archive/etl-validation-history.md#자치구-길단위인구-격리-db-검증-2026-11-01)을 참고하세요.
 
 ## 자치구 추정매출 원본 probe 계약
@@ -501,7 +501,8 @@ PK 외에 생성하는 조회 인덱스입니다.
 - 빈 셀만 NULL입니다. 실제 0은 문자열로 유지하며 공백·문자 NULL·음수(-0 포함)·NaN·Infinity는 거부합니다. 총인구와 성별·연령·시간대·요일 합계 일치를 강제하거나 값을 보정하지 않습니다.
 - 전체 파일을 검증한 뒤 양의 안전한 정수인 `--expected-rows`와 비교합니다. 표본은 최대 5행이며 제한 이후에도 끝까지 검증합니다. 550행·25구×22분기 완전성·컬럼 25개를 모든 판본의 고정 요건으로 두지 않습니다.
 - 출력은 `mode=PROBE`, `datasetId=OA-22179`, `serviceName=VwsmSignguFlpopW`, `validationScope=LOCAL_FILE_FORMAT`, `databaseChecked=false`, `batchCreated=false`, `loadedRows=0`, `expectedRows`·`fetchedRows`·`validRows`·`rejectedRows=0`, `periodFrom`·`periodTo`, `checksum`·`encoding`·`sample`입니다. 측정값은 sample의 위 세 필드만 포함하며 원본 경로·ZIP entry·배치 ID는 출력하지 않습니다. ZIP 체크섬은 내부 CSV 바이트 기준입니다.
-- `--probe`에서는 DB 설정 검증·풀 생성·FK 조회·배치·적재·네트워크 호출 없이 실행하며 오류 시 원본 값·접속정보·라이브러리 오류 원문과 부분 성공 JSON을 출력하지 않습니다. 생략하면 위 V7 적재 계약을 실행합니다.
+- `--compare-db`를 선택하면 기본 CSV probe 또는 API의 `--compare-csv` 성공 후 같은 SHA-256의 CSV를 로컬 DB와 대조합니다. 전체 테이블의 양방향 키·세 NUMERIC의 정확한 값·REST 조회의 게시 조건을 검사합니다. CSV 출처 배치의 체크섬이 없거나 비교 CSV의 SHA-256과 다르면 실패합니다. API 출처에는 정규화 행의 별도 해시 계약을 적용하므로 CSV 바이트와 대조하지 않습니다. `dbComparison`에는 CSV 해시, 일치 키·비교 수치·표현 차이 건수, 자치구·분기·누락 조합 수, CSV 배치 해시 일치 행 수를 반환합니다. `databaseChecked=true`로 표시하며 배치와 적재는 없습니다.
+- 실패 시 원본 값·접속정보·라이브러리 오류 원문과 부분 성공 JSON을 출력하지 않습니다. `--probe`를 생략하면 위 V7 적재 계약을 실행합니다.
 
 실제 제공 파일의 22개 수치 12,100개에 대한 독립 조사와 probe가 채택한 세 수치의 검증은 [길단위인구 CSV 검증 기록](archive/etl-validation-history.md#자치구-길단위인구-csv-probe와-독립-조사-2026-11-01)에서 구분합니다. 이 probe 출력은 V7 적재 결과나 [자치구 유동인구 API 응답](#자치구-유동인구-통계-rest-api-계약)이 아닙니다.
 

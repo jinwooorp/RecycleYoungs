@@ -63,6 +63,19 @@ export function districtFootTrafficKey(
   return `${row.districtCode}:${row.quarterCode}`;
 }
 
+export const districtFootTrafficMeasurements = [
+  'totalFootTraffic',
+  'maleFootTraffic',
+  'femaleFootTraffic',
+] as const;
+
+/** 십진수 값의 대조에서만 소수부 후행 0을 제거하고 NULL과 0을 구분합니다. */
+export function comparableDistrictFootTrafficValue(value: string | null) {
+  return value?.includes('.')
+    ? value.replace(/0+$/, '').replace(/\.$/, '')
+    : value;
+}
+
 const aliases: Record<keyof DistrictFootTrafficStatRow, readonly string[]> = {
   districtCode: ['자치구_코드', 'SIGNGU_CD'],
   quarterCode: ['기준_년분기_코드', 'STDR_YYQU_CD'],
