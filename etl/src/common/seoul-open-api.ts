@@ -1,6 +1,10 @@
 import { setTimeout as wait } from 'node:timers/promises';
 import { z } from 'zod';
-import { seoulOpenApiEndpoint } from './config.js';
+import {
+  seoulOpenApiEndpoint,
+  seoulOpenApiHttpOrigin,
+  seoulOpenApiHttpsOrigins,
+} from './config.js';
 
 const pageSize = 100;
 const maxRows = 100_000;
@@ -153,6 +157,7 @@ async function requestPage(url: string, serviceName: string) {
 /** 서비스별 행 검증을 적용하고, 전 구간의 건수와 복합키가 일치할 때만 결과를 반환합니다. */
 export async function collectSeoulOpenApiRows<Row>(options: {
   serviceName: string;
+  allowInsecureHttp?: boolean;
   expectedRows?: number;
   parseRow: (value: Record<string, unknown>, rowNumber: number) => Row;
   rowKey: (row: Row) => string;
@@ -164,14 +169,29 @@ export async function collectSeoulOpenApiRows<Row>(options: {
     );
   if (!/^[A-Za-z0-9_-]{1,256}$/.test(apiKey))
     throw new SeoulOpenApiError('SEOUL_OPEN_API_KEY 형식이 올바르지 않습니다.');
-  // 인증키가 들어간 URL을 만들기 전에 HTTPS 여부를 확인하고 설정값은 오류에 포함하지 않습니다.
-  if (URL.parse(seoulOpenApiEndpoint)?.protocol !== 'https:')
-    throw new SeoulOpenApiError(
-      'BLOCKED: 서울시 Open API 인증 요청에는 검증된 HTTPS 주소가 필요합니다.',
-    );
   const { serviceName, expectedRows, parseRow, rowKey } = options;
+  const endpoint = seoulOpenApiEndpoint;
+  const url = URL.parse(endpoint);
+  // 원문 origin을 정확히 대조해 인증 URL을 만들기 전에 경로·쿼리·다른 목적지를 거부합니다.
+  if (
+    endpoint === seoulOpenApiHttpOrigin &&
+    serviceName === 'VwsmSignguFlpopW'
+  ) {
+    if (options.allowInsecureHttp !== true)
+      throw new SeoulOpenApiError(
+        'BLOCKED: 공식 HTTP 주소의 인증 요청에는 --allow-insecure-http가 필요합니다.',
+      );
+  } else if (
+    url?.protocol !== 'https:' ||
+    url.origin !== endpoint ||
+    !seoulOpenApiHttpsOrigins.includes(endpoint)
+  ) {
+    throw new SeoulOpenApiError(
+      'BLOCKED: 허용된 서울시 Open API 주소가 아닙니다.',
+    );
+  }
   const pageUrl = (start: number, end: number) =>
-    `${seoulOpenApiEndpoint}/${encodeURIComponent(apiKey)}/json/${encodeURIComponent(serviceName)}/${start}/${end}/`;
+    `${endpoint}/${encodeURIComponent(apiKey)}/json/${encodeURIComponent(serviceName)}/${start}/${end}/`;
   let page = await requestPage(pageUrl(1, pageSize), serviceName);
   const totalRows = page.list_total_count;
   if (expectedRows !== undefined && expectedRows !== totalRows)
@@ -193,6 +213,11 @@ export async function collectSeoulOpenApiRows<Row>(options: {
       );
     for (const [offset, value] of page.row.entries()) {
       const row = parseRow(value, start + offset);
+      // 변조된 응답이 인증키를 정상 형식의 수치로 되돌려도 probe 표본에 노출하지 않습니다.
+      if (JSON.stringify(row)?.includes(apiKey))
+        throw new SeoulOpenApiError(
+          '서울시 Open API 응답에 인증정보가 포함되어 있습니다.',
+        );
       const key = rowKey(row);
       if (rows.has(key))
         throw new SeoulOpenApiError(

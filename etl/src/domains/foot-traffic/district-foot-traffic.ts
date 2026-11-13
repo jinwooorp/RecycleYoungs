@@ -7,6 +7,11 @@ import {
   safeMessage,
 } from '../../common/database.js';
 import {
+  districtFootTrafficApiReference,
+  readDistrictFootTrafficApiSource,
+  type DistrictFootTrafficApiPublishOptions,
+} from './district-foot-traffic-api.js';
+import {
   readDistrictFootTrafficSource,
   DistrictFootTrafficSourceError,
   type DistrictFootTrafficSource,
@@ -21,19 +26,51 @@ export type DistrictFootTrafficOptions = {
   expectedRows: number;
 };
 
+type CsvSourceReader = (
+  path: string,
+  onRows: (rows: DistrictFootTrafficStatRow[]) => Promise<void>,
+) => Promise<DistrictFootTrafficSource>;
+
+type PublishSource =
+  | { type: 'CSV'; path: string; read: CsvSourceReader }
+  | { type: 'API'; options: DistrictFootTrafficApiPublishOptions };
+
+/** CSV 판독기의 바이트 체크섬과 경로 기반 출처를 기존 방식으로 기록합니다. */
+export async function importDistrictFootTrafficStats(
+  pool: Pool,
+  options: DistrictFootTrafficOptions,
+  loadSource: CsvSourceReader = readDistrictFootTrafficSource,
+) {
+  return publishDistrictFootTraffic(pool, options.expectedRows, {
+    type: 'CSV',
+    path: options.source,
+    read: loadSource,
+  });
+}
+
+/** 전체 수집을 검증한 API 입력만 공통 게시 트랜잭션에 전달합니다. */
+export async function importDistrictFootTrafficApi(
+  pool: Pool,
+  options: DistrictFootTrafficApiPublishOptions,
+) {
+  if (options.publish !== true)
+    throw new Error('서울시 API 게시에는 --publish가 필요합니다.');
+  return publishDistrictFootTraffic(pool, options.expectedRows, {
+    type: 'API',
+    options,
+  });
+}
+
 /**
  * 검증한 길단위인구 통계를 작은 묶음으로 스테이징하고, FK 확인 후 한 번에 공개합니다.
  * 원본에 없는 기존 키는 보존하며 측정값과 출처가 같은 재실행은 SKIPPED로 기록합니다.
  */
-export async function importDistrictFootTrafficStats(
+async function publishDistrictFootTraffic(
   pool: Pool,
-  options: DistrictFootTrafficOptions,
-  loadSource: (
-    path: string,
-    onRows: (rows: DistrictFootTrafficStatRow[]) => Promise<void>,
-  ) => Promise<DistrictFootTrafficSource> = readDistrictFootTrafficSource,
+  expectedRows: number,
+  input: PublishSource,
 ) {
-  if (!Number.isSafeInteger(options.expectedRows) || options.expectedRows <= 0)
+  if (!Number.isSafeInteger(expectedRows) || expectedRows <= 0)
     throw new Error('예상 행 수는 양의 안전한 정수여야 합니다.');
   assertLocalDatabaseUrl(pool.options.connectionString);
   const batchId = randomUUID();
@@ -48,19 +85,23 @@ export async function importDistrictFootTrafficStats(
   let validRows = 0;
   let rejectedRows = 0;
   let stagedRows = 0;
-  let reference = JSON.stringify({
-    datasetId: 'OA-22179',
-    serviceName: 'VwsmSignguFlpopW',
-    path: resolve(options.source),
-  });
+  let reference = JSON.stringify(
+    input.type === 'API'
+      ? districtFootTrafficApiReference
+      : {
+          datasetId: 'OA-22179',
+          serviceName: 'VwsmSignguFlpopW',
+          path: resolve(input.path),
+        },
+  );
 
   try {
     // 시작 이력은 반영 트랜잭션 밖에 확정해 파일·검증·DB 오류도 추적할 수 있게 합니다.
     await client.query(
       `INSERT INTO etl_batch
        (batch_id,dataset_code,source_type,scope_type,source_reference,etl_version,status,expected_rows,started_at)
-       VALUES ($1,$2,'CSV','SEOUL',$3,$4,'RUNNING',$5,now())`,
-      [batchId, datasetCode, reference, etlVersion, options.expectedRows],
+      VALUES ($1,$2,$3,'SEOUL',$4,$5,'RUNNING',$6,now())`,
+      [batchId, datasetCode, input.type, reference, etlVersion, expectedRows],
     );
     started = true;
     const schema = await client.query<{ present: boolean }>(
@@ -71,6 +112,23 @@ export async function importDistrictFootTrafficStats(
         'district_foot_traffic_stat이 없습니다. Flyway V7를 먼저 적용하세요.',
       );
 
+    // API 오류는 배치에 기록하되, 모든 페이지를 확인하기 전에는 staging이나 통계 쓰기를 시작하지 않습니다.
+    const apiSource =
+      input.type === 'API'
+        ? await readDistrictFootTrafficApiSource(input.options)
+        : undefined;
+    if (apiSource) {
+      ({
+        checksum,
+        fetchedRows,
+        validRows,
+        rejectedRows,
+        periodFrom,
+        periodTo,
+        reference,
+      } = apiSource);
+    }
+
     await client.query('BEGIN');
     transaction = true;
     await client.query(`CREATE TEMP TABLE district_foot_traffic_stage (
@@ -78,7 +136,7 @@ export async function importDistrictFootTrafficStats(
       total_foot_traffic NUMERIC, male_foot_traffic NUMERIC, female_foot_traffic NUMERIC,
       source_record BIGINT NOT NULL, PRIMARY KEY (district_code,quarter_code)
     ) ON COMMIT DROP`);
-    const source = await loadSource(options.source, async (rows) => {
+    const stageRows = async (rows: DistrictFootTrafficStatRow[]) => {
       // JSON에도 수치를 문자열로 넣어 BIGINT·NUMERIC을 Number로 변환하지 않습니다.
       // 한 번에 최대 1000행만 전송하고 await해 빠른 파일 판독이 DB 쓰기를 앞질러 쌓이지 않게 합니다.
       for (let offset = 0; offset < rows.length; offset += 1000) {
@@ -98,23 +156,33 @@ export async function importDistrictFootTrafficStats(
         );
         stagedRows += chunk.length;
       }
-    });
-    ({ checksum, fetchedRows, validRows, rejectedRows, periodFrom, periodTo } =
-      source);
-    reference = JSON.stringify({
-      datasetId: 'OA-22179',
-      serviceName: 'VwsmSignguFlpopW',
-      path: source.path,
-      ...(source.entry ? { entry: source.entry } : {}),
-      encoding: source.encoding,
-    });
+    };
+    if (apiSource) await stageRows(apiSource.rows);
+    if (input.type === 'CSV') {
+      const source = await input.read(input.path, stageRows);
+      ({
+        checksum,
+        fetchedRows,
+        validRows,
+        rejectedRows,
+        periodFrom,
+        periodTo,
+      } = source);
+      reference = JSON.stringify({
+        datasetId: 'OA-22179',
+        serviceName: 'VwsmSignguFlpopW',
+        path: source.path,
+        ...(source.entry ? { entry: source.entry } : {}),
+        encoding: source.encoding,
+      });
+    }
     if (
       rejectedRows !== 0 ||
       validRows !== fetchedRows ||
-      fetchedRows !== options.expectedRows
+      fetchedRows !== expectedRows
     )
       throw new Error(
-        `원본 행 수가 --expected-rows와 다릅니다: 예상 ${options.expectedRows}, 실제 ${fetchedRows}`,
+        `원본 행 수가 --expected-rows와 다릅니다: 예상 ${expectedRows}, 실제 ${fetchedRows}`,
       );
     // 콜백에 전달한 건수가 아닌 DB의 실제 행 수를 확인해 누락·초과된 스테이징을 공개하지 않습니다.
     const staged = await client.query<{ staged_rows: string }>(
@@ -156,9 +224,9 @@ export async function importDistrictFootTrafficStats(
 
     const previous = await client.query<{ batch_id: string }>(
       `SELECT batch_id FROM etl_batch WHERE dataset_code=$1 AND source_checksum=$2
-       AND etl_version=$3 AND source_type='CSV' AND scope_type='SEOUL' AND scope_code IS NULL
+      AND etl_version=$3 AND source_type=$4 AND scope_type='SEOUL' AND scope_code IS NULL
        AND status='PUBLISHED' AND published_at IS NOT NULL ORDER BY published_at DESC,batch_id DESC LIMIT 1`,
-      [datasetCode, checksum, etlVersion],
+      [datasetCode, checksum, etlVersion, input.type],
     );
     let unchanged = false;
     if (previous.rows[0]) {

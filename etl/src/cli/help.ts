@@ -13,7 +13,10 @@ export function printHelp(): void {
     '  npm run dev -- district-foot-traffic [--probe] --source /절대경로/자치구인구.csv --expected-rows <원본 전체 행 수>\n자치구 길단위인구는 CSV/단일 CSV ZIP을 적재하며 --probe에서는 DB·배치·적재·네트워크 요청을 사용하지 않습니다.',
   );
   console.log(
-    '  npm run dev -- district-foot-traffic --api --probe [--expected-rows <API 전체 행 수>] [--compare-csv /절대경로/자치구인구.csv]\n서울시 Open API 전체 수집 검증은 SEOUL_OPEN_API_KEY를 사용하며 DB·배치·적재를 사용하지 않습니다.',
+    '  npm run dev -- district-foot-traffic --api --probe [--allow-insecure-http] [--expected-rows <API 전체 행 수>] [--compare-csv /절대경로/자치구인구.csv]\n공식 HTTP 주소에 SEOUL_OPEN_API_KEY를 보내려면 --allow-insecure-http가 필요합니다. HTTP에서는 키와 응답이 암호화되지 않습니다. 이 검증은 DB·배치·적재를 사용하지 않습니다.',
+  );
+  console.log(
+    '  npm run dev -- district-foot-traffic --api --publish [--allow-insecure-http] --expected-rows <API 전체 행 수>\nAPI 게시는 SEOUL_OPEN_API_KEY와 로컬 DATABASE_URL을 사용합니다. 전체 수집 검증 뒤에 통계를 반영하며 --compare-csv는 probe에서 사용합니다.',
   );
   console.log(
     '  npm run dev -- official-sources --probe --manifest /절대경로/official-sources.json\n공식 자치구 원본 세 종의 통합 검증은 로컬 CSV·ZIP만 읽습니다.',

@@ -2,7 +2,10 @@ import { parseArgs } from 'node:util';
 import { z } from 'zod';
 import type { BoundaryOptions } from '../domains/boundaries/boundaries.js';
 import type { CafeOptions } from '../domains/cafes/cafes.js';
-import type { DistrictFootTrafficApiProbeOptions } from '../domains/foot-traffic/district-foot-traffic-api.js';
+import type {
+  DistrictFootTrafficApiProbeOptions,
+  DistrictFootTrafficApiPublishOptions,
+} from '../domains/foot-traffic/district-foot-traffic-api.js';
 import type { DistrictFootTrafficOptions } from '../domains/foot-traffic/district-foot-traffic.js';
 import type { FootTrafficOptions } from '../domains/foot-traffic/foot-traffic.js';
 import type { IndustryOptions } from '../domains/industries/industries.js';
@@ -24,6 +27,7 @@ export function parseDistrictFootTrafficArguments(
 ):
   | (DistrictFootTrafficOptions & { probe: boolean })
   | DistrictFootTrafficApiProbeOptions
+  | DistrictFootTrafficApiPublishOptions
   | null {
   let parsed;
   try {
@@ -36,6 +40,8 @@ export function parseDistrictFootTrafficArguments(
         'expected-rows': { type: 'string' },
         probe: { type: 'boolean' },
         api: { type: 'boolean' },
+        publish: { type: 'boolean' },
+        'allow-insecure-http': { type: 'boolean' },
         'compare-csv': { type: 'string' },
         help: { type: 'boolean', short: 'h' },
       },
@@ -57,6 +63,8 @@ export function parseDistrictFootTrafficArguments(
     'expected-rows',
     'probe',
     'api',
+    'publish',
+    'allow-insecure-http',
     'compare-csv',
   ]) {
     if (
@@ -74,10 +82,28 @@ export function parseDistrictFootTrafficArguments(
     .regex(/^[1-9][0-9]*(?![\s\S])/)
     .pipe(count);
   if (values.api) {
-    if (!values.probe || values.source !== undefined)
+    if (
+      Boolean(values.probe) === Boolean(values.publish) ||
+      values.source !== undefined
+    )
       throw new Error(
-        '서울시 API는 --api --probe로만 검증하며 --source 대신 --compare-csv를 사용하세요.',
+        '서울시 API는 --api와 함께 --probe 또는 --publish 중 하나를 사용하며 --source를 허용하지 않습니다.',
       );
+    if (values.publish) {
+      if (values['compare-csv'] !== undefined)
+        throw new Error('--compare-csv는 --api --probe와 함께 사용하세요.');
+      const expected = expectedRows.safeParse(values['expected-rows']);
+      if (!expected.success)
+        throw new Error(
+          '서울시 API 게시에는 양의 안전한 정수인 --expected-rows가 필요합니다.',
+        );
+      return {
+        api: true,
+        publish: true,
+        allowInsecureHttp: values['allow-insecure-http'],
+        expectedRows: expected.data,
+      };
+    }
     const apiOptions = z
       .object({
         expectedRows: expectedRows.optional(),
@@ -91,8 +117,16 @@ export function parseDistrictFootTrafficArguments(
       throw new Error(
         '자치구 길단위인구 API 예상 행 수 또는 비교 CSV 경로가 올바르지 않습니다.',
       );
-    return { api: true, probe: true, ...apiOptions.data };
+    return {
+      api: true,
+      probe: true,
+      allowInsecureHttp: values['allow-insecure-http'],
+      ...apiOptions.data,
+    };
   }
+  if (values.publish) throw new Error('--publish는 --api와 함께 사용하세요.');
+  if (values['allow-insecure-http'] !== undefined)
+    throw new Error('--allow-insecure-http는 --api와 함께 사용하세요.');
   if (values['compare-csv'] !== undefined)
     throw new Error('--compare-csv는 --api --probe와 함께 사용하세요.');
   const options = z

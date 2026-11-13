@@ -90,7 +90,7 @@ DB_PORT=15432 FRONTEND_PORT=18081 docker compose -p recycleyoungs-full --profile
 
 ### 서울시 Open API 인증키
 
-발급받은 `SEOUL_OPEN_API_KEY`는 루트의 로컬 `.env`에 설정합니다. 인증 전체 probe에는 검증된 HTTPS 주소가 필요합니다. 현재 공식 HTTP 주소에서는 키가 있어도 인증 요청 전 `BLOCKED`로 종료합니다. [서울시 Open API 이용안내](https://data.seoul.go.kr/together/guide/useGuide.do) · [ETL probe 실행](etl-guide.md#서울시-open-api-전체-수집-probe) · [HTTPS 확인 기록](archive/etl-validation-history.md#oa-22179-공개-표본과-https-확인-2026-11-10)
+발급받은 `SEOUL_OPEN_API_KEY`는 로컬 `.env`나 실행 셸에 설정합니다. OA-22179는 읽기 전용 `--api --probe`와 DB에 반영하는 `--api --publish`를 지원합니다. 공식 HTTP 주소에서는 `--allow-insecure-http`가 필요하며, 평문으로 전송되는 키가 노출되거나 응답이 변조될 수 있습니다. 실제 게시 전에 읽기 전용 probe로 원본을 대조하고 대상 DB의 쓰기 승인을 받습니다. [서울시 Open API 이용안내](https://data.seoul.go.kr/together/guide/useGuide.do) · [ETL probe 실행](etl-guide.md#서울시-open-api-전체-수집-probe) · [API 직접 게시](etl-guide.md#oa-22179-api-직접-게시) · [HTTPS 확인 기록](archive/etl-validation-history.md#oa-22179-공개-표본과-https-확인-2026-11-10)
 
 ## 2. Frontend
 

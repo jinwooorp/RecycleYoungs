@@ -28,7 +28,7 @@
 서울시 CSV·ZIP은 데이터셋의 파일 또는 Sheet CSV 내려받기로 확보합니다. Sheet 미리보기는 전체 행 수의 근거로 쓰지 않습니다. 발급 키와 별도로 서비스별 요청 제한·이용조건·제공 범위를 확인합니다. 경계·통계 파일과 로컬 CSV probe에는 인증키가 필요 없습니다. [서울시 상권분석서비스의 다운로드 안내](https://golmok.seoul.go.kr/introduce.do)
 
 - `SEMAS_API_KEY`는 공공데이터포털에서 상가(상권)정보 API 활용을 신청하고 승인 상태를 확인한 뒤 **Decoding 키**로 설정합니다. 다른 API의 이용 권한은 서비스별로 확인합니다. [공공데이터포털](https://www.data.go.kr/) · [활용신청과 명세](https://www.data.go.kr/data/15012005/openapi.do)
-- `SEOUL_OPEN_API_KEY`는 서울 열린데이터광장의 일반 인증키입니다. 일부 별도 서비스는 다른 키가 필요합니다. 현재 OA-22179 인증 probe는 검증된 HTTPS 주소가 없어 차단됩니다. [인증키 신청](https://data.seoul.go.kr/together/mypage/actkeyMain.do) · [서울시 Open API 이용안내](https://data.seoul.go.kr/together/guide/useGuide.do)
+- `SEOUL_OPEN_API_KEY`는 서울 열린데이터광장의 일반 인증키입니다. 일부 별도 서비스는 다른 키가 필요합니다. OA-22179의 공식 HTTP 주소에는 명시적 허용 옵션이 필요합니다. [인증키 신청](https://data.seoul.go.kr/together/mypage/actkeyMain.do) · [서울시 Open API 이용안내](https://data.seoul.go.kr/together/guide/useGuide.do)
 
 실제 키는 서버 측 환경변수로만 전달합니다. 키·원본·로컬 manifest·실제 `.env`는 저장소에 올리지 않으며 키나 인증 요청 URL을 로그에 남기지 않습니다.
 
@@ -51,13 +51,14 @@ npm run dev -- --help
 
 개발 명령은 [`src/index.ts`](../etl/src/index.ts)를 실행합니다. 빌드 결과를 사용할 때는 `npm run build` 후 같은 인자를 `npm start -- …`에 전달해 `dist/index.js`를 실행합니다. 두 방식 모두 인자 없이 실행하거나 `--help`를 지정하면 DB 접속 없이 도움말을 표시합니다. [CLI 인자 파서](../etl/src/cli/arguments.ts)
 
-| 모드                                  | 읽는 범위                                                                  | DB·외부 요청                                             |
-| ------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------- |
-| 자치구 통계 3종의 `--probe`           | 지정 CSV 또는 단일 CSV ZIP 전체                                            | DB·인증키·네트워크 없이 검증                             |
-| `official-sources --probe --manifest` | manifest의 자치구 원본 3종 전체, 기대 행 수·선택적 해시·관찰 커버리지 대조 | DB·인증키·네트워크 없이 검증                             |
-| `district-foot-traffic --api --probe` | 서울시 API 전체 페이지, 선택적 CSV 대조                                    | DB 없이 검증하는 모드이며 현재 인증 요청은 `BLOCKED`     |
-| `cafes --probe`                       | 소진공 공식 분류와 첫 페이지 최대 5행                                      | `SEMAS_API_KEY`로 실제 HTTPS API 요청. DB·배치 생성 없음 |
-| 적재 명령 9개                         | 전체 원본 검증, FK·staging 검사 후 게시                                    | 대상 로컬 DB 변경. 카페는 실제 API 전체 수집             |
+| 모드                                    | 읽는 범위                                                                  | DB·외부 요청                                                      |
+| --------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 자치구 통계 3종의 `--probe`             | 지정 CSV 또는 단일 CSV ZIP 전체                                            | DB·인증키·네트워크 없이 검증                                      |
+| `official-sources --probe --manifest`   | manifest의 자치구 원본 3종 전체, 기대 행 수·선택적 해시·관찰 커버리지 대조 | DB·인증키·네트워크 없이 검증                                      |
+| `district-foot-traffic --api --probe`   | 서울시 API 전체 페이지, 선택적 CSV 대조                                    | DB 없이 검증. 공식 HTTP는 명시적 허용과 일반 키 필요              |
+| `district-foot-traffic --api --publish` | OA-22179 전체 페이지 검증 후 staging·FK 검사·게시                          | 일반 키와 loopback DB 필요. 전체 수집 실패는 `FAILED` 배치로 기록 |
+| `cafes --probe`                         | 소진공 공식 분류와 첫 페이지 최대 5행                                      | `SEMAS_API_KEY`로 실제 HTTPS API 요청. DB·배치 생성 없음          |
+| 적재 명령 9개                           | 전체 원본 검증, FK·staging 검사 후 게시                                    | 대상 로컬 DB 변경. 카페는 실제 API 전체 수집                      |
 
 ### 작업 디렉터리와 환경변수
 
@@ -164,16 +165,22 @@ npm --silent run dev -- official-sources --probe --manifest /절대경로/offici
 
 ### 서울시 Open API 전체 수집 probe
 
-OA-22179의 `VwsmSignguFlpopW`를 대상으로 하는 인증 읽기 전용 모드입니다. 공식 엔드포인트의 HTTPS 지원이 확인되지 않아 **현재 `BLOCKED`이며 종료 코드 1**을 반환합니다. 키가 없거나 `sample`인 경우도 차단합니다. 실제 키가 설정되어 있어도 현재 HTTP 주소에는 인증 URL을 만들거나 요청하지 않습니다. [OA-22179 API 명세](https://data.seoul.go.kr/dataList/OA-22179/S/1/datasetView.do?tab=A) · [2026-11-10 공개 표본과 HTTPS 확인](archive/etl-validation-history.md#oa-22179-공개-표본과-https-확인-2026-11-10)
+OA-22179의 `VwsmSignguFlpopW`만 대상으로 하는 인증 읽기 전용 모드입니다. 현재 공식 주소인 `http://openapi.seoul.go.kr:8088`은 `--allow-insecure-http`가 있을 때만 허용합니다. 옵션이 없거나 키가 없거나 `sample`이면 요청 전에 `BLOCKED`로 종료합니다(코드 1). 검증된 공식 HTTPS 주소를 코드의 허용 목록에 등록하면 HTTP 옵션 없이 사용할 수 있습니다. [OA-22179 API 명세](https://data.seoul.go.kr/dataList/OA-22179/S/1/datasetView.do?tab=A) · [2026-11-10 공개 표본과 HTTPS 확인](archive/etl-validation-history.md#oa-22179-공개-표본과-https-확인-2026-11-10)
 
-검증된 공식 HTTPS 주소가 반영된 뒤, [인증키 설정](development.md#서울시-open-api-인증키)을 마치고 `etl/`에서 다음 명령을 사용합니다.
+**HTTP에서는 요청 경로의 인증키와 응답이 평문으로 전송됩니다.** 네트워크 중간에서 키를 읽거나 응답을 변조할 수 있습니다. 인증 URL을 로컬 로그에 남기지 않아도 이 위험은 남습니다. 실제 키를 보내는 자동 검증은 사용자가 전송을 명시적으로 승인한 경우에만 실행합니다. 공개 `sample`은 실키 없이 최대 5행과 전체 건수 메타데이터를 확인하는 별도 조회입니다.
+
+위 위험을 수락해 직접 실행할 때는 [인증키 설정](development.md#서울시-open-api-인증키)을 마치고 `etl/`에서 다음 명령을 사용합니다. `npm run dev`는 `etl/.env` 또는 실행 셸의 환경변수를 읽습니다. 루트 `.env`를 사용할 경우 `node --env-file=../.env --import tsx src/index.ts` 뒤에 같은 인자를 전달합니다.
 
 ```bash
-node --env-file=../.env --import tsx src/index.ts district-foot-traffic --api --probe
+npm run dev -- district-foot-traffic \
+  --api --probe --allow-insecure-http \
+  --expected-rows 550 \
+  --compare-csv /절대경로/자치구인구.csv
 ```
 
 - 공식 요청 형식은 `/{KEY}/json/{SERVICE}/{START_INDEX}/{END_INDEX}/`입니다. 1부터 양끝을 포함해 공식 페이지 상한 1,000행 중 CLI는 최대 100행씩 순차 수집합니다. `RESULT.CODE=INFO-000`, 각 구간 행 수, 모든 페이지의 동일한 `list_total_count`와 유일한 자치구·분기 키가 필요합니다. 결과는 페이지 수·건수·분기 범위·최대 5행을 반환합니다. 전체 수집 검증은 다른 판본과의 일치나 모든 구·분기 제공을 확정하지 않습니다.
 - 선택적 `--expected-rows`는 독립적으로 확인한 API 전체 건수와 대조합니다. `--compare-csv /절대경로/자치구인구.csv`는 CSV 또는 단일 CSV ZIP의 전체 복합키와 공통 키의 세 수치를 비교합니다. 지수·후행 0이 달라도 정확한 십진수 값이 같으면 일치로 보고 NULL과 0은 구분합니다. 차이는 API 전용·CSV 전용·수치 불일치 행 수로 보고하며 원문·경로 없이 실패합니다.
+- 전체 수집과 요청한 CSV 대조가 모두 끝난 뒤에만 성공 JSON을 반환합니다. `databaseChecked=false`, `batchCreated=false`, `loadedRows=0`이며, 예시의 550행은 대상 판본의 기대 건수입니다.
 - 숫자 원문 토큰을 유지해 기존 스키마로 검증합니다. 요청·본문 읽기 10초, 연결·타임아웃·일시적 HTTP 오류는 최대 한 번 재시도, 페이지당 4 MiB, 전체 100,000행, 정규화 수치 문자열 32 MiB를 적용합니다. 리다이렉트를 따르지 않으며 외부 오류 원문·응답 메시지·요청 URL을 출력하지 않습니다.
 
 ### 카페 API 첫 페이지 probe
@@ -265,13 +272,32 @@ V7과 실제 자치구 기준 데이터가 필요합니다.
 npm run dev -- district-foot-traffic --source /절대경로/자치구인구.csv --expected-rows 550
 ```
 
-세 자치구 통계는 각 probe와 같은 검증을 하고 예상·유효·실제 staging 건수 및 실제 FK를 대조합니다. 원본 종류·범위는 `CSV`·`SEOUL`·`scope_code=NULL`입니다. `source_reference`에는 `datasetId`·`serviceName`·로컬 `path`·선택적 ZIP `entry`·`encoding`을 기록하며 배치에는 내부 CSV 체크섬·관찰 분기 범위를 기록합니다. 동일 체크섬·ETL 버전의 정상 `PUBLISHED`(출처 조건과 게시 시각 포함), 측정값과 실제 `source_batch_id`가 모두 일치할 때만 `SKIPPED`입니다. 적재 결과에는 배치 ID·상태·건수·분기 범위를 반환합니다.
+세 자치구 통계의 CSV 게시에서는 각 probe와 같은 검증을 하고 예상·유효·실제 staging 건수 및 실제 FK를 대조합니다. 원본 종류·범위는 `CSV`·`SEOUL`·`scope_code=NULL`입니다. `source_reference`에는 `datasetId`·`serviceName`·로컬 `path`·선택적 ZIP `entry`·`encoding`을 기록하며 배치에는 내부 CSV 체크섬·관찰 분기 범위를 기록합니다. 동일 체크섬·ETL 버전의 정상 `PUBLISHED`(출처 조건과 게시 시각 포함), 측정값과 실제 `source_batch_id`가 모두 일치할 때만 `SKIPPED`입니다. 적재 결과에는 배치 ID·상태·건수·분기 범위를 반환합니다.
 
 | 계약                                                                 | 배치 데이터셋                      | ETL 버전                        |
 | -------------------------------------------------------------------- | ---------------------------------- | ------------------------------- |
 | [V5 점포](data-design.md#v5-자치구-점포-컬럼과-etl-계약)             | `SEOUL_DISTRICT_STORE_STAT`        | `district-store-stat-v1`        |
 | [V6 추정매출](data-design.md#v6-자치구-추정매출-컬럼과-etl-계약)     | `SEOUL_DISTRICT_SALES_STAT`        | `district-sales-stat-v1`        |
 | [V7 길단위인구](data-design.md#v7-자치구-길단위인구-컬럼과-etl-계약) | `SEOUL_DISTRICT_FOOT_TRAFFIC_STAT` | `district-foot-traffic-stat-v1` |
+
+#### OA-22179 API 직접 게시
+
+`--api --publish`는 V1~V7과 서울 자치구 기준 데이터가 준비된 loopback DB에 게시합니다. 실행 셸에 `SEOUL_OPEN_API_KEY`와 `DATABASE_URL`을 준비하고, 해당 판본의 전체 행 수를 `--expected-rows`로 지정합니다. 공식 HTTP 주소는 키와 응답을 평문으로 전송하며 중간에서 가로채거나 변조할 수 있습니다. 이 주소를 쓰는 경우에만 전송을 명시적으로 허용합니다. [공식 HTTP 주소와 위험 안내](#서울시-open-api-전체-수집-probe)
+
+```bash
+npm run dev -- district-foot-traffic \
+  --api --publish --allow-insecure-http \
+  --expected-rows 550
+```
+
+- `--api --probe`는 DB 없이 수집 및 선택적 CSV 대조를 수행합니다. `--api --publish`에는 `--probe`, `--source`, `--compare-csv`를 함께 사용할 수 없습니다.
+- 게시 명령은 `RUNNING` 배치를 먼저 기록합니다. 전체 페이지·행 수·복합키·분기·측정값 검증이 끝나면 staging과 FK 검사를 시작합니다. 수집 실패는 `FAILED` 이력을 남기고 기존 정상 통계와 출처를 보존합니다. staging 또는 Upsert 실패는 반영 트랜잭션을 롤백합니다.
+- API 배치에는 `source_type=API`, `scope_type=SEOUL`, 공식 데이터셋 ID·서비스명·전체 수집 범위를 기록합니다. 성공적으로 수집하면 보고 건수·페이지 수·분기 범위도 저장합니다. 정규화한 행을 자치구·분기 복합키 순으로 정렬한 뒤 고정 순서의 JSON 배열과 줄바꿈을 UTF-8로 해시합니다. 수치의 소수 자릿수와 NULL/0을 보존하며 요청 URL과 키는 출처·체크섬에서 제외합니다.
+- `SKIPPED` 판정은 동일 원본 유형의 정상 게시 배치와 현재 값·출처를 대조합니다. 같은 값의 CSV를 API로 교체하면 API 배치로 `PUBLISHED`되고 해당 행의 출처가 바뀝니다. 입력에 없는 키는 보존합니다.
+
+자치구 유동인구 REST는 정상 `CSV`·`API` 게시 배치를 참조하는 각 행을 조회합니다. CSV와 API가 서로 다른 분기에 섞여 있어도 각 행의 배치 ID와 게시 시각을 반환합니다. [현재 Backend 조회 조건](../backend/src/main/java/kr/ac/recycleyoungs/foottraffic/DistrictFootTrafficStatRepository.java)
+
+실제 사용 전에는 인증키 전송을 승인받고 읽기 전용 probe로 공식 CSV와 전체 판본을 대조합니다. 차이와 대상 DB·백업을 확인한 뒤 해당 DB의 쓰기 승인을 받아 게시합니다. 게시 후 배치 상태·시각, 행 수와 출처를 확인합니다. 현재 실행은 수동이며 정기 수집·게시 작업은 구현하지 않았습니다. [검증 및 승인 절차](etl-api-migration-plan.md#csvapi-대조와-게시-승인-조건)
 
 ### 카페 API 수집·적재
 

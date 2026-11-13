@@ -7,6 +7,7 @@ import { setTimeout } from 'node:timers/promises';
 import type { Pool } from 'pg';
 import {
   afterAll,
+  afterEach,
   beforeAll,
   beforeEach,
   describe,
@@ -14,7 +15,11 @@ import {
   it,
   vi,
 } from 'vitest';
-import { importDistrictFootTrafficStats } from './district-foot-traffic.js';
+import { runCli } from '../../cli/runner.js';
+import {
+  importDistrictFootTrafficApi,
+  importDistrictFootTrafficStats,
+} from './district-foot-traffic.js';
 import {
   DistrictFootTrafficSourceError,
   type DistrictFootTrafficSource,
@@ -99,6 +104,96 @@ describe.runIf(process.env.RUN_DISTRICT_FOOT_TRAFFIC_DB_TESTS === '1')(
           "SELECT * FROM etl_batch WHERE dataset_code='SEOUL_DISTRICT_FOOT_TRAFFIC_STAT' AND status='FAILED' ORDER BY started_at DESC LIMIT 1",
         )
       ).rows[0];
+    const readBatch = async (batchId: string) =>
+      (await pool.query('SELECT * FROM etl_batch WHERE batch_id=$1', [batchId]))
+        .rows[0];
+
+    // 행정표준코드관리시스템의 서울 자치구 25개 코드·명칭에 합성 도형과 통계를 사용합니다.
+    const officialDistricts = [
+      ['11110', '종로구'],
+      ['11140', '중구'],
+      ['11170', '용산구'],
+      ['11200', '성동구'],
+      ['11215', '광진구'],
+      ['11230', '동대문구'],
+      ['11260', '중랑구'],
+      ['11290', '성북구'],
+      ['11305', '강북구'],
+      ['11320', '도봉구'],
+      ['11350', '노원구'],
+      ['11380', '은평구'],
+      ['11410', '서대문구'],
+      ['11440', '마포구'],
+      ['11470', '양천구'],
+      ['11500', '강서구'],
+      ['11530', '구로구'],
+      ['11545', '금천구'],
+      ['11560', '영등포구'],
+      ['11590', '동작구'],
+      ['11620', '관악구'],
+      ['11650', '서초구'],
+      ['11680', '강남구'],
+      ['11710', '송파구'],
+      ['11740', '강동구'],
+    ] as const;
+    const apiOptions = {
+      api: true,
+      publish: true,
+      allowInsecureHttp: true,
+      expectedRows: 550,
+    } as const;
+    const syntheticApiKey = 'isolated-district-foot-traffic-fixture';
+    const apiFixture = () =>
+      officialDistricts.flatMap(([districtCode]) =>
+        Array.from({ length: 22 }, (_, index): DistrictFootTrafficStatRow => ({
+          districtCode,
+          quarterCode: String(20211 + Math.floor(index / 4) * 10 + (index % 4)),
+          totalFootTraffic: '9007199254740993.12345678901234567890',
+          maleFootTraffic: null,
+          femaleFootTraffic: '0.000',
+        })),
+      );
+    const stubApi = (
+      data: DistrictFootTrafficStatRow[],
+      changePage?: (
+        page: number,
+        payload: {
+          list_total_count: number;
+          row: {
+            SIGNGU_CD: string;
+            STDR_YYQU_CD: string;
+            TOT_FLPOP_CO: string | null;
+            ML_FLPOP_CO: string | null;
+            FML_FLPOP_CO: string | null;
+          }[];
+        },
+      ) => void,
+      key = syntheticApiKey,
+    ) => {
+      vi.stubEnv('SEOUL_OPEN_API_KEY', key);
+      const fetchPage = vi
+        .fn<typeof fetch>()
+        .mockRejectedValue(new Error('합성 API의 예상 페이지를 초과했습니다.'));
+      for (let start = 0; start < data.length; start += 100) {
+        const payload = {
+          RESULT: { CODE: 'INFO-000' },
+          list_total_count: data.length,
+          row: data.slice(start, start + 100).map((row) => ({
+            SIGNGU_CD: row.districtCode,
+            STDR_YYQU_CD: row.quarterCode,
+            TOT_FLPOP_CO: row.totalFootTraffic,
+            ML_FLPOP_CO: row.maleFootTraffic,
+            FML_FLPOP_CO: row.femaleFootTraffic,
+          })),
+        };
+        changePage?.(start / 100, payload);
+        fetchPage.mockResolvedValueOnce(
+          Response.json({ VwsmSignguFlpopW: payload }),
+        );
+      }
+      vi.stubGlobal('fetch', fetchPage);
+      return fetchPage;
+    };
 
     beforeAll(async () => {
       container = execFileSync(
@@ -188,6 +283,225 @@ describe.runIf(process.env.RUN_DISTRICT_FOOT_TRAFFIC_DB_TESTS === '1')(
       if (container)
         execFileSync('docker', ['stop', container], { stdio: 'pipe' });
     }, 30000);
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    });
+
+    it('CLI에서 합성 API 550행을 게시하고 원본 순서와 키가 달라도 동일 입력은 SKIPPED로 기록한다', async () => {
+      await pool.query(
+        `INSERT INTO district (district_code,district_name,geom,boundary_batch_id)
+         SELECT code,name,ST_GeomFromText('MULTIPOLYGON(((126.9 37.5,127.1 37.5,127.1 37.7,126.9 37.7,126.9 37.5)))',4326),$3
+         FROM unnest($1::text[],$2::text[]) AS reference(code,name)
+         ON CONFLICT (district_code) DO UPDATE SET district_name=EXCLUDED.district_name`,
+        [
+          officialDistricts.map(([code]) => code),
+          officialDistricts.map(([, name]) => name),
+          seedBatchId,
+        ],
+      );
+      const data = apiFixture();
+      const csv = [
+        'STDR_YYQU_CD,SIGNGU_CD,TOT_FLPOP_CO,ML_FLPOP_CO,FML_FLPOP_CO',
+        ...data.map(
+          (row) =>
+            `${row.quarterCode},${row.districtCode},${row.totalFootTraffic},,0.000`,
+        ),
+      ].join('\n');
+      const csvPath = '/virtual/api-predecessor.csv';
+      virtualFiles.set(csvPath, Buffer.from(csv));
+      const priorCsv = await importDistrictFootTrafficStats(pool, {
+        source: csvPath,
+        expectedRows: 550,
+      });
+      const csvBatch = await readBatch(priorCsv.batchId);
+      expect(csvBatch).toMatchObject({
+        status: 'PUBLISHED',
+        source_type: 'CSV',
+        source_checksum: createHash('sha256').update(csv).digest('hex'),
+      });
+
+      const fetchPage = stubApi(data);
+      vi.stubEnv('DATABASE_URL', pool.options.connectionString);
+      const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+      await runCli([
+        'district-foot-traffic',
+        '--api',
+        '--publish',
+        '--allow-insecure-http',
+        '--expected-rows',
+        '550',
+      ]);
+      const output = String(log.mock.calls[0]?.[0]);
+      expect(output).not.toMatch(
+        /http:\/\/|isolated-district-foot-traffic-fixture/,
+      );
+      const published = JSON.parse(output);
+      expect(published).toMatchObject({
+        status: 'PUBLISHED',
+        fetchedRows: 550,
+        validRows: 550,
+        rejectedRows: 0,
+      });
+      expect(fetchPage).toHaveBeenCalledTimes(6);
+      expect(
+        fetchPage.mock.calls.map(([url]) =>
+          String(url).split('/').slice(-3, -1).join('/'),
+        ),
+      ).toEqual([
+        '1/100',
+        '101/200',
+        '201/300',
+        '301/400',
+        '401/500',
+        '501/550',
+      ]);
+      const stored = await snapshot();
+      expect(stored).toEqual(
+        data.map((row) => ({
+          district_code: row.districtCode,
+          quarter_code: row.quarterCode,
+          total_foot_traffic: row.totalFootTraffic,
+          male_foot_traffic: row.maleFootTraffic,
+          female_foot_traffic: row.femaleFootTraffic,
+          source_batch_id: published.batchId,
+        })),
+      );
+      const batch = await readBatch(published.batchId);
+      expect(batch).toMatchObject({
+        source_type: 'API',
+        scope_type: 'SEOUL',
+        scope_code: null,
+        expected_rows: '550',
+        fetched_rows: '550',
+        valid_rows: '550',
+        period_from: '20211',
+        period_to: '20262',
+        published_at: expect.any(Date),
+      });
+      expect(batch.source_checksum).toMatch(/^[a-f0-9]{64}$/);
+      expect(batch.source_checksum).not.toBe(csvBatch.source_checksum);
+      expect(batch.source_reference).not.toMatch(
+        /http:\/\/|isolated-district-foot-traffic-fixture|\/virtual\//,
+      );
+      expect(JSON.parse(batch.source_reference)).toEqual({
+        datasetId: 'OA-22179',
+        serviceName: 'VwsmSignguFlpopW',
+        scope: 'SEOUL',
+        collectionMode: 'FULL',
+        reportedRows: 550,
+        pages: 6,
+        periodFrom: '20211',
+        periodTo: '20262',
+      });
+
+      stubApi([...data].reverse(), undefined, 'another-isolated-fixture-key');
+      const repeat = await importDistrictFootTrafficApi(pool, apiOptions);
+      expect(repeat.status).toBe('SKIPPED');
+      expect(await readBatch(repeat.batchId)).toMatchObject({
+        source_type: 'API',
+        source_checksum: batch.source_checksum,
+        published_at: null,
+      });
+      expect((await readBatch(published.batchId)).published_at).toEqual(
+        batch.published_at,
+      );
+      expect(await snapshot()).toEqual(stored);
+
+      data[0]!.totalFootTraffic = '19.00';
+      data[0]!.femaleFootTraffic = '0.0000';
+      stubApi(data);
+      const changed = await importDistrictFootTrafficApi(pool, apiOptions);
+      expect(changed.status).toBe('PUBLISHED');
+      const changedBatch = await readBatch(changed.batchId);
+      expect(changedBatch.source_checksum).not.toBe(batch.source_checksum);
+      expect(changedBatch.published_at).toBeInstanceOf(Date);
+      expect((await snapshot())[0]).toMatchObject({
+        total_foot_traffic: '19.00',
+        female_foot_traffic: '0.0000',
+        source_batch_id: changed.batchId,
+      });
+      expect(await readBatch(priorCsv.batchId)).toEqual(csvBatch);
+    });
+
+    it.each([
+      ['누락', '구간의 행 수'],
+      ['중복', '복합키가 중복'],
+      ['건수 변동', '전체 건수가 수집 중 변경'],
+    ])(
+      'API 두 번째 페이지 %s 시 FAILED를 기록하고 기존 행을 보존한다',
+      async (failure, message) => {
+        await importDistrictFootTrafficStats(pool, options, loader());
+        const before = await snapshot();
+        const data = apiFixture().slice(0, 101);
+        stubApi(data, (page, payload) => {
+          if (page !== 1) return;
+          if (failure === '누락') payload.row.pop();
+          else if (failure === '건수 변동') payload.list_total_count++;
+          else {
+            payload.row[0]!.SIGNGU_CD = data[0]!.districtCode;
+            payload.row[0]!.STDR_YYQU_CD = data[0]!.quarterCode;
+          }
+        });
+        await expect(
+          importDistrictFootTrafficApi(pool, {
+            ...apiOptions,
+            expectedRows: data.length,
+          }),
+        ).rejects.toThrow(message);
+        expect(await latestFailure()).toMatchObject({
+          source_type: 'API',
+          status: 'FAILED',
+          fetched_rows: '0',
+          source_checksum: null,
+          published_at: null,
+        });
+        expect(await snapshot()).toEqual(before);
+      },
+    );
+
+    it('API FK 불일치는 검증 건수를 FAILED에 남기고 기존 게시 데이터를 보존한다', async () => {
+      await importDistrictFootTrafficStats(pool, options, loader());
+      const before = await snapshot();
+      const data = rows();
+      data[1]!.districtCode = '11999';
+      stubApi(data);
+      await expect(
+        importDistrictFootTrafficApi(pool, { ...apiOptions, expectedRows: 2 }),
+      ).rejects.toThrow('FK 불일치 1행');
+      expect(await latestFailure()).toMatchObject({
+        source_type: 'API',
+        status: 'FAILED',
+        fetched_rows: '2',
+        valid_rows: '1',
+        rejected_rows: '1',
+        published_at: null,
+      });
+      expect(await snapshot()).toEqual(before);
+    });
+
+    it('API PUBLISHED 기록 실패 시 Upsert와 출처를 모두 롤백한다', async () => {
+      await importDistrictFootTrafficStats(pool, options, loader());
+      const before = await snapshot();
+      await pool.query(`CREATE FUNCTION reject_api_publish() RETURNS trigger LANGUAGE plpgsql AS
+        $$ BEGIN IF NEW.source_type='API' AND NEW.status='PUBLISHED' THEN RAISE EXCEPTION 'test API publish rollback'; END IF; RETURN NEW; END $$;
+        CREATE TRIGGER reject_api_publish BEFORE UPDATE ON etl_batch FOR EACH ROW EXECUTE FUNCTION reject_api_publish()`);
+      const data = rows();
+      data[0]!.totalFootTraffic = '19.00';
+      stubApi(data);
+      await expect(
+        importDistrictFootTrafficApi(pool, { ...apiOptions, expectedRows: 2 }),
+      ).rejects.toThrow('test API publish rollback');
+      expect(await snapshot()).toEqual(before);
+      expect(await latestFailure()).toMatchObject({
+        source_type: 'API',
+        status: 'FAILED',
+        fetched_rows: '2',
+        published_at: null,
+      });
+    });
 
     it('publishes exact NUMERIC values, NULL, zero and source metadata without forcing sums', async () => {
       // 큰 정수부와 긴 소수부를 보존하고 남성·여성 합계가 전체와 달라도 원본 의미를 유지합니다.

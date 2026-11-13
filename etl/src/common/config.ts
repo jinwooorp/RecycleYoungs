@@ -1,7 +1,9 @@
 import { z } from 'zod';
 
-// 인증 요청 대상은 서울시 공식 주소로 고정하고 전송 프로토콜은 수집기가 확인합니다.
-export const seoulOpenApiEndpoint = 'http://openapi.seoul.go.kr:8088';
+// 기관이 확인한 HTTPS origin은 여기에 추가한 뒤 수집 주소로 지정합니다.
+export const seoulOpenApiHttpsOrigins: readonly string[] = [];
+export const seoulOpenApiHttpOrigin = 'http://openapi.seoul.go.kr:8088';
+export const seoulOpenApiEndpoint = seoulOpenApiHttpOrigin;
 
 const databaseConfigSchema = z.object({
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/, hostname: /.+/ }),

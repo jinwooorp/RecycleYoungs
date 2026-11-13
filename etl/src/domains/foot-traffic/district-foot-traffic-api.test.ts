@@ -1,23 +1,37 @@
 import { readFile } from 'node:fs/promises';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { probeDistrictFootTrafficApi } from './district-foot-traffic-api.js';
+import { collectSeoulOpenApiRows } from '../../common/seoul-open-api.js';
+import {
+  probeDistrictFootTrafficApi,
+  type DistrictFootTrafficApiProbeOptions,
+} from './district-foot-traffic-api.js';
 
 vi.mock('node:fs/promises', () => ({ readFile: vi.fn() }));
 
-// 합성 응답은 테스트 모듈에서만 HTTPS 주소와 fetch를 대체해 공급합니다.
-const testEndpoint = vi.hoisted(() => ({ url: 'https://seoul-api.test' }));
+// 공식 HTTP 검증에는 실제 설정값을 사용하고, 향후 HTTPS 허용 목록만 테스트에서 모의합니다.
+const testEndpoint = vi.hoisted(() => ({
+  url: 'http://openapi.seoul.go.kr:8088',
+}));
 vi.mock('../../common/config.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../common/config.js')>()),
+  seoulOpenApiHttpsOrigins: ['https://seoul-api.test'],
   get seoulOpenApiEndpoint() {
     return testEndpoint.url;
   },
 }));
 
 const fakeKey = 'test-key-never-send';
-const privateUrl = `https://seoul-api.test/${fakeKey}/json/VwsmSignguFlpopW`;
+const privateUrl = `http://openapi.seoul.go.kr:8088/${fakeKey}/json/VwsmSignguFlpopW`;
 const fetchPage = vi.fn<typeof fetch>();
-const probe = (options: { expectedRows?: number; compareCsv?: string } = {}) =>
-  probeDistrictFootTrafficApi({ api: true, probe: true, ...options });
+const probe = (
+  options: Omit<DistrictFootTrafficApiProbeOptions, 'api' | 'probe'> = {},
+) =>
+  probeDistrictFootTrafficApi({
+    api: true,
+    probe: true,
+    allowInsecureHttp: true,
+    ...options,
+  });
 
 const row = (district = 11110, quarter = 20262) =>
   JSON.stringify({
@@ -40,7 +54,7 @@ const page = (total: number, rows: string[]) =>
   );
 
 beforeEach(() => {
-  testEndpoint.url = 'https://seoul-api.test';
+  testEndpoint.url = 'http://openapi.seoul.go.kr:8088';
   vi.stubEnv('SEOUL_OPEN_API_KEY', fakeKey);
   fetchPage.mockReset();
   vi.stubGlobal('fetch', fetchPage);
@@ -54,20 +68,67 @@ afterEach(() => {
 });
 
 describe('자치구 길단위인구 서울시 API probe', () => {
-  it.each(['http://openapi.seoul.go.kr:8088', 'invalid-endpoint'])(
-    'HTTPS가 아닌 주소는 설정된 키가 있어도 fetch 전에 차단한다 (%#)',
+  it('공식 HTTP 주소는 옵션이 없으면 fetch 전에 차단한다', async () => {
+    await expect(probe({ allowInsecureHttp: undefined })).rejects.toThrow(
+      'BLOCKED: 공식 HTTP 주소의 인증 요청에는 --allow-insecure-http가 필요합니다.',
+    );
+    expect(fetchPage).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'invalid-endpoint',
+    'http://openapi.seoul.go.kr',
+    'http://openapi.seoul.go.kr:8089',
+    'http://openapi.seoul.go.kr:8088/extra',
+    'http://openapi.seoul.go.kr:8088?x=1',
+    'http://openapi.seoul.go.kr:8088#fragment',
+    'http://openapi.seoul.go.kr:8088.evil.test',
+    'http://openapi.seoul.go.kr:8088@untrusted.test',
+    'http://user@openapi.seoul.go.kr:8088',
+    'ftp://openapi.seoul.go.kr:8088',
+    'https://openapi.seoul.go.kr',
+    'https://seoul-api.test:8443',
+    'https://user@seoul-api.test',
+  ])(
+    '옵션이 있어도 허용 목록 밖 주소는 fetch 전에 차단한다 (%#)',
     async (endpoint) => {
       testEndpoint.url = endpoint;
       const error: unknown = await probe().catch((error: unknown) => error);
       expect(error).toBeInstanceOf(Error);
       expect(String(error)).toContain('BLOCKED:');
-      expect(String(error)).toContain('HTTPS');
+      expect(String(error)).toContain('허용된 서울시 Open API 주소');
       expect(String(error)).not.toContain(fakeKey);
       expect(String(error)).not.toContain(endpoint);
       expect(error).not.toHaveProperty('cause');
       expect(fetchPage).not.toHaveBeenCalled();
     },
   );
+
+  it('공식 HTTP 예외는 OA-22179 서비스로 제한한다', async () => {
+    await expect(
+      collectSeoulOpenApiRows({
+        serviceName: 'VwsmAdstrdFlpopW',
+        allowInsecureHttp: true,
+        parseRow: (value) => value,
+        rowKey: () => 'unused',
+      }),
+    ).rejects.toThrow('BLOCKED:');
+    expect(fetchPage).not.toHaveBeenCalled();
+  });
+
+  it('확인된 HTTPS origin은 HTTP 옵션 없이 사용할 수 있다', async () => {
+    testEndpoint.url = 'https://seoul-api.test';
+    fetchPage.mockResolvedValueOnce(page(1, [row()]));
+    await expect(
+      probe({ allowInsecureHttp: undefined }),
+    ).resolves.toMatchObject({
+      fetchedRows: 1,
+    });
+    expect(fetchPage).toHaveBeenCalledWith(
+      `${testEndpoint.url}/${fakeKey}/json/VwsmSignguFlpopW/1/100/`,
+      expect.objectContaining({ redirect: 'manual' }),
+    );
+  });
 
   it('페이지 전체를 수집하고 원문 숫자 정밀도·NULL·실제 0을 보존한다', async () => {
     fetchPage
@@ -182,11 +243,13 @@ describe('자치구 길단위인구 서울시 API probe', () => {
       fetchPage.mockResolvedValueOnce(
         new Response(privateUrl, {
           status,
-          headers: { location: privateUrl },
+          headers: { location: `https://untrusted.test/${fakeKey}` },
         }),
       );
       await expect(probe()).rejects.toThrow(`HTTP 오류(${status})`);
       expect(fetchPage).toHaveBeenCalledTimes(1);
+      expect(fetchPage.mock.calls[0]?.[0]).toBe(`${privateUrl}/1/100/`);
+      expect(fetchPage.mock.calls[0]?.[1]?.redirect).toBe('manual');
     },
   );
 
@@ -243,6 +306,17 @@ describe('자치구 길단위인구 서울시 API probe', () => {
     await expect(probe()).rejects.toThrow('JSON 응답');
     await expect(probe()).rejects.toThrow('필수 코드 또는 수치');
     expect(fetchPage).toHaveBeenCalledTimes(2);
+  });
+
+  it('응답 수치에 반사된 인증키를 표본이나 오류에 노출하지 않는다', async () => {
+    const numericKey = '12345678901234567890';
+    vi.stubEnv('SEOUL_OPEN_API_KEY', numericKey);
+    fetchPage.mockResolvedValueOnce(
+      page(1, [preciseRow.replace('0.000', numericKey)]),
+    );
+    const error: unknown = await probe().catch((error: unknown) => error);
+    expect(String(error)).toContain('응답에 인증정보가 포함');
+    expect(String(error)).not.toContain(numericKey);
   });
 
   it('CSV를 선택하면 키 순서와 표현 자릿수에 관계없이 정확한 값 전체를 대조한다', async () => {

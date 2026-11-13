@@ -25,8 +25,10 @@ import {
 import {
   probeDistrictFootTrafficApi,
   type DistrictFootTrafficApiProbeOptions,
+  type DistrictFootTrafficApiPublishOptions,
 } from '../domains/foot-traffic/district-foot-traffic-api.js';
 import {
+  importDistrictFootTrafficApi,
   importDistrictFootTrafficStats,
   type DistrictFootTrafficOptions,
 } from '../domains/foot-traffic/district-foot-traffic.js';
@@ -62,6 +64,7 @@ export async function runCli(args: string[]): Promise<void> {
       | (DistrictFootTrafficOptions & { probe: boolean })
       | OfficialSourcesProbeOptions
       | DistrictFootTrafficApiProbeOptions
+      | DistrictFootTrafficApiPublishOptions
       | FootTrafficOptions
       | SalesOptions
       | StoreOptions
@@ -98,7 +101,7 @@ export async function runCli(args: string[]): Promise<void> {
       const result = await probeOfficialSources(options.manifest);
       console.log(JSON.stringify(result));
       if (result.status === 'FAIL') process.exitCode = 1;
-    } else if ('api' in options) {
+    } else if ('api' in options && 'probe' in options) {
       console.log(JSON.stringify(await probeDistrictFootTrafficApi(options)));
     } else if (
       args[0] === 'district-foot-traffic' &&
@@ -138,7 +141,9 @@ export async function runCli(args: string[]): Promise<void> {
       const pool = createDatabasePool();
       try {
         let result;
-        if (
+        if ('publish' in options) {
+          result = await importDistrictFootTrafficApi(pool, options);
+        } else if (
           args[0] === 'district-foot-traffic' &&
           'source' in options &&
           'expectedRows' in options
