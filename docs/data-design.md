@@ -1087,7 +1087,7 @@ FootTrafficStatResponse
 ### 자치구 유동인구 게시 출처와 오류
 
 - [최신 정상 게시 경계](#게시-배치-선택과-상태-판정)와 실제 경계 행이 없으면 `DATA_NOT_READY`(503)입니다. 그 게시본에 요청 자치구가 없으면 `REGION_NOT_FOUND`(404)이며 과거 경계에만 남은 구는 제외합니다. 자치구의 존재 여부는 행정동 행의 유무로 대체하지 않습니다.
-- 각 통계 행의 `source_batch_id`로 `etl_batch`를 JOIN해 `dataset_code='SEOUL_DISTRICT_FOOT_TRAFFIC_STAT'`, `source_type='CSV'`, `scope_type='SEOUL'`, `scope_code IS NULL`, `status='PUBLISHED'`, `published_at IS NOT NULL`을 모두 검증합니다. `SKIPPED`·`FAILED`·`RUNNING`과 부적격 출처를 제외합니다.
+- 각 통계 행의 `source_batch_id`로 `etl_batch`를 JOIN해 `dataset_code='SEOUL_DISTRICT_FOOT_TRAFFIC_STAT'`, `source_type IN ('CSV', 'API')`, `scope_type='SEOUL'`, `scope_code IS NULL`, `status='PUBLISHED'`, `published_at IS NOT NULL`을 모두 검증합니다. `SKIPPED`·`FAILED`·`RUNNING`과 부적격 출처를 제외합니다.
 - 정상 게시 이력만으로 준비 완료를 판정하지 않습니다. 위 조건의 출처를 참조하는 실제 통계 행이 전체에 하나도 없으면 `DATA_NOT_READY`(503)입니다. 판정 순서는 경계 준비 → 현행 자치구 → 유동인구 데이터셋 준비입니다.
 - 전역 최신 통계 배치로 제한하지 않으며 과거 정상 게시 분기도 조회합니다. 새로운 빈 게시 배치나 `SKIPPED` 이력으로 기존 유효 분기를 숨기지 않습니다.
 - 준비 후 요청 구·분기의 유효 행만 없으면 요청 식별자와 `data: null`을 `200`으로 반환합니다. 다른 분기·0·임의 값을 생성하지 않습니다. 모든 측정값이 NULL인 실제 행은 이 경우와 구분합니다.

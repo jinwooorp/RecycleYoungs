@@ -17,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -60,6 +61,7 @@ class DistrictFootTrafficStatApiIntegrationTests {
   private static final UUID BOUNDARY = new UUID(0, 1);
   private static final UUID FOOT_TRAFFIC = new UUID(0, 2);
   private static final UUID OLD_FOOT_TRAFFIC = new UUID(0, 3);
+  private static final UUID API_FOOT_TRAFFIC = new UUID(0, 9);
   @Autowired private JdbcClient jdbc;
   @Autowired private MockMvc mvc;
   @Autowired private Flyway flyway;
@@ -154,6 +156,26 @@ class DistrictFootTrafficStatApiIntegrationTests {
   }
 
   @Test
+  void apiOnlyPublicationPreparesDatasetAndPreservesExactValuesAndSource() throws Exception {
+    jdbc.sql("DELETE FROM district_foot_traffic_stat WHERE quarter_code='20261'").update();
+    publishCurrentQuarterFromApi();
+    jdbc.sql(
+            "UPDATE district_foot_traffic_stat SET male_foot_traffic=0.0000 WHERE quarter_code='20262'")
+        .update();
+    mvc.perform(request("00110", "20262"))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath("$.data.totalFootTraffic").value("9007199254740993.123456789012345678900"))
+        .andExpect(jsonPath("$.data.maleFootTraffic").value("0.0000"))
+        .andExpect(jsonPath("$.data.femaleFootTraffic").value(nullValue()))
+        .andExpect(jsonPath("$.data.sourceBatch.batchId").value(API_FOOT_TRAFFIC.toString()))
+        .andExpect(jsonPath("$.data.sourceBatch.publishedAt").value("2026-10-04T00:00:00Z"));
+    mvc.perform(request("00110", "20261"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data").value(nullValue()));
+  }
+
+  @Test
   void preservesScaleAndMismatchBetweenTotalAndGenderSum() throws Exception {
     jdbc.sql(
             """
@@ -210,7 +232,8 @@ class DistrictFootTrafficStatApiIntegrationTests {
   }
 
   @Test
-  void keepsHistoricalQuarterAndItsOwnSourceDespiteNewerPublications() throws Exception {
+  void keepsHistoricalCsvAndCurrentApiSourcesDespiteNewerPublications() throws Exception {
+    publishCurrentQuarterFromApi();
     // 더 최신의 빈 정상 배치나 SKIPPED 이력이 기존 분기의 정상 출처를 가리지 않아야 한다.
     batch(
         new UUID(0, 4),
@@ -232,7 +255,26 @@ class DistrictFootTrafficStatApiIntegrationTests {
         .andExpect(jsonPath("$.data.sourceBatch.publishedAt").value("2026-09-01T00:00:00Z"));
     mvc.perform(request("00110", "20262"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.sourceBatch.batchId").value(FOOT_TRAFFIC.toString()));
+        .andExpect(
+            jsonPath("$.data.totalFootTraffic").value("9007199254740993.123456789012345678900"))
+        .andExpect(jsonPath("$.data.sourceBatch.batchId").value(API_FOOT_TRAFFIC.toString()))
+        .andExpect(jsonPath("$.data.sourceBatch.publishedAt").value("2026-10-04T00:00:00Z"));
+  }
+
+  /** 해당 분기 행이 API 배치를 참조하는 게시 상태를 재현한다. */
+  private void publishCurrentQuarterFromApi() {
+    batch(
+        API_FOOT_TRAFFIC,
+        "SEOUL_DISTRICT_FOOT_TRAFFIC_STAT",
+        "API",
+        "SEOUL",
+        null,
+        "PUBLISHED",
+        "2026-10-04");
+    jdbc.sql(
+            "UPDATE district_foot_traffic_stat SET source_batch_id=:batch WHERE quarter_code='20262'")
+        .param("batch", API_FOOT_TRAFFIC)
+        .update();
   }
 
   @ParameterizedTest
@@ -305,10 +347,17 @@ class DistrictFootTrafficStatApiIntegrationTests {
             "SEOUL_DISTRICT_FOOT_TRAFFIC_STAT", "CSV", "SEOUL", null, "RUNNING", "2026-10-02"),
         Arguments.of("SEOUL_DISTRICT_FOOT_TRAFFIC_STAT", "CSV", "SEOUL", null, "PUBLISHED", null),
         Arguments.of(
+            "SEOUL_DISTRICT_FOOT_TRAFFIC_STAT", "API", "SEOUL", null, "SKIPPED", "2026-10-02"),
+        Arguments.of(
+            "SEOUL_DISTRICT_FOOT_TRAFFIC_STAT", "API", "SEOUL", null, "FAILED", "2026-10-02"),
+        Arguments.of(
+            "SEOUL_DISTRICT_FOOT_TRAFFIC_STAT", "API", "SEOUL", null, "RUNNING", "2026-10-02"),
+        Arguments.of("SEOUL_DISTRICT_FOOT_TRAFFIC_STAT", "API", "SEOUL", null, "PUBLISHED", null),
+        Arguments.of(
             "SEOUL_DONG_FOOT_TRAFFIC_STAT", "CSV", "SEOUL", null, "PUBLISHED", "2026-10-02"),
         Arguments.of("SEOUL_DISTRICT_STORE_STAT", "CSV", "SEOUL", null, "PUBLISHED", "2026-10-02"),
         Arguments.of(
-            "SEOUL_DISTRICT_FOOT_TRAFFIC_STAT", "API", "SEOUL", null, "PUBLISHED", "2026-10-02"),
+            "SEOUL_DONG_FOOT_TRAFFIC_STAT", "API", "SEOUL", null, "PUBLISHED", "2026-10-02"),
         Arguments.of(
             "SEOUL_DISTRICT_FOOT_TRAFFIC_STAT",
             "SHAPEFILE",
@@ -319,6 +368,13 @@ class DistrictFootTrafficStatApiIntegrationTests {
         Arguments.of(
             "SEOUL_DISTRICT_FOOT_TRAFFIC_STAT",
             "CSV",
+            "DISTRICT",
+            "00110",
+            "PUBLISHED",
+            "2026-10-02"),
+        Arguments.of(
+            "SEOUL_DISTRICT_FOOT_TRAFFIC_STAT",
+            "API",
             "DISTRICT",
             "00110",
             "PUBLISHED",
@@ -492,8 +548,8 @@ class DistrictFootTrafficStatApiIntegrationTests {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"boundary", "footTraffic"})
-  void keepsBoundaryStatisticsAndSourceInOneSnapshotDuringPublication(String point)
+  @CsvSource({"boundary,CSV", "footTraffic,CSV", "boundary,API", "footTraffic,API"})
+  void keepsBoundaryStatisticsAndSourceInOneSnapshotDuringPublication(String point, String source)
       throws Exception {
     var published = new AtomicBoolean();
     org.mockito.stubbing.Answer<Object> publishAfterRead =
@@ -504,7 +560,7 @@ class DistrictFootTrafficStatApiIntegrationTests {
           assertThat(jdbc.sql("SHOW transaction_isolation").query(String.class).single())
               .isEqualTo("repeatable read");
           if (published.compareAndSet(false, true)) {
-            publishReplacement();
+            publishReplacement(source);
           }
           return selected;
         };
@@ -530,19 +586,22 @@ class DistrictFootTrafficStatApiIntegrationTests {
   }
 
   /** 테스트 컨테이너의 별도 연결에서 경계·통계·PUBLISHED 이력을 원자적으로 교체한다. */
-  private void publishReplacement() throws Exception {
+  private void publishReplacement(String source) throws Exception {
     try (var connection = flyway.getConfiguration().getDataSource().getConnection();
-        var statement = connection.createStatement()) {
+        var statement = connection.createStatement();
+        var insert =
+            connection.prepareStatement(
+                """
+            INSERT INTO etl_batch(batch_id,dataset_code,source_type,scope_type,source_reference,
+              etl_version,status,published_at,started_at) VALUES
+            ('00000000-0000-0000-0000-000000000010','SEOUL_DONG_BOUNDARY','SHAPEFILE','SEOUL',
+              'synthetic fixture','test-v1','PUBLISHED','2026-10-21T00:00:00Z','2026-10-21T00:00:00Z'),
+            ('00000000-0000-0000-0000-000000000011','SEOUL_DISTRICT_FOOT_TRAFFIC_STAT',?,'SEOUL',
+              'synthetic fixture','test-v1','RUNNING',NULL,'2026-10-21T00:00:00Z')
+            """)) {
       connection.setAutoCommit(false);
-      statement.executeUpdate(
-          """
-          INSERT INTO etl_batch(batch_id,dataset_code,source_type,scope_type,source_reference,
-            etl_version,status,published_at,started_at) VALUES
-          ('00000000-0000-0000-0000-000000000010','SEOUL_DONG_BOUNDARY','SHAPEFILE','SEOUL',
-            'synthetic fixture','test-v1','PUBLISHED','2026-10-21T00:00:00Z','2026-10-21T00:00:00Z'),
-          ('00000000-0000-0000-0000-000000000011','SEOUL_DISTRICT_FOOT_TRAFFIC_STAT','CSV','SEOUL',
-            'synthetic fixture','test-v1','RUNNING',NULL,'2026-10-21T00:00:00Z')
-          """);
+      insert.setString(1, source);
+      insert.executeUpdate();
       statement.executeUpdate(
           "UPDATE district SET boundary_batch_id='00000000-0000-0000-0000-000000000010'");
       statement.executeUpdate(
