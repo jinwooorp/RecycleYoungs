@@ -5,8 +5,10 @@
 ## 목차
 
 - [1. 개발 도구](#1-개발-도구)
+  - [팀원 클론과 실행 방식](#팀원-클론과-실행-방식)
   - [로컬 DB 준비](#로컬-db-준비)
   - [전체 Docker 스택](#전체-docker-스택)
+  - [개발 DB 게시 데이터](#개발-db-게시-데이터)
   - [서울시 Open API 인증키](#서울시-open-api-인증키)
 - [2. Frontend](#2-frontend)
 - [3. Backend](#3-backend)
@@ -26,25 +28,39 @@
 | Backend                 | Java 21과 저장소의 Gradle Wrapper(`./gradlew`)                                                                   |
 | 컨테이너·DB 통합 테스트 | Docker와 Docker Compose. ETL은 호스트에서 실행합니다.                                                            |
 
+### 팀원 클론과 실행 방식
+
+1. 저장소를 클론하고 `project-upgrade`를 체크아웃합니다. 명령은 저장소 루트에서 시작합니다.
+2. `cp -n .env.example .env`로 루트 설정을 준비하고 로컬 DB 포트와 계정을 확인합니다. 실제 환경 파일과 인증키는 개인 환경에 보관합니다.
+3. 아래 표에서 실행 방식을 선택하고 해당 절의 명령을 실행합니다. 지도에는 [Kakao Maps 설정](#kakao-maps-설정)이 필요합니다. 실제 통계와 후보지 분석을 확인하려면 [게시 데이터](#개발-db-게시-데이터)를 준비합니다.
+
+| 실행 방식   | 프로세스                                                                | 접속 주소                                                           | 설정 파일                                                             |
+| ----------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| 호스트 기본 | Vite와 기본 Spring Boot                                                 | `http://localhost:5173` · Backend `8080`                            | 지도용 `frontend/.env.local`                                          |
+| 하이브리드  | Vite와 Spring Boot `db` 프로필은 호스트에서, PostGIS는 Compose에서 실행 | `http://localhost:5173` · Backend `8080` · DB `127.0.0.1:5432`      | Compose와 Backend 셸용 루트 `.env`, Vite 지도용 `frontend/.env.local` |
+| 전체 Docker | Nginx·Spring Boot·PostGIS를 `full` 프로필로 실행                        | `http://127.0.0.1:8081` · 내부 Backend `8080` · DB `127.0.0.1:5432` | Compose 및 Docker 지도 빌드용 루트 `.env`                             |
+
 ### 로컬 DB 준비
 
 루트 [환경변수 예시](../.env.example)를 `.env`로 복사하고 DB 이름·사용자·비밀번호·포트를 확인합니다. `cp -n`은 기존 파일을 유지합니다.
 
-| 설정                                                      | 읽는 위치와 용도                                                                                                                                                                |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 루트 `.env`                                               | 개발 Compose가 자동으로 읽습니다. `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`로 로컬 DB를 준비합니다.                                                                        |
-| `DB_JDBC_URL`, `DB_USER`, `DB_PASSWORD`                   | Backend의 `db` 프로필이 실행 셸에서 읽습니다. 별도 환경은 [Backend 예시](../backend/.env.example)를 참고합니다.                                                                 |
-| `DATABASE_URL`, `DB_POOL_MAX`, `DB_CONNECTION_TIMEOUT_MS` | ETL 연결 설정입니다. ETL 실행 위치의 `.env`도 읽으며 셸에서 내보낸 값이 우선합니다. 비밀번호의 URL 예약 문자는 `DATABASE_URL`에서 인코딩합니다. [ETL 예시](../etl/.env.example) |
-| `SEMAS_API_KEY`, `SEOUL_OPEN_API_KEY`                     | 각 공공데이터 ETL의 서버 측 인증키입니다. 실제 키·비밀번호·접속 URL은 Git이나 로그에 남기지 않습니다. [ETL 환경변수와 실행](etl-guide.md#설치-및-공통-실행)                     |
+| 설정 | 읽는 위치와 용도 |
+| --- | --- |
+| [루트 예시](../.env.example) | Compose는 루트 `.env`를 읽습니다. `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`는 DB 설정이고, `FRONTEND_PORT`와 `VITE_KAKAO_MAP_APP_KEY`는 `full` 프로필에 사용합니다. |
+| [Frontend 예시](../frontend/.env.example) | 호스트 Vite는 `frontend/.env.local` 등에서 `VITE_KAKAO_MAP_APP_KEY`와 개발 서버의 `API_PROXY_TARGET`을 읽습니다. |
+| [Backend 예시](../backend/.env.example) | 호스트 Backend의 `db` 프로필은 실행 셸에서 `DB_USER`, `DB_PASSWORD`, `DB_JDBC_URL`을 읽습니다. |
+| [ETL 예시](../etl/.env.example) | ETL은 실행 위치의 `.env`에서 DB 연결 설정과 `SEMAS_API_KEY`, `SEOUL_OPEN_API_KEY`를 읽습니다. 실행 셸의 값이 우선합니다. |
 
-루트에서 `.env`를 준비한 뒤 개발 DB를 시작합니다. [개발용 Compose](../docker-compose.yml)의 기본 실행은 DB만 시작하며, 호스트의 Vite HMR과 Spring Boot Gradle 실행을 함께 사용할 수 있습니다. DB는 `127.0.0.1`의 `DB_PORT`(기본 5432)에 게시됩니다. 포트가 이미 사용 중이면 로컬 설정을 바꿉니다.
+별도 ETL 설정을 쓸 때는 `DATABASE_URL`을 대상 DB의 실제 로컬 계정에 맞추고 비밀번호의 URL 예약 문자를 인코딩합니다. 실제 키·비밀번호·접속 URL은 Git이나 로그에 남기지 않습니다. [ETL 환경변수와 실행](etl-guide.md#설치-및-공통-실행)
+
+하이브리드 실행에서는 [개발용 Compose](../docker-compose.yml)로 DB를 시작한 뒤 별도 터미널에서 [Frontend](#2-frontend)와 [Backend의 `db` 프로필](#db를-사용하는-db-프로필-실행)을 실행합니다. DB는 `127.0.0.1`의 `DB_PORT`(기본 5432)에 게시됩니다. 포트가 이미 사용 중이면 로컬 설정을 바꿉니다.
 
 ```bash
 cp -n .env.example .env
 # .env의 로컬 DB 설정을 확인합니다.
-docker compose config --quiet
-docker compose up -d --wait db
-docker compose ps db
+docker compose -f docker-compose.yml config --quiet
+docker compose -f docker-compose.yml up -d --wait db
+docker compose -f docker-compose.yml ps db
 ```
 
 공통 설정은 **Backend 또는 ETL을 실행할 각 셸**에서 다음과 같이 내보냅니다. 이미 `backend/`나 `etl/`이면 `source ../.env`를 사용합니다. 두 앱의 연결 URL은 같은 로컬 DB를 가리켜야 합니다.
@@ -58,39 +74,70 @@ set +a
 루트에서 다음 명령으로 접속한 뒤 `psql`에서 `SELECT version(), PostGIS_Version();`을 실행하고 `\q`로 종료합니다. 호스트 DB 도구도 동일한 루프백 주소와 `.env`의 DB 정보를 사용합니다.
 
 ```bash
-docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+docker compose -f docker-compose.yml exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 ```
 
-개발 데이터는 `recycleyoungs_postgres_data`에 남습니다. `docker compose stop db`로 중지하고 `docker compose up -d --wait db`로 다시 시작합니다. 일반 종료·재시작 시 볼륨을 삭제하지 않습니다. 초기화된 볼륨의 DB·계정·비밀번호는 `.env` 값만 바꿔도 자동으로 갱신되지 않습니다.
+호스트 Frontend와 Backend는 실행한 터미널에서 `Ctrl+C`로 종료합니다. DB는 `docker compose -f docker-compose.yml stop db`로 중지하고 `docker compose -f docker-compose.yml start db`로 기존 컨테이너를 다시 시작합니다. `recycleyoungs_postgres_data`가 개발 데이터를 보존합니다. 초기화된 볼륨의 DB·계정·비밀번호는 `.env` 값만 바꿔도 자동으로 갱신되지 않습니다.
 
 ### 전체 Docker 스택
 
 `full` 프로필은 개발 DB에 Frontend와 Backend를 추가합니다. Frontend는 Node.js 24로 빌드한 SPA를 Nginx에서 제공하고 `/api`를 Backend로 전달합니다. Backend는 Java 21 Gradle Wrapper로 빌드한 JAR를 JRE에서 실행합니다. Backend 포트는 Compose 네트워크 안에서만 사용합니다.
 
-루트 `.env`를 준비한 뒤 별도 프로젝트명과 사용 가능한 포트를 지정합니다. 예제의 DB 볼륨은 `recycleyoungs-full_postgres_data`입니다.
+하이브리드에서 전환할 때는 호스트 Vite와 Spring Boot를 먼저 종료합니다. 저장소 루트에서 아래 명령을 실행하면 기본 프로젝트명 `recycleyoungs`와 기존 개발 볼륨 `recycleyoungs_postgres_data`를 사용합니다.
 
 ```bash
-DB_PORT=15432 FRONTEND_PORT=18081 docker compose -p recycleyoungs-full --profile full up -d --build
-DB_PORT=15432 FRONTEND_PORT=18081 docker compose -p recycleyoungs-full --profile full ps
+docker compose -f docker-compose.yml --profile full config --quiet
+docker compose -f docker-compose.yml --profile full up -d --build
+docker compose -f docker-compose.yml --profile full ps
 ```
 
 Nginx는 루프백의 `FRONTEND_PORT`(기본 8081)에 게시됩니다. Compose는 [루트의 개발용 Nginx 설정](../nginx/default-dev.conf) 한 파일을 컨테이너에 읽기 전용으로 연결합니다. Frontend 빌드 컨텍스트는 `frontend/`입니다.
 
-위 명령으로는 [홈](http://localhost:18081)과 [탐색 화면](http://localhost:18081/explore)을 엽니다. 소스가 바뀌면 이미지를 다시 빌드합니다. HMR이 필요하면 호스트에서 Vite를 실행합니다.
+[홈](http://127.0.0.1:8081/)과 [탐색 화면](http://127.0.0.1:8081/explore)을 엽니다. Docker에서는 정적 빌드를 제공하므로 앱 소스를 바꾸면 해당 서비스 이미지를 다시 빌드합니다. HMR을 사용하려면 하이브리드 방식으로 실행합니다.
 
 - Backend는 DB가 준비되면 `db:5432`에 연결하고 Flyway를 실행합니다. 호스트용 `DB_JDBC_URL`은 컨테이너에 전달하지 않습니다. 새 볼륨에는 조회용 게시 데이터가 없으며 ETL은 자동 실행되지 않습니다.
-- Kakao 지도를 사용하려면 Compose가 읽는 루트 `.env` 또는 실행 셸에 `VITE_KAKAO_MAP_APP_KEY`를 지정하고, Kakao Developers에 실제 접속 origin(예: `http://localhost:18081`)을 등록합니다. 빌드 시 전달되는 JavaScript 키는 브라우저 번들에 공개됩니다. 키를 바꾸면 이미지를 다시 빌드합니다. 키가 비어 있으면 지도 설정 안내가 표시됩니다.
+- Docker 지도는 루트 `.env`의 `VITE_KAKAO_MAP_APP_KEY`를 빌드 인자로 사용합니다. 키를 바꾼 뒤 아래 Frontend 재빌드 명령을 실행합니다. [Kakao Maps 설정](#kakao-maps-설정)
 - DB 비밀번호는 실행 시 DB와 Backend에만 전달됩니다. 이미지 빌드에는 로컬 환경 파일을 포함하지 않습니다.
 
-종료할 때도 같은 프로젝트명과 포트를 지정합니다. 아래 명령은 해당 스택의 볼륨을 유지합니다.
+전체 컨테이너를 종료하거나 기존 이미지로 다시 시작할 때 같은 Compose 프로젝트를 사용합니다. Frontend 재빌드는 실행 중인 DB와 Backend를 유지합니다.
 
 ```bash
-DB_PORT=15432 FRONTEND_PORT=18081 docker compose -p recycleyoungs-full --profile full down
+# 실행 중인 전체 스택 중지
+docker compose -f docker-compose.yml --profile full stop
+# 중지된 전체 스택 재시작
+docker compose -f docker-compose.yml --profile full start
+# Frontend 소스 또는 지도 키 변경 후 Frontend만 재빌드
+docker compose -f docker-compose.yml --profile full up -d --no-deps --build frontend
 ```
+
+기존 개발 DB와 나란히 분리해 실행하려면 별도 프로젝트명과 빈 루프백 포트를 사용합니다. 아래 예의 볼륨은 `recycleyoungs-full_postgres_data`입니다. `ps`, `stop`, `start`에도 같은 프로젝트명과 포트 설정을 사용합니다.
+
+```bash
+DB_PORT=15432 FRONTEND_PORT=18081 docker compose -f docker-compose.yml -p recycleyoungs-full --profile full up -d --build
+```
+
+`restart`는 기존 컨테이너의 프로세스를 다시 시작합니다. 빌드 인자나 Compose 설정 변경을 적용할 때는 해당 서비스를 `up`으로 다시 구성합니다. 기본 개발 볼륨에서 데이터를 보존하려면 볼륨 삭제 옵션을 사용하지 않습니다.
+
+### 개발 DB 게시 데이터
+
+2026-11-17에 기존 로컬 개발 DB에 검증된 서울시 API 게시본 6종을 통합했습니다. 총 410,731개 복합키와 2,432,815개 측정값을 전수 대조했고, 각 API 배치의 게시 상태와 독립 체크섬을 확인했습니다. 기존 CSV 배치 이력과 Flyway V1~V7을 보존했습니다.
+
+| 지역   |                 점포 |             추정매출 |           유동인구 |
+| ------ | -------------------: | -------------------: | -----------------: |
+| 자치구 |  OA-22173 · 54,765행 |  OA-22176 · 33,803행 |   OA-22179 · 550행 |
+| 행정동 | OA-22172 · 211,832행 | OA-22175 · 100,431행 | OA-22178 · 9,350행 |
+
+행정동 점포·매출 게시 범위는 공식 CSV와 검증한 `20251`~`20262`이며, 나머지 4종은 `20211`~`20262`입니다. 이 결과는 검증에 사용한 기존 개발 DB의 상태입니다.
+
+**새로 클론해 만든 DB에는 게시 데이터가 자동으로 생성되지 않습니다.** Flyway는 스키마를 적용합니다. 팀원이 조회를 재현하려면 별도 로컬 DB에 승인된 개발 스냅샷을 복원하거나 공식 경계·기준·카페·통계 원천을 [ETL 절차](etl-guide.md)에 따라 별도로 게시합니다. 스냅샷과 원본 자료는 Git 외부에서 관리합니다.
+
+게시 데이터와 Kakao 키 없이 화면 흐름을 확인하려면 [합성 E2E 환경](#공통-합성-환경)을 실행합니다. Compose의 빈 DB로 지역·통계·후보지 조회를 재현하려면 별도로 실행할 수 있는 합성 Demo fixture가 필요합니다.
+
+API 통합 후 전체 개발 DB 백업은 custom 형식으로 생성해 SHA-256을 기록했습니다. 별도 PostGIS에서 실제 복원해 Flyway, 배치 이력, 테이블 지문, API 6종의 게시 체크섬을 원본과 대조했습니다. `pg_dump`는 대상 DB를 백업하므로 새 클러스터에 복원할 때는 필요한 소유자 역할을 별도로 준비합니다.
 
 ### 서울시 Open API 인증키
 
-발급받은 `SEOUL_OPEN_API_KEY`는 로컬 `.env`나 실행 셸에 설정합니다. OA-22179는 읽기 전용 `--api --probe`와 DB에 반영하는 `--api --publish`를 지원합니다. 공식 HTTP 주소에서는 `--allow-insecure-http`가 필요하며, 평문으로 전송되는 키가 노출되거나 응답이 변조될 수 있습니다. 실제 게시 전에 읽기 전용 probe로 원본을 대조하고 대상 DB의 쓰기 승인을 받습니다. [서울시 Open API 이용안내](https://data.seoul.go.kr/together/guide/useGuide.do) · [ETL probe 실행](etl-guide.md#서울시-open-api-전체-수집-probe) · [API 직접 게시](etl-guide.md#oa-22179-api-직접-게시) · [HTTPS 확인 기록](archive/etl-validation-history.md#oa-22179-공개-표본과-https-확인-2026-11-10)
+발급받은 `SEOUL_OPEN_API_KEY`는 로컬 `.env`나 실행 셸에 설정합니다. 서울시 통계 6종은 읽기 전용 `--api --probe`와 DB에 반영하는 `--api --publish`를 지원합니다. 공식 HTTP 주소에서는 `--allow-insecure-http`가 필요하며, 평문으로 전송되는 키가 노출되거나 응답이 변조될 수 있습니다. 실제 게시 전에는 원본 대조 절차를 확인하고 대상 DB와 쓰기 범위를 승인받습니다. [서울시 Open API 이용안내](https://data.seoul.go.kr/together/guide/useGuide.do) · [ETL probe 실행](etl-guide.md#서울시-open-api-전체-수집-probe) · [API 직접 게시](etl-guide.md#oa-22179-api-직접-게시) · [HTTPS 확인 기록](archive/etl-validation-history.md#oa-22179-공개-표본과-https-확인-2026-11-10)
 
 ## 2. Frontend
 
@@ -107,9 +154,11 @@ npm run dev
 
 ### Kakao Maps 설정
 
-1. Kakao Developers에서 앱의 카카오맵 사용을 활성화하고 **JavaScript 키**를 확인합니다. [Kakao 지도 공식 가이드](https://apis.map.kakao.com/web/guide/)
-2. [Frontend 환경변수 예시](../frontend/.env.example)를 참고해 `frontend/.env.local`에 `VITE_KAKAO_MAP_APP_KEY`를 지정합니다. JavaScript SDK 도메인에 실제 접속 origin을 등록합니다. 개발 기본값은 `http://localhost:5173`이며 `127.0.0.1`이나 preview(기본 4173)를 사용하면 해당 origin도 등록합니다.
-3. 키 변경 후 Vite를 재시작합니다. `VITE_*` 값은 브라우저에 노출되고 제품 빌드에 포함됩니다. REST API 키·Admin 키·DB 비밀번호는 사용하지 않습니다.
+1. Kakao Developers에서 앱의 **카카오맵 사용 설정**을 활성화합니다. **앱 → 플랫폼 키 → JavaScript 키**에서 키를 발급하거나 확인합니다. [카카오맵 사용 설정](https://developers.kakao.com/docs/ko/kakaomap/common) · [JavaScript 키 설정](https://developers.kakao.com/docs/ko/app-setting/app)
+2. 같은 JavaScript 키의 **JavaScript SDK 도메인**에 실제 접속 주소를 등록합니다. 호스트 Vite의 기본 예는 `http://localhost:5173`, 전체 Docker의 기본 주소는 `http://127.0.0.1:8081`입니다. 호스트명이나 포트가 다르면 실제 사용할 주소를 등록합니다.
+3. 호스트 Vite는 [Frontend 예시](../frontend/.env.example)에 따라 `frontend/.env.local`에 `VITE_KAKAO_MAP_APP_KEY`를 설정하고 Vite를 재시작합니다. 전체 Docker는 [루트 예시](../.env.example)에 따라 루트 `.env`에 같은 변수명을 설정하고 `docker compose -f docker-compose.yml --profile full up -d --no-deps --build frontend`로 다시 빌드합니다. Docker 빌드는 `frontend/.env.local`을 읽지 않습니다.
+
+JavaScript 키는 브라우저 번들에서 확인할 수 있습니다. `VITE_KAKAO_MAP_APP_KEY`에는 JavaScript 키만 사용하며 REST API 키·Admin 키·DB 비밀번호는 넣지 않습니다.
 
 키가 비어 있으면 설정 안내를 표시하며 SDK를 요청하지 않습니다. 로딩 오류나 시간 초과가 발생하면 키 종류·카카오맵 활성화·등록 origin·네트워크를 확인한 후 화면의 재시도를 사용합니다. 현재 위치 기능은 브라우저 권한과 HTTPS 또는 localhost 같은 보안 컨텍스트가 필요합니다. [지도 이용 동작](service-spec.md#탐색-페이지)
 

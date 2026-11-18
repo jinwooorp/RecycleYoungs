@@ -76,6 +76,8 @@ flowchart LR
 
 자치구 통계는 공식 자치구 원천을 직접 사용합니다. 원본 수집·검증·적재는 ETL 명령으로 실행하며 정기 자동 갱신은 아직 운영하지 않습니다. 원본 출처와 실행법은 [ETL 가이드](docs/etl-guide.md), 로컬 적재·재실행 결과는 [ETL 검증·적재 이력](docs/archive/etl-validation-history.md)에 있습니다.
 
+2026-11-17 기존 개발 DB에 서울시 API 통계 6종을 통합했습니다. 자치구·행정동의 점포, 추정매출, 유동인구 총 410,731행의 게시 출처와 수치를 검증했습니다. 새로 클론해 만든 DB에는 게시 데이터가 자동으로 생성되지 않습니다. [개발 DB 게시 데이터](docs/development.md#개발-db-게시-데이터)
+
 ## REST API
 
 `db` 프로필에서 행정동·자치구의 경계와 통계를 모두 조회할 수 있습니다. 표의 각 경로 앞에 `/api/v1`을 붙여 `GET`으로 요청합니다.
@@ -111,7 +113,7 @@ RecycleYoungs/
 
 ## 빠른 시작
 
-Node.js 24 LTS, npm 11, Java 21이 필요합니다. 로컬 DB나 백엔드 통합 테스트를 실행할 때는 Docker와 Docker Compose를 준비합니다. [개발 도구 안내](docs/development.md#1-개발-도구)
+`project-upgrade`를 체크아웃한 새 클론에서 아래 실행 방식 중 하나를 선택합니다. 호스트에서 Frontend·Backend를 실행하려면 Node.js 24 LTS·npm 11과 Java 21을 준비합니다. 하이브리드와 전체 Docker는 Docker Compose가 필요합니다. [팀원 클론과 실행 방식](docs/development.md#팀원-클론과-실행-방식)
 
 ### DB 없이 웹 앱과 백엔드 실행
 
@@ -137,7 +139,7 @@ cd backend
 
 ### 로컬 DB와 조회 API 실행
 
-저장소 루트에서 `.env`를 준비합니다. `cp -n`은 기존 파일을 덮어쓰지 않습니다. `.env`의 DB 이름·사용자·비밀번호·포트와 JDBC URL이 로컬 개발 DB를 가리키는지 확인합니다. 기본 [개발용 Compose](docker-compose.yml)는 DB만 시작합니다. Frontend는 Vite HMR, Backend는 Gradle로 호스트에서 실행합니다.
+하이브리드 방식은 PostGIS만 Docker로 실행하고, Frontend는 Vite HMR, Backend는 Gradle로 호스트에서 실행합니다. 루트 `.env`를 준비하고 DB 이름·계정·포트·JDBC URL이 로컬 개발 DB를 가리키는지 확인합니다. `cp -n`은 기존 파일을 유지합니다.
 
 ```bash
 cp -n .env.example .env
@@ -146,9 +148,9 @@ cp -n .env.example .env
 기본 백엔드가 실행 중이면 종료한 뒤 저장소 루트에서 실행합니다.
 
 ```bash
-docker compose config --quiet
-docker compose up -d --wait db
-docker compose ps db
+docker compose -f docker-compose.yml config --quiet
+docker compose -f docker-compose.yml up -d --wait db
+docker compose -f docker-compose.yml ps db
 set -a
 source .env
 set +a
@@ -156,17 +158,20 @@ cd backend
 ./gradlew bootRun --args='--spring.profiles.active=db'
 ```
 
-Compose는 루트 `.env`를 읽고 백엔드는 셸에서 내보낸 변수를 사용합니다. `db` 프로필은 Flyway로 미적용 스키마를 적용합니다. 조회에 필요한 경계·통계·카페 데이터는 ETL에서 별도로 게시합니다. 실제 환경변수 파일·인증키·원본 데이터는 저장소에 올리지 않습니다. [ETL 설치와 실행](docs/etl-guide.md#설치-및-공통-실행) · [개발 환경변수와 실행 절차](docs/development.md)
+Frontend는 앞 절과 동일하게 실행합니다. `db` 프로필은 Flyway로 스키마를 적용합니다. 조회용 게시 데이터는 별도로 준비합니다. 호스트 서버는 실행한 터미널에서 `Ctrl+C`로 종료하고, DB는 `docker compose -f docker-compose.yml stop db`로 중지합니다. [환경변수 예시와 로컬 DB 준비](docs/development.md#로컬-db-준비)
 
 ### 전체 Docker 스택 실행
 
-기존 개발 DB와 분리하려면 별도 프로젝트명과 빈 루프백 포트를 지정합니다. `full`은 PostGIS와 함께 Nginx로 정적 빌드를 제공하는 Frontend와 Spring Boot JAR를 실행합니다.
+저장소 루트에서 `.env`를 준비한 뒤 `full` 프로필을 실행합니다. 기본 `recycleyoungs` 프로젝트는 하이브리드 방식과 같은 `recycleyoungs_postgres_data` 볼륨을 사용합니다. 실지도가 필요하면 빌드 전에 루트 `.env`의 JavaScript 키와 실제 접속 주소를 설정합니다. [Kakao Maps 설정](docs/development.md#kakao-maps-설정)
 
 ```bash
-DB_PORT=15432 FRONTEND_PORT=18081 docker compose -p recycleyoungs-full --profile full up -d --build
+cp -n .env.example .env
+docker compose -f docker-compose.yml --profile full config --quiet
+docker compose -f docker-compose.yml --profile full up -d --build
+docker compose -f docker-compose.yml --profile full ps
 ```
 
-[홈](http://localhost:18081)에서 접속합니다. Kakao 지도 키 주입, 볼륨 분리와 종료 방법은 [전체 Docker 스택](docs/development.md#전체-docker-스택)을 참고합니다.
+[Docker 홈](http://127.0.0.1:8081/)과 [탐색 화면](http://127.0.0.1:8081/explore)은 Nginx가 제공하고 `/api`는 내부 Spring Boot로 전달됩니다. `stop`으로 볼륨을 유지하며 종료하고 `start`로 같은 컨테이너를 다시 시작할 수 있습니다. Frontend만 재빌드하거나 두 환경의 볼륨을 분리하는 명령은 [전체 Docker 스택](docs/development.md#전체-docker-스택)에 있습니다.
 
 ## 테스트 및 CI
 
