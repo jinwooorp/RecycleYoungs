@@ -173,6 +173,18 @@ docker compose -f docker-compose.yml --profile full ps
 
 [Docker 홈](http://127.0.0.1:8081/)과 [탐색 화면](http://127.0.0.1:8081/explore)은 Nginx가 제공하고 `/api`는 내부 Spring Boot로 전달됩니다. `stop`으로 볼륨을 유지하며 종료하고 `start`로 같은 컨테이너를 다시 시작할 수 있습니다. Frontend만 재빌드하거나 두 환경의 볼륨을 분리하는 명령은 [전체 Docker 스택](docs/development.md#전체-docker-스택)에 있습니다.
 
+### 합성 Demo 실행
+
+저장소 루트에서 실행합니다. 두 번째 명령이 전용 DB에만 합성 데이터를 넣습니다. 외부 API 키 없이 지역·두 분기 통계·후보지 주변 카페를 실제 REST API에서 조회할 수 있습니다.
+
+```bash
+./demo/run.sh up
+./demo/run.sh seed
+node --test demo/smoke.test.mjs
+```
+
+Demo 화면은 `http://127.0.0.1:38081/`에서 열고 `./demo/run.sh stop`으로 종료합니다. 지도 표시·장소 검색·지도에서 후보 선택에는 Kakao Maps 설정이 필요합니다. [합성 Demo 실행과 조회 예시](docs/development.md#합성-demo)
+
 ## 테스트 및 CI
 
 로컬에서는 `frontend/`와 `etl/`에서 각각 `npm test`, `npm run lint`, `npm run format:check`, `npm run build`를 실행합니다. `backend/`에서는 `./gradlew build`를 실행하며, `./gradlew integrationTest`는 Docker의 일회용 PostGIS를 사용합니다.

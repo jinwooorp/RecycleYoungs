@@ -8,6 +8,7 @@
   - [팀원 클론과 실행 방식](#팀원-클론과-실행-방식)
   - [로컬 DB 준비](#로컬-db-준비)
   - [전체 Docker 스택](#전체-docker-스택)
+  - [합성 Demo](#합성-demo)
   - [개발 DB 게시 데이터](#개발-db-게시-데이터)
   - [서울시 Open API 인증키](#서울시-open-api-인증키)
 - [2. Frontend](#2-frontend)
@@ -118,6 +119,30 @@ DB_PORT=15432 FRONTEND_PORT=18081 docker compose -f docker-compose.yml -p recycl
 
 `restart`는 기존 컨테이너의 프로세스를 다시 시작합니다. 빌드 인자나 Compose 설정 변경을 적용할 때는 해당 서비스를 `up`으로 다시 구성합니다. 기본 개발 볼륨에서 데이터를 보존하려면 볼륨 삭제 옵션을 사용하지 않습니다.
 
+### 합성 Demo
+
+로컬 Docker와 Compose를 준비하고 저장소 루트에서 아래 명령을 실행합니다. REST 자동 검증에는 Node.js 24가 필요합니다. Demo는 프로젝트 `recycleyoungs-demo`, DB `recycleyoungs_demo`, 볼륨 `recycleyoungs-demo_postgres_data`, 루프백 포트 `35432`(PostGIS)와 `38081`(Nginx)을 사용합니다.
+
+```bash
+./demo/run.sh up
+./demo/run.sh seed
+node --test demo/smoke.test.mjs
+```
+
+`up`은 Flyway V1~V7까지 적용하고, `seed`를 명시적으로 실행하면 합성 게시 배치 9건과 조회용 행 20건이 저장됩니다. `seed`는 전용 컨테이너·볼륨·DB·계정·서버 표시를 확인하고, 동일 fixture의 행 수와 SHA-256을 재검증해 출력합니다. 다른 배치나 불일치가 있으면 중단합니다. `./demo/run.sh logs`로 Backend 기동을 확인하고, 종료는 `./demo/run.sh stop`을 사용합니다. 재기동해도 같은 Demo 볼륨을 사용합니다.
+
+같은 호스트에서 독립된 Demo를 실행하려면 별도 셸에서 `export DEMO_SLOT=1`을 설정한 후 시작·seed·테스트·종료 명령에 같은 값을 사용합니다. 슬롯은 0~9이고 0이 기본입니다. 슬롯 1의 프로젝트는 `recycleyoungs-demo-1`, 볼륨은 `recycleyoungs-demo-1_postgres_data`, 루프백 포트는 `35433`과 `38082`입니다. 1~9는 프로젝트 이름에 슬롯 번호를 붙이고 기본 포트에 슬롯 번호를 더합니다. 아래 조회 예시는 기본 슬롯 기준입니다.
+
+```bash
+curl -fsS http://127.0.0.1:38081/api/v1/districts
+curl -fsS 'http://127.0.0.1:38081/api/v1/dongs/99001001/stats/stores?quarterCode=20262&industryCode=CS100010'
+curl -fsS 'http://127.0.0.1:38081/api/v1/cafes/nearby?longitude=127&latitude=37.57&radiusM=500'
+```
+
+REST 검증은 [후보 좌표 A·B](../demo/candidates.json)로 중심 포함 지역과 500m·1,000m 카페 수를 확인합니다. 두 분기의 통계는 REST에서 조회하며, 화면의 전분기 증감 표시는 기존 공개 정책을 따릅니다.
+
+Demo 화면에는 지도 키 설정 안내가 표시됩니다. 실제 지도 표시·장소 검색·지도 조작에 의존하는 후보 등록은 [Kakao Maps 설정](#kakao-maps-설정)이 있는 개발 실행에서 확인합니다. 키 없이 화면의 합성 후보 흐름을 확인하려면 [합성 E2E 환경](#공통-합성-환경)을 사용합니다.
+
 ### 개발 DB 게시 데이터
 
 2026-11-17에 기존 로컬 개발 DB에 검증된 서울시 API 게시본 6종을 통합했습니다. 총 410,731개 복합키와 2,432,815개 측정값을 전수 대조했고, 각 API 배치의 게시 상태와 독립 체크섬을 확인했습니다. 기존 CSV 배치 이력과 Flyway V1~V7을 보존했습니다.
@@ -131,7 +156,7 @@ DB_PORT=15432 FRONTEND_PORT=18081 docker compose -f docker-compose.yml -p recycl
 
 **새로 클론해 만든 DB에는 게시 데이터가 자동으로 생성되지 않습니다.** Flyway는 스키마를 적용합니다. 팀원이 조회를 재현하려면 별도 로컬 DB에 승인된 개발 스냅샷을 복원하거나 공식 경계·기준·카페·통계 원천을 [ETL 절차](etl-guide.md)에 따라 별도로 게시합니다. 스냅샷과 원본 자료는 Git 외부에서 관리합니다.
 
-게시 데이터와 Kakao 키 없이 화면 흐름을 확인하려면 [합성 E2E 환경](#공통-합성-환경)을 실행합니다. Compose의 빈 DB로 지역·통계·후보지 조회를 재현하려면 별도로 실행할 수 있는 합성 Demo fixture가 필요합니다.
+공공데이터 없이 실제 조회 API를 확인하려면 [합성 Demo](#합성-demo)의 전용 DB를 사용합니다.
 
 API 통합 후 전체 개발 DB 백업은 custom 형식으로 생성해 SHA-256을 기록했습니다. 별도 PostGIS에서 실제 복원해 Flyway, 배치 이력, 테이블 지문, API 6종의 게시 체크섬을 원본과 대조했습니다. `pg_dump`는 대상 DB를 백업하므로 새 클러스터에 복원할 때는 필요한 소유자 역할을 별도로 준비합니다.
 
