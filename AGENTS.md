@@ -7,15 +7,15 @@
 - 요청 범위에 집중하고 불필요한 추상화, 의존성 추가, 리팩터링, 무관한 수정을 피한다.
 - 현재 작업 트리의 변경 사항을 보존하며, 구현에 필요한 일반적인 판단은 자율적으로 수행한다.
 - 중요한 설계 결정이나 요구사항이 불명확한 경우에는 사용자에게 확인한다.
-- 문서는 역할에 맞게 관리한다.
+- 문서 역할과 읽는 순서는 [docs/README.md](docs/README.md)를 따른다.
   - [README.md](README.md): 프로젝트 소개·핵심 기능·개발 현황·빠른 시작
-  - [docs/service-spec.md](docs/service-spec.md): 상세 요구사항과 서비스 이용 정책
-  - [docs/data-design.md](docs/data-design.md): DB·API·데이터 계약과 공식 자치구 원천·지표별 집계 정책
-  - [docs/etl-guide.md](docs/etl-guide.md): ETL 출처·수집·검증·적재·재실행 절차
-  - [docs/archive/etl-validation-history.md](docs/archive/etl-validation-history.md): 날짜별 probe·격리 시험·실제 적재 및 게시 이력
-  - [docs/development.md](docs/development.md): 개발 환경·실행·테스트
-  - [전분기 비교 검증](docs/archive/quarter-comparison-verification.md): 당시 통계·API 대조와 증감 공개 판단의 근거
-  - [공식 원천 후속 검증](docs/archive/official-source-verification-20261-20262.md): 공식 출력·로컬 원본·DB 대조와 판본 비교의 미확인 사항
+  - [docs/PRD.md](docs/PRD.md): 서비스 요구사항과 화면 정책
+  - [docs/DATABASE.md](docs/DATABASE.md) · [docs/API.md](docs/API.md): DB 스키마·저장 규칙과 REST 계약
+  - [docs/ETL.md](docs/ETL.md): ETL 원천·집계 기준·수집·적재·재실행 절차
+  - [ETL 검증 범위](docs/ETL.md#검증-범위와-재현-근거): 날짜별 probe·격리 시험·실제 적재 및 게시 이력
+  - [docs/SETUP.md](docs/SETUP.md) · [docs/TESTING.md](docs/TESTING.md): 개발 환경·실행과 테스트
+  - [전분기 비교 검증](docs/ETL.md#전분기-비교-검증-근거): 당시 통계·API 대조와 증감 공개 판단의 근거
+  - [공식 원천 후속 검증](docs/ETL.md#공식-출력의-재확인-조건): 공식 출력·로컬 원본·DB 대조와 판본 비교의 미확인 사항
 - 코드·API·데이터 계약 변경 시 관련 문서의 정합성도 확인한다.
 - 문서 정리 과정에서 기존 검증 결과와 중요한 설계 결정을 누락하지 않는다.
 - 문서 작성·정리 시 가독성과 정확성을 함께 확인한다.
@@ -68,7 +68,7 @@
 
 ## 5. 테스트 및 검증 효율
 
-- 브라우저 UI 검증은 `ego-browser skill` 안내를 확인한 뒤 `ego-browser`를 우선 사용한다. 시스템 서비스 연결·권한·환경 문제로 실행할 수 없을 때만 연결된 Chrome을 사용한다. 실행과 결과 기록은 [브라우저 E2E 검증](docs/development.md#브라우저-e2e-검증)을 따른다.
+- 브라우저 UI 검증은 `ego-browser skill` 안내를 확인한 뒤 `ego-browser`를 우선 사용한다. 시스템 서비스 연결·권한·환경 문제로 실행할 수 없을 때만 연결된 Chrome을 사용한다. 실행과 결과 기록은 [브라우저 E2E 검증](docs/TESTING.md#브라우저-e2e-검증)을 따른다.
 - 문구·스타일·문서 등 동작에 영향을 주지 않는 간단한 수정에는 새 테스트를 기본적으로 추가하지 않는다. 단, 필수 검증 규칙은 준수한다.
 - 버그 수정, 의미 있는 신규 기능, 데이터 무결성·보안·동시성 관련 변경에는 적절한 회귀 테스트를 추가하거나 보완한다.
 - 테스트는 내부 구현을 복제하지 않고 실제 입력과 기대 동작을 검증한다.
