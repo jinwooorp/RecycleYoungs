@@ -257,7 +257,7 @@ test('동 경계 후보지는 반경 카페만 비교하고 다른 후보지는 
   expect(
     within(
       screen.getByRole('region', { name: '후보지 B 행정동 통계' }),
-    ).getByText(/비교 불가: 여러 행정동 경계/),
+    ).getByText(/여러 행정동 경계/),
   ).toBeVisible();
   expect(await screen.findByText('0개')).toBeVisible();
   expect(screen.getByText('개업 0 · 폐업 자료 없음')).toBeVisible();
@@ -483,7 +483,7 @@ test.each([
   expect(
     within(
       screen.getByRole('region', { name: '후보지 A 행정동 통계' }),
-    ).getByText(`비교 불가: ${reason}`),
+    ).getByText(reason),
   ).toBeVisible();
 });
 
@@ -606,7 +606,7 @@ test('후보지 0개는 등록 안내와 공통 반경만 제공하고 조회하
 });
 
 test.each([1, 2, 3])(
-  '후보지 %s개를 표 없이 공통 기준으로 분석하고 서버 순서·전체 건수·각 출처를 보존한다',
+  '후보지 %s개를 표 없이 공통 기준으로 분석하고 가까운 세 곳과 전체 건수를 표시하며 게시 시각을 숨긴다',
   async (count) => {
     saveItems(count);
     const fetch = analysisApi();
@@ -620,9 +620,6 @@ test.each([1, 2, 3])(
       screen.getAllByRole('region', { name: /후보지 [ABC] 요약/ }),
     ).toHaveLength(count);
     expect(within(competition).getByText('401곳')).toBeVisible();
-    expect(within(competition).getByText(/서버가 반환한 4곳 중/)).toBeVisible();
-    expect(within(competition).getByText(/조회 상한은 200곳/)).toBeVisible();
-    expect(within(competition).getByText(/전체 건수 중 일부/)).toBeVisible();
     expect(
       within(competition)
         .getAllByRole('listitem')
@@ -638,27 +635,15 @@ test.each([1, 2, 3])(
       await within(stats).findByText('9,223,372,036,854,775,807원'),
     ).toBeVisible();
     expect(
-      within(stats).getByText('9,007,199,254,740,993.123456789012345678900명'),
+      within(stats).getByText('9,007,199,254,740,993.1234567890123456789명'),
     ).toBeVisible();
     expect(within(stats).getByText('0개')).toBeVisible();
-    expect([...stats.querySelectorAll('time')].map((n) => n.dateTime)).toEqual([
-      sourceBatch.publishedAt,
-      '2026-10-02T00:00:00Z',
-      '2026-10-03T00:00:00Z',
-    ]);
-    expect(
-      [...stats.querySelectorAll('time')].every((n) =>
-        n.textContent?.includes('2026년 10월'),
-      ),
-    ).toBe(true);
+    expect(stats.querySelector('time')).toBeNull();
+    expect(competition.querySelector('time')).toBeNull();
+    expect(screen.queryByText(/출처:|서버가 반환한/)).not.toBeInTheDocument();
     expect(
       fetch.mock.calls.filter(([path]) => path.includes('/stats/')),
     ).toHaveLength(3);
-    expect(
-      screen.getByText(
-        /같은 행정동의 후보지는 동일한 행정동 통계와 조회 응답을 공유/,
-      ),
-    ).toBeVisible();
     expect(fetch.mock.calls.some(([path]) => path.includes('20261'))).toBe(
       false,
     );

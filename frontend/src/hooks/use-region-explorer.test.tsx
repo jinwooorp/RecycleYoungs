@@ -170,3 +170,79 @@ test('경계 오류는 선택을 유지하고 재시도하며 전체 선택 후 
   await act(async () => finish(response(boundary('00110'))));
   expect(result.current.target).toEqual({ kind: 'default' });
 });
+
+test('장소는 소속 동으로 분석하며 늦은 검색 응답보다 마지막 지역 필터가 우선한다', async () => {
+  let finish!: (value: Response) => void;
+  const nearby = (code: string) => ({
+    districts: [
+      { districtCode: code, districtName: '검색구', containsCenter: true },
+    ],
+    dongs: [{ ...dong(code), containsCenter: true }],
+  });
+  const pending =
+    '/api/v1/regions/nearby?longitude=127.02&latitude=37.5&radiusM=1';
+  const fetch = install({
+    '/api/v1/regions/nearby?longitude=127.01&latitude=37.5&radiusM=1':
+      async () => response(nearby('00140')),
+    [pending]: () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  });
+  const { result } = renderHook(useRegionExplorer);
+  await waitFor(() => expect(result.current.districts.status).toBe('ready'));
+  act(() => result.current.selectDistrict('00110'));
+  await waitFor(() => expect(result.current.target?.kind).toBe('boundary'));
+  act(() => result.current.selectPlace({ longitude: 127.01, latitude: 37.5 }));
+  expect(result.current.target).toBeNull();
+  expect(result.current.analysis.districtCode).toBe('');
+  await waitFor(() =>
+    expect(result.current.analysis.dongCode).toBe('00140001'),
+  );
+  expect(result.current.analysis.districtName).toBe('검색구');
+
+  act(() => result.current.selectPlace({ longitude: 127.02, latitude: 37.5 }));
+  act(() => result.current.selectDistrict('00110'));
+  await act(async () => finish(response(nearby('00140'))));
+  expect(
+    fetch.mock.calls.find(([url]) => url === pending)?.[1]?.signal?.aborted,
+  ).toBe(true);
+  expect(result.current.analysis.districtCode).toBe('00110');
+  expect(result.current.placeRegion.status).toBe('idle');
+});
+
+test('경계 위의 장소는 유일한 자치구만 사용하고 겹치는 자치구를 임의로 고르지 않는다', async () => {
+  const containingDistricts = districts.map((item) => ({
+    ...item,
+    containsCenter: true,
+  }));
+  const containingDongs = [
+    { ...dong('00110'), containsCenter: true },
+    { ...dong('00110'), dongCode: '00110002', containsCenter: true },
+  ];
+  install({
+    '/api/v1/regions/nearby?longitude=127.01&latitude=37.5&radiusM=1':
+      async () =>
+        response({
+          districts: containingDistricts.slice(0, 1),
+          dongs: containingDongs,
+        }),
+    '/api/v1/regions/nearby?longitude=127.02&latitude=37.5&radiusM=1':
+      async () =>
+        response({ districts: containingDistricts, dongs: containingDongs }),
+  });
+  const { result } = renderHook(useRegionExplorer);
+  act(() => result.current.selectPlace({ longitude: 127.01, latitude: 37.5 }));
+  await waitFor(() => expect(result.current.placeRegion.status).toBe('ready'));
+  expect(result.current.analysis).toMatchObject({
+    districtCode: '00110',
+    dongCode: '',
+  });
+
+  act(() => result.current.selectPlace({ longitude: 127.02, latitude: 37.5 }));
+  await waitFor(() => expect(result.current.placeRegion.status).toBe('ready'));
+  expect(result.current.analysis).toMatchObject({
+    districtCode: '',
+    dongCode: '',
+  });
+});

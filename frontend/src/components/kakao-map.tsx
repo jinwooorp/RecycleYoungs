@@ -27,6 +27,7 @@ export interface MapConnection {
   status: MapStatus;
   context: KakaoMapContext | null;
   retry: () => void;
+  needsKey?: boolean;
   focusLocation?: (center: CafeCenter, target: RegionMapTarget | null) => void;
 }
 
@@ -40,6 +41,8 @@ export function KakaoMapView({
   onSearchMarkerClick,
   regionRevision = 0,
   searchOpen = false,
+  candidatePicking = false,
+  searchMarkerHidden = false,
 }: {
   target?: RegionMapTarget | null;
   cafes?: CafeExplorer;
@@ -49,6 +52,8 @@ export function KakaoMapView({
   onSearchMarkerClick?: () => void;
   regionRevision?: number;
   searchOpen?: boolean;
+  candidatePicking?: boolean;
+  searchMarkerHidden?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<KakaoMap | null>(null);
@@ -61,6 +66,30 @@ export function KakaoMapView({
   const location = useCurrentLocation(
     status === 'ready' ? (context?.maps ?? null) : null,
   );
+  const [dismissedLocationAttempt, setDismissedLocationAttempt] = useState<
+    number | null
+  >(null);
+  const locationResult = location.result;
+  const locationReason = locationResult?.reason;
+  const locationError =
+    locationReason &&
+    !['denied', 'outside', 'unsupported'].includes(locationReason)
+      ? locationMessages[locationReason]
+      : null;
+  useEffect(() => {
+    if (status !== 'ready' || !locationResult || locationError) return;
+    const timer = window.setTimeout(
+      () => setDismissedLocationAttempt(locationResult.attempt),
+      4000,
+    );
+    return () => window.clearTimeout(timer);
+  }, [status, locationResult, locationError]);
+  const pickingRef = useRef(candidatePicking);
+  const setBoundaryVisible = useRef<((visible: boolean) => void) | null>(null);
+  useEffect(() => {
+    pickingRef.current = candidatePicking;
+    setBoundaryVisible.current?.(!candidatePicking);
+  }, [candidatePicking]);
   const cameraIntent = useRef(0);
   const cancelMoveRef = useRef<(() => void) | null>(null);
   const searchVisibilityRef = useRef<(() => void) | null>(null);
@@ -113,13 +142,14 @@ export function KakaoMapView({
       status,
       context: status === 'ready' ? context : null,
       retry,
+      needsKey: !appKey,
       focusLocation: (center, target) => {
         markIntent();
         candidateLocation.current = center;
         moveRef.current?.(target, center);
       },
     });
-  }, [status, context, retry, connectionChanged, markIntent]);
+  }, [status, context, retry, connectionChanged, markIntent, appKey]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -154,6 +184,10 @@ export function KakaoMapView({
         let fitFrame: number | null = null;
         let polygons: KakaoPolygon[] = [];
         let geometry: BoundaryGeometry | null = null;
+        // 후보를 고르는 동안 오버레이가 클릭을 가로채지 않도록 카메라와 별도로 숨깁니다.
+        setBoundaryVisible.current = (visible) => {
+          for (const polygon of polygons) polygon.setMap(visible ? map : null);
+        };
         cancelMoveRef.current = () => {
           if (fitFrame !== null) cancelAnimationFrame(fitFrame);
           fitFrame = null;
@@ -195,7 +229,7 @@ export function KakaoMapView({
                     fillOpacity: 0.12,
                   });
                   polygons.push(polygon);
-                  polygon.setMap(map);
+                  polygon.setMap(pickingRef.current ? null : map);
                 }
                 geometry = nextGeometry;
               } catch {
@@ -288,6 +322,7 @@ export function KakaoMapView({
         // 리스너 등록 중 실패해도 이미 연결된 자원을 정리할 수 있도록 먼저 설정합니다.
         release = () => {
           observer.disconnect();
+          setBoundaryVisible.current = null;
           if (fitFrame !== null) cancelAnimationFrame(fitFrame);
           movingRef.current = false;
           clearBoundary();
@@ -341,7 +376,13 @@ export function KakaoMapView({
   }, [location.result, status, context, target]);
 
   useEffect(() => {
-    if (!context || status !== 'ready' || !location.result?.point) return;
+    if (
+      !context ||
+      status !== 'ready' ||
+      !location.result?.point ||
+      candidatePicking
+    )
+      return;
     const { map, maps } = context;
     const { latitude, longitude } = location.result.point;
     const svg =
@@ -364,7 +405,7 @@ export function KakaoMapView({
       maps.event.removeListener(marker, 'click', click);
       marker.setMap(null);
     };
-  }, [context, status, location.result]);
+  }, [context, status, location.result, candidatePicking]);
 
   useEffect(() => {
     if (!context || !searchSelection || !searchOpen) return;
@@ -452,7 +493,9 @@ export function KakaoMapView({
       status !== 'ready' ||
       !context ||
       !searchSelection ||
-      searchIsRadiusCenter
+      searchIsRadiusCenter ||
+      candidatePicking ||
+      searchMarkerHidden
     )
       return;
     const { map, maps } = context;
@@ -485,6 +528,8 @@ export function KakaoMapView({
     context,
     searchSelection,
     searchIsRadiusCenter,
+    candidatePicking,
+    searchMarkerHidden,
     onSearchMarkerClick,
   ]);
 
@@ -495,6 +540,7 @@ export function KakaoMapView({
     target,
     cafes,
     centerPicking,
+    candidatePicking,
   );
 
   function zoom(delta: number) {
@@ -603,15 +649,27 @@ export function KakaoMapView({
           <Minus aria-hidden="true" />
         </Button>
       </div>
-      {status === 'ready' && (
-        <p role="status" aria-live="polite" className="explore-location-notice">
-          {location.pending
-            ? '현재 위치를 확인하고 있습니다…'
-            : location.result?.reason
-              ? locationMessages[location.result.reason]
-              : '현재 위치를 확인했습니다. 지도는 사용자 선택을 우선하며 지역 필터는 변경하지 않습니다.'}
-        </p>
-      )}
+      {status === 'ready' &&
+        locationResult &&
+        (locationError ? (
+          <div role="alert" className="explore-location-error">
+            <p>{locationError}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label="위치 확인 다시 시도"
+              onClick={() => location.request(markIntent)}
+            >
+              다시 시도
+            </Button>
+          </div>
+        ) : dismissedLocationAttempt !== locationResult.attempt ? (
+          <p role="status" className="explore-location-toast">
+            {locationReason
+              ? locationMessages[locationReason]
+              : '현재 위치를 확인했습니다.'}
+          </p>
+        ) : null)}
     </section>
   );
 }

@@ -24,18 +24,12 @@ test('320×568에서 키보드로 상세 패널을 열고 스크롤하며 지역
   const filter = page.getByRole('button', { name: '지역 필터', exact: true });
   const controls = page.getByRole('group', { name: '지역 필터' });
   const district = controls.getByRole('combobox', { name: '자치구' });
-  const notice = page.getByText('지도와 검색 서비스를 불러오지 못했습니다.', {
-    exact: true,
+  const noticeCard = page.getByRole('alert').filter({
+    has: page.getByRole('heading', {
+      name: '지도 설정이 필요합니다',
+      exact: true,
+    }),
   });
-  const retry = page.getByRole('button', {
-    name: '검색 서비스 다시 시도',
-    exact: true,
-  });
-  const noticeCard = page
-    .getByRole('search', { name: '장소 검색', exact: true })
-    .locator(':scope > div')
-    .filter({ has: notice })
-    .filter({ has: retry });
   await expect(filter).toBeInViewport({ ratio: 1 });
   await expect(noticeCard).toBeInViewport({ ratio: 1 });
   const filterBox = (await filter.boundingBox())!;
@@ -60,8 +54,6 @@ test('320×568에서 키보드로 상세 패널을 열고 스크롤하며 지역
   ).toContainText('120');
   // 패널 전환이 끝나 닫기 버튼을 누를 수 있는 위치에서 스크롤을 검사합니다.
   await close.click({ trial: true });
-  // 일반 클릭과 같은 조작 가능 여부를 확인하되 SDK 재시도는 실행하지 않습니다.
-  await retry.click({ trial: true });
   const stores = panel.getByRole('tab', { name: '점포 현황' });
   await expect(stores).not.toBeInViewport();
   await page.keyboard.press('Tab');

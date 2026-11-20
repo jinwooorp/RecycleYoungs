@@ -53,10 +53,12 @@ function ResourceNotice({
 export function RegionFilter({
   region,
   onOpen,
+  onSelection,
   panelOpen,
 }: {
   region: RegionExplorer;
   onOpen: () => void;
+  onSelection?: () => void;
   panelOpen: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -205,7 +207,10 @@ export function RegionFilter({
                 ref={district}
                 value={region.districtCode}
                 aria-describedby="region-filter-help"
-                onChange={(event) => region.selectDistrict(event.target.value)}
+                onChange={(event) => {
+                  region.selectDistrict(event.target.value);
+                  onSelection?.();
+                }}
                 disabled={
                   region.districts.status !== 'ready' ||
                   !region.districts.data?.length
@@ -229,7 +234,10 @@ export function RegionFilter({
                 aria-label="행정동"
                 value={region.dongCode}
                 aria-describedby="region-filter-help"
-                onChange={(event) => region.selectDong(event.target.value)}
+                onChange={(event) => {
+                  region.selectDong(event.target.value);
+                  onSelection?.();
+                }}
                 disabled={
                   !region.districtCode ||
                   region.dongs.status !== 'ready' ||

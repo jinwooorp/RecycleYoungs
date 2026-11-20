@@ -74,15 +74,15 @@ export function ExplorePanel({
 function CafePanel({ cafes }: { cafes: CafeExplorer }) {
   const nearby = cafes.mode === 'nearby';
   return (
-    <div className="flex flex-col gap-6 p-5 break-keep text-pretty">
-      <section aria-labelledby="nearby-heading" className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 p-5 break-keep text-pretty">
+      <section aria-labelledby="nearby-heading" className="flex flex-col gap-3">
         <div
           role="group"
           aria-label="주변 탐색 방식"
-          className="grid grid-cols-2 gap-2"
+          className="explore-nearby-mode grid grid-cols-2 gap-2"
         >
           <Button
-            variant={nearby ? 'outline' : 'default'}
+            variant="outline"
             size="sm"
             aria-pressed={!nearby}
             onClick={() => cafes.setMode('viewport')}
@@ -90,7 +90,7 @@ function CafePanel({ cafes }: { cafes: CafeExplorer }) {
             지도 영역
           </Button>
           <Button
-            variant={nearby ? 'default' : 'outline'}
+            variant="outline"
             size="sm"
             aria-pressed={nearby}
             onClick={() => cafes.setMode('nearby')}
@@ -101,12 +101,6 @@ function CafePanel({ cafes }: { cafes: CafeExplorer }) {
         <h3 id="nearby-heading" className="text-sm font-semibold">
           {nearby ? '선택 지점 주변 카페' : '현재 지도 영역 카페'}
         </h3>
-        <p className="text-sm leading-6 text-muted-foreground">
-          현재는 카페 업종을 지원합니다.{' '}
-          {nearby
-            ? '선택한 지점과 설정한 반경만 기준으로 카페를 조회합니다.'
-            : '현재 지도에 보이는 영역에서 카페를 조회합니다. 구·동을 선택하면 해당 경계 안으로 범위를 좁힙니다.'}
-        </p>
         {nearby && (
           <>
             <label className="flex min-w-0 flex-col gap-2 text-xs font-medium">
@@ -128,12 +122,8 @@ function CafePanel({ cafes }: { cafes: CafeExplorer }) {
                 />
               </span>
             </label>
-            <p className="text-xs leading-5 text-muted-foreground">
-              지도를 클릭해 중심점을 지정하세요. 다시 클릭하면 위치를
-              변경합니다.
-            </p>
             <div className="flex flex-col gap-2 rounded-xl border bg-muted/30 p-3 text-xs leading-5">
-              <p className="font-medium">임시 관심 위치 · 저장되지 않습니다.</p>
+              <p className="font-medium">선택 지점</p>
               {cafes.center ? (
                 <div
                   className="space-y-1 [overflow-wrap:anywhere]"
@@ -149,59 +139,42 @@ function CafePanel({ cafes }: { cafes: CafeExplorer }) {
                   {cafes.centerDetails.name && cafes.centerDetails.address && (
                     <p>{cafes.centerDetails.address}</p>
                   )}
-                  <p>탐색 반경: {cafes.radiusM === 500 ? '500m' : '1km'}</p>
                 </div>
               ) : (
-                <p>중심점이 선택되지 않았습니다.</p>
+                <p>지도에서 중심점을 고르세요.</p>
               )}
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!cafes.center}
-                onClick={cafes.clearCenter}
-              >
-                중심점 해제
-              </Button>
+              {cafes.center && (
+                <Button variant="outline" size="sm" onClick={cafes.clearCenter}>
+                  중심점 해제
+                </Button>
+              )}
             </div>
           </>
         )}
       </section>
       <section
         aria-labelledby="cafe-list-heading"
-        className="flex flex-col gap-4 border-t pt-6"
+        className="flex flex-col gap-3 border-t pt-4"
       >
         <h3 id="cafe-list-heading" className="text-sm font-semibold">
           조회된 카페
         </h3>
-        {cafes.status === 'idle' && (
+        {cafes.status === 'idle' && !nearby && (
           <p role="status" className="text-xs leading-5 text-muted-foreground">
-            {nearby
-              ? '중심점을 선택하면 반경 내 카페를 조회합니다.'
-              : cafes.needsZoom
-                ? '자치구를 선택하거나 지도를 확대하면 카페를 조회합니다.'
-                : '지도 준비 또는 지역 이동 후 현재 영역을 조회합니다.'}
+            {cafes.needsZoom
+              ? '지도를 확대하거나 자치구를 선택하세요.'
+              : '지도 영역 확인 중…'}
           </p>
         )}
         <ResourceNotice resource={cafes} label="카페 목록" />
         {cafes.status === 'ready' && cafes.data && (
           <>
             <p role="status" className="text-sm font-medium">
-              {nearby ? '반경 내 전체 ' : '전체 '}
-              {cafes.data.totalCount.toLocaleString('ko-KR')}곳 중{' '}
-              {cafes.items.length.toLocaleString('ko-KR')}곳 표시
+              {nearby ? '반경 내 ' : '지도 영역 '}
+              {cafes.data.totalCount.toLocaleString('ko-KR')}곳
+              {cafes.items.length !== cafes.data.totalCount &&
+                ` · ${cafes.items.length.toLocaleString('ko-KR')}곳 표시`}
             </p>
-            <p className="text-xs leading-5 text-muted-foreground">
-              지도에 표시된 묶음의 숫자는 포함된 카페 수입니다. 지도를 확대하면
-              개별 카페를 볼 수 있습니다.
-            </p>
-            {cafes.data.hasMore && (
-              <p className="text-xs leading-5 text-muted-foreground">
-                최대 200곳만 표시합니다.{' '}
-                {nearby
-                  ? '반경 내 결과의 거리순 일부입니다.'
-                  : '지도를 확대해 범위를 좁혀 보세요.'}
-              </p>
-            )}
             {cafes.items.length === 0 && (
               <p className="text-sm text-muted-foreground">
                 {nearby
@@ -238,14 +211,6 @@ function CafePanel({ cafes }: { cafes: CafeExplorer }) {
                 ))}
               </ul>
             )}
-            <p className="text-xs leading-5 text-muted-foreground">
-              카페 게시 기준:{' '}
-              <time dateTime={cafes.data.sourceBatch.publishedAt}>
-                {new Date(
-                  cafes.data.sourceBatch.publishedAt,
-                ).toLocaleDateString('ko-KR')}
-              </time>
-            </p>
           </>
         )}
       </section>

@@ -15,7 +15,7 @@ export function useCandidateMap(
   const addCandidate = useEffectEvent(add);
 
   useEffect(() => {
-    if (!context) return;
+    if (!context || picking) return;
     const { maps, map } = context;
     const overlays = items.map((item) => {
       const color = item.slot === selected ? '#4338CA' : '#475569';
@@ -46,7 +46,7 @@ export function useCandidateMap(
         marker.setMap(null);
       }
     };
-  }, [context, items, selected]);
+  }, [context, items, selected, picking]);
 
   useEffect(() => {
     if (!context || !picking) return;

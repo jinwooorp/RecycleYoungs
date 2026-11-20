@@ -19,7 +19,7 @@ import { useCafeExplorer } from '@/hooks/use-cafe-explorer';
 import { useCandidates } from '@/hooks/use-candidates';
 import { useCandidateMap } from '@/hooks/use-candidate-map';
 import { CandidatePanel } from '@/components/candidate-panel';
-import type { Candidate } from '@/lib/candidates';
+import { sameCandidateLocation, type Candidate } from '@/lib/candidates';
 
 const menus = [
   { id: 'cafes', label: '주변 탐색', Icon: Compass },
@@ -40,6 +40,7 @@ export default function App() {
     region.dongCode,
     region.boundary.status === 'loading',
     connection?.status === 'ready' ? (connection.context?.maps ?? null) : null,
+    region.cameraKey,
   );
   const [selectedMenu, setSelectedMenu] = useState<ExploreMenu | null>(null);
   // 닫는 전환이 끝날 때까지 마지막 내용을 유지해 깜빡임을 방지합니다.
@@ -57,6 +58,15 @@ export default function App() {
     }
   }, [selectedMenu]);
   const candidates = useCandidates();
+  const candidatePicking = selectedMenu === 'compare' && candidates.picking;
+  const searchedPlace = search.selected?.place;
+  const searchMarkerHidden =
+    !!searchedPlace &&
+    candidates.items.some((item) => sameCandidateLocation(item, searchedPlace));
+  function resetNearby() {
+    cafes.clearCenter();
+    cafes.setMode('viewport');
+  }
   function selectCandidate(item: Candidate) {
     candidates.setSelected(item.slot);
     connection?.focusLocation?.(item, region.target);
@@ -65,11 +75,10 @@ export default function App() {
     connection?.context ?? null,
     candidates.items,
     candidates.selected,
-    selectedMenu === 'compare' && candidates.picking,
+    candidatePicking,
     selectCandidate,
     (center) => {
-      if (selectedMenu === 'compare' && candidates.picking)
-        void candidates.add(center);
+      if (candidatePicking) void candidates.add(center);
     },
   );
   const selectedLabel = menus.find(({ id }) => id === panelMenu)!.label;
@@ -149,18 +158,33 @@ export default function App() {
         <RegionFilter
           region={region}
           onOpen={search.close}
+          onSelection={() => {
+            resetNearby();
+            search.close();
+          }}
           panelOpen={selectedMenu !== null}
         />
         <PlaceSearch
           search={search}
           connection={connection}
           panelOpen={selectedMenu !== null}
-          regionFiltered={!!region.districtCode}
+          onSelect={(place) => {
+            if (candidatePicking) candidates.setPicking(false);
+            resetNearby();
+            region.selectPlace(place);
+          }}
+          onAnalysis={() => {
+            if (selectedMenu === 'compare') candidates.leave();
+            setPanelMenu('analysis');
+            setSelectedMenu('analysis');
+            search.close();
+            menuRefs.current.analysis?.focus({ preventScroll: true });
+          }}
           onCandidate={(place) => {
             setPanelMenu('compare');
             setSelectedMenu('compare');
             search.close();
-            menuRefs.current.compare?.focus();
+            menuRefs.current.compare?.focus({ preventScroll: true });
             void candidates.add(place);
           }}
           onNearby={(place) => {
@@ -176,7 +200,7 @@ export default function App() {
             setPanelMenu('cafes');
             setSelectedMenu('cafes');
             search.close();
-            menuRefs.current.cafes?.focus();
+            menuRefs.current.cafes?.focus({ preventScroll: true });
           }}
         />
         <div
@@ -216,6 +240,7 @@ export default function App() {
                   active={selectedMenu === 'compare'}
                   mapReady={connection?.status === 'ready'}
                   onSelect={selectCandidate}
+                  onStartPicking={search.close}
                 />
               ) : (
                 <ExplorePanel
@@ -236,8 +261,10 @@ export default function App() {
           cafes={cafes}
           connectionChanged={setConnection}
           searchSelection={search.selected}
+          searchMarkerHidden={searchMarkerHidden}
           onSearchMarkerClick={search.showSelection}
           centerPicking={selectedMenu === 'cafes'}
+          candidatePicking={candidatePicking}
         />
       </main>
     </div>

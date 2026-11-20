@@ -160,28 +160,27 @@ test('공통 지역 필터와 반경 입력·행정구역 전체 통계를 구�
   expect(screen.getByRole('textbox', { name: '장소 검색' })).toBeDisabled();
   fireEvent.click(screen.getByRole('button', { name: '주변 탐색' }));
   const panel = screen.getByRole('complementary', { name: '주변 탐색' });
-  expect(panel).toHaveTextContent('현재는 카페 업종을 지원합니다.');
-  expect(panel).toHaveTextContent(
-    '구·동을 선택하면 해당 경계 안으로 범위를 좁힙니다.',
-  );
+  expect(panel).toHaveTextContent('현재 지도 영역 카페');
   expect(
     screen.queryByRole('combobox', { name: '탐색 반경' }),
   ).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '선택 지점 주변' }));
-  expect(panel).toHaveTextContent(
-    '선택한 지점과 설정한 반경만 기준으로 카페를 조회합니다.',
-  );
+  expect(panel).toHaveTextContent('선택 지점 주변 카페');
   expect(screen.getByRole('combobox', { name: '탐색 반경' })).toBeEnabled();
   expect(screen.getByRole('combobox', { name: '탐색 반경' })).toHaveValue(
     '500',
   );
-  expect(screen.getByText('중심점이 선택되지 않았습니다.')).toBeVisible();
+  expect(screen.getByText('지도에서 중심점을 고르세요.')).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: '지도 영역' }));
-  expect(screen.getByText(/자치구를 선택하거나 지도를 확대하면/)).toBeVisible();
+  expect(
+    screen.getByText(/지도를 확대하거나 자치구를 선택하세요/),
+  ).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
   expect(
     screen.getByRole('region', { name: '행정구역 전체 통계' }),
-  ).toHaveTextContent('상단 지역 필터에서 자치구 또는 행정동을 선택해 주세요.');
+  ).toHaveTextContent(
+    '장소를 검색하거나 지역 필터에서 자치구·행정동을 선택해 주세요.',
+  );
   expect(screen.getByText('점포 현황')).toBeVisible();
   expect(screen.getByText('추정매출')).toBeVisible();
   expect(screen.getByText('유동인구')).toBeVisible();

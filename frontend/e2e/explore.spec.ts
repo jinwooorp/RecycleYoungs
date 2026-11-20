@@ -98,23 +98,26 @@ test('구·동 선택, 통계 갱신, 탭과 미검증 숫자 차단', async ({ 
   ).toContainText('9,007,199,254,740,993');
   await expect(
     page.getByRole('region', { name: '지역 전체 유동인구 요약' }),
-  ).toContainText('123,456.7800');
+  ).toContainText('123,456.78');
   for (const label of [
     '점포 수 요약',
     '당월 추정매출액 요약',
     '지역 전체 유동인구 요약',
   ]) {
     const card = page.getByRole('region', { name: label, exact: true });
-    await expect(card).toContainText('비교 불가:');
     await expect(card).not.toContainText('%');
+    await expect(card).not.toContainText(/출처|게시 시각|비교 불가|↑|↓/);
   }
+  await expect(
+    page.getByText('전분기 비교 준비 중', { exact: true }),
+  ).toHaveCount(1);
   const count = statisticsRequests.length;
   await page.getByRole('tab', { name: '추정매출', exact: true }).click();
   await expect(page.getByRole('tabpanel')).toContainText(
     '9,007,199,254,740,993',
   );
   await page.getByRole('tab', { name: '유동인구', exact: true }).click();
-  await expect(page.getByRole('tabpanel')).toContainText('123,456.7800');
+  await expect(page.getByRole('tabpanel')).toContainText('123,456.78');
   await page.getByRole('tab', { name: '유동인구', exact: true }).press('Home');
   await expect(page.getByRole('tab', { name: '점포 현황' })).toHaveAttribute(
     'aria-selected',
@@ -156,7 +159,7 @@ test('매출 API 오류는 독립 표시하고 사용자 재시도로 복구', a
   ).toContainText('120');
   await expect(
     page.getByRole('region', { name: '지역 전체 유동인구 요약' }),
-  ).toContainText('123,456.7800');
+  ).toContainText('123,456.78');
   await scenario(page, 'normal');
   await sales.getByRole('button', retry).click();
   await expect(sales).toContainText('9,007,199,254,740,993');

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   fetchBoundary,
+  fetchContainingRegions,
   fetchDistricts,
   fetchDongs,
   type RegionMapTarget,
 } from '@/lib/regions';
+import type { CafeCenter } from '@/lib/cafes';
 
 export interface RegionResource<T> {
   status: 'idle' | 'loading' | 'ready' | 'error';
@@ -68,8 +70,10 @@ export function useRegionExplorer() {
     districtCode: '',
     dongCode: '',
     revision: 0,
+    place: null as CafeCenter | null,
+    placeRevision: 0,
   });
-  const { districtCode, dongCode } = selection;
+  const { districtCode, dongCode, place, placeRevision } = selection;
   const districts = useRegionRequest('districts', fetchDistricts);
   const dongs = useRegionRequest(
     districtCode || null,
@@ -81,18 +85,59 @@ export function useRegionExplorer() {
     code ? `${kind}:${code}` : null,
     useCallback((signal) => fetchBoundary(kind, code, signal), [kind, code]),
   );
+  // 검색 좌표를 서버 경계로 확인합니다. 주소 문자열이나 이전 필터로 소속을 추정하지 않습니다.
+  const placeRegion = useRegionRequest(
+    place ? String(placeRevision) : null,
+    useCallback(
+      (signal) =>
+        fetchContainingRegions(place!.longitude, place!.latitude, signal),
+      [place],
+    ),
+  );
+  const containingDistricts = placeRegion.data?.districts ?? [];
+  const containingDongs = placeRegion.data?.dongs ?? [];
+  const placeDistrict =
+    containingDistricts.length === 1 ? containingDistricts[0] : null;
+  const placeDong =
+    containingDongs.length === 1 &&
+    containingDongs[0].districtCode === placeDistrict?.districtCode
+      ? containingDongs[0]
+      : null;
+  const analysis = {
+    districtCode: place ? (placeDistrict?.districtCode ?? '') : districtCode,
+    dongCode: place ? (placeDong?.dongCode ?? '') : dongCode,
+    districtName:
+      placeDistrict?.districtName ??
+      districts.data?.find((item) => item.districtCode === districtCode)
+        ?.districtName,
+    dongName:
+      placeDong?.dongName ??
+      dongs.data?.find((item) => item.dongCode === dongCode)?.dongName,
+  };
   const target = useMemo<RegionMapTarget | null>(() => {
+    if (place) return null;
     if (!districtCode) return { kind: 'default' };
     return boundary.status === 'ready' && boundary.data
       ? { kind: 'boundary', ...boundary.data }
       : null;
-  }, [districtCode, boundary.status, boundary.data]);
+  }, [place, districtCode, boundary.status, boundary.data]);
+  function selectPlace(center: CafeCenter) {
+    setSelection((current) => ({
+      ...current,
+      districtCode: '',
+      dongCode: '',
+      place: center,
+      placeRevision: current.placeRevision + 1,
+    }));
+  }
   function selectDistrict(value: string) {
     if (value && !districts.data?.some((item) => item.districtCode === value))
       return;
     setSelection((current) => ({
+      ...current,
       districtCode: value,
       dongCode: '',
+      place: null,
       revision: current.revision + 1,
     }));
   }
@@ -101,6 +146,7 @@ export function useRegionExplorer() {
     setSelection((current) => ({
       ...current,
       dongCode: value,
+      place: null,
       revision: current.revision + 1,
     }));
   }
@@ -108,10 +154,14 @@ export function useRegionExplorer() {
     districtCode,
     dongCode,
     revision: selection.revision,
+    cameraKey: `${selection.revision}:${placeRevision}`,
     districts,
     dongs,
     boundary,
+    analysis,
+    placeRegion,
     target,
+    selectPlace,
     selectDistrict,
     selectDong,
   };

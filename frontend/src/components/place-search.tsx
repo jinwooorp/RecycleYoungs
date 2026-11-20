@@ -10,14 +10,16 @@ export function PlaceSearch({
   search,
   connection,
   panelOpen,
-  regionFiltered,
+  onSelect,
+  onAnalysis,
   onNearby,
   onCandidate,
 }: {
   search: PlaceSearchState;
   connection: MapConnection | null;
   panelOpen: boolean;
-  regionFiltered: boolean;
+  onSelect?: (place: PlaceSearchResult) => void;
+  onAnalysis?: () => void;
   onNearby: (place: PlaceSearchResult) => void;
   onCandidate?: (place: PlaceSearchResult) => void;
 }) {
@@ -107,7 +109,7 @@ export function PlaceSearch({
           ? '검색어를 입력하고 Enter 또는 검색 버튼을 누르세요. 서울 소재 결과를 우선 표시합니다.'
           : '지도와 검색 서비스를 준비한 뒤 검색할 수 있습니다.'}
       </p>
-      {connection?.status === 'error' && (
+      {connection?.status === 'error' && !connection.needsKey && (
         <div className="explore-search-error mt-2 rounded-xl border bg-background p-3 text-sm leading-6">
           <p>지도와 검색 서비스를 불러오지 못했습니다.</p>
           <Button variant="outline" size="sm" onClick={connection.retry}>
@@ -195,6 +197,7 @@ export function PlaceSearch({
                                 event.detail === 0 ||
                                 document.activeElement === event.currentTarget;
                               search.selectResult(place);
+                              onSelect?.(place);
                             }}
                           >
                             <span className="text-sm font-medium [overflow-wrap:anywhere]">
@@ -234,11 +237,10 @@ export function PlaceSearch({
                       합니다.
                     </p>
                   )}
-                  {regionFiltered && (
-                    <p className="text-xs leading-5 text-muted-foreground">
-                      기존 구·동 필터가 유지됩니다. 지도 영역 카페는 해당 필터로
-                      조회하며, 반경 탐색에는 적용하지 않습니다.
-                    </p>
+                  {onAnalysis && (
+                    <Button variant="outline" size="lg" onClick={onAnalysis}>
+                      이 위치 상권 분석
+                    </Button>
                   )}
                   <Button
                     ref={nearbyRef}

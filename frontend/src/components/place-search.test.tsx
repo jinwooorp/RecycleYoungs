@@ -31,6 +31,8 @@ const data: PlaceSearchPage = {
   partial: false,
 };
 const onNearby = vi.fn(),
+  onSelect = vi.fn(),
+  onAnalysis = vi.fn(),
   onEscape = vi.fn(),
   retry = vi.fn();
 function Harness({ status = 'ready' }: { status?: 'ready' | 'error' }) {
@@ -41,7 +43,8 @@ function Harness({ status = 'ready' }: { status?: 'ready' | 'error' }) {
         search={search}
         connection={{ status, context: null, retry }}
         panelOpen
-        regionFiltered
+        onSelect={onSelect}
+        onAnalysis={onAnalysis}
         onNearby={onNearby}
       />
       <button onClick={search.showSelection}>지도에서 선택한 장소</button>
@@ -96,7 +99,9 @@ test('입력은 자동 검색하지 않고 Enter 제출·선택·별도 반경 �
   const nearby = screen.getByRole('button', { name: '이 위치 주변 카페 보기' });
   expect(nearby).toHaveFocus();
   expect(onNearby).not.toHaveBeenCalled();
-  expect(screen.getByText(/기존 구·동 필터가 유지됩니다/)).toBeVisible();
+  expect(onSelect).toHaveBeenCalledWith(place);
+  fireEvent.click(screen.getByRole('button', { name: '이 위치 상권 분석' }));
+  expect(onAnalysis).toHaveBeenCalledOnce();
   fireEvent.click(nearby);
   expect(onNearby).toHaveBeenCalledWith(place);
   fireEvent.keyDown(nearby, { key: 'Escape' });

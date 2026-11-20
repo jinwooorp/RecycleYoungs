@@ -12,11 +12,7 @@ import {
   type CandidateSlot,
 } from '@/lib/candidates';
 import { cafeAddress, formatCafeDistance } from '@/lib/cafes';
-import {
-  formatStatistic,
-  type StatisticsResponse,
-  type StatisticsSourceBatch,
-} from '@/lib/statistics';
+import { formatStatistic, type StatisticsResponse } from '@/lib/statistics';
 
 function Result<T>({
   resource,
@@ -46,23 +42,6 @@ function Result<T>({
   if (resource.status === 'idle')
     return <span className="text-muted-foreground">조회 대기 중</span>;
   return resource.data === null ? '자료 없음' : children(resource.data);
-}
-
-const publicationDate = new Intl.DateTimeFormat('ko-KR', {
-  dateStyle: 'long',
-  timeStyle: 'medium',
-  timeZone: 'Asia/Seoul',
-});
-function Publication({ publishedAt }: { publishedAt: string }) {
-  return (
-    <p className="mt-2 text-xs leading-5 text-muted-foreground">
-      게시{' '}
-      <time dateTime={publishedAt}>
-        {publicationDate.format(new Date(publishedAt))}
-      </time>{' '}
-      (한국시간)
-    </p>
-  );
 }
 
 function CafeCount({ analysis }: { analysis: CandidateAnalysis }) {
@@ -106,11 +85,6 @@ function Competition({
           >
             {(page) => (
               <>
-                <p className="text-xs leading-5 text-muted-foreground">
-                  서버가 반환한 {page.items.length}곳 중 가까운 최대 3곳을
-                  표시합니다. 조회 상한은 200곳입니다.
-                  {page.hasMore && ' 전체 건수 중 일부만 반환되었습니다.'}
-                </p>
                 {page.items.length ? (
                   <ol className="divide-y">
                     {page.items.slice(0, 3).map((cafe) => (
@@ -138,7 +112,6 @@ function Competition({
                       : '반환된 카페 목록이 없습니다.'}
                   </p>
                 )}
-                <Publication publishedAt={page.sourceBatch.publishedAt} />
               </>
             )}
           </Result>
@@ -158,7 +131,7 @@ function DongMetrics({ analysis }: { analysis: CandidateAnalysis }) {
         <h4 className="font-semibold">
           {item.slot} · {item.name}
         </h4>
-        <p className="text-muted-foreground">비교 불가: {unavailable}</p>
+        <p className="text-muted-foreground">{unavailable}</p>
       </section>
     );
   const metrics = [
@@ -200,9 +173,7 @@ function DongMetrics({ analysis }: { analysis: CandidateAnalysis }) {
           <div key={metric.label} className="min-w-0 space-y-2 py-3">
             <dt className="text-xs text-muted-foreground">{metric.label}</dt>
             <dd className="min-w-0 leading-6 tabular-nums [overflow-wrap:anywhere]">
-              <Result<
-                StatisticsResponse<{ sourceBatch: StatisticsSourceBatch }>
-              >
+              <Result<StatisticsResponse<unknown>>
                 resource={metric.resource}
                 label={`${item.slot} ${metric.retry}`}
               >
@@ -210,7 +181,9 @@ function DongMetrics({ analysis }: { analysis: CandidateAnalysis }) {
                   data ? (
                     <>
                       <p className="font-semibold">
-                        {formatStatistic(metric.value)}
+                        {formatStatistic(metric.value, {
+                          trimTrailingZeros: true,
+                        })}
                         {metric.value === null ? '' : metric.unit}
                       </p>
                       {metric.retry === '점포' &&
@@ -226,7 +199,6 @@ function DongMetrics({ analysis }: { analysis: CandidateAnalysis }) {
                             )}
                           </p>
                         )}
-                      <Publication publishedAt={data.sourceBatch.publishedAt} />
                     </>
                   ) : (
                     '자료 없음'
@@ -247,11 +219,13 @@ export function CandidatePanel({
   active,
   mapReady,
   onSelect,
+  onStartPicking,
 }: {
   candidates: Candidates;
   active: boolean;
   mapReady: boolean;
   onSelect: (item: Candidate) => void;
+  onStartPicking?: () => void;
 }) {
   const { items, picking, pending, notice, radius } = candidates;
   const analyses = useCandidateAnalysis(items, radius, active);
@@ -289,16 +263,15 @@ export function CandidatePanel({
               ? '후보지 상세 분석'
               : '후보지 등록'}
         </h3>
-        <p className="text-xs leading-5 text-muted-foreground">
-          후보지를 최대 3곳까지 등록할 수 있습니다. 목록은 이 브라우저 탭에 임시
-          저장됩니다.
-        </p>
       </header>
       <Button
         variant="outline"
         aria-pressed={picking}
         disabled={!mapReady || pending || items.length >= 3}
-        onClick={() => candidates.setPicking(!picking)}
+        onClick={() => {
+          if (!picking) onStartPicking?.();
+          candidates.setPicking(!picking);
+        }}
       >
         {picking ? '지도 추가 모드 끄기' : '지도에서 후보지 추가'}
       </Button>
@@ -399,11 +372,6 @@ export function CandidatePanel({
                                 ? dongs.map((area) => area.dongName).join(' · ')
                                 : '소속 행정동 없음'}
                             </p>
-                            {!analysis.dong && (
-                              <p className="text-muted-foreground">
-                                {analysis.unavailable}
-                              </p>
-                            )}
                           </>
                         ) : (
                           '서울 경계 밖'
@@ -482,12 +450,6 @@ export function CandidatePanel({
             className="min-w-0 space-y-3 border-t pt-4"
           >
             <h3 className="text-sm font-semibold">주변 경쟁 환경</h3>
-            <p className="text-xs leading-5 text-muted-foreground">
-              모든 후보지에 같은 반경 {radius === 500 ? '500m' : '1km'}를
-              적용합니다. 경쟁 카페는 반경 내 전체 건수이며, 많고 적음이 창업
-              유불리를 뜻하지 않습니다. 출처: 소상공인시장진흥공단
-              상가(상권)정보.
-            </p>
             {analyses.map((analysis) => (
               <Competition
                 key={analysis.item.slot}
@@ -501,13 +463,6 @@ export function CandidatePanel({
             className="min-w-0 space-y-3 border-t pt-4"
           >
             <h3 className="text-sm font-semibold">소속 행정동 상권 특성</h3>
-            <p className="text-xs leading-5 text-muted-foreground">
-              2026년 2분기 행정동 전체 통계입니다. 점포·당월 추정매출은 카페
-              업종, 유동인구는 업종 구분 없이 집계합니다. 반경 내 통계가 아니며
-              합산·환산하지 않습니다. 당월 추정매출은 분기 합계나 월평균이
-              아닙니다. 같은 행정동의 후보지는 동일한 행정동 통계와 조회 응답을
-              공유합니다. 출처: 서울시 상권분석서비스.
-            </p>
             {analyses.map((analysis) => (
               <DongMetrics key={analysis.item.slot} analysis={analysis} />
             ))}

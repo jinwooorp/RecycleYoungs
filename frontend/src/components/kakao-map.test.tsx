@@ -303,6 +303,54 @@ const locationSearch = {
   revision: 1,
 };
 
+test('최초 진입 위치 안내는 자동으로 닫히고 재시도 오류는 유지된다', async () => {
+  const { maps } = createSdk();
+  const geo = pendingPositions();
+  load.mockResolvedValue(maps);
+  render(<KakaoMapView />);
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: '지도 확대' })).toBeEnabled(),
+  );
+  vi.useFakeTimers();
+  try {
+    await act(async () =>
+      geo.pending[0].fail({ code: 1 } as GeolocationPositionError),
+    );
+    expect(screen.getByRole('status')).toHaveClass('explore-location-toast');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '위치 권한이 거부되었습니다',
+    );
+    act(() => vi.advanceTimersByTime(4000));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '내 위치로 이동' }));
+    await act(async () =>
+      geo.pending[1].fail({ code: 3 } as GeolocationPositionError),
+    );
+    act(() => vi.advanceTimersByTime(8000));
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '위치 확인 시간이 초과되었습니다',
+    );
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: '위치 확인 다시 시도' }),
+    );
+    await act(async () =>
+      geo.pending[2].success({
+        coords: { longitude: 126.92378, latitude: 37.55687 },
+      } as GeolocationPosition),
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '현재 위치를 확인했습니다.',
+    );
+    act(() => vi.advanceTimersByTime(4000));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test.each(['region', 'search', 'drag', 'candidate'] as const)(
   '늦은 자동 위치 응답은 먼저 수행한 %s 이동을 덮어쓰지 않는다',
   async (kind) => {
@@ -348,9 +396,7 @@ test.each(['region', 'search', 'drag', 'candidate'] as const)(
       expected = 127.02;
     }
     geo.complete();
-    await screen.findByText(
-      '현재 위치를 확인했습니다. 지도는 사용자 선택을 우선하며 지역 필터는 변경하지 않습니다.',
-    );
+    await screen.findByText('현재 위치를 확인했습니다.');
     expect(map.getCenter().getLng()).toBe(expected);
     expect(maps.Map).toHaveBeenCalledOnce();
   },
@@ -611,9 +657,7 @@ test.each(['region', 'search', 'drag', 'candidate'] as const)(
     expect(map.getCenter()).toBe(center);
     expect(map.getLevel()).toBe(level);
     expect(map.setCenter).toHaveBeenCalledTimes(moves);
-    expect(
-      screen.getByText(/현재 위치를 확인했습니다.*사용자 선택을 우선/),
-    ).toBeVisible();
+    expect(screen.getByText('현재 위치를 확인했습니다.')).toBeVisible();
   },
 );
 
@@ -625,9 +669,7 @@ test('구 선택이 경계 응답을 기다리는 동안 위치가 완료되어�
   await waitFor(() => expect(maps.Map).toHaveBeenCalledOnce());
   view.rerender(<KakaoMapView target={null} regionRevision={1} />);
   geo.complete();
-  await screen.findByText(
-    '현재 위치를 확인했습니다. 지도는 사용자 선택을 우선하며 지역 필터는 변경하지 않습니다.',
-  );
+  await screen.findByText('현재 위치를 확인했습니다.');
   expect(map.getCenter().getLng()).toBe(126.978);
   view.rerender(<KakaoMapView target={polygonTarget} regionRevision={1} />);
   await waitFor(() => expect(map.getCenter().getLng()).toBe(127));
@@ -662,9 +704,7 @@ test('늦게 완료된 지역 경계는 그 사이 명시적으로 선택한 후
     />,
   );
   geo.complete();
-  await screen.findByText(
-    '현재 위치를 확인했습니다. 지도는 사용자 선택을 우선하며 지역 필터는 변경하지 않습니다.',
-  );
+  await screen.findByText('현재 위치를 확인했습니다.');
   await waitFor(() => expect(maps.Polygon).toHaveBeenCalledOnce());
   expect(map.getCenter().getLng()).toBe(127.06);
   expect(map.setBounds).not.toHaveBeenCalled();
@@ -745,8 +785,11 @@ test.each([
         } as GeolocationPositionError),
       );
     else if (reason !== 'unsupported') geo.complete();
-    await screen.findByText(/현재 지도를 유지합니다/);
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    const notice = await screen.findByText(/현재 지도를 유지합니다/);
+    expect(notice.closest('[role]')).toHaveAttribute(
+      'role',
+      ['timeout', 'verification'].includes(reason) ? 'alert' : 'status',
+    );
     expect(screen.getByRole('button', { name: '지도 확대' })).toBeEnabled();
     expect(map.getCenter().getLng()).toBe(126.978);
     expect(map.getLevel()).toBe(5);
@@ -875,7 +918,9 @@ test('최초 영역·idle 재조회와 목록 선택은 마커·안전한 정보
   await waitFor(() =>
     expect(screen.getByRole('button', { name: '지도 확대' })).toBeEnabled(),
   );
-  expect(screen.getByText(/자치구를 선택하거나 지도를 확대하면/)).toBeVisible();
+  expect(
+    screen.getByText(/지도를 확대하거나 자치구를 선택하세요/),
+  ).toBeVisible();
   expect(maps.Marker).not.toHaveBeenCalled();
   await waitFor(() => expect(map.setCenter).toHaveBeenCalled());
   fireEvent.click(screen.getByRole('button', { name: '지도 확대' }));
@@ -884,8 +929,7 @@ test('최초 영역·idle 재조회와 목록 선택은 마커·안전한 정보
   )![2];
   act(() => idleAfterZoom());
   await screen.findByRole('button', { name: /<img src=x/ });
-  expect(screen.getByText('전체 301곳 중 2곳 표시')).toBeVisible();
-  expect(screen.getByText(/최대 200곳만/)).toBeVisible();
+  expect(screen.getByText('지도 영역 301곳 · 2곳 표시')).toBeVisible();
   expect(maps.Marker).toHaveBeenCalledTimes(2);
   const marker = maps.Marker.mock.results[0].value;
   expect(marker.setMap).toHaveBeenCalledWith(map);
@@ -955,7 +999,7 @@ test('최초 영역·idle 재조회와 목록 선택은 마커·안전한 정보
     map.setLevel(5);
     idle();
   });
-  await screen.findByText(/자치구를 선택하거나 지도를 확대하면/);
+  await screen.findByText(/지도를 확대하거나 자치구를 선택하세요/);
   expect(cafeCalls()).toHaveLength(4);
   expect(
     screen.queryByText('현재 지도 영역에 조회된 카페가 없습니다.'),
@@ -1652,7 +1696,7 @@ test('구·동 변경은 즉시 이전 마커를 정리하고 늦은 동 응답�
   );
   await waitFor(() => expect(map.getLevel()).toBe(5));
   fireEvent.click(screen.getByRole('button', { name: '주변 탐색' }));
-  await screen.findByText(/자치구를 선택하거나 지도를 확대하면/);
+  await screen.findByText(/지도를 확대하거나 자치구를 선택하세요/);
   expect(
     maps.Polygon.mock.results.at(-1)!.value.setMap,
   ).toHaveBeenLastCalledWith(null);
@@ -1824,7 +1868,7 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
   fireEvent.click(screen.getByRole('button', { name: '선택 지점 주변' }));
   expect(oldMarker.setMap).toHaveBeenLastCalledWith(null);
   expect(maps.Circle).not.toHaveBeenCalled();
-  expect(screen.getByText('중심점이 선택되지 않았습니다.')).toBeVisible();
+  expect(screen.getByText('지도에서 중심점을 고르세요.')).toBeVisible();
   const nearbyCalls = () =>
     fetch.mock.calls.filter(([url]) => url.includes('/nearby'));
   expect(nearbyCalls()).toHaveLength(0);
@@ -1835,14 +1879,13 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
   act(() =>
     mapClick()({ latLng: { getLat: () => 37.5665, getLng: () => 126.978 } }),
   );
-  await screen.findByText('반경 내 전체 201곳 중 1곳 표시');
+  await screen.findByText('반경 내 201곳 · 1곳 표시');
   expect(screen.getByText('지도에서 선택한 위치')).toBeVisible();
   expect(nearbyCalls()[0][0]).toContain(
     'longitude=126.978&latitude=37.5665&radiusM=500&limit=200&offset=0',
   );
   expect(nearbyCalls()[0][0]).not.toContain('Codes');
   expect(screen.getByText(/499.9m/)).toBeVisible();
-  expect(screen.getByText(/최대 200곳만/)).toBeVisible();
   expect(maps.Circle.mock.calls[0][0]).toMatchObject({
     radius: 500,
     strokeStyle: 'dash',
@@ -1937,7 +1980,7 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
   expect(
     maps.Circle.mock.results.at(-1)!.value.setMap,
   ).toHaveBeenLastCalledWith(null);
-  expect(screen.getByText('중심점이 선택되지 않았습니다.')).toBeVisible();
+  expect(screen.getByText('지도에서 중심점을 고르세요.')).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: '지도 영역' }));
   await screen.findByRole('button', { name: /지도 카페/ });
   expect(screen.queryByText(/499.9m/)).not.toBeInTheDocument();
@@ -2008,7 +2051,7 @@ test('반경 API 실패에도 지도와 중심점을 유지하고 재시도로 �
   expect(
     await screen.findByText('선택한 반경 내에 조회된 카페가 없습니다.'),
   ).toBeVisible();
-  expect(screen.getByText('반경 내 전체 0곳 중 0곳 표시')).toBeVisible();
+  expect(screen.getByText('반경 내 0곳')).toBeVisible();
   expect(
     maps.Marker.mock.calls.every(
       ([options]) => options.title === '임시 관심 위치',
@@ -2016,7 +2059,7 @@ test('반경 API 실패에도 지도와 중심점을 유지하고 재시도로 �
   ).toBe(true);
 });
 
-test('장소 검색 이동·지역 필터 독립성·명시적 반경 연계와 지역 재선택 우선순위를 유지한다', async () => {
+test('검색 좌표로 행정동 통계를 연결하고 검색·지역 필터의 마지막 선택을 적용한다', async () => {
   const { maps, map } = createSdk();
   map.getBounds.mockImplementation(() => ({
     getSouthWest: () => ({
@@ -2075,33 +2118,79 @@ test('장소 검색 이동·지역 필터 독립성·명시적 반경 연계와 
                   publishedAt: '2026-10-02T00:00:00Z',
                 },
               }
-            : url === '/api/v1/districts'
+            : url.startsWith('/api/v1/regions/nearby')
               ? {
-                  items: [
-                    { districtCode: '11110', districtName: '종로구' },
-                    { districtCode: '11140', districtName: '중구' },
+                  districts: [
+                    {
+                      districtCode: '11140',
+                      districtName: '중구',
+                      containsCenter: true,
+                    },
+                  ],
+                  dongs: [
+                    {
+                      districtCode: '11140',
+                      dongCode: '11140515',
+                      dongName: '검색동',
+                      containsCenter: true,
+                    },
                   ],
                 }
-              : url.endsWith('/dongs')
+              : url.includes('/stats/stores')
                 ? {
-                    items: [
-                      {
-                        districtCode: url.split('/')[4],
-                        dongCode: `${url.split('/')[4]}515`,
-                        dongName: '선택동',
-                        labelPoint: { type: 'Point', coordinates: [127, 37] },
+                    [url.includes('/dongs/') ? 'dongCode' : 'districtCode']:
+                      url.split('/')[4],
+                    quarterCode: new URL(
+                      url,
+                      'http://localhost',
+                    ).searchParams.get('quarterCode'),
+                    industryCode: 'CS100010',
+                    data: {
+                      storeCount: '37',
+                      generalStoreCount: null,
+                      franchiseStoreCount: null,
+                      openedStoreCount: null,
+                      closedStoreCount: null,
+                      openingRate: null,
+                      closureRate: null,
+                      sourceBatch: {
+                        batchId: '00000000-0000-0000-0000-000000000004',
+                        publishedAt: '2026-10-02T00:00:00Z',
                       },
-                    ],
-                  }
-                : {
-                    type: 'Feature',
-                    id: url.split('/')[4],
-                    properties: {
-                      regionCode: url.split('/')[4],
-                      regionType: url.includes('/dongs/') ? 'DONG' : 'DISTRICT',
                     },
-                    geometry: polygonTarget.geometry,
-                  },
+                  }
+                : url === '/api/v1/districts'
+                  ? {
+                      items: [
+                        { districtCode: '11110', districtName: '종로구' },
+                        { districtCode: '11140', districtName: '중구' },
+                      ],
+                    }
+                  : url.endsWith('/dongs')
+                    ? {
+                        items: [
+                          {
+                            districtCode: url.split('/')[4],
+                            dongCode: `${url.split('/')[4]}515`,
+                            dongName: '선택동',
+                            labelPoint: {
+                              type: 'Point',
+                              coordinates: [127, 37],
+                            },
+                          },
+                        ],
+                      }
+                    : {
+                        type: 'Feature',
+                        id: url.split('/')[4],
+                        properties: {
+                          regionCode: url.split('/')[4],
+                          regionType: url.includes('/dongs/')
+                            ? 'DONG'
+                            : 'DISTRICT',
+                        },
+                        geometry: polygonTarget.geometry,
+                      },
         ),
       ),
   );
@@ -2144,16 +2233,28 @@ test('장소 검색 이동·지역 필터 독립성·명시적 반경 연계와 
       .getByRole('button', { name: '검색 결과 닫기' })
       .closest('.explore-search-result-body'),
   ).toBeNull();
+  const previousBoundary = maps.Polygon.mock.results.at(-1)!.value;
   fireEvent.click(screen.getByRole('button', { name: /서울시청.*세종대로/ }));
+  expect(previousBoundary.setMap).toHaveBeenLastCalledWith(null);
   await waitFor(() =>
     expect(map.setCenter.mock.calls.at(-1)![0].getLng()).toBe(126.978),
   );
   expect(map.getLevel()).toBe(3);
-  expect(screen.getByRole('combobox', { name: '자치구' })).toHaveValue('11110');
-  expect(screen.getByRole('combobox', { name: '행정동' })).toHaveValue(
-    '11110515',
-  );
-  expect(screen.getByText(/기존 구·동 필터가 유지됩니다/)).toBeVisible();
+  expect(screen.getByRole('combobox', { name: '자치구' })).toHaveValue('');
+  expect(screen.getByRole('combobox', { name: '행정동' })).toHaveValue('');
+  expect(
+    await screen.findByRole('heading', { name: '중구 · 검색동' }),
+  ).toBeVisible();
+  expect(
+    await within(
+      screen.getByRole('region', { name: '점포 수 요약' }),
+    ).findByText('37'),
+  ).toBeVisible();
+  expect(
+    fetch.mock.calls.some(([url]) =>
+      url.includes('/dongs/11140515/stats/stores?quarterCode=20262'),
+    ),
+  ).toBe(true);
   const searchMarker = maps.Marker.mock.results.find(
     (_, index) =>
       maps.Marker.mock.calls[index][0].title === '검색 위치: 서울시청',
@@ -2167,7 +2268,7 @@ test('장소 검색 이동·지역 필터 독립성·명시적 반경 연계와 
       fetch.mock.calls.some(
         ([url]) =>
           url.includes('/viewport') &&
-          url.includes('districtCodes=11110') &&
+          !url.includes('districtCodes=') &&
           Math.abs(
             Number(new URL(url, 'http://localhost').searchParams.get('west')) -
               126.968,
@@ -2176,7 +2277,7 @@ test('장소 검색 이동·지역 필터 독립성·명시적 반경 연계와 
     ).toBe(true),
   );
   expect(
-    fetch.mock.calls.filter(([url]) => url.includes('/nearby')),
+    fetch.mock.calls.filter(([url]) => url.includes('/cafes/nearby')),
   ).toHaveLength(0);
   fireEvent.keyDown(
     screen.getByRole('button', { name: '이 위치 주변 카페 보기' }),
@@ -2220,7 +2321,7 @@ test('장소 검색 이동·지역 필터 독립성·명시적 반경 연계와 
   });
   await waitFor(() =>
     expect(
-      fetch.mock.calls.filter(([url]) => url.includes('/nearby')),
+      fetch.mock.calls.filter(([url]) => url.includes('/cafes/nearby')),
     ).toHaveLength(2),
   );
   fireEvent.change(input, { target: { value: '다른 위치' } });
@@ -2230,7 +2331,7 @@ test('장소 검색 이동·지역 필터 독립성·명시적 반경 연계와 
   );
   await waitFor(() => expect(map.getCenter().getLng()).toBe(126.923));
   expect(
-    fetch.mock.calls.filter(([url]) => url.includes('/nearby')),
+    fetch.mock.calls.filter(([url]) => url.includes('/cafes/nearby')),
   ).toHaveLength(2);
   fireEvent.click(
     screen.getByRole('button', { name: '이 위치 주변 카페 보기' }),
@@ -2244,7 +2345,7 @@ test('장소 검색 이동·지역 필터 독립성·명시적 반경 연계와 
   );
   expect(
     fetch.mock.calls
-      .filter(([url]) => url.includes('/nearby'))
+      .filter(([url]) => url.includes('/cafes/nearby'))
       .every(([url]) => !url.includes('Codes')),
   ).toBe(true);
   fireEvent.change(input, { target: { value: '서울시청' } });
@@ -2259,6 +2360,11 @@ test('장소 검색 이동·지역 필터 독립성·명시적 반경 연계와 
     target: { value: '11140' },
   });
   expect(lastMarker.setMap).toHaveBeenLastCalledWith(null);
+  await waitFor(() =>
+    expect(
+      maps.Polygon.mock.results.at(-1)!.value.setMap,
+    ).toHaveBeenLastCalledWith(map),
+  );
   await waitFor(() => expect(map.getLevel()).toBe(7));
   expect(map.getCenter().getLng()).toBe(127);
   const markers = maps.Marker.mock.calls.length;
@@ -2317,7 +2423,7 @@ test('선택 검색 마커와 카메라를 SDK 재시도에서 복원하고 언�
   );
 });
 
-test('지도 추가 모드와 검색에서 후보지를 등록하고 명시적으로 선택할 때만 이동한다', async () => {
+test('지역 필터를 적용한 채 지도와 검색에서 후보지를 등록한다', async () => {
   const { maps, map } = createSdk();
   load.mockResolvedValue(maps);
   maps.services.Places.mockImplementation(function () {
@@ -2353,7 +2459,16 @@ test('지도 추가 모드와 검색에서 후보지를 등록하고 명시적�
               ],
               dongs: [],
             }
-          : { items: [] },
+          : path === '/api/v1/districts'
+            ? { items: [{ districtCode: '11140', districtName: '중구' }] }
+            : path === '/api/v1/districts/11140/boundary'
+              ? {
+                  type: 'Feature',
+                  id: '11140',
+                  properties: { regionCode: '11140', regionType: 'DISTRICT' },
+                  geometry: polygonTarget.geometry,
+                }
+              : { items: [] },
       ),
     ),
   );
@@ -2362,6 +2477,12 @@ test('지도 추가 모드와 검색에서 후보지를 등록하고 명시적�
       <App />
     </StrictMode>,
   );
+  await screen.findByRole('option', { name: '중구' });
+  const filter = screen.getByRole('combobox', { name: '자치구' });
+  fireEvent.change(filter, { target: { value: '11140' } });
+  await waitFor(() => expect(map.setBounds).toHaveBeenCalledTimes(1));
+  const boundary = maps.Polygon.mock.results.at(-1)!.value;
+  expect(boundary.setMap).toHaveBeenLastCalledWith(map);
   const menu = screen.getByRole('button', { name: '후보지 분석' });
   fireEvent.click(menu);
   const mode = screen.getByRole('button', { name: '지도에서 후보지 추가' });
@@ -2372,6 +2493,8 @@ test('지도 추가 모드와 검색에서 후보지를 등록하고 명시적�
     )?.[2];
   expect(mapClick()).toBeUndefined();
   fireEvent.click(mode);
+  expect(boundary.setMap).toHaveBeenLastCalledWith(null);
+  expect(filter).toHaveValue('11140');
   const firstClick = mapClick()!;
   act(() =>
     firstClick({ latLng: { getLat: () => 37.5, getLng: () => 126.99 } }),
@@ -2382,7 +2505,16 @@ test('지도 추가 모드와 검색에서 후보지를 등록하고 명시적�
     'click',
     firstClick,
   );
-  const marker = maps.Marker.mock.results.at(-1)!.value;
+  expect(boundary.setMap).toHaveBeenLastCalledWith(map);
+  expect(map.setBounds).toHaveBeenCalledTimes(1);
+  const marker = await waitFor(() => {
+    const entry = maps.Marker.mock.results.find(
+      (_, index) =>
+        maps.Marker.mock.calls[index][0].title === '후보지 A: 후보지 A',
+    );
+    expect(entry).toBeDefined();
+    return entry!.value;
+  });
   const markerClick = maps.event.addListener.mock.calls.find(
     ([target, type]) => target === marker && type === 'click',
   )![2];
@@ -2409,8 +2541,13 @@ test('지도 추가 모드와 검색에서 후보지를 등록하고 명시적�
   fireEvent.click(
     await screen.findByRole('button', { name: /검색 장소.*서울 중구/ }),
   );
+  const placeMarker = maps.Marker.mock.results.find(
+    (_, index) =>
+      maps.Marker.mock.calls[index][0].title === '검색 위치: 검색 장소',
+  )!.value;
   fireEvent.click(screen.getByRole('button', { name: '후보지로 추가' }));
   await screen.findByText('후보지 B를 등록했습니다.');
+  expect(placeMarker.setMap).toHaveBeenLastCalledWith(null);
   expect(
     screen.getByRole('button', { name: '후보지 A 지도에서 위치 확인' }),
   ).toBeVisible();
@@ -3047,7 +3184,7 @@ test('카페만 묶고 후보지 A·B·C와 반경 중심 표식은 별도 계�
         { slot: 'C', name: '후보지 셋', longitude: 126.98, latitude: 37.5665 },
       ],
       'A',
-      true,
+      false,
       vi.fn(),
       add,
     );

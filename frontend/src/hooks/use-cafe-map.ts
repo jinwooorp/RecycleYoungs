@@ -102,6 +102,7 @@ export function useCafeMap(
   target: RegionMapTarget | null | undefined,
   cafes?: CafeExplorer,
   centerPicking = false,
+  overlaysHidden = false,
 ) {
   const onViewportChange =
     cafes?.mode === 'nearby' ? undefined : cafes?.onViewportChange;
@@ -116,7 +117,7 @@ export function useCafeMap(
   const status = cafes?.status;
   const scopeKey = cafes?.scopeKey;
   const clustererRef = useRef<KakaoMarkerClusterer | null>(null);
-  const cafeLayerEnabled = scopeKey !== undefined;
+  const cafeLayerEnabled = scopeKey !== undefined && !overlaysHidden;
   const layerRef = useRef<{
     markers: Map<string, CafeMarkerEntry>;
     info: KakaoInfoWindow;
@@ -148,7 +149,8 @@ export function useCafeMap(
   }, [context, mode, centerPicking, selectCenter]);
 
   useEffect(() => {
-    if (!context || mode !== 'nearby' || !center || !radiusM) return;
+    if (!context || mode !== 'nearby' || !center || !radiusM || overlaysHidden)
+      return;
     const { map, maps } = context;
     const position = new maps.LatLng(center.latitude, center.longitude);
     // 카페 기본 핀과 다른 고정 SVG 표식을 사용합니다. 외부 문자열을 포함하지 않습니다.
@@ -182,7 +184,7 @@ export function useCafeMap(
       marker.setMap(null);
       circle.setMap(null);
     };
-  }, [context, mode, center, radiusM]);
+  }, [context, mode, center, radiusM, overlaysHidden]);
 
   useEffect(() => {
     if (!context || !onViewportChange) return;

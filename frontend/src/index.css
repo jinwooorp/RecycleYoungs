@@ -372,6 +372,12 @@
   border-color: var(--primary);
 }
 
+.explore-nearby-mode button[aria-pressed='true'] {
+  border-color: var(--primary);
+  background: var(--accent);
+  color: var(--primary);
+}
+
 .explore-search {
   position: absolute;
   z-index: 30;
@@ -424,6 +430,7 @@
   border-radius: 0.875rem;
   background: var(--background);
   box-shadow: 0 4px 16px rgb(23 54 41 / 8%);
+  transition: max-height 220ms ease-in-out;
 }
 
 .explore-search[data-panel-open='true'] .explore-search-results {
@@ -479,20 +486,58 @@
   pointer-events: none;
 }
 
-.explore-location-notice {
-  position: absolute;
-  z-index: 10;
-  bottom: 2rem;
-  left: 0.75rem;
-  max-width: min(22rem, calc(100% - 5.25rem));
+.explore-location-toast,
+.explore-location-error {
+  position: fixed;
+  z-index: 24;
+  top: calc(var(--explore-top) + 4rem);
+  left: 50%;
+  width: max-content;
+  max-width: min(23rem, calc(100vw - 2rem));
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: 0.75rem;
   background: var(--background);
-  color: var(--muted-foreground);
-  font-size: 0.75rem;
-  line-height: 1.6;
+  font-size: 0.8125rem;
+  transform: translateX(-50%);
+  box-shadow: 0 4px 16px rgb(23 54 41 / 10%);
+}
+
+.explore-location-toast {
+  top: calc(var(--explore-top) + 3.5rem);
+  width: 19rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.9375rem;
+  line-height: 1.5;
   pointer-events: none;
+  text-align: center;
+  word-break: keep-all;
+}
+
+.explore-location-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  border-color: var(--destructive);
+}
+
+@media (width < 48rem) {
+  .explore-location-error {
+    top: calc(var(--explore-top) + 7rem);
+  }
+  .explore-location-toast {
+    top: calc(var(--explore-top) + 7rem);
+    /* 오른쪽 지도 조작 버튼 너비만큼 양쪽에 같은 여백을 둡니다. */
+    max-width: calc(100% - 8rem);
+  }
+}
+
+/* 검색창과 지역 필터 사이에 Toast가 들어가는 화면 폭에서 상단을 맞춥니다. */
+@media (width >= 75rem) {
+  .explore-location-toast {
+    top: var(--explore-top);
+  }
 }
 
 /* 지역 선택은 업종·패널과 독립적인 지도 공통 도구로 배치합니다. */
@@ -655,6 +700,10 @@
 }
 
 @media (width < 48rem) {
+  .explore-map-notice {
+    top: calc(var(--explore-top) + 7rem);
+    right: 4rem;
+  }
   .explore-search-error {
     margin-top: 3.75rem;
   }
@@ -759,6 +808,7 @@
     left: 0;
     width: 100%;
     max-height: min(36rem, calc(100dvh - 6rem));
+    transition: left 220ms ease-in-out;
   }
   .explore-search[data-panel-open='true'] .explore-search-results {
     /* 결과를 상세 패널 옆에 배치해 두 닫기 버튼을 모두 사용할 수 있게 합니다. */
@@ -770,6 +820,12 @@
   }
   .explore-app .explore-map-controls {
     right: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .explore-search-results {
+    transition: none;
   }
 }
 

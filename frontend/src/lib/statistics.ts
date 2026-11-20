@@ -83,12 +83,18 @@ function numeric(value: unknown, decimal: boolean): value is string | null {
 }
 
 /** 원본 문자열을 변환하지 않아 큰 정수·긴 소수부·후행 0을 보존합니다. */
-export function formatStatistic(value: string | null): string {
+export function formatStatistic(
+  value: string | null,
+  { trimTrailingZeros = false } = {},
+): string {
   if (value === null) return '자료 없음';
   if (!numeric(value, true)) return invalid();
   const [integer, fraction] = value.split('.');
   const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return fraction === undefined ? grouped : `${grouped}.${fraction}`;
+  const displayFraction = trimTrailingZeros
+    ? fraction?.replace(/0+$/, '')
+    : fraction;
+  return displayFraction ? `${grouped}.${displayFraction}` : grouped;
 }
 
 export function fetchStoreStatistics(

@@ -22,13 +22,14 @@ export function useCafeExplorer(
   dongCode: string,
   regionLoading: boolean,
   maps: KakaoMaps | null = null,
+  cameraKey = '',
 ) {
   const [mode, changeMode] = useState<CafeMode>('viewport');
   const [center, setCenter] = useState<CafeCenter | null>(null);
   const [centerPlace, setCenterPlace] = useState<CenterPlace | null>(null);
   const centerDetails = useCenterAddress(maps, center, centerPlace);
   const [radiusM, changeRadius] = useState<CafeRadius>(500);
-  const regionKey = `${districtCode}:${dongCode}`;
+  const regionKey = `${districtCode}:${dongCode}:${cameraKey}`;
   const [viewport, setViewport] = useState<{
     regionKey: string;
     bounds: BoundaryExtent;
