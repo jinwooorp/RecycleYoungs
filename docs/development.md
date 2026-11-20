@@ -256,7 +256,9 @@ npm run build
 
 ## GitHub Actions CI
 
-`78d2d3a526d4`의 2026-11-11 실행에서 아래 5개 Job이 모두 성공했습니다. 워크플로는 `project-upgrade` Push 및 해당 브랜치 대상 PR의 열기·동기화·재열기·수정·검토 준비 전환에서 실행하며, 같은 브랜치나 PR의 이전 실행을 취소합니다. [실행 결과](https://github.com/jinwooorp/RecycleYoungs/actions/runs/42937924388) · [워크플로](../.github/workflows/ci.yml)
+카페 MVP 커밋 `a36b85ab11a1`의 2026-11-20 Push 실행에서 아래 5개 Job이 성공했습니다. Vitest는 Frontend 339개, ETL 803개가 통과했으며 ETL의 DB 통합 테스트 262개는 기본 실행에서 제외됐습니다. Playwright 26개와 Backend 통합 테스트 779개는 건너뜀 없이 통과했습니다. [실행 결과](https://github.com/jinwooorp/RecycleYoungs/actions/runs/44676231261)
+
+워크플로는 `project-upgrade` Push와 해당 브랜치 대상 PR의 열기·동기화·재열기·수정·검토 준비 전환에서 실행하며, 같은 브랜치나 PR의 이전 실행을 취소합니다. [워크플로](../.github/workflows/ci.yml)
 
 | Job                 | 실행과 확인                                                                  |
 | ------------------- | ---------------------------------------------------------------------------- |
@@ -266,7 +268,7 @@ npm run build
 | Backend integration | Docker와 PostGIS 이미지를 확인하고 `./gradlew integrationTest` 및 JUnit 검사 |
 | ETL                 | Node.js 24·npm 11.19.1에서 설치, 린트·포맷·기본 테스트·빌드                  |
 
-모든 Job은 `ubuntu-24.04`와 `contents: read`를 사용합니다. 의존성은 기존 잠금 파일·Wrapper로 준비하며 checkout 인증정보를 남기지 않습니다. E2E·DB 통합은 JUnit 누락·실행 0건·실패·오류·건너뜀을 실패로 처리합니다. 실패 원인은 **Actions → CI → Job/Step 로그** 또는 PR의 **Checks**에서 확인합니다. CI는 품질 검증을 수행하며 실제 환경변수·운영 DB·공공데이터 수집·서비스 배포는 사용하지 않습니다.
+모든 Job은 `ubuntu-24.04`와 `contents: read`를 사용하며 checkout 인증정보를 남기지 않습니다. npm은 디렉터리별 잠금 파일을 기준으로 캐시하고 `npm ci`로 설치합니다. Gradle은 빌드 설정과 Wrapper 파일을 기준으로 캐시합니다. E2E·DB 통합은 JUnit 누락·실행 0건·실패·오류·건너뜀을 실패로 처리합니다. 실패 원인은 **Actions → CI → Job/Step 로그** 또는 PR의 **Checks**에서 확인합니다. CI는 실제 환경변수·운영 DB·공공데이터 수집·서비스 배포를 사용하지 않습니다.
 
 ## 브라우저 E2E 검증
 
@@ -304,7 +306,9 @@ document.cookie = "ry-e2e-scenario=sales-error; Path=/; SameSite=Strict";
 
 실제 Chromium 실행은 GitHub-hosted Linux Runner에서 수행합니다. Playwright가 합성 서버를 시작·종료하고 데스크톱 1440×900과 모바일 390×844에서 13개씩 총 26개를 검증합니다. 라우팅·키 누락 안내·반응형 패널과 포커스·지역 통계·오류와 재시도·후보지 복원·미검증 증감 비공개를 포함합니다. 실패 시 HTML·trace·스크린샷·JUnit을 7일 보존합니다. 브라우저 시작 전 실패는 Step 로그로 확인합니다.
 
-실제 Kakao 지도·검색·마커·클러스터 및 지도 클릭이나 검색에서 후보지를 새로 등록하는 흐름은 키가 있는 환경에서 별도 확인합니다. 세 곳 초과 E2E는 저장 데이터의 복원 제한을 검증합니다. `kakao-map.test.tsx`의 간헐적 마커 생성 실패는 기존 후속 검증 항목입니다.
+키가 있는 개발 환경에서 실제 Kakao 지도·검색·마커·클러스터를 확인합니다. 장소 검색으로 상권 분석을 열고, 지역 필터를 적용한 뒤 지도에서 후보지를 등록합니다. 1440px와 390px에서 필터 경계 복원, 패널 전환, Toast 자동 종료, 위치 오류 재시도를 확인합니다. 저장 데이터의 후보지 수 제한은 합성 E2E가 검증합니다.
+
+`kakao-map.test.tsx`에서 과거 관찰한 마커 생성 간헐 실패는 카페 MVP 커밋의 CI에서 재현되지 않았습니다.
 
 ## 배포 검토 항목
 
