@@ -96,6 +96,16 @@ test('320×568에서 키보드로 상세 패널을 열고 스크롤하며 지역
   await page.keyboard.press('Tab');
   await expect(stores).toBeFocused();
   await expect(stores).toBeInViewport({ ratio: 1 });
+  await page.keyboard.press('Tab');
+  const statistics = panel.getByRole('tabpanel', { name: '점포 현황' });
+  await expect(statistics).toBeFocused();
+  const lastAxis = statistics
+    .getByRole('region', { name: '개업·폐업 점포' })
+    .getByText('상한 2 개');
+  await expect(lastAxis).not.toBeInViewport();
+  await page.keyboard.press('End');
+  await expect(lastAxis).toBeInViewport({ ratio: 1 });
+  await expect(statistics).toBeFocused();
   expect(await page.evaluate(() => innerWidth)).toBe(320);
   await noOverflow(page);
 });

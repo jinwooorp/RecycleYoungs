@@ -8,6 +8,7 @@ import type {
 import { formatQuarter, formatStatistic } from '@/lib/statistics';
 import { statisticsSource } from '@/lib/data-sources';
 import { DataSourceDetails, PublishedDate } from '@/components/data-provenance';
+import { StatisticBars } from '@/components/statistic-bars';
 
 /** 원본 문자열은 유지하고 표시에서만 의미 없는 소수 후행 0을 제거합니다. */
 function StatisticValue({
@@ -104,28 +105,38 @@ export function AnalysisPanel({
           value: storeData?.storeCount ?? null,
           unit: '개',
         },
-        {
-          label: '일반 점포 수',
-          value: storeData?.generalStoreCount ?? null,
-          unit: '개',
-        },
-        {
-          label: '프랜차이즈 점포 수',
-          value: storeData?.franchiseStoreCount ?? null,
-          unit: '개',
-        },
-        {
-          label: '개업 점포 수',
-          value: storeData?.openedStoreCount ?? null,
-          unit: '개',
-        },
-        {
-          label: '폐업 점포 수',
-          value: storeData?.closedStoreCount ?? null,
-          unit: '개',
-        },
         { label: '개업률', value: storeData?.openingRate ?? null, unit: '%' },
         { label: '폐업률', value: storeData?.closureRate ?? null, unit: '%' },
+      ],
+      groups: [
+        {
+          title: '일반·프랜차이즈 점포',
+          unit: '개',
+          items: [
+            {
+              label: '일반 점포 수',
+              value: storeData?.generalStoreCount ?? null,
+            },
+            {
+              label: '프랜차이즈 점포 수',
+              value: storeData?.franchiseStoreCount ?? null,
+            },
+          ],
+        },
+        {
+          title: '개업·폐업 점포',
+          unit: '개',
+          items: [
+            {
+              label: '개업 점포 수',
+              value: storeData?.openedStoreCount ?? null,
+            },
+            {
+              label: '폐업 점포 수',
+              value: storeData?.closedStoreCount ?? null,
+            },
+          ],
+        },
       ],
     },
     {
@@ -143,15 +154,21 @@ export function AnalysisPanel({
           value: salesData?.monthlySalesCount ?? null,
           unit: '건',
         },
+      ],
+      groups: [
         {
-          label: '주중 매출액',
-          value: salesData?.weekdaySalesAmount ?? null,
+          title: '주중·주말 추정매출액',
           unit: '원',
-        },
-        {
-          label: '주말 매출액',
-          value: salesData?.weekendSalesAmount ?? null,
-          unit: '원',
+          items: [
+            {
+              label: '주중 매출액',
+              value: salesData?.weekdaySalesAmount ?? null,
+            },
+            {
+              label: '주말 매출액',
+              value: salesData?.weekendSalesAmount ?? null,
+            },
+          ],
         },
       ],
     },
@@ -165,15 +182,21 @@ export function AnalysisPanel({
           value: footData?.totalFootTraffic ?? null,
           unit: '명',
         },
+      ],
+      groups: [
         {
-          label: '남성 유동인구',
-          value: footData?.maleFootTraffic ?? null,
+          title: '남성·여성 유동인구',
           unit: '명',
-        },
-        {
-          label: '여성 유동인구',
-          value: footData?.femaleFootTraffic ?? null,
-          unit: '명',
+          items: [
+            {
+              label: '남성 유동인구',
+              value: footData?.maleFootTraffic ?? null,
+            },
+            {
+              label: '여성 유동인구',
+              value: footData?.femaleFootTraffic ?? null,
+            },
+          ],
         },
       ],
     },
@@ -183,6 +206,7 @@ export function AnalysisPanel({
   const regionName = dongCode
     ? `${districtName ? `${districtName} · ` : ''}${dongName || '행정동 이름 확인 중'}`
     : districtName || '자치구 이름 확인 중';
+  const regionScope = dongCode ? '행정동 전체' : '자치구 전체';
   const summaries = [
     {
       id: 'stores',
@@ -219,9 +243,7 @@ export function AnalysisPanel({
       <header className="min-w-0 space-y-3">
         <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-primary">
           <span className="rounded-md bg-accent px-2 py-1">
-            {statistics.target
-              ? `${dongCode ? '행정동' : '자치구'} 전체`
-              : '지역 선택 필요'}
+            {statistics.target ? regionScope : '지역 선택 필요'}
           </span>
           {quarter && <span>{formatQuarter(quarter)}</span>}
         </div>
@@ -375,24 +397,37 @@ export function AnalysisPanel({
               />
               {current.resource.status === 'ready' &&
                 (data ? (
-                  <dl className="grid min-w-0 gap-2">
-                    {current.metrics.map((metric) => (
-                      <div
-                        key={metric.label}
-                        className="min-w-0 rounded-xl border px-4 py-3"
-                      >
-                        <dt className="text-xs leading-5 text-muted-foreground">
-                          {metric.label}
-                        </dt>
-                        <dd className="mt-1 text-base leading-6 font-semibold tabular-nums [overflow-wrap:anywhere]">
-                          <StatisticValue
-                            value={metric.value}
-                            unit={metric.unit}
-                          />
-                        </dd>
-                      </div>
+                  <>
+                    <dl className="grid min-w-0 gap-2">
+                      {current.metrics.map((metric) => (
+                        <div
+                          key={metric.label}
+                          className="min-w-0 rounded-xl border px-4 py-3"
+                        >
+                          <dt className="text-xs leading-5 text-muted-foreground">
+                            {metric.label}
+                          </dt>
+                          <dd className="mt-1 text-base leading-6 font-semibold tabular-nums [overflow-wrap:anywhere]">
+                            <StatisticValue
+                              value={metric.value}
+                              unit={metric.unit}
+                            />
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      막대 길이는 같은 그래프 안에서 비교하세요. 지역이나 분기가
+                      바뀌면 축의 상한도 달라질 수 있습니다.
+                    </p>
+                    {current.groups.map((group) => (
+                      <StatisticBars
+                        key={group.title}
+                        {...group}
+                        scope={`${regionName} · ${regionScope} · ${formatQuarter(quarter)} · ${current.id === 'footTraffic' ? '길 단위 유동인구 추정 규모' : '카페·음료 업종'}`}
+                      />
                     ))}
-                  </dl>
+                  </>
                 ) : (
                   <p
                     role="status"
