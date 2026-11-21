@@ -5,13 +5,7 @@ import type {
   RegionExplorer,
   RegionResource,
 } from '@/hooks/use-region-explorer';
-import {
-  formatStatistic,
-  STATISTICS_QUARTER,
-  PREVIOUS_STATISTICS_QUARTER,
-} from '@/lib/statistics';
-
-const quarterLabel = `${STATISTICS_QUARTER.slice(0, 4)}년 ${STATISTICS_QUARTER.slice(4)}분기`;
+import { formatQuarter, formatStatistic } from '@/lib/statistics';
 
 /** 원본 문자열은 유지하고 표시에서만 의미 없는 소수 후행 0을 제거합니다. */
 function StatisticValue({
@@ -77,23 +71,19 @@ type StatisticsTab = 'stores' | 'sales' | 'footTraffic';
 export function AnalysisPanel({
   region,
   active,
+  quarter,
 }: {
   region: RegionExplorer;
   active: boolean;
+  quarter: string | null;
 }) {
   const { districtCode, dongCode, districtName, dongName } = region.analysis;
-  const statistics = useStatisticsExplorer(districtCode, dongCode, active);
-  const previousStatistics = useStatisticsExplorer(
+  const statistics = useStatisticsExplorer(
     districtCode,
     dongCode,
     active,
-    PREVIOUS_STATISTICS_QUARTER,
+    quarter,
   );
-  const previousErrors = [
-    previousStatistics.stores,
-    previousStatistics.sales,
-    previousStatistics.footTraffic,
-  ].filter((resource) => resource.status === 'error');
   const [tab, setTab] = useState<StatisticsTab>('stores');
   const tabRefs = useRef<
     Partial<Record<StatisticsTab, HTMLButtonElement | null>>
@@ -226,7 +216,7 @@ export function AnalysisPanel({
               ? `${dongCode ? '행정동' : '자치구'} 전체`
               : '지역 선택 필요'}
           </span>
-          <span>{quarterLabel}</span>
+          {quarter && <span>{formatQuarter(quarter)}</span>}
         </div>
         <h3 className="text-xl leading-7 font-semibold [overflow-wrap:anywhere]">
           {statistics.target
@@ -258,7 +248,7 @@ export function AnalysisPanel({
           </p>
         )}
       </header>
-      {statistics.target && (
+      {statistics.target && quarter && (
         <section
           aria-labelledby="statistics-summary-heading"
           className="min-w-0 space-y-3"
@@ -298,24 +288,6 @@ export function AnalysisPanel({
             ))}
           </div>
           <p className="text-xs text-muted-foreground">전분기 비교 준비 중</p>
-          {previousErrors.length > 0 && (
-            <div
-              role="alert"
-              className="flex flex-wrap items-center gap-2 text-xs"
-            >
-              <p>이전 분기 통계를 불러오지 못했습니다.</p>
-              <Button
-                variant="outline"
-                size="sm"
-                aria-label="이전 분기 통계 다시 시도"
-                onClick={() =>
-                  previousErrors.forEach((resource) => resource.retry())
-                }
-              >
-                다시 시도
-              </Button>
-            </div>
-          )}
         </section>
       )}
       <section
@@ -374,7 +346,7 @@ export function AnalysisPanel({
             <p className="text-sm leading-6 text-muted-foreground">
               지역을 선택하면 세부 통계를 확인할 수 있습니다.
             </p>
-          ) : (
+          ) : quarter ? (
             <>
               <StatisticsNotice
                 resource={current.resource}
@@ -409,7 +381,7 @@ export function AnalysisPanel({
                   </p>
                 ))}
             </>
-          )}
+          ) : null}
         </div>
       </section>
     </section>

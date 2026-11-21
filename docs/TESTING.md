@@ -45,6 +45,8 @@ Docker를 먼저 실행한 뒤 `backend/`에서 실행합니다.
 
 Testcontainers가 `postgis/postgis:17-3.5`의 일회용 DB를 띄우고 서비스와 Flyway 연결을 모두 지정합니다.
 
+분기 목록만 확인하려면 `./gradlew integrationTest --tests '*StatisticsQuarterApiIntegrationTests'`를 실행합니다. 이 검사는 일부 지표가 게시된 분기, 기본값, 적격 배치와 현행 경계 조건, 조회 도중에 커밋된 행이 다음 요청부터 반영되는지 확인합니다.
+
 단위 검사와 함께 실행하려면 `./gradlew build integrationTest`를 사용합니다.
 
 ARM64에서 이미지 판본이 없으면 `docker pull --platform linux/amd64 postgis/postgis:17-3.5`와 AMD64 에뮬레이션을 확인합니다.
@@ -101,7 +103,7 @@ npm run test:e2e:list
 
    등록되지 않은 Mock 경로는 404입니다.
 
-2. 테스트 사이트의 `ry-e2e-scenario` 쿠키로 `normal`, `sales-error`, `sales-empty`, `districts-error`를 선택합니다.
+2. 테스트 사이트의 `ry-e2e-scenario` 쿠키로 `normal`, `sales-error`, `sales-empty`, `districts-error`, `quarters-error`를 선택합니다.
 
    변경 후 지역이나 패널을 다시 고릅니다.
 
@@ -112,6 +114,10 @@ npm run test:e2e:list
    새 탭을 시작하거나 해당 탭의 키·쿠키만 초기화합니다.
 
    서버는 `Ctrl+C`로 종료합니다.
+
+4. 상권 분석에서 기본값인 2026년 2분기의 마포구 점포 수 120개를 확인합니다. 1분기를 선택하면 110개로 바뀌며, 지역·분석 패널을 바꿔도 분기가 유지됩니다. 새로고침하면 2분기부터 시작합니다.
+
+   3분기는 자치구 점포만 있는 합성 분기입니다. `quarters-error`에서는 후보지 반경 카페가 계속 표시되고, 쿠키를 `normal`로 바꾼 뒤 **분기 목록 다시 시도**를 누르면 통계를 확인할 수 있습니다. 데스크톱과 320px·390px에서 선택 요소의 키보드 접근, 포커스, 패널 스크롤을 확인합니다.
 
 ### 로컬 UI 확인
 

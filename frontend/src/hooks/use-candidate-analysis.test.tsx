@@ -61,7 +61,7 @@ test('슬롯 좌표 교체 중 취소를 무시한 반경·행정동 응답을 �
     ),
   );
   const view = renderHook(
-    ({ items, active }) => useCandidateAnalysis(items, 500, active),
+    ({ items, active }) => useCandidateAnalysis(items, 500, active, '20262'),
     { initialProps: { items: [a], active: true } },
   );
   await waitFor(() => expect(pending).toHaveLength(4));
@@ -128,7 +128,7 @@ test('StrictMode와 패널 빠른 재열기에서 소속 요청을 정리하고 
   );
   vi.stubGlobal('fetch', fetch);
   const view = renderHook(
-    ({ active }) => useCandidateAnalysis([a], 500, active),
+    ({ active }) => useCandidateAnalysis([a], 500, active, '20262'),
     {
       initialProps: { active: false },
       wrapper: ({ children }: { children: ReactNode }) => (

@@ -40,6 +40,18 @@ test('합성 식별자, 구·동과 경계는 외부 연결 없이 제공', asyn
 
 test('분기·지역·업종 계약과 원본 정밀도', async (t) => {
   const get = await fixture(t);
+  const quarters = await (await get('/api/v1/statistics/quarters')).json();
+  assert.equal(quarters.defaultQuarterCode, '20262');
+  assert.deepEqual(
+    quarters.quarters.map((row: { quarterCode: string }) => row.quarterCode),
+    ['20263', '20262', '20261'],
+  );
+  assert.deepEqual(quarters.quarters[0].districtMetrics, ['stores']);
+  assert.equal(
+    (await get('/api/v1/statistics/quarters', 'ry-e2e-scenario=quarters-error'))
+      .status,
+    503,
+  );
   for (const kind of ['districts', 'dongs'])
     for (const quarter of ['20261', '20262']) {
       const code = kind === 'districts' ? '11440' : '11440660';
@@ -53,7 +65,10 @@ test('분기·지역·업종 계약과 원본 정밀도', async (t) => {
         code,
       );
       assert.equal(data.quarterCode, quarter);
-      assert.equal(data.data.monthlySalesAmount, '9007199254740993');
+      assert.equal(
+        data.data.monthlySalesAmount,
+        quarter === '20261' ? '4000' : '9007199254740993',
+      );
     }
   const foot = await (
     await get('/api/v1/districts/11440/stats/foot-traffic?quarterCode=20262')

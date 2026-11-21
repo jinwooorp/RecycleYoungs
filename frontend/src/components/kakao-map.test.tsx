@@ -1,3 +1,4 @@
+import { quarterCatalogFixture } from '@/test/quarter-catalog';
 import { StrictMode } from 'react';
 import {
   act,
@@ -2194,7 +2195,11 @@ test('검색 좌표로 행정동 통계를 연결하고 검색·지역 필터의
         ),
       ),
   );
-  vi.stubGlobal('fetch', fetch);
+  vi.stubGlobal('fetch', (url: string) =>
+    url === '/api/v1/statistics/quarters'
+      ? Promise.resolve(Response.json(quarterCatalogFixture))
+      : fetch(url),
+  );
   render(
     <StrictMode>
       <App />

@@ -59,15 +59,17 @@ export function ExplorePanel({
   region,
   cafes,
   active = true,
+  quarter,
 }: {
   menu: ExploreMenu;
   region: RegionExplorer;
   cafes: CafeExplorer;
   active?: boolean;
+  quarter: string | null;
 }) {
   if (menu === 'cafes') return <CafePanel cafes={cafes} />;
   if (menu === 'analysis')
-    return <AnalysisPanel region={region} active={active} />;
+    return <AnalysisPanel region={region} active={active} quarter={quarter} />;
   return null;
 }
 

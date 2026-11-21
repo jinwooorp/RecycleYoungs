@@ -2,12 +2,84 @@ import { afterEach, expect, test, vi } from 'vitest';
 import {
   fetchFootTrafficStatistics,
   fetchSalesStatistics,
+  fetchStatisticsQuarters,
   fetchStoreStatistics,
   formatStatistic,
   type RegionStatTarget,
 } from './statistics';
+import { quarterCatalogFixture } from '@/test/quarter-catalog';
 
 afterEach(() => vi.unstubAllGlobals());
+
+test('분기 목록은 API 기본값과 일부 지표를 보존하며 빈 목록도 허용한다', async () => {
+  const partial = {
+    quarterCode: '20263',
+    districtMetrics: ['stores'],
+    dongMetrics: [],
+  };
+  const quarters = [partial, ...quarterCatalogFixture.quarters];
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(
+      Response.json({ ...quarterCatalogFixture, quarters }),
+    )
+    .mockResolvedValueOnce(
+      Response.json({
+        ...quarterCatalogFixture,
+        quarters: [],
+        defaultQuarterCode: null,
+      }),
+    );
+  vi.stubGlobal('fetch', fetch);
+  const { signal } = new AbortController();
+  await expect(fetchStatisticsQuarters(signal)).resolves.toEqual({
+    quarters,
+    defaultQuarterCode: '20262',
+  });
+  await expect(fetchStatisticsQuarters(signal)).resolves.toEqual({
+    quarters: [],
+    defaultQuarterCode: null,
+  });
+  expect(fetch).toHaveBeenCalledWith('/api/v1/statistics/quarters', { signal });
+});
+
+test.each([
+  { industryCode: 'CS100011' },
+  { defaultQuarterCode: '20263' },
+  { defaultQuarterCode: null },
+  { quarters: [...quarterCatalogFixture.quarters].reverse() },
+  {
+    quarters: [
+      quarterCatalogFixture.quarters[0],
+      quarterCatalogFixture.quarters[0],
+    ],
+  },
+  {
+    quarters: [
+      { quarterCode: '20265', districtMetrics: ['stores'], dongMetrics: [] },
+    ],
+  },
+  {
+    quarters: [
+      { quarterCode: '20262', districtMetrics: ['unknown'], dongMetrics: [] },
+    ],
+  },
+  {
+    quarters: [{ quarterCode: '20262', districtMetrics: [], dongMetrics: [] }],
+  },
+])('잘못된 분기 목록 응답을 거부한다 %#', async (override) => {
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValue(
+        Response.json({ ...quarterCatalogFixture, ...override }),
+      ),
+  );
+  await expect(
+    fetchStatisticsQuarters(new AbortController().signal),
+  ).rejects.toThrow('응답 형식');
+});
 
 const sourceBatch = {
   batchId: '00000000-0000-0000-0000-000000000002',
@@ -68,7 +140,7 @@ test.each(cases)(
           JSON.stringify(body(target, data, kind === 'foot-traffic')),
         ),
       );
-      expect(await fetchStatistics(target, signal)).toEqual(
+      expect(await fetchStatistics(target, signal, '20262')).toEqual(
         body(target, data, kind === 'foot-traffic'),
       );
       const [url, options] = fetch.mock.calls.at(-1)!;
@@ -100,7 +172,8 @@ test.each(cases)(
         ),
     );
     expect(
-      (await fetchStatistics(target, new AbortController().signal)).data,
+      (await fetchStatistics(target, new AbortController().signal, '20262'))
+        .data,
     ).toBeNull();
   },
 );
@@ -120,7 +193,8 @@ test('모든 측정값이 NULL인 실제 통계 행은 객체와 게시 출처�
     vi.fn().mockResolvedValue(new Response(JSON.stringify(body(target, data)))),
   );
   expect(
-    (await fetchStoreStatistics(target, new AbortController().signal)).data,
+    (await fetchStoreStatistics(target, new AbortController().signal, '20262'))
+      .data,
   ).toEqual(data);
 });
 
@@ -159,7 +233,7 @@ test.each([
     vi.fn().mockResolvedValue(new Response(JSON.stringify(body(target, data)))),
   );
   await expect(
-    fetchStoreStatistics(target, new AbortController().signal),
+    fetchStoreStatistics(target, new AbortController().signal, '20262'),
   ).rejects.toThrow('응답');
 });
 
@@ -174,7 +248,7 @@ test.each([
     vi.fn().mockResolvedValue(new Response(JSON.stringify(body(target, data)))),
   );
   await expect(
-    fetchSalesStatistics(target, new AbortController().signal),
+    fetchSalesStatistics(target, new AbortController().signal, '20262'),
   ).rejects.toThrow('응답');
 });
 
@@ -193,7 +267,7 @@ test.each([
       ),
   );
   await expect(
-    fetchFootTrafficStatistics(target, new AbortController().signal),
+    fetchFootTrafficStatistics(target, new AbortController().signal, '20262'),
   ).rejects.toThrow('응답');
 });
 
@@ -226,6 +300,7 @@ test.each([
     fetchStoreStatistics(
       { kind: 'district', code: '11110' },
       new AbortController().signal,
+      '20262',
     ),
   ).rejects.toThrow('응답');
 });
@@ -246,6 +321,7 @@ test.each([
     fetchSalesStatistics(
       { kind: 'district', code: '11110' },
       new AbortController().signal,
+      '20262',
     ),
   ).rejects.toThrow(text);
 });
@@ -255,23 +331,24 @@ test('네트워크·취소·잘못된 지역 코드·잘못된 JSON을 구분한
   vi.stubGlobal('fetch', fetch);
   const target = { kind: 'district', code: '11110' } as const;
   await expect(
-    fetchStoreStatistics(target, new AbortController().signal),
+    fetchStoreStatistics(target, new AbortController().signal, '20262'),
   ).rejects.toThrow('네트워크');
   const abort = new AbortController();
   abort.abort();
-  await expect(fetchStoreStatistics(target, abort.signal)).rejects.toThrow(
-    'network',
-  );
+  await expect(
+    fetchStoreStatistics(target, abort.signal, '20262'),
+  ).rejects.toThrow('network');
   await expect(
     fetchStoreStatistics(
       { ...target, code: '11110/other' },
       new AbortController().signal,
+      '20262',
     ),
   ).rejects.toThrow('지역 코드');
   expect(fetch).toHaveBeenCalledTimes(2);
   fetch.mockResolvedValue(new Response('not JSON'));
   await expect(
-    fetchStoreStatistics(target, new AbortController().signal),
+    fetchStoreStatistics(target, new AbortController().signal, '20262'),
   ).rejects.toThrow('응답');
 });
 

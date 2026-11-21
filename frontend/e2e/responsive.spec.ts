@@ -59,6 +59,19 @@ test('320×568에서 키보드로 상세 패널을 열고 스크롤하며 지역
   await page.keyboard.press('Tab');
   await expect(close).toBeFocused();
   await page.keyboard.press('Tab');
+  const quarter = panel.getByRole('combobox', { name: '통계 기준 분기' });
+  await expect(quarter).toBeFocused();
+  await expect(quarter).toBeInViewport({ ratio: 1 });
+  await quarter.selectOption('20261');
+  await expect(quarter).toHaveValue('20261');
+  await expect(
+    panel.getByRole('region', { name: '점포 수 요약' }),
+  ).toContainText('110');
+  await page.keyboard.press('Tab');
+  await expect(
+    panel.getByRole('button', { name: '분기 목록 새로고침' }),
+  ).toBeFocused();
+  await page.keyboard.press('Tab');
   await expect(stores).toBeFocused();
   await expect(stores).toBeInViewport({ ratio: 1 });
   expect(await page.evaluate(() => innerWidth)).toBe(320);

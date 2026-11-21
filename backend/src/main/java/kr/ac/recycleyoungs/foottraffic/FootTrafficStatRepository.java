@@ -1,6 +1,7 @@
 package kr.ac.recycleyoungs.foottraffic;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import kr.ac.recycleyoungs.foottraffic.FootTrafficStatResponse.FootTrafficData;
@@ -38,6 +39,22 @@ public class FootTrafficStatRepository {
                 + ")")
         .query(Boolean.class)
         .single();
+  }
+
+  public List<String> findPublishedQuarters(UUID boundaryBatchId) {
+    return jdbc.sql(
+            """
+        SELECT DISTINCT s.quarter_code
+        FROM dong_foot_traffic_stat s
+        JOIN etl_batch b ON b.batch_id = s.source_batch_id
+        JOIN administrative_dong a ON a.dong_code = s.dong_code
+        JOIN district d ON d.district_code = a.district_code
+        WHERE a.boundary_batch_id = :boundary AND d.boundary_batch_id = :boundary AND
+        """
+                + PUBLISHED_FOOT_TRAFFIC_BATCH)
+        .param("boundary", boundaryBatchId)
+        .query(String.class)
+        .list();
   }
 
   public Optional<FootTrafficData> findFootTraffic(String dongCode, String quarterCode) {
