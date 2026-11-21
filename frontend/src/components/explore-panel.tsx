@@ -1,6 +1,7 @@
 import { ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AnalysisPanel } from '@/components/analysis-panel';
+import { CafeProvenance } from '@/components/data-provenance';
 import type { CafeExplorer } from '@/hooks/use-cafe-explorer';
 import { cafeAddress, formatCafeDistance } from '@/lib/cafes';
 import type {
@@ -67,14 +68,29 @@ export function ExplorePanel({
   active?: boolean;
   quarter: string | null;
 }) {
-  if (menu === 'cafes') return <CafePanel cafes={cafes} />;
+  if (menu === 'cafes') return <CafePanel cafes={cafes} region={region} />;
   if (menu === 'analysis')
     return <AnalysisPanel region={region} active={active} quarter={quarter} />;
   return null;
 }
 
-function CafePanel({ cafes }: { cafes: CafeExplorer }) {
+function CafePanel({
+  cafes,
+  region,
+}: {
+  cafes: CafeExplorer;
+  region: RegionExplorer;
+}) {
   const nearby = cafes.mode === 'nearby';
+  const district = region.districts.data?.find(
+    ({ districtCode }) => districtCode === region.districtCode,
+  );
+  const dong = region.dongs.data?.find(
+    ({ dongCode }) => dongCode === region.dongCode,
+  );
+  const filterLabel = [district?.districtName, dong?.dongName]
+    .filter(Boolean)
+    .join(' · ');
   return (
     <div className="flex flex-col gap-4 p-5 break-keep text-pretty">
       <section aria-labelledby="nearby-heading" className="flex flex-col gap-3">
@@ -177,6 +193,12 @@ function CafePanel({ cafes }: { cafes: CafeExplorer }) {
               {cafes.items.length !== cafes.data.totalCount &&
                 ` · ${cafes.items.length.toLocaleString('ko-KR')}곳 표시`}
             </p>
+            <p className="text-xs text-muted-foreground">
+              {nearby
+                ? `선택 지점 중심 ${cafes.radiusM === 500 ? '500m' : '1km'} 반경 · 구·동 필터와 독립 조회`
+                : `현재 지도 영역${region.districtCode ? ` · ${filterLabel || '선택 구·동'} 경계 적용` : ''}`}
+            </p>
+            <CafeProvenance sourceBatch={cafes.data.sourceBatch} />
             {cafes.items.length === 0 && (
               <p className="text-sm text-muted-foreground">
                 {nearby

@@ -16,7 +16,14 @@ import {
   formatQuarter,
   formatStatistic,
   type StatisticsResponse,
+  type StatisticsSourceBatch,
 } from '@/lib/statistics';
+import { statisticsSource } from '@/lib/data-sources';
+import {
+  CafeProvenance,
+  DataSourceDetails,
+  PublishedDate,
+} from '@/components/data-provenance';
 
 function Result<T>({
   resource,
@@ -89,6 +96,7 @@ function Competition({
           >
             {(page) => (
               <>
+                <CafeProvenance sourceBatch={page.sourceBatch} />
                 {page.items.length ? (
                   <ol className="divide-y">
                     {page.items.slice(0, 3).map((cafe) => (
@@ -146,6 +154,7 @@ function DongMetrics({
     );
   const metrics = [
     {
+      id: 'stores',
       label: '카페 업종 점포 수',
       retry: '점포',
       resource: statistics.stores,
@@ -153,6 +162,7 @@ function DongMetrics({
       unit: '개',
     },
     {
+      id: 'sales',
       label: '당월 추정매출액',
       retry: '추정매출',
       resource: statistics.sales,
@@ -160,13 +170,19 @@ function DongMetrics({
       unit: '원',
     },
     {
+      id: 'foot-traffic',
       label: '지역 전체 유동인구',
       retry: '유동인구',
       resource: statistics.footTraffic,
       value: statistics.footTraffic.data?.data?.totalFootTraffic ?? null,
       unit: '명',
     },
-  ];
+  ] as const;
+  const sources = metrics.flatMap(({ id, resource }) =>
+    resource.status === 'ready' && resource.data?.data
+      ? [statisticsSource('dong', id)]
+      : [],
+  );
   return (
     <section
       aria-label={`후보지 ${item.slot} 행정동 통계`}
@@ -178,12 +194,17 @@ function DongMetrics({
       <p className="text-xs leading-5 text-muted-foreground">
         {dong.dongName} 전체 · {formatQuarter(quarter)}
       </p>
+      <p className="text-xs leading-5 text-muted-foreground">
+        점포·매출은 카페·음료 업종 · 유동인구는 지역 전체
+      </p>
       <dl className="min-w-0 divide-y">
         {metrics.map((metric) => (
           <div key={metric.label} className="min-w-0 space-y-2 py-3">
             <dt className="text-xs text-muted-foreground">{metric.label}</dt>
             <dd className="min-w-0 leading-6 tabular-nums [overflow-wrap:anywhere]">
-              <Result<StatisticsResponse<unknown>>
+              <Result<
+                StatisticsResponse<{ sourceBatch: StatisticsSourceBatch }>
+              >
                 resource={metric.resource}
                 label={`${item.slot} ${metric.retry}`}
               >
@@ -196,6 +217,9 @@ function DongMetrics({
                         })}
                         {metric.value === null ? '' : metric.unit}
                       </p>
+                      <PublishedDate
+                        publishedAt={data.sourceBatch.publishedAt}
+                      />
                       {metric.retry === '점포' &&
                         statistics.stores.data?.data && (
                           <p className="text-xs text-muted-foreground">
@@ -211,7 +235,7 @@ function DongMetrics({
                         )}
                     </>
                   ) : (
-                    '자료 없음'
+                    '선택한 지역·분기의 자료 없음'
                   )
                 }
               </Result>
@@ -219,6 +243,7 @@ function DongMetrics({
           </div>
         ))}
       </dl>
+      <DataSourceDetails sources={sources} />
     </section>
   );
 }
@@ -462,6 +487,10 @@ export function CandidatePanel({
             className="min-w-0 space-y-3 border-t pt-4"
           >
             <h3 className="text-sm font-semibold">주변 경쟁 환경</h3>
+            <p className="text-xs leading-5 text-muted-foreground">
+              경쟁 카페는 통계 분기 선택과 별도로 최신 적격 카페 게시본에서
+              조회합니다.
+            </p>
             {analyses.map((analysis) => (
               <Competition
                 key={analysis.item.slot}

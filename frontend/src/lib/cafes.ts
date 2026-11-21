@@ -1,4 +1,5 @@
 import type { BoundaryExtent } from './regions';
+import { parseReferenceMonth } from './data-sources';
 
 export interface Cafe {
   bizesId: string;
@@ -25,7 +26,11 @@ export interface CafePage {
   limit: number;
   offset: number;
   hasMore: boolean;
-  sourceBatch: { batchId: string; publishedAt: string };
+  sourceBatch: {
+    batchId: string;
+    publishedAt: string;
+    referenceMonth: string | null;
+  };
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -191,6 +196,7 @@ async function fetchCafePage(
     sourceBatch: {
       batchId: body.sourceBatch.batchId,
       publishedAt: body.sourceBatch.publishedAt,
+      referenceMonth: parseReferenceMonth(body.sourceBatch.referenceMonth),
     },
   };
 }

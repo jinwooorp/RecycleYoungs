@@ -553,7 +553,14 @@ function analysisApi(
         limit: 200,
         offset: 0,
         hasMore: !options.empty,
-        sourceBatch,
+        sourceBatch: {
+          ...sourceBatch,
+          publishedAt:
+            url.searchParams.get('longitude') === '127'
+              ? '2026-11-16T15:00:00Z'
+              : '2026-11-17T15:00:00Z',
+          referenceMonth: '202610',
+        },
       });
     }
     const foot = path.includes('foot-traffic');
@@ -594,7 +601,10 @@ function analysisApi(
               closedStoreCount: null,
               openingRate: null,
               closureRate: null,
-              sourceBatch,
+              sourceBatch:
+                quarterCode === '20261'
+                  ? { ...sourceBatch, publishedAt: '2026-08-01T00:00:00Z' }
+                  : sourceBatch,
             },
     });
   });
@@ -614,7 +624,7 @@ test('후보지 0개는 등록 안내와 공통 반경만 제공하고 조회하
 });
 
 test.each([1, 2, 3])(
-  '후보지 %s개를 표 없이 공통 기준으로 분석하고 가까운 세 곳과 전체 건수를 표시하며 게시 시각을 숨긴다',
+  '후보지 %s개의 행정동 통계와 경쟁 카페를 공통 기준으로 조회하고 실제 게시 정보를 표시한다',
   async (count) => {
     saveItems(count);
     const fetch = analysisApi();
@@ -629,7 +639,7 @@ test.each([1, 2, 3])(
     ).toHaveLength(count);
     expect(within(competition).getByText('401곳')).toBeVisible();
     expect(
-      within(competition)
+      within(competition.querySelector('ol')!)
         .getAllByRole('listitem')
         .map((n) => n.textContent),
     ).toEqual([
@@ -646,9 +656,25 @@ test.each([1, 2, 3])(
       within(stats).getByText('9,007,199,254,740,993.1234567890123456789명'),
     ).toBeVisible();
     expect(within(stats).getByText('0개')).toBeVisible();
-    expect(stats.querySelector('time')).toBeNull();
-    expect(competition.querySelector('time')).toBeNull();
-    expect(screen.queryByText(/출처:|서버가 반환한/)).not.toBeInTheDocument();
+    expect(
+      Array.from(stats.querySelectorAll('time'), (time) => time.textContent),
+    ).toEqual(['2026년 10월 1일', '2026년 10월 2일', '2026년 10월 3일']);
+    expect(within(competition).getByText('2026년 10월')).toHaveAttribute(
+      'dateTime',
+      '2026-10',
+    );
+    expect(within(competition).getByText('2026년 11월 17일')).toBeVisible();
+    const details = within(stats).getByText('데이터 출처 상세');
+    fireEvent.click(details);
+    expect(details.parentElement).toHaveAttribute('open');
+    expect(
+      within(stats).getByRole('link', {
+        name: '서울시 상권분석서비스(점포-행정동)',
+      }),
+    ).toHaveAttribute(
+      'href',
+      'https://data.seoul.go.kr/dataList/OA-22172/S/1/datasetView.do',
+    );
     expect(
       fetch.mock.calls.filter(([path]) => path.includes('/stats/')),
     ).toHaveLength(3);
@@ -673,11 +699,25 @@ test('분기 변경은 같은 동의 통계만 한 번씩 갱신한다', async (
     fetch.mock.calls.filter(([path]) => path.includes(kind));
   const regions = paths('/regions/').length;
   const cafes = paths('/cafes/').length;
+  const aCafes = within(
+    screen.getByRole('region', { name: '후보지 A 주변 경쟁 환경' }),
+  );
+  expect(aCafes.getByText('2026년 11월 17일')).toBeVisible();
+  expect(
+    within(
+      screen.getByRole('region', { name: '후보지 B 주변 경쟁 환경' }),
+    ).getByText('2026년 11월 18일'),
+  ).toBeVisible();
   view.rerender(<Fixture quarter="20261" />);
   expect(statistics('A').queryByText('0개')).not.toBeInTheDocument();
+  expect(
+    statistics('A').queryByText('2026년 10월 1일'),
+  ).not.toBeInTheDocument();
   await statistics('A').findByText('17개');
   await statistics('B').findByText('17개');
   expect(statistics('B').getByText('예시동 전체 · 2026년 1분기')).toBeVisible();
+  expect(statistics('A').getByText('2026년 8월 1일')).toBeVisible();
+  expect(aCafes.getByText('2026년 11월 17일')).toBeVisible();
   expect(paths('/stats/')).toHaveLength(6);
   expect(
     paths('/stats/')
@@ -772,6 +812,8 @@ test('한 후보지의 반경 오류는 다른 결과를 가리지 않고 해당
   );
   await within(a).findByText('선택한 반경 내에 카페가 없습니다.');
   expect(within(a).getByText('0곳')).toBeVisible();
+  expect(within(a).getByText('2026년 10월')).toBeVisible();
+  expect(within(a).getByText('2026년 11월 17일')).toBeVisible();
   expect(fetch.mock.calls).toHaveLength(before + 1);
   expect(
     within(

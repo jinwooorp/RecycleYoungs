@@ -1798,7 +1798,7 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
     latitude: 37.5665,
     distanceM: 499.9,
   };
-  const page = (nearby: boolean) => ({
+  const page = (nearby: boolean, oneKm: boolean) => ({
     items: [
       nearby
         ? cafe
@@ -1815,7 +1815,12 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
     hasMore: nearby,
     sourceBatch: {
       batchId: '00000000-0000-0000-0000-000000000004',
-      publishedAt: '2026-10-02T00:00:00Z',
+      publishedAt: oneKm
+        ? '2026-11-03T15:00:00Z'
+        : nearby
+          ? '2026-11-02T15:00:00Z'
+          : '2026-10-02T00:00:00Z',
+      referenceMonth: nearby ? '202610' : '202609',
     },
   });
   const fetch = vi.fn(
@@ -1823,7 +1828,7 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
       new Response(
         JSON.stringify(
           url.startsWith('/api/v1/cafes/')
-            ? page(url.includes('/nearby'))
+            ? page(url.includes('/nearby'), url.includes('radiusM=1000'))
             : url === '/api/v1/districts'
               ? { items: [{ districtCode: '11110', districtName: '종로구' }] }
               : url.endsWith('/dongs')
@@ -1866,7 +1871,10 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
   await waitFor(() => expect(maps.Marker).toHaveBeenCalled());
   const oldMarker = maps.Marker.mock.results.at(-1)!.value;
   fireEvent.click(screen.getByRole('button', { name: '주변 탐색' }));
+  await screen.findByText('현재 지도 영역 · 종로구 · 청운효자동 경계 적용');
+  expect(screen.getByText('2026년 9월')).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: '선택 지점 주변' }));
+  expect(screen.queryByText('2026년 9월')).not.toBeInTheDocument();
   expect(oldMarker.setMap).toHaveBeenLastCalledWith(null);
   expect(maps.Circle).not.toHaveBeenCalled();
   expect(screen.getByText('지도에서 중심점을 고르세요.')).toBeVisible();
@@ -1881,6 +1889,11 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
     mapClick()({ latLng: { getLat: () => 37.5665, getLng: () => 126.978 } }),
   );
   await screen.findByText('반경 내 201곳 · 1곳 표시');
+  expect(
+    screen.getByText('선택 지점 중심 500m 반경 · 구·동 필터와 독립 조회'),
+  ).toBeVisible();
+  expect(screen.getByText('2026년 10월')).toBeVisible();
+  expect(screen.getByText('2026년 11월 3일')).toBeVisible();
   expect(screen.getByText('지도에서 선택한 위치')).toBeVisible();
   expect(nearbyCalls()[0][0]).toContain(
     'longitude=126.978&latitude=37.5665&radiusM=500&limit=200&offset=0',
@@ -1928,6 +1941,8 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
   fireEvent.change(screen.getByRole('combobox', { name: '탐색 반경' }), {
     target: { value: '1000' },
   });
+  expect(screen.queryByText('2026년 11월 3일')).not.toBeInTheDocument();
+  await screen.findByText('2026년 11월 4일');
   await waitFor(() => expect(nearbyCalls()).toHaveLength(2));
   expect(nearbyCalls()[1][0]).toContain('radiusM=1000');
   expect(firstCircle.setMap).toHaveBeenLastCalledWith(null);
@@ -2053,6 +2068,8 @@ test('반경 API 실패에도 지도와 중심점을 유지하고 재시도로 �
     await screen.findByText('선택한 반경 내에 조회된 카페가 없습니다.'),
   ).toBeVisible();
   expect(screen.getByText('반경 내 0곳')).toBeVisible();
+  expect(screen.getByText('원천 기준년월 확인 불가')).toBeVisible();
+  expect(screen.getByText('2026년 10월 2일')).toBeVisible();
   expect(
     maps.Marker.mock.calls.every(
       ([options]) => options.title === '임시 관심 위치',

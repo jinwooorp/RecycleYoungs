@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import kr.ac.recycleyoungs.cafe.CafeResponse.Cafe;
-import kr.ac.recycleyoungs.region.RegionResponse.PublishedBatch;
 import org.jspecify.annotations.Nullable;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -36,12 +35,17 @@ public class CafeRepository {
     this.jdbc = jdbc;
   }
 
-  public Optional<PublishedBatch> findLatestPublishedBatch() {
+  public Optional<CafeSourceBatch> findLatestPublishedBatch() {
     // TEXT 출처가 잘못된 JSON이어도 SQL 오류가 나지 않도록 CASE 안에서만 jsonb로 변환한다.
     // 별도 AND 조건의 평가 순서에 의존하면 안전한 형 변환을 보장할 수 없다.
     return jdbc.sql(
             """
-        SELECT batch_id, published_at FROM etl_batch
+        SELECT batch_id, published_at,
+          CASE WHEN pg_input_is_valid(source_reference, 'jsonb') THEN
+            CASE WHEN jsonb_typeof(source_reference::jsonb -> 'stdrYm') = 'string'
+              THEN source_reference::jsonb ->> 'stdrYm' END
+          END AS reference_month
+        FROM etl_batch
         WHERE dataset_code = 'SEMAS_CAFE_STORE' AND source_type = 'API'
           AND scope_type = 'SEOUL' AND scope_code IS NULL
           AND status = 'PUBLISHED' AND published_at IS NOT NULL
@@ -53,9 +57,10 @@ public class CafeRepository {
         """)
         .query(
             (rs, row) ->
-                new PublishedBatch(
+                new CafeSourceBatch(
                     rs.getObject("batch_id", UUID.class),
-                    rs.getObject("published_at", OffsetDateTime.class)))
+                    rs.getObject("published_at", OffsetDateTime.class),
+                    rs.getString("reference_month")))
         .optional()
         // 최신 정상 게시본이 비었을 때 과거로 돌아가지 않는다. 좌표 없는 행도 준비된 데이터다.
         .filter(

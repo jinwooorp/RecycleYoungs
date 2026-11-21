@@ -13,7 +13,6 @@ import java.util.stream.Stream;
 import kr.ac.recycleyoungs.api.ApiErrorCode;
 import kr.ac.recycleyoungs.api.ApiException;
 import kr.ac.recycleyoungs.cafe.CafeResponse.Cafe;
-import kr.ac.recycleyoungs.region.RegionResponse.PublishedBatch;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -36,7 +35,8 @@ class CafeControllerTests {
 
   @Test
   void appliesDefaultsAndKeepsSourceIdentifiersAndOptionalFields() throws Exception {
-    var batch = new PublishedBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"));
+    var batch =
+        new CafeSourceBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"), "202609");
     when(service.getNearby(127, 37, 500, List.of(), 100, 0))
         .thenReturn(
             new CafeResponse(
@@ -61,12 +61,14 @@ class CafeControllerTests {
         .andExpect(jsonPath("$.offset").value(0))
         .andExpect(jsonPath("$.hasMore").value(false))
         .andExpect(jsonPath("$.sourceBatch.batchId").value(batch.batchId().toString()))
+        .andExpect(jsonPath("$.sourceBatch.referenceMonth").value("202609"))
         .andExpect(jsonPath("$.sourceBatch.sourceReference").doesNotExist());
   }
 
   @Test
   void normalizesOnlyRepeatedDistrictCodesAndAcceptsFractionalRadius() throws Exception {
-    var batch = new PublishedBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"));
+    var batch =
+        new CafeSourceBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"), "202609");
     when(service.getNearby(127, 37, 999.5, List.of("00110", "00140"), 500, 100000))
         .thenReturn(new CafeResponse(List.of(), 2, 500, 100000, false, batch));
     mvc.perform(
@@ -84,7 +86,8 @@ class CafeControllerTests {
   void acceptsCoordinateAndRadiusBoundsAndDecimalExponents(
       String longitude, String latitude, String radius, double x, double y, double meters)
       throws Exception {
-    var batch = new PublishedBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"));
+    var batch =
+        new CafeSourceBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"), "202609");
     when(service.getNearby(x, y, meters, List.of(), 1, 0))
         .thenReturn(new CafeResponse(List.of(), 0, 1, 0, false, batch));
     mvc.perform(
@@ -199,7 +202,8 @@ class CafeControllerTests {
 
   @Test
   void returnsViewportDefaultsAndDedicatedItemsWithoutDistance() throws Exception {
-    var batch = new PublishedBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"));
+    var batch =
+        new CafeSourceBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"), "202609");
     var item =
         new CafeViewportResponse.Cafe(
             "000001", "예시카페", null, "I21201", "카페", null, "예시주소", 127, 37);
@@ -220,7 +224,8 @@ class CafeControllerTests {
 
   @Test
   void reusesRepeatedDistrictAndPagingValidationForViewport() throws Exception {
-    var batch = new PublishedBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"));
+    var batch =
+        new CafeSourceBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"), "202609");
     when(service.getViewport(
             126.99, 36.99, 127.01, 37.01, List.of("00110", "00140"), List.of(), 500, 100000))
         .thenReturn(new CafeViewportResponse(List.of(), 2, 500, 100000, false, batch));
@@ -315,7 +320,8 @@ class CafeControllerTests {
 
   @Test
   void acceptsFullWgs84ViewportWithDecimalExponentInput() throws Exception {
-    var batch = new PublishedBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"));
+    var batch =
+        new CafeSourceBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"), "202609");
     when(service.getViewport(-180, -90, 180, 90, List.of(), List.of(), 100, 0))
         .thenReturn(new CafeViewportResponse(List.of(), 0, 100, 0, false, batch));
     mvc.perform(
@@ -361,7 +367,8 @@ class CafeControllerTests {
 
   @Test
   void viewportNormalizesRepeatedDongCodesWhilePreservingLeadingZeros() throws Exception {
-    var batch = new PublishedBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"));
+    var batch =
+        new CafeSourceBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"), "202609");
     when(service.getViewport(
             126.99,
             36.99,

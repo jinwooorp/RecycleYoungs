@@ -24,8 +24,8 @@ class CafeServiceTests {
   private final RegionRepository regions = mock(RegionRepository.class);
   private final CafeRepository repository = mock(CafeRepository.class);
   private final CafeService service = new CafeService(regions, repository);
-  private final PublishedBatch cafeBatch =
-      new PublishedBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"));
+  private final CafeSourceBatch cafeBatch =
+      new CafeSourceBatch(new UUID(0, 2), OffsetDateTime.parse("2026-10-02T00:00:00Z"), "202609");
   private final PublishedBatch boundary =
       new PublishedBatch(new UUID(0, 1), OffsetDateTime.parse("2026-10-01T00:00:00Z"));
 
