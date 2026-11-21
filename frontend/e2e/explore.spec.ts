@@ -1,3 +1,4 @@
+import type { Request } from '@playwright/test';
 import { candidates } from './fixtures';
 import {
   test,
@@ -176,11 +177,23 @@ test('선택 분기가 지역과 두 분석 패널에 유지되며 새로고침�
       ),
     candidates.slice(0, 2),
   );
-  const requests: string[] = [];
+  const started = new Set<string>();
+  const pending = new Map<Request, string>();
+  const completed: string[] = [];
   page.on('request', (request) => {
     const url = new URL(request.url());
-    if (url.pathname.includes('/stats/'))
-      requests.push(url.searchParams.get('quarterCode')!);
+    if (!url.pathname.includes('/stats/')) return;
+    const key = `${url.pathname}?quarterCode=${url.searchParams.get('quarterCode')}`;
+    started.add(key);
+    pending.set(request, key);
+  });
+  page.on('requestfinished', (request) => {
+    const key = pending.get(request);
+    pending.delete(request);
+    if (key && request.existingResponse()?.ok()) completed.push(key);
+  });
+  page.on('requestfailed', (request) => {
+    pending.delete(request);
   });
   await page.goto('/explore');
   await selectDistrict(page);
@@ -189,7 +202,13 @@ test('선택 분기가 지역과 두 분석 패널에 유지되며 새로고침�
   const stores = page.getByRole('region', { name: '점포 수 요약' });
   await expect(quarter).toHaveValue('20262');
   await expect(stores).toContainText('120');
-  expect(requests).toEqual(['20262', '20262', '20262']);
+  // StrictMode에서 취소된 요청도 시작 기록에는 남습니다.
+  const expected = ['foot-traffic', 'sales', 'stores'].map(
+    (metric) => `/api/v1/districts/11440/stats/${metric}?quarterCode=20262`,
+  );
+  await expect.poll(() => pending.size).toBe(0);
+  expect([...started].sort()).toEqual(expected);
+  expect(completed.sort()).toEqual(expected);
   await quarter.selectOption('20263');
   await expect(stores).toContainText('130');
   await expect(
