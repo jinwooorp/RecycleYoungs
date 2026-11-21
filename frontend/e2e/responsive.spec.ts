@@ -71,6 +71,28 @@ test('320×568에서 키보드로 상세 패널을 열고 스크롤하며 지역
   await expect(
     panel.getByRole('button', { name: '분기 목록 새로고침' }),
   ).toBeFocused();
+
+  const sourceDetails = panel.getByText('데이터 출처 상세', { exact: true });
+  const sourceLink = panel.getByRole('link', {
+    name: '서울시 상권분석서비스(점포-자치구)',
+  });
+  await page.keyboard.press('Tab');
+  await expect(sourceDetails).toBeFocused();
+  await expect(sourceLink).toBeHidden();
+  await page.keyboard.press('Enter');
+  await expect(sourceLink).toBeVisible();
+  await noOverflow(page);
+  await page.keyboard.press('Tab');
+  await expect(sourceLink).toBeFocused();
+  await expect(sourceLink).toHaveAttribute(
+    'href',
+    'https://data.seoul.go.kr/dataList/OA-22173/S/1/datasetView.do',
+  );
+  await page.keyboard.press('Shift+Tab');
+  await expect(sourceDetails).toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(sourceLink).toBeHidden();
+
   await page.keyboard.press('Tab');
   await expect(stores).toBeFocused();
   await expect(stores).toBeInViewport({ ratio: 1 });
