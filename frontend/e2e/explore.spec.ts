@@ -107,7 +107,8 @@ test('구·동 선택, 통계 갱신, 탭과 미검증 숫자 차단', async ({ 
   ]) {
     const card = page.getByRole('region', { name: label, exact: true });
     await expect(card).not.toContainText('%');
-    await expect(card).not.toContainText(/출처|게시 시각|비교 불가|↑|↓/);
+    await expect(card).not.toContainText(/비교 불가|↑|↓/);
+    await expect(card.getByText(/서비스 DB 게시일/)).toBeVisible();
   }
   await expect(
     page.getByText('전분기 비교 준비 중', { exact: true }),
@@ -209,13 +210,37 @@ test('선택 분기가 지역과 두 분석 패널에 유지되며 새로고침�
   await expect.poll(() => pending.size).toBe(0);
   expect([...started].sort()).toEqual(expected);
   expect(completed.sort()).toEqual(expected);
+  await expect(stores.locator('time')).toHaveText('2026년 7월 2일');
+  await expect(
+    quarter.getByRole('option', { name: '2026년 3분기 · 일부 지표' }),
+  ).toHaveCount(1);
+  const details = page.getByText('데이터 출처 상세', { exact: true });
+  await details.press('Enter');
+  await expect(
+    page.getByRole('link', { name: '서울시 상권분석서비스(점포-자치구)' }),
+  ).toHaveAttribute(
+    'href',
+    'https://data.seoul.go.kr/dataList/OA-22173/S/1/datasetView.do',
+  );
+  await details.press('Enter');
   await quarter.selectOption('20263');
   await expect(stores).toContainText('130');
+  await expect(stores.locator('time')).toHaveText('2026년 10월 2일');
+  await expect(
+    page.getByText('자치구 · 추정매출·유동인구 미게시'),
+  ).toBeVisible();
+  await expect(
+    page.getByText('행정동 · 점포·추정매출·유동인구 미게시'),
+  ).toBeVisible();
   await expect(
     page.getByRole('region', { name: '당월 추정매출액 요약' }),
   ).toContainText('자료 없음');
+  await expect(
+    page.getByRole('region', { name: '당월 추정매출액 요약' }).locator('time'),
+  ).toHaveCount(0);
   await quarter.selectOption('20261');
   await expect(stores).toContainText('110');
+  await expect(stores.locator('time')).toHaveText('2026년 4월 2일');
   await selectDistrict(page, '11200');
   await expect(quarter).toHaveValue('20261');
   await expect(stores).toContainText('230');
@@ -223,6 +248,28 @@ test('선택 분기가 지역과 두 분석 패널에 유지되며 새로고침�
   await expect(quarter).toHaveValue('20261');
   const candidate = page.getByRole('region', { name: '후보지 A 행정동 통계' });
   await expect(candidate).toContainText('2026년 1분기');
+  await expect(candidate).toContainText('20개');
+  const competition = page.getByRole('region', {
+    name: '후보지 A 주변 경쟁 환경',
+  });
+  await expect(competition.locator('time[datetime="2026-10"]')).toHaveText(
+    '2026년 10월',
+  );
+  await expect(
+    competition.locator('time[datetime="2026-11-16T15:00:00Z"]'),
+  ).toHaveText('2026년 11월 17일');
+  await quarter.selectOption('20262');
+  await expect(candidate).toContainText('30개');
+  await expect(
+    candidate.locator('time[datetime="2026-07-01T15:00:00Z"]'),
+  ).toHaveText('2026년 7월 2일');
+  await expect(competition.locator('time[datetime="2026-10"]')).toHaveText(
+    '2026년 10월',
+  );
+  await expect(
+    competition.locator('time[datetime="2026-11-16T15:00:00Z"]'),
+  ).toHaveText('2026년 11월 17일');
+  await quarter.selectOption('20261');
   await expect(candidate).toContainText('20개');
   await page.reload();
   await page.getByRole('button', { name: '후보지 분석', exact: true }).click();

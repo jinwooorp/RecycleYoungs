@@ -6,6 +6,8 @@ import type {
   RegionResource,
 } from '@/hooks/use-region-explorer';
 import { formatQuarter, formatStatistic } from '@/lib/statistics';
+import { statisticsSource } from '@/lib/data-sources';
+import { DataSourceDetails, PublishedDate } from '@/components/data-provenance';
 
 /** 원본 문자열은 유지하고 표시에서만 의미 없는 소수 후행 0을 제거합니다. */
 function StatisticValue({
@@ -197,13 +199,18 @@ export function AnalysisPanel({
       resource: statistics.sales,
     },
     {
-      id: 'footTraffic',
+      id: 'foot-traffic',
       label: '지역 전체 유동인구',
       value: footData?.totalFootTraffic ?? null,
       unit: '명',
       resource: statistics.footTraffic,
     },
   ] as const;
+  const sources = summaries.flatMap(({ id, resource }) =>
+    resource.status === 'ready' && resource.data?.data
+      ? [statisticsSource(dongCode ? 'dong' : 'district', id)]
+      : [],
+  );
   return (
     <section
       aria-label="행정구역 전체 통계"
@@ -270,12 +277,25 @@ export function AnalysisPanel({
                   </dt>
                   <dd className="mt-1 flex min-h-9 min-w-0 flex-col justify-center text-xl leading-7 font-semibold tabular-nums [overflow-wrap:anywhere]">
                     {metric.resource.status === 'ready' ? (
-                      <span>
-                        <StatisticValue
-                          value={metric.value}
-                          unit={metric.unit}
-                        />
-                      </span>
+                      metric.resource.data?.data ? (
+                        <>
+                          <span>
+                            <StatisticValue
+                              value={metric.value}
+                              unit={metric.unit}
+                            />
+                          </span>
+                          <PublishedDate
+                            publishedAt={
+                              metric.resource.data.data.sourceBatch.publishedAt
+                            }
+                          />
+                        </>
+                      ) : (
+                        <span className="text-sm">
+                          선택한 지역·분기의 자료 없음
+                        </span>
+                      )
                     ) : (
                       <StatisticsNotice
                         resource={metric.resource}
@@ -287,6 +307,7 @@ export function AnalysisPanel({
               </section>
             ))}
           </div>
+          <DataSourceDetails sources={sources} />
           <p className="text-xs text-muted-foreground">전분기 비교 준비 중</p>
         </section>
       )}

@@ -36,7 +36,11 @@ export function cafePage(radius: number): CafePage {
     limit: 200,
     offset: 0,
     hasMore: true,
-    sourceBatch,
+    sourceBatch: {
+      batchId: '00000000-0000-4000-8000-000000000002',
+      publishedAt: '2026-11-16T15:00:00Z',
+      referenceMonth: '202610',
+    },
     items: [
       {
         bizesId: 'synthetic-cafe-1',
@@ -58,6 +62,12 @@ export function statistics(metric: string, code: string, quarter: string) {
   const baseCount = code === '11440' ? 120 : code === '11200' ? 240 : 30;
   const difference = quarter === '20261' ? -10 : quarter === '20263' ? 10 : 0;
   const storeCount = baseCount + difference;
+  const month = quarter === '20261' ? '04' : quarter === '20262' ? '07' : '10';
+  const day = metric === 'stores' ? '01' : metric === 'sales' ? '02' : '03';
+  const statisticsBatch = {
+    batchId: `00000000-0000-4000-8000-00000${quarter}${day}`,
+    publishedAt: `2026-${month}-${day}T15:00:00Z`,
+  };
   if (metric === 'stores')
     return {
       storeCount: String(storeCount),
@@ -67,7 +77,7 @@ export function statistics(metric: string, code: string, quarter: string) {
       closedStoreCount: '0',
       openingRate: '1.00',
       closureRate: '0.00',
-      sourceBatch,
+      sourceBatch: statisticsBatch,
     };
   if (metric === 'sales')
     return {
@@ -75,12 +85,12 @@ export function statistics(metric: string, code: string, quarter: string) {
       monthlySalesCount: '1234',
       weekdaySalesAmount: quarter === '20261' ? '3000' : '6000000000000000',
       weekendSalesAmount: quarter === '20261' ? '1000' : '3007199254740993',
-      sourceBatch,
+      sourceBatch: statisticsBatch,
     };
   return {
     totalFootTraffic: quarter === '20261' ? '400.0000' : '123456.7800',
     maleFootTraffic: quarter === '20261' ? '200.0000' : '60000.0000',
     femaleFootTraffic: quarter === '20261' ? '200.0000' : '63456.7800',
-    sourceBatch,
+    sourceBatch: statisticsBatch,
   };
 }

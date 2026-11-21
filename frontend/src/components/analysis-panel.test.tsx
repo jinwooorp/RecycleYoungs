@@ -435,8 +435,15 @@ test('요약과 세부는 실제 0·NULL을 구분하고 화면에서만 후행 
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
   expect(await within(summary('점포 수')).findByText('0')).toBeVisible();
   expect(within(summary('점포 수')).getByText('개')).toBeVisible();
+  expect(within(summary('점포 수')).getByText('2026년 10월 2일')).toBeVisible();
   expect(
     within(summary('당월 추정매출액')).getByText('자료 없음'),
+  ).toBeVisible();
+  expect(
+    within(summary('당월 추정매출액')).getByText('2026년 10월 3일'),
+  ).toBeVisible();
+  expect(
+    within(summary('지역 전체 유동인구')).getByText('2026년 10월 4일'),
   ).toBeVisible();
   expect(
     within(summary('당월 추정매출액')).queryByText('원'),
@@ -611,7 +618,13 @@ test('분기 기본값과 선택이 패널·지역 전환에 유지되며 다시
     statistic(
       url,
       url.includes('/stores')
-        ? { ...stores, storeCount: url.includes('20261') ? '42' : '80' }
+        ? {
+            ...stores,
+            storeCount: url.includes('20261') ? '42' : '80',
+            sourceBatch: url.includes('20261')
+              ? { ...sourceBatch, publishedAt: '2026-07-16T15:00:00Z' }
+              : sourceBatch,
+          }
         : url.includes('/sales')
           ? sales
           : foot,
@@ -632,9 +645,16 @@ test('분기 기본값과 선택이 패널·지역 전환에 유지되며 다시
   );
   expect(screen.getAllByText('전분기 비교 준비 중')).toHaveLength(1);
   expect(screen.getByRole('tabpanel').querySelector('time')).toBeNull();
+  expect(within(summary('점포 수')).getByText('2026년 10월 2일')).toBeVisible();
   fireEvent.change(selector(), { target: { value: '20261' } });
   expect(within(summary('점포 수')).queryByText('80')).not.toBeInTheDocument();
+  expect(
+    within(summary('점포 수')).queryByText('2026년 10월 2일'),
+  ).not.toBeInTheDocument();
   await within(summary('점포 수')).findByText('42');
+  expect(
+    within(summary('점포 수')).getByText('2026년 7월 17일'),
+  ).toHaveAttribute('dateTime', '2026-07-16T15:00:00Z');
   expect(requests().slice(3)).toHaveLength(3);
   expect(
     requests()

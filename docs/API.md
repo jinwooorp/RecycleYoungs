@@ -263,9 +263,13 @@ ASCII 연도 4자리와 분기 1~4를 이어 붙인 `YYYYQ` 형식입니다.
 
 두 API 모두 `items`, `totalCount`, `limit`, `offset`, `hasMore`, `sourceBatch`를 반환합니다.
 
+`sourceBatch.referenceMonth`는 조회에 쓴 배치의 소진공 원천 기준년월을 `YYYYMM` 문자열로 제공합니다. 기준년월이 없거나 올바르지 않은 기존 배치는 `null`을 반환합니다. `sourceBatch.publishedAt`은 같은 배치가 서비스 DB에 게시된 ISO 8601 시각입니다. 원천 기준년월, 서비스 DB 게시일, 원본 갱신일은 각각 별개의 정보입니다.
+
 `totalCount`는 페이지를 나누기 전 전체 일치 건수이고 `hasMore`는 `offset + items.length < totalCount`입니다.
 
 결과가 없으면 `200`, 빈 배열, 전체 건수 0, `hasMore: false`입니다.
+
+이 경우에도 조회에 사용한 배치의 `sourceBatch`를 함께 반환합니다.
 
 `offset`이 결과 범위를 넘으면 목록만 비고 전체 건수는 유지됩니다.
 

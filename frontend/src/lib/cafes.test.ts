@@ -23,6 +23,7 @@ const page = {
   sourceBatch: {
     batchId: '00000000-0000-0000-0000-000000000004',
     publishedAt: '2026-10-02T00:00:00Z',
+    referenceMonth: '202609',
   },
 };
 
@@ -43,6 +44,30 @@ test('현재 영역·문자열 구 코드·200건 상한을 전달하고 실제 
   });
   expect(fetch.mock.calls[0][1]).toEqual({ signal });
 });
+
+test.each([undefined, null, '202613', '000009', 202609])(
+  '기준년월이 누락되거나 유효하지 않아도 0곳의 정상 응답을 보존한다 (%s)',
+  async (referenceMonth) => {
+    const body = {
+      ...page,
+      items: [],
+      totalCount: 0,
+      hasMore: false,
+      sourceBatch: { ...page.sourceBatch, referenceMonth },
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(body)));
+    const result = await fetchViewportCafes(
+      bounds,
+      '',
+      new AbortController().signal,
+    );
+    expect(result.totalCount).toBe(0);
+    expect(result.sourceBatch).toEqual({
+      ...page.sourceBatch,
+      referenceMonth: null,
+    });
+  },
+);
 
 test('구 전체는 districtCodes를 생략하고 빈 결과를 정상 처리한다', async () => {
   const fetch = vi

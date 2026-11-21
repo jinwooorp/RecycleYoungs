@@ -3,8 +3,8 @@ export const PREVIOUS_STATISTICS_QUARTER = '20261';
 export const STATISTICS_INDUSTRY = 'CS100010';
 
 const quarterPattern = /^[0-9]{4}[1-4]$/;
-const metricCodes = ['stores', 'sales', 'foot-traffic'] as const;
-type MetricCode = (typeof metricCodes)[number];
+export const metricCodes = ['stores', 'sales', 'foot-traffic'] as const;
+export type MetricCode = (typeof metricCodes)[number];
 
 export interface StatisticsQuarter {
   quarterCode: string;

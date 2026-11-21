@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -82,8 +84,8 @@ class CafeApiIntegrationTests {
     jdbc.sql("DELETE FROM administrative_dong").update();
     jdbc.sql("DELETE FROM district").update();
     jdbc.sql("DELETE FROM etl_batch").update();
-    batch(CURRENT, "2026-10-02", "2026-10-02", FULL_SOURCE);
-    batch(OLD, "2026-09-01", "2026-10-20", FULL_SOURCE);
+    batch(CURRENT, "2026-10-02", "2026-10-02", withReferenceMonth("\"202609\""));
+    batch(OLD, "2026-09-01", "2026-10-20", withReferenceMonth("\"202608\""));
     cafe("000001", "중심카페", 127, 37, CURRENT);
     cafe("000099", "과거카페", 127, 37, OLD);
   }
@@ -125,9 +127,33 @@ class CafeApiIntegrationTests {
         .andExpect(jsonPath("$.limit").value(100))
         .andExpect(jsonPath("$.offset").value(0))
         .andExpect(jsonPath("$.hasMore").value(false))
-        .andExpect(jsonPath("$.sourceBatch.length()").value(2))
+        .andExpect(jsonPath("$.sourceBatch.length()").value(3))
         .andExpect(jsonPath("$.sourceBatch.batchId").value(CURRENT.toString()))
-        .andExpect(jsonPath("$.sourceBatch.publishedAt").value("2026-10-02T00:00:00Z"));
+        .andExpect(jsonPath("$.sourceBatch.publishedAt").value("2026-10-02T00:00:00Z"))
+        .andExpect(jsonPath("$.sourceBatch.referenceMonth").value("202609"));
+  }
+
+  @ParameterizedTest
+  @NullSource
+  @ValueSource(
+      strings = {"null", "202609", "\"202600\"", "\"202613\"", "\"000009\"", "\"2026-09\""})
+  void preservesBothCafeQueriesWhenReferenceMonthIsMissingOrInvalid(String monthJson)
+      throws Exception {
+    jdbc.sql("UPDATE etl_batch SET source_reference=:source WHERE batch_id=:batch")
+        .param("source", monthJson == null ? FULL_SOURCE : withReferenceMonth(monthJson))
+        .param("batch", CURRENT)
+        .update();
+    for (var request : List.of(nearby(), viewport())) {
+      mvc.perform(request)
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.totalCount").value(1))
+          .andExpect(jsonPath("$.sourceBatch.batchId").value(CURRENT.toString()))
+          .andExpect(jsonPath("$.sourceBatch.referenceMonth").value(nullValue()));
+    }
+  }
+
+  private static String withReferenceMonth(String monthJson) {
+    return FULL_SOURCE.substring(0, FULL_SOURCE.length() - 1) + ",\"stdrYm\":" + monthJson + "}";
   }
 
   @Test
@@ -411,7 +437,8 @@ class CafeApiIntegrationTests {
         .andExpect(jsonPath("$.items").isEmpty())
         .andExpect(jsonPath("$.totalCount").value(0))
         .andExpect(jsonPath("$.hasMore").value(false))
-        .andExpect(jsonPath("$.sourceBatch.batchId").value(CURRENT.toString()));
+        .andExpect(jsonPath("$.sourceBatch.batchId").value(CURRENT.toString()))
+        .andExpect(jsonPath("$.sourceBatch.referenceMonth").value("202609"));
   }
 
   @ParameterizedTest
@@ -666,9 +693,10 @@ class CafeApiIntegrationTests {
         .andExpect(jsonPath("$.limit").value(100))
         .andExpect(jsonPath("$.offset").value(0))
         .andExpect(jsonPath("$.hasMore").value(false))
-        .andExpect(jsonPath("$.sourceBatch.length()").value(2))
+        .andExpect(jsonPath("$.sourceBatch.length()").value(3))
         .andExpect(jsonPath("$.sourceBatch.batchId").value(CURRENT.toString()))
-        .andExpect(jsonPath("$.sourceBatch.publishedAt").value("2026-10-02T00:00:00Z"));
+        .andExpect(jsonPath("$.sourceBatch.publishedAt").value("2026-10-02T00:00:00Z"))
+        .andExpect(jsonPath("$.sourceBatch.referenceMonth").value("202609"));
   }
 
   @Test
@@ -789,7 +817,8 @@ class CafeApiIntegrationTests {
         .andExpect(jsonPath("$.items").isEmpty())
         .andExpect(jsonPath("$.totalCount").value(0))
         .andExpect(jsonPath("$.hasMore").value(false))
-        .andExpect(jsonPath("$.sourceBatch.batchId").value(CURRENT.toString()));
+        .andExpect(jsonPath("$.sourceBatch.batchId").value(CURRENT.toString()))
+        .andExpect(jsonPath("$.sourceBatch.referenceMonth").value("202609"));
   }
 
   @Test
