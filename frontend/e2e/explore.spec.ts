@@ -94,6 +94,9 @@ test('구·동 선택, 통계 갱신, 탭과 미검증 숫자 차단', async ({ 
     exact: true,
   });
   await expect(summary.getByText('120', { exact: true })).toBeVisible();
+  const storeChart = page.getByRole('region', { name: '일반·프랜차이즈 점포' });
+  await expect(storeChart).toContainText('마포구 · 자치구 전체');
+  await expect(storeChart.getByText('상한 110 개')).toBeVisible();
   await expect(
     page.getByRole('region', { name: '당월 추정매출액 요약' }),
   ).toContainText('9,007,199,254,740,993');
@@ -118,8 +121,16 @@ test('구·동 선택, 통계 갱신, 탭과 미검증 숫자 차단', async ({ 
   await expect(page.getByRole('tabpanel')).toContainText(
     '9,007,199,254,740,993',
   );
+  await expect(
+    page.getByRole('region', { name: '주중·주말 추정매출액' }),
+  ).toContainText('상한 6,000,000,000,000,000 원');
+  await noOverflow(page);
   await page.getByRole('tab', { name: '유동인구', exact: true }).click();
   await expect(page.getByRole('tabpanel')).toContainText('123,456.78');
+  await expect(
+    page.getByRole('region', { name: '남성·여성 유동인구' }),
+  ).toContainText('길 단위 유동인구 추정 규모');
+  await expect(page.getByRole('tabpanel')).not.toContainText(/전분기|↑|↓/);
   await page.getByRole('tab', { name: '유동인구', exact: true }).press('Home');
   await expect(page.getByRole('tab', { name: '점포 현황' })).toHaveAttribute(
     'aria-selected',
@@ -139,6 +150,8 @@ test('구·동 선택, 통계 갱신, 탭과 미검증 숫자 차단', async ({ 
     page.getByRole('heading', { name: '마포구 · 서교동', exact: true }),
   ).toBeVisible();
   await expect(summary.getByText('30', { exact: true })).toBeVisible();
+  await expect(storeChart).toContainText('마포구 · 서교동 · 행정동 전체');
+  await expect(storeChart.getByText('상한 20 개')).toBeVisible();
   await noOverflow(page);
 });
 
@@ -203,6 +216,17 @@ test('선택 분기가 지역과 두 분석 패널에 유지되며 새로고침�
   const stores = page.getByRole('region', { name: '점포 수 요약' });
   await expect(quarter).toHaveValue('20262');
   await expect(stores).toContainText('120');
+  const storeChart = page.getByRole('region', { name: '일반·프랜차이즈 점포' });
+  const generalStoreCount = storeChart
+    .getByText('일반 점포 수', { exact: true })
+    .locator('..')
+    .locator('dd');
+  const franchiseBar = storeChart
+    .getByText('프랜차이즈 점포 수')
+    .locator('..')
+    .locator('rect');
+  await expect(generalStoreCount.getByText(/^110\s*개$/)).toBeVisible();
+  await expect(franchiseBar).toHaveAttribute('width', '909');
   // StrictMode에서 취소된 요청도 시작 기록에는 남습니다.
   const expected = ['foot-traffic', 'sales', 'stores'].map(
     (metric) => `/api/v1/districts/11440/stats/${metric}?quarterCode=20262`,
@@ -225,6 +249,8 @@ test('선택 분기가 지역과 두 분석 패널에 유지되며 새로고침�
   await details.press('Enter');
   await quarter.selectOption('20263');
   await expect(stores).toContainText('130');
+  await expect(generalStoreCount.getByText(/^120\s*개$/)).toBeVisible();
+  await expect(franchiseBar).toHaveAttribute('width', '833');
   await expect(stores.locator('time')).toHaveText('2026년 10월 2일');
   await expect(
     page.getByText('자치구 · 추정매출·유동인구 미게시'),
@@ -240,10 +266,15 @@ test('선택 분기가 지역과 두 분석 패널에 유지되며 새로고침�
   ).toHaveCount(0);
   await quarter.selectOption('20261');
   await expect(stores).toContainText('110');
+  await expect(generalStoreCount.getByText(/^100\s*개$/)).toBeVisible();
+  await expect(franchiseBar).toHaveAttribute('width', '1000');
   await expect(stores.locator('time')).toHaveText('2026년 4월 2일');
   await selectDistrict(page, '11200');
   await expect(quarter).toHaveValue('20261');
   await expect(stores).toContainText('230');
+  await expect(storeChart).toContainText('성동구 · 자치구 전체');
+  await expect(generalStoreCount.getByText(/^220\s*개$/)).toBeVisible();
+  await expect(franchiseBar).toHaveAttribute('width', '454');
   await page.getByRole('button', { name: '후보지 분석', exact: true }).click();
   await expect(quarter).toHaveValue('20261');
   const candidate = page.getByRole('region', { name: '후보지 A 행정동 통계' });
@@ -323,6 +354,13 @@ test('매출 자료 없음은 조회 오류와 구분', async ({ page }) => {
   const sales = page.getByRole('region', { name: '당월 추정매출액 요약' });
   await expect(sales).toContainText('자료 없음');
   await expect(sales.getByRole('alert')).toHaveCount(0);
+  await page.getByRole('tab', { name: '추정매출', exact: true }).click();
+  await expect(page.getByRole('tabpanel')).toContainText(
+    '선택한 지역·조회 조건의 통계 자료가 없습니다.',
+  );
+  await expect(
+    page.getByRole('region', { name: '주중·주말 추정매출액' }),
+  ).toHaveCount(0);
 });
 
 test('지역 API 오류와 재시도', async ({ page, allowHttpErrors }) => {

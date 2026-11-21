@@ -265,12 +265,22 @@ test('API별 오류·재시도·data:null과 모든 필드 NULL인 실제 행을
   expect(
     await within(screen.getByRole('tabpanel')).findAllByText('자료 없음'),
   ).toHaveLength(3);
+  expect(
+    screen.getByRole('region', { name: '남성·여성 유동인구' }),
+  ).toBeVisible();
+  expect(screen.getByRole('tabpanel').querySelector('svg')).toBeNull();
+  expect(
+    within(summary('지역 전체 유동인구')).getByText('2026년 10월 4일'),
+  ).toBeVisible();
   fireEvent.click(screen.getByRole('tab', { name: '점포 현황' }));
   fail = false;
   fireEvent.click(screen.getByRole('button', { name: '점포 현황 다시 시도' }));
   expect(
     await screen.findByText('선택한 지역·조회 조건의 통계 자료가 없습니다.'),
   ).toBeVisible();
+  expect(
+    screen.queryByRole('region', { name: '일반·프랜차이즈 점포' }),
+  ).toBeNull();
   expect(
     fetch.mock.calls.filter(([url]) => url.includes('/stores')),
   ).toHaveLength(2);
@@ -461,6 +471,72 @@ test('요약과 세부는 실제 0·NULL을 구분하고 화면에서만 후행 
   ).toHaveLength(2);
 });
 
+test('막대는 원본 값·단위를 한 번씩 표시하고 극소 양수·실제 0·결측을 구분한다', async () => {
+  mockApi(async (url) =>
+    statistic(
+      url,
+      url.includes('/stores')
+        ? stores
+        : url.includes('/sales')
+          ? sales
+          : {
+              ...foot,
+              maleFootTraffic: '0.0000000000000000000010',
+              femaleFootTraffic: '9007199254740993.123456789012345678900',
+            },
+    ),
+  );
+  render(<App />);
+  await chooseDistrict();
+  fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
+
+  const storeGroup = await screen.findByRole('region', {
+    name: '일반·프랜차이즈 점포',
+  });
+  expect(storeGroup).toHaveTextContent(
+    '종로구 · 자치구 전체 · 2026년 2분기 · 카페·음료 업종 · 단위 개',
+  );
+  expect(within(storeGroup).getByText('자료 없음')).toBeVisible();
+  expect(within(storeGroup).getByText('상한 0 개')).toBeVisible();
+  expect(storeGroup.querySelectorAll('svg')).toHaveLength(1);
+  expect(storeGroup.querySelector('line')).toBeInTheDocument();
+  const turnover = screen.getByRole('region', { name: '개업·폐업 점포' });
+  expect(within(turnover).getByText('상한 2 개')).toBeVisible();
+  expect(turnover.querySelector('rect')).toHaveAttribute('width', '5000');
+
+  fireEvent.click(screen.getByRole('tab', { name: '추정매출' }));
+  const salesGroup = await screen.findByRole('region', {
+    name: '주중·주말 추정매출액',
+  });
+  expect(within(salesGroup).getByText('상한 1 원')).toBeVisible();
+  expect(
+    within(screen.getByRole('tabpanel')).getByText('9,223,372,036,854,775,807'),
+  ).toBeVisible();
+
+  fireEvent.click(screen.getByRole('tab', { name: '유동인구' }));
+  const footGroup = await screen.findByRole('region', {
+    name: '남성·여성 유동인구',
+  });
+  expect(footGroup).toHaveTextContent('길 단위 유동인구 추정 규모 · 단위 명');
+  expect(within(footGroup).getByText('0.000000000000000000001')).toBeVisible();
+  expect(
+    within(footGroup).getByText(
+      '축에서 막대 폭을 구분하기 어려운 작은 값입니다.',
+    ),
+  ).toBeVisible();
+  expect(
+    within(footGroup).getByText('9,007,199,254,740,993.1234567890123456789'),
+  ).toBeVisible();
+  const svg = footGroup.querySelectorAll('svg');
+  expect(svg).toHaveLength(2);
+  expect(svg[0]).toHaveAttribute('aria-hidden', 'true');
+  expect(svg[0]).toHaveAttribute('focusable', 'false');
+  expect(svg[0]).not.toHaveAttribute('tabindex');
+  expect(svg[0].querySelector('line')).toBeNull();
+  expect(svg[0].querySelector('rect')).toHaveAttribute('width', '0');
+  expect(svg[1].querySelector('rect')).toHaveAttribute('width', '10000');
+});
+
 test('미확인 지역명은 코드나 임의 명칭 대신 확인 중으로 표시한다', () => {
   const loading = {
     status: 'loading' as const,
@@ -621,6 +697,7 @@ test('분기 기본값과 선택이 패널·지역 전환에 유지되며 다시
         ? {
             ...stores,
             storeCount: url.includes('20261') ? '42' : '80',
+            generalStoreCount: url.includes('20261') ? '39' : '60',
             sourceBatch: url.includes('20261')
               ? { ...sourceBatch, publishedAt: '2026-07-16T15:00:00Z' }
               : sourceBatch,
@@ -646,12 +723,20 @@ test('분기 기본값과 선택이 패널·지역 전환에 유지되며 다시
   expect(screen.getAllByText('전분기 비교 준비 중')).toHaveLength(1);
   expect(screen.getByRole('tabpanel').querySelector('time')).toBeNull();
   expect(within(summary('점포 수')).getByText('2026년 10월 2일')).toBeVisible();
+  const group = () =>
+    screen.getByRole('region', { name: '일반·프랜차이즈 점포' });
+  expect(within(group()).getByText('상한 60 개')).toBeVisible();
   fireEvent.change(selector(), { target: { value: '20261' } });
   expect(within(summary('점포 수')).queryByText('80')).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole('region', { name: '일반·프랜차이즈 점포' }),
+  ).toBeNull();
   expect(
     within(summary('점포 수')).queryByText('2026년 10월 2일'),
   ).not.toBeInTheDocument();
   await within(summary('점포 수')).findByText('42');
+  expect(within(group()).getByText('상한 39 개')).toBeVisible();
+  expect(group()).toHaveTextContent('종로구 · 자치구 전체 · 2026년 1분기');
   expect(
     within(summary('점포 수')).getByText('2026년 7월 17일'),
   ).toHaveAttribute('dateTime', '2026-07-16T15:00:00Z');
@@ -662,7 +747,11 @@ test('분기 기본값과 선택이 패널·지역 전환에 유지되며 다시
       .every(([url]) => url.includes('quarterCode=20261')),
   ).toBe(true);
   await chooseDistrict('11140');
+  expect(
+    screen.queryByRole('region', { name: '일반·프랜차이즈 점포' }),
+  ).toBeNull();
   await within(summary('점포 수')).findByText('42');
+  expect(group()).toHaveTextContent('중구 · 자치구 전체 · 2026년 1분기');
   fireEvent.click(screen.getByRole('button', { name: '후보지 분석' }));
   expect(selector()).toHaveValue('20261');
   fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
