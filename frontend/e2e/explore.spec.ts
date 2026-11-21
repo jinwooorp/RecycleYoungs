@@ -217,11 +217,15 @@ test('선택 분기가 지역과 두 분석 패널에 유지되며 새로고침�
   await expect(quarter).toHaveValue('20262');
   await expect(stores).toContainText('120');
   const storeChart = page.getByRole('region', { name: '일반·프랜차이즈 점포' });
+  const generalStoreCount = storeChart
+    .getByText('일반 점포 수', { exact: true })
+    .locator('..')
+    .locator('dd');
   const franchiseBar = storeChart
     .getByText('프랜차이즈 점포 수')
     .locator('..')
     .locator('rect');
-  await expect(storeChart.getByText('110', { exact: true })).toBeVisible();
+  await expect(generalStoreCount.getByText(/^110\s*개$/)).toBeVisible();
   await expect(franchiseBar).toHaveAttribute('width', '909');
   // StrictMode에서 취소된 요청도 시작 기록에는 남습니다.
   const expected = ['foot-traffic', 'sales', 'stores'].map(
@@ -245,6 +249,8 @@ test('선택 분기가 지역과 두 분석 패널에 유지되며 새로고침�
   await details.press('Enter');
   await quarter.selectOption('20263');
   await expect(stores).toContainText('130');
+  await expect(generalStoreCount.getByText(/^120\s*개$/)).toBeVisible();
+  await expect(franchiseBar).toHaveAttribute('width', '833');
   await expect(stores.locator('time')).toHaveText('2026년 10월 2일');
   await expect(
     page.getByText('자치구 · 추정매출·유동인구 미게시'),
@@ -260,12 +266,15 @@ test('선택 분기가 지역과 두 분석 패널에 유지되며 새로고침�
   ).toHaveCount(0);
   await quarter.selectOption('20261');
   await expect(stores).toContainText('110');
-  await expect(storeChart.getByText('100', { exact: true })).toBeVisible();
+  await expect(generalStoreCount.getByText(/^100\s*개$/)).toBeVisible();
   await expect(franchiseBar).toHaveAttribute('width', '1000');
   await expect(stores.locator('time')).toHaveText('2026년 4월 2일');
   await selectDistrict(page, '11200');
   await expect(quarter).toHaveValue('20261');
   await expect(stores).toContainText('230');
+  await expect(storeChart).toContainText('성동구 · 자치구 전체');
+  await expect(generalStoreCount.getByText(/^220\s*개$/)).toBeVisible();
+  await expect(franchiseBar).toHaveAttribute('width', '454');
   await page.getByRole('button', { name: '후보지 분석', exact: true }).click();
   await expect(quarter).toHaveValue('20261');
   const candidate = page.getByRole('region', { name: '후보지 A 행정동 통계' });
