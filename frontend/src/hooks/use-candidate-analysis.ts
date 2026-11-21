@@ -58,6 +58,7 @@ export function useCandidateAnalysis(
   items: Candidate[],
   radius: CafeRadius,
   active: boolean,
+  quarter: string | null,
 ) {
   const a = useCandidateLocation(
     items.find((item) => item.slot === 'A'),
@@ -84,9 +85,9 @@ export function useCandidateAnalysis(
       ? location.dong.dongCode
       : '',
   );
-  const first = useStatisticsExplorer('', codes[0], active);
-  const second = useStatisticsExplorer('', codes[1], active);
-  const third = useStatisticsExplorer('', codes[2], active);
+  const first = useStatisticsExplorer('', codes[0], active, quarter);
+  const second = useStatisticsExplorer('', codes[1], active, quarter);
+  const third = useStatisticsExplorer('', codes[2], active, quarter);
   const statistics = [first, second, third];
   return locations.flatMap((location) =>
     location.item

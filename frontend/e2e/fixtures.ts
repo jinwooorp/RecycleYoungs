@@ -19,6 +19,16 @@ export const candidates: Candidate[] = [
   { slot: 'B', name: '합성 성수 후보지', longitude: 127.048, latitude: 37.546 },
   { slot: 'C', name: '합성 서교 후보지', longitude: 126.924, latitude: 37.555 },
 ];
+const metrics = ['stores', 'sales', 'foot-traffic'];
+export const quarterCatalog = {
+  industryCode: 'CS100010',
+  defaultQuarterCode: '20262',
+  quarters: [
+    { quarterCode: '20263', districtMetrics: ['stores'], dongMetrics: [] },
+    { quarterCode: '20262', districtMetrics: metrics, dongMetrics: metrics },
+    { quarterCode: '20261', districtMetrics: metrics, dongMetrics: metrics },
+  ],
+};
 
 export function cafePage(radius: number): CafePage {
   return {
@@ -44,13 +54,14 @@ export function cafePage(radius: number): CafePage {
   };
 }
 
-export function statistics(metric: string, code: string) {
-  const storeCount = code === '11440' ? '120' : code === '11200' ? '240' : '30';
+export function statistics(metric: string, code: string, quarter: string) {
+  const baseCount = code === '11440' ? 120 : code === '11200' ? 240 : 30;
+  const difference = quarter === '20261' ? -10 : quarter === '20263' ? 10 : 0;
+  const storeCount = baseCount + difference;
   if (metric === 'stores')
     return {
-      storeCount,
-      generalStoreCount:
-        storeCount === '120' ? '110' : storeCount === '240' ? '230' : '20',
+      storeCount: String(storeCount),
+      generalStoreCount: String(storeCount - 10),
       franchiseStoreCount: '10',
       openedStoreCount: '2',
       closedStoreCount: '0',
@@ -60,16 +71,16 @@ export function statistics(metric: string, code: string) {
     };
   if (metric === 'sales')
     return {
-      monthlySalesAmount: '9007199254740993',
+      monthlySalesAmount: quarter === '20261' ? '4000' : '9007199254740993',
       monthlySalesCount: '1234',
-      weekdaySalesAmount: '6000000000000000',
-      weekendSalesAmount: '3007199254740993',
+      weekdaySalesAmount: quarter === '20261' ? '3000' : '6000000000000000',
+      weekendSalesAmount: quarter === '20261' ? '1000' : '3007199254740993',
       sourceBatch,
     };
   return {
-    totalFootTraffic: '123456.7800',
-    maleFootTraffic: '60000.0000',
-    femaleFootTraffic: '63456.7800',
+    totalFootTraffic: quarter === '20261' ? '400.0000' : '123456.7800',
+    maleFootTraffic: quarter === '20261' ? '200.0000' : '60000.0000',
+    femaleFootTraffic: quarter === '20261' ? '200.0000' : '63456.7800',
     sourceBatch,
   };
 }

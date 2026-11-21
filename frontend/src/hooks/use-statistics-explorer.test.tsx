@@ -54,7 +54,7 @@ test('활성 패널에서 구→동→구 변경 즉시 결과를 숨기고 취�
   );
   const view = renderHook(
     ({ district, dong, active }) =>
-      useStatisticsExplorer(district, dong, active),
+      useStatisticsExplorer(district, dong, active, '20262'),
     { initialProps: { district: '11110', dong: '', active: true } },
   );
   expect(pending).toHaveLength(3);
@@ -93,7 +93,7 @@ test('StrictMode에서 각 API 요청 수명을 정리하고 지역이 없으면
   );
   vi.stubGlobal('fetch', fetch);
   const view = renderHook(
-    ({ district }) => useStatisticsExplorer(district, '', true),
+    ({ district }) => useStatisticsExplorer(district, '', true, '20262'),
     {
       initialProps: { district: '11110' },
       wrapper: ({ children }: { children: ReactNode }) => (

@@ -34,7 +34,13 @@ const membership = {
   boundaryBatch: sourceBatch,
 };
 
-function Fixture({ active = true }: { active?: boolean }) {
+function Fixture({
+  active = true,
+  quarter = '20262',
+}: {
+  active?: boolean;
+  quarter?: string;
+}) {
   const candidates = useCandidates();
   return (
     <>
@@ -54,6 +60,7 @@ function Fixture({ active = true }: { active?: boolean }) {
       <CandidatePanel
         candidates={candidates}
         active={active}
+        quarter={quarter}
         mapReady
         onSelect={(item) => candidates.setSelected(item.slot)}
       />
@@ -551,9 +558,10 @@ function analysisApi(
     }
     const foot = path.includes('foot-traffic');
     const sales = path.includes('/sales');
+    const quarterCode = url.searchParams.get('quarterCode');
     return Response.json({
       dongCode: url.pathname.split('/')[4],
-      quarterCode: '20262',
+      quarterCode,
       ...(foot ? {} : { industryCode: 'CS100010' }),
       data: foot
         ? {
@@ -579,7 +587,7 @@ function analysisApi(
               },
             }
           : {
-              storeCount: '0',
+              storeCount: quarterCode === '20261' ? '17' : '0',
               generalStoreCount: null,
               franchiseStoreCount: null,
               openedStoreCount: '0',
@@ -650,6 +658,35 @@ test.each([1, 2, 3])(
     expect(screen.queryByText(/증감률/)).not.toBeInTheDocument();
   },
 );
+
+test('분기 변경은 같은 동의 통계만 한 번씩 갱신한다', async () => {
+  saveItems(2);
+  const fetch = analysisApi();
+  const view = render(<Fixture />);
+  const statistics = (slot: string) =>
+    within(screen.getByRole('region', { name: `후보지 ${slot} 행정동 통계` }));
+  await statistics('A').findByText('0개');
+  await within(
+    screen.getByRole('region', { name: '후보지 B 요약' }),
+  ).findByText('401곳');
+  const paths = (kind: string) =>
+    fetch.mock.calls.filter(([path]) => path.includes(kind));
+  const regions = paths('/regions/').length;
+  const cafes = paths('/cafes/').length;
+  view.rerender(<Fixture quarter="20261" />);
+  expect(statistics('A').queryByText('0개')).not.toBeInTheDocument();
+  await statistics('A').findByText('17개');
+  await statistics('B').findByText('17개');
+  expect(statistics('B').getByText('예시동 전체 · 2026년 1분기')).toBeVisible();
+  expect(paths('/stats/')).toHaveLength(6);
+  expect(
+    paths('/stats/')
+      .slice(3)
+      .every(([path]) => path.includes('quarterCode=20261')),
+  ).toBe(true);
+  expect(paths('/regions/')).toHaveLength(regions);
+  expect(paths('/cafes/')).toHaveLength(cafes);
+});
 
 test('서로 다른 행정동은 각각 조회하고 반경 변경·이름 변경·카드 선택은 통계를 재조회하지 않는다', async () => {
   saveItems(2);

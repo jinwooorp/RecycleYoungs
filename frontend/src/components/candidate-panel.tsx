@@ -12,7 +12,11 @@ import {
   type CandidateSlot,
 } from '@/lib/candidates';
 import { cafeAddress, formatCafeDistance } from '@/lib/cafes';
-import { formatStatistic, type StatisticsResponse } from '@/lib/statistics';
+import {
+  formatQuarter,
+  formatStatistic,
+  type StatisticsResponse,
+} from '@/lib/statistics';
 
 function Result<T>({
   resource,
@@ -120,7 +124,13 @@ function Competition({
   );
 }
 
-function DongMetrics({ analysis }: { analysis: CandidateAnalysis }) {
+function DongMetrics({
+  analysis,
+  quarter,
+}: {
+  analysis: CandidateAnalysis;
+  quarter: string;
+}) {
   const { statistics, dong, item, unavailable } = analysis;
   if (!dong || !statistics)
     return (
@@ -166,7 +176,7 @@ function DongMetrics({ analysis }: { analysis: CandidateAnalysis }) {
         {item.slot} · {item.name}
       </h4>
       <p className="text-xs leading-5 text-muted-foreground">
-        {dong.dongName} 전체 · 2026년 2분기
+        {dong.dongName} 전체 · {formatQuarter(quarter)}
       </p>
       <dl className="min-w-0 divide-y">
         {metrics.map((metric) => (
@@ -217,18 +227,20 @@ function DongMetrics({ analysis }: { analysis: CandidateAnalysis }) {
 export function CandidatePanel({
   candidates,
   active,
+  quarter,
   mapReady,
   onSelect,
   onStartPicking,
 }: {
   candidates: Candidates;
   active: boolean;
+  quarter: string | null;
   mapReady: boolean;
   onSelect: (item: Candidate) => void;
   onStartPicking?: () => void;
 }) {
   const { items, picking, pending, notice, radius } = candidates;
-  const analyses = useCandidateAnalysis(items, radius, active);
+  const analyses = useCandidateAnalysis(items, radius, active, quarter);
   const selectionRefs = useRef<
     Partial<Record<CandidateSlot, HTMLButtonElement | null>>
   >({});
@@ -458,15 +470,21 @@ export function CandidatePanel({
               />
             ))}
           </section>
-          <section
-            aria-label="소속 행정동 상권 특성"
-            className="min-w-0 space-y-3 border-t pt-4"
-          >
-            <h3 className="text-sm font-semibold">소속 행정동 상권 특성</h3>
-            {analyses.map((analysis) => (
-              <DongMetrics key={analysis.item.slot} analysis={analysis} />
-            ))}
-          </section>
+          {quarter && (
+            <section
+              aria-label="소속 행정동 상권 특성"
+              className="min-w-0 space-y-3 border-t pt-4"
+            >
+              <h3 className="text-sm font-semibold">소속 행정동 상권 특성</h3>
+              {analyses.map((analysis) => (
+                <DongMetrics
+                  key={analysis.item.slot}
+                  analysis={analysis}
+                  quarter={quarter}
+                />
+              ))}
+            </section>
+          )}
         </>
       )}
     </div>

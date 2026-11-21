@@ -1,6 +1,7 @@
 package kr.ac.recycleyoungs.sales;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import kr.ac.recycleyoungs.region.RegionResponse.PublishedBatch;
@@ -38,6 +39,22 @@ public class DistrictSalesStatRepository {
                 + ")")
         .query(Boolean.class)
         .single();
+  }
+
+  public List<String> findPublishedQuarters(UUID boundaryBatchId, String industryCode) {
+    return jdbc.sql(
+            """
+        SELECT DISTINCT s.quarter_code
+        FROM district_sales_stat s
+        JOIN etl_batch b ON b.batch_id = s.source_batch_id
+        JOIN district d ON d.district_code = s.district_code
+        WHERE d.boundary_batch_id = :boundary AND s.industry_code = :industry AND
+        """
+                + PUBLISHED_SALES_BATCH)
+        .param("boundary", boundaryBatchId)
+        .param("industry", industryCode)
+        .query(String.class)
+        .list();
   }
 
   public Optional<SalesData> findSales(

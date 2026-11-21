@@ -3,7 +3,6 @@ import {
   fetchStoreStatistics,
   fetchSalesStatistics,
   fetchFootTrafficStatistics,
-  STATISTICS_QUARTER,
   type RegionStatTarget,
 } from '@/lib/statistics';
 import { useRegionRequest } from './use-region-explorer';
@@ -13,7 +12,7 @@ export function useStatisticsExplorer(
   districtCode: string,
   dongCode: string,
   active: boolean,
-  quarter: string = STATISTICS_QUARTER,
+  quarter: string | null,
 ) {
   const code = dongCode || districtCode;
   const kind = dongCode ? 'dong' : 'district';
@@ -22,25 +21,27 @@ export function useStatisticsExplorer(
     [kind, code],
   );
   const key =
-    active && target ? `${target.kind}:${target.code}:${quarter}` : null;
+    active && target && quarter
+      ? `${target.kind}:${target.code}:${quarter}`
+      : null;
   const stores = useRegionRequest(
     key ? `${key}:stores` : null,
     useCallback(
-      (signal) => fetchStoreStatistics(target!, signal, quarter),
+      (signal) => fetchStoreStatistics(target!, signal, quarter!),
       [target, quarter],
     ),
   );
   const sales = useRegionRequest(
     key ? `${key}:sales` : null,
     useCallback(
-      (signal) => fetchSalesStatistics(target!, signal, quarter),
+      (signal) => fetchSalesStatistics(target!, signal, quarter!),
       [target, quarter],
     ),
   );
   const footTraffic = useRegionRequest(
     key ? `${key}:foot-traffic` : null,
     useCallback(
-      (signal) => fetchFootTrafficStatistics(target!, signal, quarter),
+      (signal) => fetchFootTrafficStatistics(target!, signal, quarter!),
       [target, quarter],
     ),
   );

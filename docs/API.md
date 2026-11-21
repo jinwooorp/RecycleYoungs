@@ -113,6 +113,20 @@ API는 `db` 프로필에서 제공됩니다.
 
 ## 구·동 상권 통계 REST API 계약
 
+### 통계 분기 목록
+
+`GET /api/v1/statistics/quarters`는 서울 전체에서 하나 이상의 적격 통계 행이 존재하는 분기를 최신순으로 반환합니다.
+
+응답에는 점포·추정매출에 적용한 `industryCode`(`CS100010`), `defaultQuarterCode`, `quarters`가 있습니다. 각 분기는 `quarterCode`, `districtMetrics`, `dongMetrics`를 포함하며 지표 값은 `stores`, `sales`, `foot-traffic`입니다. 유동인구는 업종 구분 없이 집계합니다.
+
+지표 목록은 해당 수준의 현행 지역 중 하나 이상에 적격 통계 행이 있다는 의미입니다. 개별 지역의 자료 유무는 해당 지역의 통계 API가 판정합니다.
+
+기본값은 구·동 두 수준에서 세 지표 모두가 있는 최신 분기입니다. 조건을 충족하는 분기가 없으면 목록의 최신 분기를 사용합니다. 현행 경계가 준비됐으나 적격 행이 없으면 `200`과 `quarters: []`, `defaultQuarterCode: null`을 반환합니다. 경계가 미준비면 `503 DATA_NOT_READY`입니다.
+
+[분기 목록의 게시 기준](DATABASE.md#통계-분기-목록)
+
+### 지역별 통계 조회
+
 | 지표 | 자치구 경로 | 행정동 경로 |
 | --- | --- | --- |
 | 점포 | `/districts/{districtCode}/stats/stores` | `/dongs/{dongCode}/stats/stores` |

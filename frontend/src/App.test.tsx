@@ -195,9 +195,10 @@ test('공통 지역 필터와 반경 입력·행정구역 전체 통계를 구�
     '/api/v1/districts',
     expect.objectContaining({ signal: expect.any(AbortSignal) }),
   );
-  expect(fetch.mock.calls.every(([url]) => url === '/api/v1/districts')).toBe(
-    true,
-  );
+  expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+    '/api/v1/districts',
+    '/api/v1/statistics/quarters',
+  ]);
 });
 
 function App() {

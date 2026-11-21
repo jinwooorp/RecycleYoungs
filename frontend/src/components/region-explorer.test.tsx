@@ -9,6 +9,7 @@ import {
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { StrictMode } from 'react';
 import ExploreApp from '@/App';
+import { quarterCatalogFixture } from '@/test/quarter-catalog';
 import { MemoryRouter } from 'react-router';
 
 beforeEach(() => vi.stubEnv('VITE_KAKAO_MAP_APP_KEY', ''));
@@ -97,12 +98,14 @@ test('목록 로딩·오류·재시도·빈 목록을 화면에서 구분한다'
   let retry = false;
   vi.stubGlobal(
     'fetch',
-    vi.fn(() =>
-      retry
-        ? Promise.resolve(json({ items: [] }))
-        : new Promise<Response>((resolve) => {
-            finish = resolve;
-          }),
+    vi.fn((url: string) =>
+      url === '/api/v1/statistics/quarters'
+        ? Promise.resolve(json(quarterCatalogFixture))
+        : retry
+          ? Promise.resolve(json({ items: [] }))
+          : new Promise<Response>((resolve) => {
+              finish = resolve;
+            }),
     ),
   );
   render(<App />);

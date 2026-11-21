@@ -118,7 +118,7 @@ test('탐색 CTA와 뒤로·앞으로 이동 후 탭에 저장된 후보지를 �
   expect(explore).toHaveFocus();
   expect(document.title).toBe('상권 탐색 | 여기 창업해도 돼?');
   expect(loadKakaoMaps).toHaveBeenCalledTimes(1);
-  expect(fetchApi).toHaveBeenCalledTimes(1);
+  expect(fetchApi).toHaveBeenCalledTimes(2);
 
   fireEvent.click(screen.getByRole('button', { name: '테스트 뒤로' }));
   expect(
@@ -128,7 +128,7 @@ test('탐색 CTA와 뒤로·앞으로 이동 후 탭에 저장된 후보지를 �
     }),
   ).toBeVisible();
   expect(explore).not.toBeInTheDocument();
-  expect(fetchApi).toHaveBeenCalledTimes(1);
+  expect(fetchApi).toHaveBeenCalledTimes(2);
 
   fireEvent.click(screen.getByRole('button', { name: '테스트 앞으로' }));
   await screen.findByRole('main', { name: '여기 창업해도 돼? 탐색 화면' });

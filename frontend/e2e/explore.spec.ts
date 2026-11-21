@@ -165,6 +165,90 @@ test('매출 API 오류는 독립 표시하고 사용자 재시도로 복구', a
   await expect(sales).toContainText('9,007,199,254,740,993');
 });
 
+test('선택 분기가 지역과 두 분석 패널에 유지되며 새로고침하면 기본 분기로 돌아간다', async ({
+  page,
+}) => {
+  await page.addInitScript(
+    (items) =>
+      sessionStorage.setItem(
+        'recycleyoungs.candidates',
+        JSON.stringify({ version: 1, items }),
+      ),
+    candidates.slice(0, 2),
+  );
+  const requests: string[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.includes('/stats/'))
+      requests.push(url.searchParams.get('quarterCode')!);
+  });
+  await page.goto('/explore');
+  await selectDistrict(page);
+  await page.getByRole('button', { name: '상권 분석', exact: true }).click();
+  const quarter = page.getByRole('combobox', { name: '통계 기준 분기' });
+  const stores = page.getByRole('region', { name: '점포 수 요약' });
+  await expect(quarter).toHaveValue('20262');
+  await expect(stores).toContainText('120');
+  expect(requests).toEqual(['20262', '20262', '20262']);
+  await quarter.selectOption('20263');
+  await expect(stores).toContainText('130');
+  await expect(
+    page.getByRole('region', { name: '당월 추정매출액 요약' }),
+  ).toContainText('자료 없음');
+  await quarter.selectOption('20261');
+  await expect(stores).toContainText('110');
+  await selectDistrict(page, '11200');
+  await expect(quarter).toHaveValue('20261');
+  await expect(stores).toContainText('230');
+  await page.getByRole('button', { name: '후보지 분석', exact: true }).click();
+  await expect(quarter).toHaveValue('20261');
+  const candidate = page.getByRole('region', { name: '후보지 A 행정동 통계' });
+  await expect(candidate).toContainText('2026년 1분기');
+  await expect(candidate).toContainText('20개');
+  await page.reload();
+  await page.getByRole('button', { name: '후보지 분석', exact: true }).click();
+  await expect(quarter).toHaveValue('20262');
+  await expect(candidate).toContainText('30개');
+  await noOverflow(page);
+});
+
+test('분기 목록 실패 상태에서 반경 조회가 유지되고 목록 재시도로 통계가 열린다', async ({
+  page,
+  allowHttpErrors,
+}) => {
+  allowHttpErrors.add('/api/v1/statistics/quarters');
+  await scenario(page, 'quarters-error');
+  await page.addInitScript(
+    (items) =>
+      sessionStorage.setItem(
+        'recycleyoungs.candidates',
+        JSON.stringify({ version: 1, items }),
+      ),
+    candidates.slice(0, 1),
+  );
+  await page.goto('/explore');
+  await page.getByRole('button', { name: '후보지 분석', exact: true }).click();
+  const quarter = page.getByRole('combobox', { name: '통계 기준 분기' });
+  await expect(
+    page.getByText(
+      '통계 분기 목록을 조회할 데이터가 아직 준비되지 않았습니다.',
+    ),
+  ).toBeVisible();
+  await expect(quarter).toBeDisabled();
+  await expect(
+    page.getByRole('region', { name: '후보지 A 요약' }),
+  ).toContainText('3곳');
+  await expect(
+    page.getByRole('region', { name: '후보지 A 행정동 통계' }),
+  ).toHaveCount(0);
+  await scenario(page, 'normal');
+  await page.getByRole('button', { name: '분기 목록 다시 시도' }).click();
+  await expect(quarter).toHaveValue('20262');
+  await expect(
+    page.getByRole('region', { name: '후보지 A 행정동 통계' }),
+  ).toContainText('30개');
+});
+
 test('매출 자료 없음은 조회 오류와 구분', async ({ page }) => {
   await scenario(page, 'sales-empty');
   await page.goto('/explore');

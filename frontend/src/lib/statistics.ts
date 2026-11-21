@@ -2,6 +2,25 @@ export const STATISTICS_QUARTER = '20262';
 export const PREVIOUS_STATISTICS_QUARTER = '20261';
 export const STATISTICS_INDUSTRY = 'CS100010';
 
+const quarterPattern = /^[0-9]{4}[1-4]$/;
+const metricCodes = ['stores', 'sales', 'foot-traffic'] as const;
+type MetricCode = (typeof metricCodes)[number];
+
+export interface StatisticsQuarter {
+  quarterCode: string;
+  districtMetrics: MetricCode[];
+  dongMetrics: MetricCode[];
+}
+
+export interface StatisticsQuarters {
+  defaultQuarterCode: string | null;
+  quarters: StatisticsQuarter[];
+}
+
+export function formatQuarter(code: string): string {
+  return `${code.slice(0, 4)}년 ${code.slice(4)}분기`;
+}
+
 export interface RegionStatTarget {
   kind: 'district' | 'dong';
   code: string;
@@ -74,6 +93,77 @@ function invalid(): never {
   throw new Error('통계 데이터 응답 형식을 확인할 수 없습니다.');
 }
 
+function isMetricList(value: unknown): value is MetricCode[] {
+  return (
+    Array.isArray(value) &&
+    value.every((metric) => metricCodes.includes(metric)) &&
+    new Set(value).size === value.length
+  );
+}
+
+export async function fetchStatisticsQuarters(
+  signal: AbortSignal,
+): Promise<StatisticsQuarters> {
+  let response: Response;
+  try {
+    response = await fetch('/api/v1/statistics/quarters', { signal });
+  } catch (error) {
+    if (signal.aborted) throw error;
+    throw new Error('네트워크 연결을 확인한 뒤 다시 시도해 주세요.', {
+      cause: error,
+    });
+  }
+  if (!response.ok) {
+    const problem: unknown = await response.json().catch(() => null);
+    throw new Error(
+      response.status === 503 &&
+        record(problem) &&
+        problem.code === 'DATA_NOT_READY'
+        ? '통계 분기 목록을 조회할 데이터가 아직 준비되지 않았습니다.'
+        : '통계 분기 목록을 불러오지 못했습니다.',
+    );
+  }
+  const body: unknown = await response.json().catch(invalid);
+  if (
+    !record(body) ||
+    body.industryCode !== STATISTICS_INDUSTRY ||
+    !Array.isArray(body.quarters)
+  )
+    return invalid();
+  const quarters: StatisticsQuarter[] = [];
+  for (const quarter of body.quarters) {
+    const previous = quarters.at(-1);
+    if (
+      !record(quarter) ||
+      typeof quarter.quarterCode !== 'string' ||
+      !quarterPattern.test(quarter.quarterCode) ||
+      (previous && previous.quarterCode <= quarter.quarterCode) ||
+      !isMetricList(quarter.districtMetrics) ||
+      !isMetricList(quarter.dongMetrics) ||
+      (!quarter.districtMetrics.length && !quarter.dongMetrics.length)
+    )
+      return invalid();
+    quarters.push({
+      quarterCode: quarter.quarterCode,
+      districtMetrics: quarter.districtMetrics,
+      dongMetrics: quarter.dongMetrics,
+    });
+  }
+  const defaultQuarterCode = body.defaultQuarterCode;
+  if (
+    quarters.length
+      ? typeof defaultQuarterCode !== 'string' ||
+        !quarters.some((quarter) => quarter.quarterCode === defaultQuarterCode)
+      : defaultQuarterCode !== null
+  )
+    return invalid();
+  return {
+    defaultQuarterCode:
+      typeof defaultQuarterCode === 'string' ? defaultQuarterCode : null,
+    quarters,
+  };
+}
+
 function numeric(value: unknown, decimal: boolean): value is string | null {
   return (
     value === null ||
@@ -100,7 +190,7 @@ export function formatStatistic(
 export function fetchStoreStatistics(
   target: RegionStatTarget,
   signal: AbortSignal,
-  quarter: string = STATISTICS_QUARTER,
+  quarter: string,
 ): Promise<StatisticsResponse<StoreStatistics>> {
   return fetchStatistics(
     target,
@@ -115,7 +205,7 @@ export function fetchStoreStatistics(
 export function fetchSalesStatistics(
   target: RegionStatTarget,
   signal: AbortSignal,
-  quarter: string = STATISTICS_QUARTER,
+  quarter: string,
 ): Promise<StatisticsResponse<SalesStatistics>> {
   return fetchStatistics(target, 'sales', salesIntegers, [], signal, quarter);
 }
@@ -123,7 +213,7 @@ export function fetchSalesStatistics(
 export function fetchFootTrafficStatistics(
   target: RegionStatTarget,
   signal: AbortSignal,
-  quarter: string = STATISTICS_QUARTER,
+  quarter: string,
 ): Promise<StatisticsResponse<FootTrafficStatistics>> {
   return fetchStatistics(
     target,
@@ -142,7 +232,7 @@ async function fetchStatistics<T>(
   integers: readonly string[],
   decimals: readonly string[],
   signal: AbortSignal,
-  quarter: string = STATISTICS_QUARTER,
+  quarter: string,
 ): Promise<StatisticsResponse<T>> {
   const district = target.kind === 'district';
   if (
@@ -150,7 +240,7 @@ async function fetchStatistics<T>(
     !(district ? /^[0-9]{5}$/ : /^[0-9]{8}$/).test(target.code)
   )
     throw new Error('조회할 지역 코드를 확인해 주세요.');
-  if (!/^[0-9]{4}[1-4]$/.test(quarter))
+  if (!quarterPattern.test(quarter))
     throw new Error('조회할 분기를 확인해 주세요.');
   const footTraffic = kind === 'foot-traffic';
   const params = new URLSearchParams({ quarterCode: quarter });

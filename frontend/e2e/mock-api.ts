@@ -3,6 +3,7 @@ import {
   cafePage,
   districts,
   dongs,
+  quarterCatalog,
   sourceBatch,
   statistics,
 } from './fixtures.ts';
@@ -41,6 +42,11 @@ export function startMockApi(port = 4174) {
     if (request.method !== 'GET') return invalid();
     if (url.pathname === '/__e2e/health')
       return send(200, { fixture: 'synthetic-v1' });
+    if (url.pathname === '/api/v1/statistics/quarters') {
+      if (scenario === 'quarters-error')
+        return send(503, { code: 'DATA_NOT_READY', status: 503 });
+      return send(200, quarterCatalog);
+    }
     if (url.pathname === '/api/v1/districts') {
       if (scenario === 'districts-error')
         return send(503, { code: 'DATA_NOT_READY', status: 503 });
@@ -100,8 +106,12 @@ export function startMockApi(port = 4174) {
       const [, kind, code, metric] = stat;
       if (!knownRegion(kind, code)) return missing();
       const quarter = url.searchParams.get('quarterCode');
+      const listed = quarterCatalog.quarters.find(
+        ({ quarterCode }) => quarterCode === quarter,
+      );
       if (
-        !['20261', '20262'].includes(quarter ?? '') ||
+        !quarter ||
+        !listed ||
         (metric === 'foot-traffic'
           ? url.searchParams.has('industryCode')
           : url.searchParams.get('industryCode') !== 'CS100010')
@@ -114,9 +124,12 @@ export function startMockApi(port = 4174) {
         quarterCode: quarter,
         ...(metric === 'foot-traffic' ? {} : { industryCode: 'CS100010' }),
         data:
-          metric === 'sales' && scenario === 'sales-empty'
+          !(
+            kind === 'districts' ? listed.districtMetrics : listed.dongMetrics
+          ).includes(metric) ||
+          (metric === 'sales' && scenario === 'sales-empty')
             ? null
-            : statistics(metric, code),
+            : statistics(metric, code, quarter),
       });
     }
     if (url.pathname === '/api/v1/regions/nearby') {

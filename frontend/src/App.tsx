@@ -20,6 +20,8 @@ import { useCandidates } from '@/hooks/use-candidates';
 import { useCandidateMap } from '@/hooks/use-candidate-map';
 import { CandidatePanel } from '@/components/candidate-panel';
 import { sameCandidateLocation, type Candidate } from '@/lib/candidates';
+import { StatisticsQuarterSelect } from '@/components/statistics-quarter-select';
+import { useStatisticsQuarters } from '@/hooks/use-statistics-quarters';
 
 const menus = [
   { id: 'cafes', label: '주변 탐색', Icon: Compass },
@@ -29,6 +31,7 @@ const menus = [
 
 export default function App() {
   const region = useRegionExplorer();
+  const quarterCatalog = useStatisticsQuarters();
   const [connection, setConnection] = useState<MapConnection | null>(null);
   const search = usePlaceSearch(
     connection?.status === 'ready' ? (connection.context?.maps ?? null) : null,
@@ -234,10 +237,14 @@ export default function App() {
               </Button>
             </div>
             <div className="explore-panel-content min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              {panelMenu !== 'cafes' && (
+                <StatisticsQuarterSelect catalog={quarterCatalog} />
+              )}
               {panelMenu === 'compare' ? (
                 <CandidatePanel
                   candidates={candidates}
                   active={selectedMenu === 'compare'}
+                  quarter={quarterCatalog.selected}
                   mapReady={connection?.status === 'ready'}
                   onSelect={selectCandidate}
                   onStartPicking={search.close}
@@ -249,6 +256,7 @@ export default function App() {
                   region={region}
                   cafes={cafes}
                   active={selectedMenu !== null}
+                  quarter={quarterCatalog.selected}
                 />
               )}
             </div>
