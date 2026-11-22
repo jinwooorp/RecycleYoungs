@@ -1,4 +1,4 @@
-import type { Request } from '@playwright/test';
+import type { Page, Request } from '@playwright/test';
 import { candidates } from './fixtures';
 import {
   test,
@@ -8,6 +8,32 @@ import {
   selectDistrict,
   noOverflow,
 } from './test-support';
+
+async function candidateValue(
+  page: Page,
+  group: string,
+  label: string,
+  slot: string,
+) {
+  const region = page.getByRole('region', { name: group, exact: true });
+  if (await page.evaluate(() => matchMedia('(min-width: 64rem)').matches)) {
+    const table = region.getByRole('table', { name: group });
+    const column = await table
+      .getByRole('columnheader', { name: new RegExp(`^${slot} ·`) })
+      .evaluate((el) => (el as HTMLTableCellElement).cellIndex);
+    const row = table
+      .getByRole('rowheader', { name: label, exact: true })
+      .locator('..');
+    return row.getByRole('cell').nth(column - 1);
+  }
+  return region
+    .getByRole('region', { name: label, exact: true })
+    .locator('dl > div')
+    .filter({
+      has: page.getByRole('term').filter({ hasText: new RegExp(`^${slot} ·`) }),
+    })
+    .getByRole('definition');
+}
 
 test('랜딩에서 시작하기로 탐색 이동', async ({ page }) => {
   await page.goto('/');
@@ -69,6 +95,7 @@ test('전체 화면 지도 위에서 세 메뉴를 열고 닫아도 지도 크�
   const mapBox = { x: 0, y: 0, ...fullScreen };
   await expect.poll(() => map.boundingBox()).toEqual(mapBox);
   await expect(page.getByRole('complementary')).toHaveCount(0);
+  let panelBox: Awaited<ReturnType<typeof map.boundingBox>> = null;
   for (const name of ['주변 탐색', '상권 분석', '후보지 분석']) {
     const menu = dock.getByRole('button', { name, exact: true });
     await menu.click();
@@ -77,6 +104,17 @@ test('전체 화면 지도 위에서 세 메뉴를 열고 닫아도 지도 크�
       panel.getByRole('heading', { name, exact: true }),
     ).toBeVisible();
     await expect.poll(() => map.boundingBox()).toEqual(mapBox);
+    await expect
+      .poll(() =>
+        panel.evaluate((el) =>
+          el
+            .getAnimations()
+            .some((animation) => animation.playState === 'running'),
+        ),
+      )
+      .toBe(false);
+    if (panelBox === null) panelBox = (await panel.boundingBox())!;
+    else expect(await panel.boundingBox()).toEqual(panelBox);
     await expect
       .poll(async () => {
         const panelBox = (await panel.boundingBox())!;
@@ -295,11 +333,19 @@ test('선택 분기가 지역과 두 분석 패널에 유지되며 새로고침�
   await expect(franchiseBar).toHaveAttribute('width', '454');
   await page.getByRole('button', { name: '후보지 분석', exact: true }).click();
   await expect(quarter).toHaveValue('20261');
-  const candidate = page.getByRole('region', { name: '후보지 A 행정동 통계' });
-  await expect(candidate).toContainText('2026년 1분기');
+  const candidate = await candidateValue(
+    page,
+    '소속 행정동 전체 통계',
+    '카페 업종 점포 수',
+    'A',
+  );
+  await expect(
+    page.getByRole('region', { name: '소속 행정동 전체 통계' }),
+  ).toContainText('2026년 1분기');
   await expect(candidate).toContainText('20개');
   const competition = page.getByRole('region', {
-    name: '후보지 A 주변 경쟁 환경',
+    name: '주변 경쟁 환경',
+    exact: true,
   });
   await expect(competition.locator('time[datetime="2026-10"]')).toHaveText(
     '2026년 10월',
@@ -351,7 +397,7 @@ test('분기 목록 실패 상태에서 반경 조회가 유지되고 목록 재
   ).toBeVisible();
   await expect(quarter).toBeDisabled();
   await expect(
-    page.getByRole('region', { name: '후보지 A 요약' }),
+    page.getByRole('region', { name: '후보지 A 주변 경쟁 환경' }),
   ).toContainText('3곳');
   await expect(
     page.getByRole('region', { name: '후보지 A 행정동 통계' }),
@@ -427,19 +473,46 @@ test('합성 후보지 세 곳 복원, 공통 반경 변경과 삭제', async ({
     await expect(
       page.getByRole('region', { name: `후보지 ${slot} 요약`, exact: true }),
     ).toBeVisible();
+  const competitionGroup = '주변 경쟁 환경';
+  const statisticsGroup = '소속 행정동 전체 통계';
+  const cafeCount = (slot: string) =>
+    candidateValue(page, competitionGroup, '전체 경쟁 카페', slot);
+  const storeCount = (slot: string) =>
+    candidateValue(page, statisticsGroup, '카페 업종 점포 수', slot);
+  for (const [slot, cafes, stores, month, day] of [
+    ['A', '3곳', '30개', '2026-10', '2026년 11월 17일'],
+    ['B', '5곳', '45개', '2026-09', '2026년 11월 18일'],
+    ['C', '7곳', '30개', '2026-08', '2026년 11월 19일'],
+  ]) {
+    await expect(await cafeCount(slot)).toHaveText(cafes);
+    await expect(await storeCount(slot)).toContainText(stores);
+    await expect(
+      (
+        await candidateValue(page, competitionGroup, '카페 원천 기준년월', slot)
+      ).locator('time'),
+    ).toHaveAttribute('datetime', month);
+    await expect(
+      await candidateValue(page, competitionGroup, '서비스 DB 게시일', slot),
+    ).toHaveText(day);
+  }
+  await page
+    .getByRole('button', { name: '후보지 A 상세 및 관리 열기' })
+    .press('Enter');
   const competition = page.getByRole('region', {
     name: '후보지 A 주변 경쟁 환경',
   });
-  await expect(competition).toContainText('3곳');
   await expect(competition).toContainText('합성 경쟁 카페');
+  await expect(competition).toContainText('120m');
   await page
     .getByRole('combobox', { name: '공통 탐색 반경' })
     .selectOption('1000');
-  await expect(competition).toContainText('7곳');
+  await expect(await cafeCount('A')).toHaveText('7곳');
+  await expect(await cafeCount('B')).toHaveText('9곳');
   await expect(competition).toContainText('공통 반경 1km');
   await page
     .getByRole('combobox', { name: '공통 탐색 반경' })
     .selectOption('500');
+  await expect(await cafeCount('A')).toHaveText('3곳');
   await expect(competition).toContainText('공통 반경 500m');
   await page
     .getByRole('textbox', { name: '후보지 A 이름', exact: true })
@@ -448,11 +521,11 @@ test('합성 후보지 세 곳 복원, 공통 반경 변경과 삭제', async ({
     .getByRole('button', { name: '후보지 A 이름 저장', exact: true })
     .click();
   await expect(
-    page.getByRole('button', {
-      name: '후보지 A 지도에서 위치 확인',
-      exact: true,
-    }),
-  ).toHaveText('합성 이름 변경');
+    page.getByRole('region', { name: '후보지 A 요약' }),
+  ).toContainText('합성 이름 변경');
+  await page
+    .getByRole('button', { name: '후보지 B 상세 및 관리 열기' })
+    .press('Enter');
   await page
     .getByRole('button', { name: '후보지 B 삭제', exact: true })
     .click();
@@ -460,8 +533,24 @@ test('합성 후보지 세 곳 복원, 공통 반경 변경과 삭제', async ({
     page.getByRole('region', { name: '후보지 B 요약', exact: true }),
   ).toHaveCount(0);
   await expect(
+    page.getByRole('button', { name: '후보지 C 상세 및 관리 열기' }),
+  ).toBeFocused();
+  await expect(
     page.getByRole('heading', { name: '2개 후보지 분석' }),
   ).toBeVisible();
+  await expect(await storeCount('A')).toContainText('30개');
+  await expect(await storeCount('C')).toContainText('30개');
+  const statsRequests: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/stats/') || request.url().includes('/cafes/'))
+      statsRequests.push(request.url());
+  });
+  await page.setViewportSize({ width: 320, height: 568 });
+  await expect(page.getByRole('table')).toHaveCount(0);
+  await expect(await cafeCount('A')).toHaveText('3곳');
+  await expect(await cafeCount('C')).toHaveText('7곳');
+  await expect(await storeCount('C')).toContainText('30개');
+  expect(statsRequests).toHaveLength(0);
   expect(
     await page.evaluate(
       () =>
@@ -470,6 +559,41 @@ test('합성 후보지 세 곳 복원, 공통 반경 변경과 삭제', async ({
     ),
   ).toBe(2);
   await noOverflow(page);
+});
+
+test('한 후보지의 반경 오류와 통계 행 부재를 다른 후보지의 값과 구분한다', async ({
+  page,
+  allowHttpErrors,
+}) => {
+  allowHttpErrors.add('/api/v1/cafes/nearby');
+  await scenario(page, 'candidate-partial');
+  await page.addInitScript(
+    (items) =>
+      sessionStorage.setItem(
+        'recycleyoungs.candidates',
+        JSON.stringify({ version: 1, items }),
+      ),
+    candidates.slice(0, 2),
+  );
+  await page.goto('/explore');
+  await page.getByRole('button', { name: '후보지 분석', exact: true }).click();
+  const cafe = (slot: string) =>
+    candidateValue(page, '주변 경쟁 환경', '전체 경쟁 카페', slot);
+  await expect(await cafe('A')).toHaveText('3곳');
+  const failed = await cafe('B');
+  await expect(failed.getByRole('alert')).toBeVisible();
+  const sales = await candidateValue(
+    page,
+    '소속 행정동 전체 통계',
+    '당월 추정매출액',
+    'B',
+  );
+  await expect(sales).toHaveText('선택한 지역·분기의 자료 없음');
+  await expect(sales.locator('time')).toHaveCount(0);
+  await scenario(page, 'normal');
+  await failed.getByRole('button', { name: 'B 경쟁 카페 다시 시도' }).click();
+  await expect(failed).toHaveText('5곳');
+  await expect(await cafe('A')).toHaveText('3곳');
 });
 
 test('최대 세 곳을 넘는 저장 데이터는 복원하지 않음', async ({ page }) => {

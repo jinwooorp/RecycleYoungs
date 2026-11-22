@@ -30,16 +30,20 @@ export const quarterCatalog = {
   ],
 };
 
-export function cafePage(radius: number): CafePage {
+export function cafePage(radius: number, longitude: number): CafePage {
+  const index = Math.max(
+    0,
+    candidates.findIndex((item) => item.longitude === longitude),
+  );
   return {
-    totalCount: radius === 1000 ? 7 : 3,
+    totalCount: (radius === 1000 ? 7 : 3) + index * 2,
     limit: 200,
     offset: 0,
     hasMore: true,
     sourceBatch: {
-      batchId: '00000000-0000-4000-8000-000000000002',
-      publishedAt: '2026-11-16T15:00:00Z',
-      referenceMonth: '202610',
+      batchId: `00000000-0000-4000-8000-00000000000${index + 2}`,
+      publishedAt: `2026-11-${16 + index}T15:00:00Z`,
+      referenceMonth: ['202610', '202609', '202608'][index],
     },
     items: [
       {
@@ -59,7 +63,14 @@ export function cafePage(radius: number): CafePage {
 }
 
 export function statistics(metric: string, code: string, quarter: string) {
-  const baseCount = code === '11440' ? 120 : code === '11200' ? 240 : 30;
+  const baseCount =
+    code === '11440'
+      ? 120
+      : code === '11200'
+        ? 240
+        : code === '11200650'
+          ? 45
+          : 30;
   const difference = quarter === '20261' ? -10 : quarter === '20263' ? 10 : 0;
   const storeCount = baseCount + difference;
   const month = quarter === '20261' ? '04' : quarter === '20262' ? '07' : '10';

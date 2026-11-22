@@ -1,5 +1,6 @@
 import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { NativeSelect } from '@/components/ui/native-select';
 import type { useStatisticsQuarters } from '@/hooks/use-statistics-quarters';
 import { formatQuarter, metricCodes, type MetricCode } from '@/lib/statistics';
 
@@ -35,13 +36,14 @@ export function StatisticsQuarterSelect({
         통계 기준 분기
       </label>
       <div className="flex items-center gap-2">
-        <select
+        <NativeSelect
           id="statistics-quarter"
           aria-describedby={partial ? 'statistics-quarter-coverage' : undefined}
           value={catalog.selected ?? ''}
           disabled={!catalog.options.length}
           onChange={(event) => catalog.selectQuarter(event.target.value)}
-          className="h-9 min-w-0 flex-1 rounded-md border bg-background px-2"
+          className="h-9"
+          containerClassName="flex-1"
         >
           {!catalog.selected && (
             <option value="" disabled>
@@ -58,7 +60,7 @@ export function StatisticsQuarterSelect({
               </option>
             ),
           )}
-        </select>
+        </NativeSelect>
         <Button
           type="button"
           variant="outline"

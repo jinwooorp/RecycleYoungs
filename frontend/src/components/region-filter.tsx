@@ -6,8 +6,9 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
-import { ChevronDown, MapPin, SlidersHorizontal, X } from 'lucide-react';
+import { MapPin, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { NativeSelect, SelectChevron } from '@/components/ui/native-select';
 import type {
   RegionExplorer,
   RegionResource,
@@ -162,7 +163,7 @@ export function RegionFilter({
             {dongName || districtName || '지역 필터'}
           </span>
           {hasError && <span aria-label="지역 데이터 확인 필요">!</span>}
-          <ChevronDown aria-hidden="true" data-icon="inline-end" />
+          <SelectChevron className="mr-px" />
         </Button>
       )}
       <div
@@ -198,59 +199,55 @@ export function RegionFilter({
           </div>
           <label className="region-filter-field">
             <span>자치구</span>
-            <span className="region-filter-select">
-              <select
-                aria-label="자치구"
-                ref={district}
-                value={region.districtCode}
-                aria-describedby="region-filter-help"
-                onChange={(event) => {
-                  region.selectDistrict(event.target.value);
-                  onSelection?.();
-                }}
-                disabled={
-                  region.districts.status !== 'ready' ||
-                  !region.districts.data?.length
-                }
-                data-selected={!!region.districtCode}
-              >
-                <option value="">자치구 전체</option>
-                {region.districts.data?.map((item) => (
-                  <option key={item.districtCode} value={item.districtCode}>
-                    {item.districtName}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown aria-hidden="true" />
-            </span>
+            <NativeSelect
+              className="h-11"
+              aria-label="자치구"
+              ref={district}
+              value={region.districtCode}
+              aria-describedby="region-filter-help"
+              onChange={(event) => {
+                region.selectDistrict(event.target.value);
+                onSelection?.();
+              }}
+              disabled={
+                region.districts.status !== 'ready' ||
+                !region.districts.data?.length
+              }
+              data-selected={!!region.districtCode}
+            >
+              <option value="">자치구 전체</option>
+              {region.districts.data?.map((item) => (
+                <option key={item.districtCode} value={item.districtCode}>
+                  {item.districtName}
+                </option>
+              ))}
+            </NativeSelect>
           </label>
           <label className="region-filter-field">
             <span>행정동</span>
-            <span className="region-filter-select">
-              <select
-                aria-label="행정동"
-                value={region.dongCode}
-                aria-describedby="region-filter-help"
-                onChange={(event) => {
-                  region.selectDong(event.target.value);
-                  onSelection?.();
-                }}
-                disabled={
-                  !region.districtCode ||
-                  region.dongs.status !== 'ready' ||
-                  !region.dongs.data?.length
-                }
-                data-selected={!!region.dongCode}
-              >
-                <option value="">행정동 전체</option>
-                {region.dongs.data?.map((item) => (
-                  <option key={item.dongCode} value={item.dongCode}>
-                    {item.dongName}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown aria-hidden="true" />
-            </span>
+            <NativeSelect
+              className="h-11"
+              aria-label="행정동"
+              value={region.dongCode}
+              aria-describedby="region-filter-help"
+              onChange={(event) => {
+                region.selectDong(event.target.value);
+                onSelection?.();
+              }}
+              disabled={
+                !region.districtCode ||
+                region.dongs.status !== 'ready' ||
+                !region.dongs.data?.length
+              }
+              data-selected={!!region.dongCode}
+            >
+              <option value="">행정동 전체</option>
+              {region.dongs.data?.map((item) => (
+                <option key={item.dongCode} value={item.dongCode}>
+                  {item.dongName}
+                </option>
+              ))}
+            </NativeSelect>
           </label>
         </div>
         <p

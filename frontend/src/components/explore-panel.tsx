@@ -1,5 +1,5 @@
-import { ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { NativeSelect } from '@/components/ui/native-select';
 import { AnalysisPanel } from '@/components/analysis-panel';
 import { CafeProvenance } from '@/components/data-provenance';
 import type { CafeExplorer } from '@/hooks/use-cafe-explorer';
@@ -123,22 +123,17 @@ function CafePanel({
           <>
             <label className="flex min-w-0 flex-col gap-2 text-xs font-medium">
               탐색 반경
-              <span className="relative block">
-                <select
-                  value={cafes.radiusM}
-                  onChange={(event) =>
-                    cafes.setRadiusM(event.target.value === '1000' ? 1000 : 500)
-                  }
-                  className="h-11 w-full appearance-none rounded-lg border bg-muted/50 pr-10 pl-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <option value="500">500m</option>
-                  <option value="1000">1km</option>
-                </select>
-                <ChevronDown
-                  aria-hidden="true"
-                  className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground"
-                />
-              </span>
+              <NativeSelect
+                value={cafes.radiusM}
+                onChange={(event) =>
+                  cafes.setRadiusM(event.target.value === '1000' ? 1000 : 500)
+                }
+                className="h-11"
+                variant="muted"
+              >
+                <option value="500">500m</option>
+                <option value="1000">1km</option>
+              </NativeSelect>
             </label>
             <div className="flex flex-col gap-2 rounded-xl border bg-muted/30 p-3 text-xs leading-5">
               <p className="font-medium">선택 지점</p>

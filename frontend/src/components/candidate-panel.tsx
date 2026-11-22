@@ -1,5 +1,7 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
+import { NativeSelect } from '@/components/ui/native-select';
+import { CandidateComparison } from '@/components/candidate-comparison';
 import type { RegionResource } from '@/hooks/use-region-explorer';
 import type { Candidates } from '@/hooks/use-candidates';
 import {
@@ -18,7 +20,11 @@ import {
   type StatisticsResponse,
   type StatisticsSourceBatch,
 } from '@/lib/statistics';
-import { statisticsSource } from '@/lib/data-sources';
+import {
+  cafeSource,
+  formatReferenceMonth,
+  statisticsSource,
+} from '@/lib/data-sources';
 import {
   CafeProvenance,
   DataSourceDetails,
@@ -69,12 +75,62 @@ function CafeCount({ analysis }: { analysis: CandidateAnalysis }) {
   );
 }
 
+function CandidateRegion({ analysis }: { analysis: CandidateAnalysis }) {
+  return (
+    <div className="text-xs leading-5">
+      <Result
+        resource={analysis.regions}
+        label={`${analysis.item.slot} 소속 지역`}
+      >
+        {({ districts, dongs }) =>
+          districts.length ? (
+            <p>
+              {districts.map((area) => area.districtName).join(' · ')} ·{' '}
+              {dongs.length
+                ? dongs.map((area) => area.dongName).join(' · ')
+                : '소속 행정동 없음'}
+            </p>
+          ) : (
+            '서울 경계 밖'
+          )
+        }
+      </Result>
+    </div>
+  );
+}
+
+function CafeDate({
+  analysis,
+  kind,
+}: {
+  analysis: CandidateAnalysis;
+  kind: 'reference' | 'published';
+}) {
+  const page = analysis.cafes.status === 'ready' ? analysis.cafes.data : null;
+  if (!page) return <span aria-label="게시 정보 없음">—</span>;
+  if (kind === 'published')
+    return (
+      <PublishedDate
+        publishedAt={page.sourceBatch.publishedAt}
+        showLabel={false}
+      />
+    );
+  const month = formatReferenceMonth(page.sourceBatch.referenceMonth);
+  return month ? (
+    <time dateTime={month.dateTime}>{month.label}</time>
+  ) : (
+    '확인 불가'
+  );
+}
+
 function Competition({
   analysis,
   radius,
+  detailsOnly = false,
 }: {
   analysis: CandidateAnalysis;
   radius: Candidates['radius'];
+  detailsOnly?: boolean;
 }) {
   return (
     <section
@@ -87,7 +143,7 @@ function Competition({
       <p className="text-xs text-muted-foreground">
         공통 반경 {radius === 500 ? '500m' : '1km'} 내 전체 경쟁 카페
       </p>
-      <CafeCount analysis={analysis} />
+      {!detailsOnly && <CafeCount analysis={analysis} />}
       {!!analysis.regions.data?.districts.length &&
         analysis.cafes.status === 'ready' && (
           <Result
@@ -96,7 +152,11 @@ function Competition({
           >
             {(page) => (
               <>
-                <CafeProvenance sourceBatch={page.sourceBatch} />
+                {detailsOnly ? (
+                  <DataSourceDetails sources={[cafeSource]} />
+                ) : (
+                  <CafeProvenance sourceBatch={page.sourceBatch} />
+                )}
                 {page.items.length ? (
                   <ol className="divide-y">
                     {page.items.slice(0, 3).map((cafe) => (
@@ -132,30 +192,17 @@ function Competition({
   );
 }
 
-function DongMetrics({
-  analysis,
-  quarter,
-}: {
-  analysis: CandidateAnalysis;
-  quarter: string;
-}) {
-  const { statistics, dong, item, unavailable } = analysis;
-  if (!dong || !statistics)
-    return (
-      <section
-        aria-label={`후보지 ${item.slot} 행정동 통계`}
-        className="min-w-0 space-y-2 rounded-xl border p-4 text-sm [overflow-wrap:anywhere]"
-      >
-        <h4 className="font-semibold">
-          {item.slot} · {item.name}
-        </h4>
-        <p className="text-muted-foreground">{unavailable}</p>
-      </section>
-    );
-  const metrics = [
+const metricLabels = [
+  '카페 업종 점포 수',
+  '당월 추정매출액',
+  '지역 전체 유동인구',
+] as const;
+
+function getDongMetrics(statistics: CandidateAnalysis['statistics']) {
+  if (!statistics) return null;
+  return [
     {
       id: 'stores',
-      label: '카페 업종 점포 수',
       retry: '점포',
       resource: statistics.stores,
       value: statistics.stores.data?.data?.storeCount ?? null,
@@ -163,7 +210,6 @@ function DongMetrics({
     },
     {
       id: 'sales',
-      label: '당월 추정매출액',
       retry: '추정매출',
       resource: statistics.sales,
       value: statistics.sales.data?.data?.monthlySalesAmount ?? null,
@@ -171,18 +217,64 @@ function DongMetrics({
     },
     {
       id: 'foot-traffic',
-      label: '지역 전체 유동인구',
       retry: '유동인구',
       resource: statistics.footTraffic,
       value: statistics.footTraffic.data?.data?.totalFootTraffic ?? null,
       unit: '명',
     },
   ] as const;
-  const sources = metrics.flatMap(({ id, resource }) =>
-    resource.status === 'ready' && resource.data?.data
-      ? [statisticsSource('dong', id)]
-      : [],
+}
+
+type DongMetric = NonNullable<ReturnType<typeof getDongMetrics>>[number];
+
+function MetricValue({
+  metric,
+  slot,
+}: {
+  metric: DongMetric;
+  slot: CandidateSlot;
+}) {
+  return (
+    <Result<StatisticsResponse<{ sourceBatch: StatisticsSourceBatch }>>
+      resource={metric.resource}
+      label={`${slot} ${metric.retry}`}
+    >
+      {({ data }) =>
+        data ? (
+          <>
+            <p className="font-semibold tabular-nums">
+              {formatStatistic(metric.value, { trimTrailingZeros: true })}
+              {metric.value === null ? '' : metric.unit}
+            </p>
+            <PublishedDate publishedAt={data.sourceBatch.publishedAt} />
+          </>
+        ) : (
+          '선택한 지역·분기의 자료 없음'
+        )
+      }
+    </Result>
   );
+}
+
+function DongMetrics({
+  analysis,
+  metrics,
+  quarter,
+  detailsOnly = false,
+}: {
+  analysis: CandidateAnalysis;
+  metrics: ReturnType<typeof getDongMetrics>;
+  quarter: string;
+  detailsOnly?: boolean;
+}) {
+  const { statistics, dong, item, unavailable } = analysis;
+  const stores = statistics?.stores.data?.data;
+  const sources =
+    metrics?.flatMap(({ id, resource }) =>
+      resource.status === 'ready' && resource.data?.data
+        ? [statisticsSource('dong', id)]
+        : [],
+    ) ?? [];
   return (
     <section
       aria-label={`후보지 ${item.slot} 행정동 통계`}
@@ -191,64 +283,43 @@ function DongMetrics({
       <h4 className="font-semibold">
         {item.slot} · {item.name}
       </h4>
-      <p className="text-xs leading-5 text-muted-foreground">
-        {dong.dongName} 전체 · {formatQuarter(quarter)}
-      </p>
-      <p className="text-xs leading-5 text-muted-foreground">
-        점포·매출은 카페·음료 업종 · 유동인구는 지역 전체
-      </p>
-      <dl className="min-w-0 divide-y">
-        {metrics.map((metric) => (
-          <div key={metric.label} className="min-w-0 space-y-2 py-3">
-            <dt className="text-xs text-muted-foreground">{metric.label}</dt>
-            <dd className="min-w-0 leading-6 tabular-nums [overflow-wrap:anywhere]">
-              <Result<
-                StatisticsResponse<{ sourceBatch: StatisticsSourceBatch }>
-              >
-                resource={metric.resource}
-                label={`${item.slot} ${metric.retry}`}
-              >
-                {({ data }) =>
-                  data ? (
-                    <>
-                      <p className="font-semibold">
-                        {formatStatistic(metric.value, {
-                          trimTrailingZeros: true,
-                        })}
-                        {metric.value === null ? '' : metric.unit}
-                      </p>
-                      <PublishedDate
-                        publishedAt={data.sourceBatch.publishedAt}
-                      />
-                      {metric.retry === '점포' &&
-                        statistics.stores.data?.data && (
-                          <p className="text-xs text-muted-foreground">
-                            개업{' '}
-                            {formatStatistic(
-                              statistics.stores.data.data.openedStoreCount,
-                            )}{' '}
-                            · 폐업{' '}
-                            {formatStatistic(
-                              statistics.stores.data.data.closedStoreCount,
-                            )}
-                          </p>
-                        )}
-                    </>
-                  ) : (
-                    '선택한 지역·분기의 자료 없음'
-                  )
-                }
-              </Result>
-            </dd>
-          </div>
-        ))}
-      </dl>
-      <DataSourceDetails sources={sources} />
+      {dong && metrics ? (
+        <>
+          <p className="text-xs leading-5 text-muted-foreground">
+            {dong.dongName} 전체 · {formatQuarter(quarter)}
+          </p>
+          <p className="text-xs leading-5 text-muted-foreground">
+            점포·매출은 카페·음료 업종 · 유동인구는 지역 전체
+          </p>
+          {!detailsOnly && (
+            <dl className="min-w-0 divide-y">
+              {metrics.map((metric, index) => (
+                <div key={metric.id} className="min-w-0 space-y-2 py-3">
+                  <dt className="text-xs text-muted-foreground">
+                    {metricLabels[index]}
+                  </dt>
+                  <dd className="min-w-0 leading-6">
+                    <MetricValue metric={metric} slot={item.slot} />
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
+          {stores && (
+            <p className="text-xs text-muted-foreground">
+              개업 {formatStatistic(stores.openedStoreCount)} · 폐업{' '}
+              {formatStatistic(stores.closedStoreCount)}
+            </p>
+          )}
+          <DataSourceDetails sources={sources} />
+        </>
+      ) : (
+        <p className="text-muted-foreground">{unavailable}</p>
+      )}
     </section>
   );
 }
 
-/** 후보지 저장 형식은 유지하고 반경 경쟁 환경과 행정동 전체 통계를 분리합니다. */
 export function CandidatePanel({
   candidates,
   active,
@@ -266,6 +337,20 @@ export function CandidatePanel({
 }) {
   const { items, picking, pending, notice, radius } = candidates;
   const analyses = useCandidateAnalysis(items, radius, active, quarter);
+  const reports = analyses.map((analysis) => ({
+    analysis,
+    metrics: getDongMetrics(analysis.statistics),
+  }));
+  const columns = analyses.map(({ item }) => item);
+  const comparing = items.length > 1;
+  const radiusLabel = radius === 500 ? '500m' : '1km';
+  const detailsId = useId();
+  const detailsRefs = useRef<
+    Partial<Record<CandidateSlot, HTMLDetailsElement | null>>
+  >({});
+  const managementRefs = useRef<
+    Partial<Record<CandidateSlot, HTMLButtonElement | null>>
+  >({});
   const selectionRefs = useRef<
     Partial<Record<CandidateSlot, HTMLButtonElement | null>>
   >({});
@@ -277,7 +362,7 @@ export function CandidatePanel({
     if (!target) return;
     (target === 'heading'
       ? headingRef.current
-      : selectionRefs.current[target]
+      : managementRefs.current[target]
     )?.focus();
     afterRemoval.current = null;
   }, [items]);
@@ -289,6 +374,76 @@ export function CandidatePanel({
         block: 'nearest',
       });
   }, [active, candidates.selected]);
+  function showDetails(slot: CandidateSlot) {
+    const details = detailsRefs.current[slot];
+    if (!details) return;
+    details.open = true;
+    details.querySelector('summary')?.focus();
+  }
+
+  function candidateManagement(item: Candidate) {
+    return (
+      <>
+        <details className="text-xs leading-5 text-muted-foreground">
+          <summary className="cursor-pointer rounded outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            위치 좌표
+          </summary>
+          <p>
+            경도 {item.longitude.toFixed(6)} · 위도 {item.latitude.toFixed(6)}
+          </p>
+        </details>
+        <form
+          className="flex min-w-0 flex-wrap gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const input = event.currentTarget.elements.namedItem(
+              'name',
+            ) as HTMLInputElement;
+            candidates.rename(item.slot, input.value);
+            input.value = input.value.trim() || item.name;
+          }}
+        >
+          <input
+            name="name"
+            aria-label={`후보지 ${item.slot} 이름`}
+            defaultValue={item.name}
+            required
+            maxLength={candidateNameLimit}
+            className="h-8 min-w-0 flex-1 rounded-md border px-2 text-sm"
+          />
+          <Button
+            ref={(node) => {
+              if (!comparing) managementRefs.current[item.slot] = node;
+            }}
+            type="submit"
+            size="sm"
+            variant="outline"
+            aria-label={`후보지 ${item.slot} 이름 저장`}
+          >
+            저장
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            aria-label={`후보지 ${item.slot} 삭제`}
+            onClick={() => {
+              const index = items.findIndex(
+                (other) => other.slot === item.slot,
+              );
+              const rest = items.filter((other) => other.slot !== item.slot);
+              afterRemoval.current =
+                rest[index]?.slot ?? rest.at(-1)?.slot ?? 'heading';
+              candidates.remove(item.slot);
+            }}
+          >
+            삭제
+          </Button>
+        </form>
+      </>
+    );
+  }
+
   return (
     <div className="flex min-w-0 flex-col gap-5 p-5 break-keep text-pretty">
       <header className="space-y-2">
@@ -346,16 +501,17 @@ export function CandidatePanel({
       )}
       <label className="flex flex-wrap items-center justify-between gap-2 text-sm">
         공통 탐색 반경
-        <select
+        <NativeSelect
           value={radius}
           onChange={(event) =>
             candidates.setRadius(event.target.value === '1000' ? 1000 : 500)
           }
-          className="h-9 rounded-md border bg-background px-2"
+          className="h-9"
+          containerClassName="w-24 max-w-full"
         >
           <option value="500">500m</option>
           <option value="1000">1km</option>
-        </select>
+        </NativeSelect>
       </label>
       {!items.length ? (
         <p className="rounded-xl bg-accent p-4 text-sm leading-6">
@@ -365,157 +521,200 @@ export function CandidatePanel({
         <>
           <section aria-label="후보지 요약" className="min-w-0 space-y-3">
             <h3 className="text-sm font-semibold">후보지 요약</h3>
-            {analyses.map((analysis) => {
-              const { item, regions } = analysis;
-              const selected = candidates.selected === item.slot;
-              return (
-                <section
-                  key={item.slot}
-                  aria-label={`후보지 ${item.slot} 요약`}
-                  data-selected={selected}
-                  className={`min-w-0 space-y-3 rounded-xl border p-4 [overflow-wrap:anywhere] ${selected ? 'border-primary bg-primary/5' : ''}`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-semibold text-primary">
-                      후보지 {item.slot}
-                    </span>
+            <div className="grid min-w-0 gap-2 lg:grid-flow-col lg:auto-cols-fr">
+              {analyses.map((analysis) => {
+                const { item } = analysis;
+                const selected = candidates.selected === item.slot;
+                return (
+                  <section
+                    key={item.slot}
+                    aria-label={`후보지 ${item.slot} 요약`}
+                    data-selected={selected}
+                    className="min-w-0 space-y-2 rounded-xl border p-3 [overflow-wrap:anywhere] data-[selected=true]:border-primary data-[selected=true]:bg-primary/5"
+                  >
+                    <h4 className="text-sm font-semibold">
+                      {item.slot} · {item.name}
+                    </h4>
+                    <CandidateRegion analysis={analysis} />
                     {selected && (
-                      <span className="text-xs font-medium text-primary">
-                        선택됨
-                      </span>
+                      <p className="text-xs font-medium text-primary">
+                        지도 선택됨
+                      </p>
                     )}
-                  </div>
-                  <Button
-                    ref={(node) => {
-                      selectionRefs.current[item.slot] = node;
-                    }}
-                    variant="outline"
-                    className="h-auto w-full justify-start whitespace-normal [overflow-wrap:anywhere]"
-                    aria-label={`후보지 ${item.slot} 지도에서 위치 확인`}
-                    aria-pressed={selected}
-                    disabled={!mapReady}
-                    onClick={() => onSelect(item)}
-                  >
-                    {item.name}
-                  </Button>
-                  <div className="text-xs leading-5">
-                    <Result resource={regions} label={`${item.slot} 소속 지역`}>
-                      {({ districts, dongs }) =>
-                        districts.length ? (
-                          <>
-                            <p>
-                              {districts
-                                .map((area) => area.districtName)
-                                .join(' · ')}{' '}
-                              ·{' '}
-                              {dongs.length
-                                ? dongs.map((area) => area.dongName).join(' · ')
-                                : '소속 행정동 없음'}
-                            </p>
-                          </>
-                        ) : (
-                          '서울 경계 밖'
-                        )
-                      }
-                    </Result>
-                  </div>
-                  <div className="space-y-1 text-sm">
-                    <p className="text-xs text-muted-foreground">
-                      반경 {radius === 500 ? '500m' : '1km'} 내 전체 경쟁 카페
-                    </p>
-                    <CafeCount analysis={analysis} />
-                  </div>
-                  <details className="text-xs leading-5 text-muted-foreground">
-                    <summary className="cursor-pointer rounded outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                      위치 좌표
-                    </summary>
-                    <p>
-                      경도 {item.longitude.toFixed(6)} · 위도{' '}
-                      {item.latitude.toFixed(6)}
-                    </p>
-                  </details>
-                  <form
-                    className="flex min-w-0 flex-wrap gap-2"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      const input = event.currentTarget.elements.namedItem(
-                        'name',
-                      ) as HTMLInputElement;
-                      candidates.rename(item.slot, input.value);
-                      input.value = input.value.trim() || item.name;
-                    }}
-                  >
-                    <input
-                      name="name"
-                      aria-label={`후보지 ${item.slot} 이름`}
-                      defaultValue={item.name}
-                      required
-                      maxLength={candidateNameLimit}
-                      className="h-8 min-w-0 flex-1 rounded-md border px-2 text-sm"
-                    />
-                    <Button
-                      type="submit"
-                      size="sm"
-                      variant="outline"
-                      aria-label={`후보지 ${item.slot} 이름 저장`}
-                    >
-                      저장
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      aria-label={`후보지 ${item.slot} 삭제`}
-                      onClick={() => {
-                        const index = items.findIndex(
-                          (other) => other.slot === item.slot,
-                        );
-                        const rest = items.filter(
-                          (other) => other.slot !== item.slot,
-                        );
-                        afterRemoval.current =
-                          rest[index]?.slot ?? rest.at(-1)?.slot ?? 'heading';
-                        candidates.remove(item.slot);
-                      }}
-                    >
-                      삭제
-                    </Button>
-                  </form>
-                </section>
-              );
-            })}
+                    <div className="flex min-w-0 flex-wrap gap-2">
+                      <Button
+                        ref={(node) => {
+                          selectionRefs.current[item.slot] = node;
+                        }}
+                        size="sm"
+                        variant="outline"
+                        aria-label={`후보지 ${item.slot} 지도에서 위치 확인`}
+                        aria-pressed={selected}
+                        disabled={!mapReady}
+                        onClick={() => onSelect(item)}
+                      >
+                        지도에서 확인
+                      </Button>
+                      {comparing && (
+                        <Button
+                          ref={(node) => {
+                            managementRefs.current[item.slot] = node;
+                          }}
+                          size="sm"
+                          variant="outline"
+                          aria-label={`후보지 ${item.slot} 상세 및 관리 열기`}
+                          aria-controls={`${detailsId}-${item.slot}`}
+                          onClick={() => showDetails(item.slot)}
+                        >
+                          상세 및 관리
+                        </Button>
+                      )}
+                    </div>
+                    {!comparing && candidateManagement(item)}
+                  </section>
+                );
+              })}
+            </div>
           </section>
-          <section
-            aria-label="주변 경쟁 환경"
-            className="min-w-0 space-y-3 border-t pt-4"
-          >
-            <h3 className="text-sm font-semibold">주변 경쟁 환경</h3>
-            <p className="text-xs leading-5 text-muted-foreground">
-              경쟁 카페는 통계 분기 선택과 별도로 최신 적격 카페 게시본에서
-              조회합니다.
-            </p>
-            {analyses.map((analysis) => (
-              <Competition
-                key={analysis.item.slot}
-                analysis={analysis}
-                radius={radius}
+          {comparing ? (
+            <>
+              <CandidateComparison
+                title="주변 경쟁 환경"
+                scope={`각 후보지 중심 ${radiusLabel} 반경 · 통계 분기와 별도로 최신 적격 카페 게시본에서 조회합니다.`}
+                candidates={columns}
+                selected={candidates.selected}
+                rows={[
+                  {
+                    label: '전체 경쟁 카페',
+                    cells: analyses.map((analysis) => (
+                      <CafeCount analysis={analysis} />
+                    )),
+                  },
+                  {
+                    label: '카페 원천 기준년월',
+                    cells: analyses.map((analysis) => (
+                      <CafeDate analysis={analysis} kind="reference" />
+                    )),
+                  },
+                  {
+                    label: '서비스 DB 게시일',
+                    cells: analyses.map((analysis) => (
+                      <CafeDate analysis={analysis} kind="published" />
+                    )),
+                  },
+                ]}
               />
-            ))}
-          </section>
-          {quarter && (
-            <section
-              aria-label="소속 행정동 상권 특성"
-              className="min-w-0 space-y-3 border-t pt-4"
-            >
-              <h3 className="text-sm font-semibold">소속 행정동 상권 특성</h3>
-              {analyses.map((analysis) => (
-                <DongMetrics
-                  key={analysis.item.slot}
-                  analysis={analysis}
-                  quarter={quarter}
+              {quarter && (
+                <CandidateComparison
+                  title="소속 행정동 전체 통계"
+                  scope={`${formatQuarter(quarter)} · 점포·매출은 카페·음료 업종 · 유동인구는 지역 전체 · 같은 행정동은 같은 통계를 사용합니다.`}
+                  candidates={columns}
+                  selected={candidates.selected}
+                  rows={metricLabels.map((label, index) => ({
+                    label,
+                    cells: reports.map(({ analysis, metrics }) => {
+                      const metric = metrics?.[index];
+                      return metric ? (
+                        <MetricValue
+                          metric={metric}
+                          slot={analysis.item.slot}
+                        />
+                      ) : (
+                        analysis.unavailable
+                      );
+                    }),
+                  }))}
                 />
-              ))}
-            </section>
+              )}
+              <section
+                aria-label="후보지 상세 및 관리"
+                className="min-w-0 space-y-2"
+              >
+                <h3 className="text-sm font-semibold">후보지 상세 및 관리</h3>
+                {reports.map(({ analysis, metrics }) => {
+                  const { item } = analysis;
+                  return (
+                    <details
+                      key={item.slot}
+                      id={`${detailsId}-${item.slot}`}
+                      ref={(node) => {
+                        detailsRefs.current[item.slot] = node;
+                      }}
+                      className="min-w-0 rounded-xl border p-3 [overflow-wrap:anywhere]"
+                    >
+                      <summary className="cursor-pointer rounded text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring">
+                        {item.slot} · {item.name} 상세 및 관리
+                      </summary>
+                      <div className="mt-3 space-y-3">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          aria-label={`후보지 ${item.slot} 상세에서 지도 확인`}
+                          aria-pressed={candidates.selected === item.slot}
+                          disabled={!mapReady}
+                          onClick={() => onSelect(item)}
+                        >
+                          지도에서 확인
+                        </Button>
+                        <CandidateRegion analysis={analysis} />
+                        {candidateManagement(item)}
+                        <Competition
+                          analysis={analysis}
+                          radius={radius}
+                          detailsOnly
+                        />
+                        {quarter && (
+                          <DongMetrics
+                            analysis={analysis}
+                            metrics={metrics}
+                            quarter={quarter}
+                            detailsOnly
+                          />
+                        )}
+                      </div>
+                    </details>
+                  );
+                })}
+              </section>
+            </>
+          ) : (
+            <>
+              <section
+                aria-label="주변 경쟁 환경"
+                className="min-w-0 space-y-3 border-t pt-4"
+              >
+                <h3 className="text-sm font-semibold">주변 경쟁 환경</h3>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  경쟁 카페는 통계 분기 선택과 별도로 최신 적격 카페 게시본에서
+                  조회합니다.
+                </p>
+                {analyses.map((analysis) => (
+                  <Competition
+                    key={analysis.item.slot}
+                    analysis={analysis}
+                    radius={radius}
+                  />
+                ))}
+              </section>
+              {quarter && (
+                <section
+                  aria-label="소속 행정동 상권 특성"
+                  className="min-w-0 space-y-3 border-t pt-4"
+                >
+                  <h3 className="text-sm font-semibold">
+                    소속 행정동 상권 특성
+                  </h3>
+                  {reports.map(({ analysis, metrics }) => (
+                    <DongMetrics
+                      key={analysis.item.slot}
+                      analysis={analysis}
+                      metrics={metrics}
+                      quarter={quarter}
+                    />
+                  ))}
+                </section>
+              )}
+            </>
           )}
         </>
       )}
