@@ -31,6 +31,71 @@ export interface MapConnection {
   focusLocation?: (center: CafeCenter, target: RegionMapTarget | null) => void;
 }
 
+function revealMarker(
+  container: HTMLElement,
+  { map, maps }: KakaoMapContext,
+  location: CafeCenter,
+) {
+  const area = container.getBoundingClientRect();
+  const workspace = container.closest('.explore-app');
+  if (!workspace || !area.width || !area.height) return;
+  const obstacles = Array.from(
+    workspace.querySelectorAll(
+      '.explore-panel-shell[data-open="true"], .explore-search-results',
+    ),
+    (element) => element.getBoundingClientRect(),
+  ).filter(({ width, height }) => width > 0 && height > 0);
+  if (!obstacles.length) return;
+
+  const projection = map.getProjection();
+  const point = projection.containerPointFromCoords(
+    new maps.LatLng(location.latitude, location.longitude),
+  );
+  const x = area.left + point.x;
+  const y = area.top + point.y;
+  // 검색·후보지 마커의 하단 중심을 기준으로 표식 전체와 여유를 확보합니다.
+  const overlaps = (left: number, bottom: number, box: DOMRect) =>
+    left + 20 > box.left &&
+    left - 20 < box.right &&
+    bottom > box.top &&
+    bottom - 42 < box.bottom;
+  const covered = obstacles.find((box) => overlaps(x, y, box));
+  if (!covered) return;
+
+  const controls = workspace.querySelectorAll(
+    '.explore-search-form, .region-filter, .explore-map-controls, .explore-dock',
+  );
+  const blocked = [
+    ...obstacles,
+    ...Array.from(controls, (element) => element.getBoundingClientRect()),
+  ];
+  const destinations = [
+    [covered.right + 32, y],
+    [x, covered.top - 12],
+    [covered.left - 32, y],
+    [x, covered.bottom + 54],
+  ];
+  const destination = destinations.find(
+    ([left, bottom]) =>
+      left >= area.left + 24 &&
+      left <= area.right - 24 &&
+      bottom >= area.top + 46 &&
+      bottom <= area.bottom - 12 &&
+      blocked.every((box) => !overlaps(left, bottom, box)),
+  );
+  if (!destination) return;
+
+  const dx = x - destination[0];
+  const dy = y - destination[1];
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    map.setCenter(
+      projection.coordsFromContainerPoint(
+        new maps.Point(area.width / 2 + dx, area.height / 2 + dy),
+      ),
+    );
+  } else map.panBy(dx, dy);
+}
+
 /** SDK 수명은 로더가, 지도 인스턴스와 화면 이벤트는 이 컴포넌트가 관리합니다. */
 export function KakaoMapView({
   target,
@@ -40,7 +105,6 @@ export function KakaoMapView({
   searchSelection,
   onSearchMarkerClick,
   regionRevision = 0,
-  searchOpen = false,
   candidatePicking = false,
   searchMarkerHidden = false,
 }: {
@@ -51,14 +115,18 @@ export function KakaoMapView({
   searchSelection?: PlaceSelection | null;
   onSearchMarkerClick?: () => void;
   regionRevision?: number;
-  searchOpen?: boolean;
   candidatePicking?: boolean;
   searchMarkerHidden?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<KakaoMap | null>(null);
   const moveRef = useRef<
-    ((next: RegionMapTarget | null, location?: CafeCenter) => void) | null
+    | ((
+        next: RegionMapTarget | null,
+        location?: CafeCenter,
+        reveal?: boolean,
+      ) => void)
+    | null
   >(null);
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<MapStatus>('loading');
@@ -92,9 +160,8 @@ export function KakaoMapView({
   }, [candidatePicking]);
   const cameraIntent = useRef(0);
   const cancelMoveRef = useRef<(() => void) | null>(null);
-  const searchVisibilityRef = useRef<(() => void) | null>(null);
   const candidateLocation = useRef<CafeCenter | null>(null);
-  const searchCameraActive = useRef(false);
+  const revealSearch = useRef(false);
   const previousIntent = useRef({
     target,
     searchSelection,
@@ -103,7 +170,7 @@ export function KakaoMapView({
   });
   const markIntent = useCallback(() => {
     cameraIntent.current++;
-    searchCameraActive.current = false;
+    revealSearch.current = false;
     cancelMoveRef.current?.();
     return cameraIntent.current;
   }, []);
@@ -120,7 +187,9 @@ export function KakaoMapView({
       markIntent();
       // 경계 응답 완료 자체는 새 사용자 선택이 아닙니다. 그 사이 선택한 후보지 위치를 보존합니다.
       candidateLocation.current = null;
-      searchCameraActive.current = !!searchSelection;
+      revealSearch.current =
+        !!searchSelection &&
+        (previous.first || previous.searchSelection !== searchSelection);
     }
     previousIntent.current = {
       target,
@@ -146,7 +215,7 @@ export function KakaoMapView({
       focusLocation: (center, target) => {
         markIntent();
         candidateLocation.current = center;
-        moveRef.current?.(target, center);
+        moveRef.current?.(target, center, true);
       },
     });
   }, [status, context, retry, connectionChanged, markIntent, appKey]);
@@ -182,6 +251,7 @@ export function KakaoMapView({
         let height = container.clientHeight;
         let restoringCenter = false;
         let fitFrame: number | null = null;
+        let lastLocation: CafeCenter | undefined;
         let polygons: KakaoPolygon[] = [];
         let geometry: BoundaryGeometry | null = null;
         // 후보를 고르는 동안 오버레이가 클릭을 가로채지 않도록 카메라와 별도로 숨깁니다.
@@ -198,10 +268,7 @@ export function KakaoMapView({
           polygons = [];
           geometry = null;
         };
-        moveRef.current = (next, location) => {
-          if (fitFrame !== null) cancelAnimationFrame(fitFrame);
-          fitFrame = null;
-          movingRef.current = !!next || !!location;
+        moveRef.current = (next, location, reveal = false) => {
           const nextGeometry = next?.kind === 'boundary' ? next.geometry : null;
           if (nextGeometry !== geometry) {
             // 조회 중·실패 상태에서도 이전 지역의 강조를 즉시 제거합니다.
@@ -239,11 +306,17 @@ export function KakaoMapView({
               }
             }
           }
+          // 경계가 늦게 도착해도 이미 요청한 위치로 다시 이동하지 않습니다.
+          if (location && location === lastLocation && !reveal) return;
+          lastLocation = location;
+          if (fitFrame !== null) cancelAnimationFrame(fitFrame);
+          fitFrame = null;
+          movingRef.current = !!next || !!location;
           if (!next && !location) return;
           let previousWidth = container.clientWidth;
           let previousHeight = container.clientHeight;
           let stableFrames = 0;
-          // 패널 전환 중의 임시 너비에 맞추지 않고, 두 프레임 연속 안정된 크기를 사용합니다.
+          // 창 크기가 바뀌는 동안에도 안정된 크기에서 경계와 표식을 배치합니다.
           const fit = () => {
             if (
               container.clientWidth === previousWidth &&
@@ -265,6 +338,7 @@ export function KakaoMapView({
               map.setCenter(
                 new maps.LatLng(location.latitude, location.longitude),
               );
+              if (reveal) revealMarker(container, { map, maps }, location);
             } else if (next?.kind === 'default') {
               map.setLevel(5);
               map.setCenter(new maps.LatLng(37.5665, 126.978));
@@ -285,7 +359,6 @@ export function KakaoMapView({
             center = map.getCenter();
             onZoom();
             movingRef.current = false;
-            searchVisibilityRef.current?.();
             viewportChangedRef.current?.();
           };
           fitFrame = requestAnimationFrame(fit);
@@ -305,6 +378,9 @@ export function KakaoMapView({
           if (!movingRef.current && !restoringCenter) markIntent();
         };
         const onResize = () => {
+          const nextWidth = container.clientWidth;
+          const nextHeight = container.clientHeight;
+          if (width === nextWidth && height === nextHeight) return;
           // 복원 중 발생하는 center_changed는 사용자 이동이 아니며 반올림을 누적하지 않습니다.
           restoringCenter = true;
           try {
@@ -313,9 +389,8 @@ export function KakaoMapView({
           } finally {
             restoringCenter = false;
           }
-          width = container.clientWidth;
-          height = container.clientHeight;
-          searchVisibilityRef.current?.();
+          width = nextWidth;
+          height = nextHeight;
           viewportChangedRef.current?.();
         };
         const observer = new ResizeObserver(onResize);
@@ -355,11 +430,14 @@ export function KakaoMapView({
   }, [appKey, attempt, markIntent]);
 
   useEffect(() => {
-    if (status === 'ready')
+    if (status === 'ready' && context) {
       moveRef.current?.(
         target ?? null,
         candidateLocation.current ?? searchSelection?.place,
+        revealSearch.current,
       );
+      revealSearch.current = false;
+    }
   }, [status, target, context, searchSelection]);
 
   useEffect(() => {
@@ -406,83 +484,6 @@ export function KakaoMapView({
       marker.setMap(null);
     };
   }, [context, status, location.result, candidatePicking]);
-
-  useEffect(() => {
-    if (!context || !searchSelection || !searchOpen) return;
-    const { map, maps } = context;
-    let frame: number | null = null;
-    const keepVisible = () => {
-      if (!searchCameraActive.current || movingRef.current) return;
-      const container = containerRef.current;
-      const area = container?.getBoundingClientRect();
-      const app = container?.closest('.explore-app');
-      const overlay = app
-        ?.querySelector('.explore-search-results')
-        ?.getBoundingClientRect();
-      const search = app
-        ?.querySelector('.explore-search-form')
-        ?.getBoundingClientRect();
-      if (!area?.width || !area.height || !overlay?.width || !search) return;
-      const place = searchSelection.place;
-      const point = map
-        .getProjection()
-        .containerPointFromCoords(
-          new maps.LatLng(place.latitude, place.longitude),
-        );
-      if (
-        point.x < 0 ||
-        point.x > area.width ||
-        point.y < 0 ||
-        point.y > area.height
-      )
-        return;
-      const x = area.left + point.x;
-      const y = area.top + point.y;
-      if (
-        x + 16 < overlay.left ||
-        x - 16 > overlay.right ||
-        y < overlay.top ||
-        y - 40 > overlay.bottom
-      )
-        return;
-      // 결과·헤더를 피할 실제 공간이 있을 때만 한 번 보정하며, 사용자가 직접 이동한 지도는 되돌리지 않습니다.
-      let dx = 0;
-      let dy = 0;
-      if (overlay.right + 48 < area.right) dx = x - (overlay.right + 32);
-      else if (overlay.bottom + 64 < area.bottom)
-        dy = y - (overlay.bottom + 48);
-      else if (overlay.top - 12 >= search.bottom + 40) {
-        dx = x - (overlay.left + overlay.width / 2);
-        dy = y - (overlay.top - 12);
-      }
-      if (!dx && !dy) return;
-      if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-        map.setCenter(
-          map
-            .getProjection()
-            .coordsFromContainerPoint(
-              new maps.Point(area.width / 2 + dx, area.height / 2 + dy),
-            ),
-        );
-      } else map.panBy(dx, dy);
-    };
-    const schedule = () => {
-      if (frame !== null) cancelAnimationFrame(frame);
-      // 연속 ResizeObserver 알림이 멈춘 뒤 보정해 패널 전환 중 패닝이 누적되지 않게 합니다.
-      frame = requestAnimationFrame(() => {
-        frame = requestAnimationFrame(() => {
-          frame = null;
-          keepVisible();
-        });
-      });
-    };
-    searchVisibilityRef.current = schedule;
-    schedule();
-    return () => {
-      if (frame !== null) cancelAnimationFrame(frame);
-      searchVisibilityRef.current = null;
-    };
-  }, [context, searchSelection, searchOpen]);
 
   const searchIsRadiusCenter =
     cafes?.mode === 'nearby' &&
@@ -554,18 +555,18 @@ export function KakaoMapView({
   return (
     <section
       aria-label="서울 상권 지도"
-      className="explore-map relative order-1 min-h-0 min-w-0 flex-1 overflow-hidden bg-muted md:order-0"
+      className="explore-map absolute inset-0 overflow-hidden bg-muted"
     >
       <div
         ref={containerRef}
         aria-label="Kakao Maps 지도"
         aria-busy={status === 'loading'}
-        className="absolute inset-0"
+        className="absolute inset-0 isolate"
         onPointerDownCapture={markIntent}
         onWheelCapture={markIntent}
       />
       {status !== 'ready' && (
-        <div className="explore-map-notice absolute inset-x-0 top-24 bottom-0 z-10 flex overflow-y-auto px-4 pb-4">
+        <div className="explore-map-notice absolute inset-x-0 z-10 flex overflow-hidden px-4 pb-4">
           {status === 'loading' ? (
             <div
               role="status"
@@ -580,7 +581,7 @@ export function KakaoMapView({
           ) : (
             <div
               role="alert"
-              className="m-auto flex w-full max-w-sm shrink-0 flex-col items-center gap-4 rounded-2xl border bg-background p-6 text-center shadow-sm"
+              className="m-auto flex max-h-full w-full max-w-sm shrink-0 flex-col items-center gap-4 overflow-y-auto rounded-2xl border bg-background p-6 text-center shadow-sm"
             >
               <CircleAlert
                 aria-hidden="true"
@@ -611,7 +612,7 @@ export function KakaoMapView({
       <div
         role="group"
         aria-label="지도 확대·축소"
-        className="explore-map-controls absolute z-10 flex flex-col bg-background"
+        className="explore-map-controls absolute z-10 flex bg-background"
       >
         <Button
           variant="ghost"

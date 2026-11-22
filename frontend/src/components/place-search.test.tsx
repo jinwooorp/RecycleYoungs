@@ -42,7 +42,6 @@ function Harness({ status = 'ready' }: { status?: 'ready' | 'error' }) {
       <PlaceSearch
         search={search}
         connection={{ status, context: null, retry }}
-        panelOpen
         onSelect={onSelect}
         onAnalysis={onAnalysis}
         onNearby={onNearby}

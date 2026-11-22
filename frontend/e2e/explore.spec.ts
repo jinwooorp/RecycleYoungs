@@ -59,20 +59,38 @@ test('잘못된 주소의 404와 홈 복귀', async ({ page }) => {
   await expect(page).toHaveURL('/');
 });
 
-test('세 메뉴 전환, 닫기와 Escape 포커스', async ({ page }) => {
+test('전체 화면 지도 위에서 세 메뉴를 열고 닫아도 지도 크기와 Escape 포커스를 유지한다', async ({
+  page,
+}) => {
   await page.goto('/explore');
+  const map = page.getByLabel('Kakao Maps 지도', { exact: true });
+  const dock = page.getByRole('navigation', { name: '탐색 메뉴' });
+  const fullScreen = page.viewportSize()!;
+  const mapBox = { x: 0, y: 0, ...fullScreen };
+  await expect.poll(() => map.boundingBox()).toEqual(mapBox);
+  await expect(page.getByRole('complementary')).toHaveCount(0);
   for (const name of ['주변 탐색', '상권 분석', '후보지 분석']) {
-    const menu = page.getByRole('button', { name, exact: true });
+    const menu = dock.getByRole('button', { name, exact: true });
     await menu.click();
+    const panel = page.getByRole('complementary', { name });
     await expect(
-      page.getByRole('heading', { name, exact: true }),
+      panel.getByRole('heading', { name, exact: true }),
     ).toBeVisible();
+    await expect.poll(() => map.boundingBox()).toEqual(mapBox);
+    await expect
+      .poll(async () => {
+        const panelBox = (await panel.boundingBox())!;
+        const dockBox = (await dock.boundingBox())!;
+        return panelBox.y + panelBox.height < dockBox.y;
+      })
+      .toBe(true);
     await page.getByRole('button', { name: `${name} 패널 닫기` }).click();
     await expect(menu).toHaveAttribute('aria-expanded', 'false');
     await expect(menu).toBeFocused();
     await menu.click();
     await page.keyboard.press('Escape');
     await expect(menu).toHaveAttribute('aria-expanded', 'false');
+    await expect.poll(() => map.boundingBox()).toEqual(mapBox);
   }
   await noOverflow(page);
 });

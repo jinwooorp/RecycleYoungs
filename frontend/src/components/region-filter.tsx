@@ -54,12 +54,10 @@ export function RegionFilter({
   region,
   onOpen,
   onSelection,
-  panelOpen,
 }: {
   region: RegionExplorer;
   onOpen: () => void;
   onSelection?: () => void;
-  panelOpen: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -132,7 +130,6 @@ export function RegionFilter({
       className="region-filter"
       data-compact={!desktop}
       data-open={open}
-      data-panel-open={panelOpen}
       onKeyDown={(event) => {
         if (event.key === 'Escape' && !desktop && open) {
           event.preventDefault();

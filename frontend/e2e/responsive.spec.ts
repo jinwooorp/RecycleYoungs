@@ -162,4 +162,46 @@ test('768×1024와 1024×768 전환에서 지역 선택과 포커스를 유지�
   await expect(filter).toBeFocused();
   await expect(controls).toBeHidden();
   await noOverflow(page);
+
+  const analysis = page.getByRole('button', { name: '상권 분석', exact: true });
+  await analysis.press('Enter');
+  const panel = page.getByRole('complementary', { name: '상권 분석' });
+  const title = panel.getByRole('heading', { name: '상권 분석', level: 2 });
+  await expect(title).toBeFocused();
+  await expect
+    .poll(async () => (await panel.boundingBox())!.width)
+    .toBeGreaterThan(700);
+  await page.setViewportSize(wide);
+  await expect.poll(async () => (await panel.boundingBox())!.width).toBe(520);
+  await expect(title).toBeFocused();
+  await expect(district).toHaveValue('11440');
+  await noOverflow(page);
+});
+
+test('모션 감소에서 빠른 Dock 전환과 지도 쪽 포인터 조작을 유지한다', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/explore');
+  const dock = page.getByRole('navigation', { name: '탐색 메뉴' });
+  for (const name of ['주변 탐색', '후보지 분석', '상권 분석']) {
+    await dock.getByRole('button', { name, exact: true }).click();
+  }
+  const panel = page.getByRole('complementary', { name: '상권 분석' });
+  await expect(page.getByRole('complementary')).toHaveCount(1);
+  await expect(panel).toHaveCSS('transition-duration', '0s');
+  await expect(panel.locator('.explore-panel-view')).toHaveCSS(
+    'animation-name',
+    'none',
+  );
+
+  const map = page.getByLabel('Kakao Maps 지도', { exact: true });
+  // 지도 모서리의 빈 부분은 전체 화면 오버레이가 클릭을 가로채지 않습니다.
+  await map.click({ position: { x: 4, y: 4 } });
+  await expect(panel).toBeVisible();
+  const active = dock.getByRole('button', { name: '상권 분석', exact: true });
+  await active.press('Space');
+  await expect(panel).toBeHidden();
+  await expect(active).toBeFocused();
+  await noOverflow(page);
 });
