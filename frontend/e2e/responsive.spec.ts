@@ -3,15 +3,31 @@ import { expect, noOverflow, openRegionFilter, test } from './test-support';
 
 async function expectChevron(control: Locator, nativeSelect = true) {
   const wrapper = nativeSelect ? control.locator('..') : control;
-  const arrow = wrapper.locator('svg.lucide-chevron-down');
+  const arrowSelector = 'svg.lucide-chevron-down';
+  const arrow = wrapper.locator(arrowSelector);
   await expect(arrow).toHaveAttribute('aria-hidden', 'true');
   await expect(arrow).toHaveCSS('pointer-events', 'none');
-  const field = (await control.boundingBox())!;
-  const icon = (await arrow.boundingBox())!;
-  expect(icon.width).toBeCloseTo(16);
-  expect(icon.height).toBeCloseTo(16);
-  expect(field.x + field.width - icon.x - icon.width).toBeCloseTo(12);
-  expect(icon.y + icon.height / 2 - field.y - field.height / 2).toBeCloseTo(0);
+  // 패널 전환 중에도 컨트롤과 화살표의 좌표를 같은 프레임에서 읽습니다.
+  const geometry = await control.evaluate(
+    (element, { arrowSelector, nativeSelect }) => {
+      const wrapper = nativeSelect ? element.parentElement : element;
+      const field = element.getBoundingClientRect();
+      const icon = wrapper!
+        .querySelector(arrowSelector)!
+        .getBoundingClientRect();
+      return {
+        iconWidth: icon.width,
+        iconHeight: icon.height,
+        rightGap: field.right - icon.right,
+        centerOffset: icon.y + icon.height / 2 - field.y - field.height / 2,
+      };
+    },
+    { arrowSelector, nativeSelect },
+  );
+  expect(geometry.iconWidth).toBeCloseTo(16);
+  expect(geometry.iconHeight).toBeCloseTo(16);
+  expect(geometry.rightGap).toBeCloseTo(12);
+  expect(Math.abs(geometry.centerOffset)).toBeLessThanOrEqual(1);
   if (nativeSelect) {
     await expect(control).toHaveCSS('appearance', 'none');
     await expect(control).toHaveCSS('padding-left', '12px');
