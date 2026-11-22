@@ -295,7 +295,7 @@
 }
 
 .explore-panel {
-  max-height: min(
+  height: min(
     var(--explore-sheet-limit),
     max(
       3.5rem,
@@ -622,41 +622,11 @@
   width: 1rem;
   height: 1rem;
 }
-.region-filter-select {
-  position: relative;
-  display: block;
-}
-.region-filter select {
-  width: 100%;
-  min-width: 0;
-  height: 2.75rem;
-  appearance: none;
-  padding: 0 2rem 0 0.75rem;
-  border: 1px solid var(--input);
-  border-radius: 0.5rem;
-  background: var(--background);
-  color: var(--foreground);
-  font-size: 0.875rem;
-}
 .region-filter select[data-selected='true'] {
   background: var(--accent);
   border-color: var(--explore-action);
   color: var(--primary);
   font-weight: 650;
-}
-.region-filter select:disabled {
-  color: var(--muted-foreground);
-  cursor: not-allowed;
-}
-.region-filter-select > svg {
-  position: absolute;
-  top: 50%;
-  right: 0.75rem;
-  width: 1rem;
-  height: 1rem;
-  transform: translateY(-50%);
-  pointer-events: none;
-  color: var(--muted-foreground);
 }
 .region-filter-help,
 .region-filter-notices {
@@ -806,27 +776,15 @@
   }
   .explore-panel-shell {
     width: min(
-      var(--panel-width),
+      840px,
       calc(
         100% - 2 * max(var(--explore-left), calc(var(--explore-right) + 4rem))
       )
     );
   }
-  .explore-panel-shell[data-menu='cafes'] {
-    --panel-width: 400px;
-    --panel-limit: 55dvh;
-  }
-  .explore-panel-shell[data-menu='analysis'] {
-    --panel-width: 520px;
-    --panel-limit: 65dvh;
-  }
-  .explore-panel-shell[data-menu='compare'] {
-    --panel-width: 840px;
-    --panel-limit: 70dvh;
-  }
   .explore-panel {
-    max-height: min(
-      var(--panel-limit),
+    height: min(
+      65dvh,
       max(
         3.5rem,
         calc(100dvh - var(--explore-panel-bottom) - var(--explore-panel-top))
@@ -904,9 +862,8 @@
     color: var(--primary);
   }
   .region-filter select {
-    border: 0;
-    border-left: 1px solid var(--border);
-    border-radius: 0.5rem;
+    border-color: transparent;
+    border-left-color: var(--border);
   }
   .region-filter-notices {
     position: absolute;

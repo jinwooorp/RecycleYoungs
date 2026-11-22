@@ -1,4 +1,24 @@
-import { expect, noOverflow, test } from './test-support';
+import type { Locator } from '@playwright/test';
+import { expect, noOverflow, openRegionFilter, test } from './test-support';
+
+async function expectChevron(control: Locator, nativeSelect = true) {
+  const wrapper = nativeSelect ? control.locator('..') : control;
+  const arrow = wrapper.locator('svg.lucide-chevron-down');
+  await expect(arrow).toHaveAttribute('aria-hidden', 'true');
+  await expect(arrow).toHaveCSS('pointer-events', 'none');
+  const field = (await control.boundingBox())!;
+  const icon = (await arrow.boundingBox())!;
+  expect(icon.width).toBeCloseTo(16);
+  expect(icon.height).toBeCloseTo(16);
+  expect(field.x + field.width - icon.x - icon.width).toBeCloseTo(12);
+  expect(icon.y + icon.height / 2 - field.y - field.height / 2).toBeCloseTo(0);
+  if (nativeSelect) {
+    await expect(control).toHaveCSS('appearance', 'none');
+    await expect(control).toHaveCSS('padding-left', '12px');
+    await expect(control).toHaveCSS('padding-right', '40px');
+    await expect(control).toHaveCSS('text-overflow', 'ellipsis');
+  }
+}
 
 test('320×568에서 키보드로 상세 패널을 열고 스크롤하며 지역 필터를 조작한다', async ({
   page,
@@ -61,6 +81,7 @@ test('320×568에서 키보드로 상세 패널을 열고 스크롤하며 지역
   await page.keyboard.press('Tab');
   const quarter = panel.getByRole('combobox', { name: '통계 기준 분기' });
   await expect(quarter).toBeFocused();
+  await expect(quarter).toHaveCSS('outline-width', '2px');
   await expect(quarter).toBeInViewport({ ratio: 1 });
   await quarter.selectOption('20261');
   await expect(quarter).toHaveValue('20261');
@@ -107,6 +128,53 @@ test('320×568에서 키보드로 상세 패널을 열고 스크롤하며 지역
   await expect(lastAxis).toBeInViewport({ ratio: 1 });
   await expect(statistics).toBeFocused();
   expect(await page.evaluate(() => innerWidth)).toBe(320);
+  await noOverflow(page);
+});
+
+test('선택 컨트롤의 공통 화살표와 여백을 유지한다', async ({ page }) => {
+  await page.goto('/explore');
+  const trigger = await openRegionFilter(page);
+  if (trigger) await expectChevron(trigger, false);
+  const region = page.getByRole('group', { name: '지역 필터' });
+  const district = region.getByRole('combobox', { name: '자치구' });
+  const dong = region.getByRole('combobox', { name: '행정동' });
+  await expectChevron(district);
+  await expectChevron(dong);
+  await expect(dong).toBeDisabled();
+  await expect(dong).toHaveCSS('cursor', 'not-allowed');
+  await district.selectOption('11200');
+  await expect(dong).toBeEnabled();
+  await dong.selectOption('11200650');
+  await expect(dong).toHaveAttribute('data-selected', 'true');
+  if (trigger) {
+    await dong.press('Escape');
+    await expect(trigger).toBeFocused();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  }
+
+  await page.getByRole('button', { name: '상권 분석', exact: true }).click();
+  const quarter = page.getByRole('combobox', { name: '통계 기준 분기' });
+  await quarter.selectOption('20263');
+  await expect(quarter).toHaveAccessibleDescription(/서울 전체 게시 현황/);
+  await expectChevron(quarter);
+
+  await page.getByRole('button', { name: '주변 탐색', exact: true }).click();
+  await page
+    .getByRole('button', { name: '선택 지점 주변', exact: true })
+    .click();
+  const nearbyRadius = page.getByRole('combobox', { name: '탐색 반경' });
+  await expectChevron(nearbyRadius);
+  await nearbyRadius.selectOption('1000');
+  await expect(nearbyRadius).toHaveValue('1000');
+
+  await page.getByRole('button', { name: '후보지 분석', exact: true }).click();
+  const candidateRadius = page.getByRole('combobox', {
+    name: '공통 탐색 반경',
+  });
+  await expectChevron(candidateRadius);
+  await candidateRadius.selectOption('1000');
+  await expect(candidateRadius).toHaveValue('1000');
+  await expect(quarter).toHaveValue('20263');
   await noOverflow(page);
 });
 
@@ -172,7 +240,7 @@ test('768×1024와 1024×768 전환에서 지역 선택과 포커스를 유지�
     .poll(async () => (await panel.boundingBox())!.width)
     .toBeGreaterThan(700);
   await page.setViewportSize(wide);
-  await expect.poll(async () => (await panel.boundingBox())!.width).toBe(520);
+  await expect.poll(async () => (await panel.boundingBox())!.width).toBe(840);
   await expect(title).toBeFocused();
   await expect(district).toHaveValue('11440');
   await noOverflow(page);

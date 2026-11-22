@@ -137,8 +137,11 @@ test('탐색 CTA와 뒤로·앞으로 이동 후 탭에 저장된 후보지를 �
     await screen.findByRole('button', { name: '후보지 A 지도에서 위치 확인' }),
   ).toBeVisible();
   expect(
-    screen.getByRole('button', { name: '후보지 A 지도에서 위치 확인' }),
-  ).toHaveTextContent('복원 후보지');
+    within(screen.getByRole('region', { name: '후보지 A 요약' })).getByRole(
+      'heading',
+      { name: 'A · 복원 후보지' },
+    ),
+  ).toBeVisible();
 });
 
 test('/explore에서 탐색 페이지를 바로 렌더링한다', async () => {
@@ -214,6 +217,9 @@ test('탐색의 홈 링크로 랜딩에 돌아와도 후보지를 보존하고 �
     await screen.findByRole('button', { name: '후보지 A 지도에서 위치 확인' }),
   ).toBeVisible();
   expect(
-    screen.getByRole('button', { name: '후보지 A 지도에서 위치 확인' }),
-  ).toHaveTextContent('홈 이동 후 후보지');
+    within(screen.getByRole('region', { name: '후보지 A 요약' })).getByRole(
+      'heading',
+      { name: 'A · 홈 이동 후 후보지' },
+    ),
+  ).toBeVisible();
 });

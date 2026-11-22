@@ -127,7 +127,10 @@ export function startMockApi(port = 4174) {
           !(
             kind === 'districts' ? listed.districtMetrics : listed.dongMetrics
           ).includes(metric) ||
-          (metric === 'sales' && scenario === 'sales-empty')
+          (metric === 'sales' && scenario === 'sales-empty') ||
+          (scenario === 'candidate-partial' &&
+            code === '11200650' &&
+            metric === 'sales')
             ? null
             : statistics(metric, code, quarter),
       });
@@ -150,7 +153,10 @@ export function startMockApi(port = 4174) {
         url.searchParams.get('offset') !== '0'
       )
         return invalid();
-      return send(200, cafePage(radius));
+      const longitude = Number(url.searchParams.get('longitude'));
+      if (scenario === 'candidate-partial' && longitude === 127.048)
+        return send(503, { code: 'DATA_NOT_READY', status: 503 });
+      return send(200, cafePage(radius, longitude));
     }
     // 정의하지 않은 경로는 실제 Backend로 전달하거나 성공 응답으로 덮지 않습니다.
     return send(404, { code: 'E2E_UNEXPECTED_ENDPOINT', status: 404 });

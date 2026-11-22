@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useRegionRequest } from './use-region-explorer';
 import { useStatisticsExplorer } from './use-statistics-explorer';
 import { fetchContainingRegions } from '@/lib/regions';
@@ -76,15 +76,16 @@ export function useCandidateAnalysis(
     active,
   );
   const locations = [a, b, c];
-  // 같은 행정동은 먼저 등장한 슬롯만 조회합니다. 삭제·새 좌표의 늦은 응답은 요청 키로 차단합니다.
-  const codes = locations.map((location, index) =>
-    location.dong &&
-    !locations
-      .slice(0, index)
-      .some((other) => other.dong?.dongCode === location.dong!.dongCode)
-      ? location.dong.dongCode
-      : '',
+  const wanted = new Set(
+    locations.flatMap(({ dong }) => (dong ? [dong.dongCode] : [])),
   );
+  const [assigned, setAssigned] = useState(['', '', '']);
+  // 생존하는 동은 같은 조회 훅에 남기고 새 동만 빈 자리에 배정합니다.
+  const codes = assigned.map((code) => (wanted.has(code) ? code : ''));
+  for (const code of wanted) {
+    if (!codes.includes(code)) codes[codes.indexOf('')] = code;
+  }
+  if (codes.some((code, index) => code !== assigned[index])) setAssigned(codes);
   const first = useStatisticsExplorer('', codes[0], active, quarter);
   const second = useStatisticsExplorer('', codes[1], active, quarter);
   const third = useStatisticsExplorer('', codes[2], active, quarter);

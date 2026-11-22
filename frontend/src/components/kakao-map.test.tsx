@@ -2657,10 +2657,13 @@ test('지역 필터를 적용한 채 지도와 검색에서 후보지를 등록�
     screen.getByRole('button', { name: '후보지 A 지도에서 위치 확인' }),
   ).toBeVisible();
   expect(
-    screen.getByRole('button', { name: '후보지 A 지도에서 위치 확인' }),
+    screen.getByRole('region', { name: '후보지 A 요약' }),
   ).toHaveTextContent('지도로 등록');
   expect(screen.getByRole('region', { name: '후보지 요약' })).toBeVisible();
   const removed = maps.Marker.mock.results.at(-1)!.value;
+  fireEvent.click(
+    screen.getByRole('button', { name: '후보지 B 상세 및 관리 열기' }),
+  );
   fireEvent.click(screen.getByRole('button', { name: '후보지 B 삭제' }));
   expect(removed.setMap).toHaveBeenLastCalledWith(null);
   const remaining = maps.Marker.mock.results.at(-1)!.value;

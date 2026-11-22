@@ -5,11 +5,17 @@ import {
   type DataSource,
 } from '@/lib/data-sources';
 
-export function PublishedDate({ publishedAt }: { publishedAt: string }) {
+export function PublishedDate({
+  publishedAt,
+  showLabel = true,
+}: {
+  publishedAt: string;
+  showLabel?: boolean;
+}) {
   const label = formatPublishedDate(publishedAt);
   return (
     <span className="text-xs leading-5 font-normal text-muted-foreground">
-      서비스 DB 게시일{' '}
+      {showLabel && '서비스 DB 게시일 '}
       {label ? <time dateTime={publishedAt}>{label}</time> : '확인 불가'}
     </span>
   );

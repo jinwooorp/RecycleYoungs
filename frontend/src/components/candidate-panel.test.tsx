@@ -37,9 +37,11 @@ const membership = {
 function Fixture({
   active = true,
   quarter = '20262',
+  mapReady = true,
 }: {
   active?: boolean;
   quarter?: string;
+  mapReady?: boolean;
 }) {
   const candidates = useCandidates();
   return (
@@ -61,11 +63,26 @@ function Fixture({
         candidates={candidates}
         active={active}
         quarter={quarter}
-        mapReady
+        mapReady={mapReady}
         onSelect={(item) => candidates.setSelected(item.slot)}
       />
     </>
   );
+}
+
+function openDetails(slot: string) {
+  fireEvent.click(
+    screen.getByRole('button', { name: `후보지 ${slot} 상세 및 관리 열기` }),
+  );
+}
+
+function comparisonCell(group: string, label: string, slot: string) {
+  const table = within(screen.getByRole('table', { name: group }));
+  const column = table
+    .getAllByRole('columnheader')
+    .findIndex((header) => header.textContent?.startsWith(`${slot} ·`));
+  const row = table.getByRole('rowheader', { name: label }).closest('tr')!;
+  return within(within(row).getAllByRole('cell')[column - 1]);
 }
 
 afterEach(() => {
@@ -106,10 +123,12 @@ test('서버 소속 판정, 재시도, 중복·최대 세 곳 제한, 이름 변
     screen.getByText('후보지는 최대 3곳까지 등록할 수 있습니다.'),
   ).toBeVisible();
   expect(screen.getByRole('region', { name: '후보지 요약' })).toBeVisible();
+  openDetails('A');
   fireEvent.change(screen.getByRole('textbox', { name: '후보지 A 이름' }), {
     target: { value: '새 이름' },
   });
   fireEvent.click(screen.getByRole('button', { name: '후보지 A 이름 저장' }));
+  openDetails('B');
   fireEvent.click(screen.getByRole('button', { name: '후보지 B 삭제' }));
   expect(readCandidates()).toEqual([
     { slot: 'A', name: '새 이름', ...center },
@@ -133,6 +152,7 @@ test('서버 소속 판정, 재시도, 중복·최대 세 곳 제한, 이름 변
     }),
   );
   render(<Fixture />);
+  for (const slot of ['A', 'B', 'C']) openDetails(slot);
   expect(
     screen
       .getAllByRole('textbox', { name: /후보지 [ABC] 이름/ })
@@ -142,8 +162,11 @@ test('서버 소속 판정, 재시도, 중복·최대 세 곳 제한, 이름 변
     screen.getByRole('button', { name: '후보지 A 지도에서 위치 확인' }),
   ).toBeVisible();
   expect(
-    screen.getByRole('button', { name: '후보지 A 지도에서 위치 확인' }),
-  ).toHaveTextContent('새 이름');
+    within(screen.getByRole('region', { name: '후보지 A 요약' })).getByRole(
+      'heading',
+      { name: 'A · 새 이름' },
+    ),
+  ).toBeVisible();
 });
 
 test.each([
@@ -263,10 +286,11 @@ test('동 경계 후보지는 반경 카페만 비교하고 다른 후보지는 
   );
   expect(
     within(
-      screen.getByRole('region', { name: '후보지 B 행정동 통계' }),
-    ).getByText(/여러 행정동 경계/),
-  ).toBeVisible();
+      screen.getByRole('table', { name: '소속 행정동 전체 통계' }),
+    ).getAllByText(/여러 행정동 경계/),
+  ).toHaveLength(3);
   expect(await screen.findByText('0개')).toBeVisible();
+  openDetails('A');
   expect(screen.getByText('개업 0 · 폐업 자료 없음')).toBeVisible();
   expect(await screen.findByText('0명')).toBeVisible();
   retrySales = true;
@@ -534,7 +558,7 @@ function analysisApi(
     const url = new URL(path, 'http://localhost');
     if (path.includes('/regions/')) {
       const other =
-        options.differentDong && url.searchParams.get('longitude') !== '127';
+        options.differentDong && url.searchParams.get('longitude') === '127.01';
       return Response.json(
         other
           ? {
@@ -629,46 +653,74 @@ test.each([1, 2, 3])(
     saveItems(count);
     const fetch = analysisApi();
     render(<Fixture />);
-    const competition = screen.getByRole('region', {
-      name: '후보지 A 주변 경쟁 환경',
-    });
-    await within(competition).findByText('가까운 카페 · 서교점');
-    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('table')).toHaveLength(count === 1 ? 0 : 2);
     expect(
       screen.getAllByRole('region', { name: /후보지 [ABC] 요약/ }),
     ).toHaveLength(count);
-    expect(within(competition).getByText('401곳')).toBeVisible();
+    if (count > 1) openDetails('A');
+    const competition = within(
+      screen.getByRole('region', { name: '후보지 A 주변 경쟁 환경' }),
+    );
+    const stats = within(
+      screen.getByRole('region', { name: '후보지 A 행정동 통계' }),
+    );
+    await competition.findByText('가까운 카페 · 서교점');
+    const competitionValue =
+      count === 1
+        ? competition
+        : comparisonCell('주변 경쟁 환경', '전체 경쟁 카페', 'A');
+    expect(competitionValue.getByText('401곳')).toBeVisible();
     expect(
-      within(competition.querySelector('ol')!)
+      competition
         .getAllByRole('listitem')
-        .map((n) => n.textContent),
+        .filter((item) => item.closest('ol'))
+        .map((item) => item.textContent),
     ).toEqual([
       expect.stringContaining('가까운 카페 · 서교점중심점에서 0m서울 예시로 1'),
       expect.stringContaining('두 번째 카페중심점에서 12.3m서울 예시동 12'),
       expect.stringContaining('세 번째 카페중심점에서 100m서울 예시로 3'),
     ]);
     expect(screen.queryByText('네 번째 카페')).not.toBeInTheDocument();
-    const stats = screen.getByRole('region', { name: '후보지 A 행정동 통계' });
+    const metric = (label: string) =>
+      count === 1 ? stats : comparisonCell('소속 행정동 전체 통계', label, 'A');
+    const sales = metric('당월 추정매출액');
+    expect(await sales.findByText('9,223,372,036,854,775,807원')).toBeVisible();
     expect(
-      await within(stats).findByText('9,223,372,036,854,775,807원'),
+      metric('지역 전체 유동인구').getByText(
+        '9,007,199,254,740,993.1234567890123456789명',
+      ),
     ).toBeVisible();
+    expect(metric('카페 업종 점포 수').getByText('0개')).toBeVisible();
+    if (count === 1) {
+      for (const date of [
+        '2026년 10월 1일',
+        '2026년 10월 2일',
+        '2026년 10월 3일',
+      ]) {
+        expect(stats.getByText(date)).toBeVisible();
+      }
+    } else {
+      expect(
+        metric('카페 업종 점포 수').getByText('2026년 10월 1일'),
+      ).toBeVisible();
+      expect(sales.getByText('2026년 10월 2일')).toBeVisible();
+      expect(
+        metric('지역 전체 유동인구').getByText('2026년 10월 3일'),
+      ).toBeVisible();
+    }
+    const cafeDate = (label: string) =>
+      count === 1 ? competition : comparisonCell('주변 경쟁 환경', label, 'A');
     expect(
-      within(stats).getByText('9,007,199,254,740,993.1234567890123456789명'),
+      cafeDate('카페 원천 기준년월').getByText('2026년 10월'),
+    ).toHaveAttribute('dateTime', '2026-10');
+    expect(
+      cafeDate('서비스 DB 게시일').getByText('2026년 11월 17일'),
     ).toBeVisible();
-    expect(within(stats).getByText('0개')).toBeVisible();
-    expect(
-      Array.from(stats.querySelectorAll('time'), (time) => time.textContent),
-    ).toEqual(['2026년 10월 1일', '2026년 10월 2일', '2026년 10월 3일']);
-    expect(within(competition).getByText('2026년 10월')).toHaveAttribute(
-      'dateTime',
-      '2026-10',
-    );
-    expect(within(competition).getByText('2026년 11월 17일')).toBeVisible();
-    const details = within(stats).getByText('데이터 출처 상세');
+    const details = stats.getByText('데이터 출처 상세');
     fireEvent.click(details);
     expect(details.parentElement).toHaveAttribute('open');
     expect(
-      within(stats).getByRole('link', {
+      stats.getByRole('link', {
         name: '서울시 상권분석서비스(점포-행정동)',
       }),
     ).toHaveAttribute(
@@ -690,24 +742,19 @@ test('분기 변경은 같은 동의 통계만 한 번씩 갱신한다', async (
   const fetch = analysisApi();
   const view = render(<Fixture />);
   const statistics = (slot: string) =>
-    within(screen.getByRole('region', { name: `후보지 ${slot} 행정동 통계` }));
+    comparisonCell('소속 행정동 전체 통계', '카페 업종 점포 수', slot);
+  const cafeDate = (slot: string) =>
+    comparisonCell('주변 경쟁 환경', '서비스 DB 게시일', slot);
   await statistics('A').findByText('0개');
-  await within(
-    screen.getByRole('region', { name: '후보지 B 요약' }),
-  ).findByText('401곳');
+  await comparisonCell('주변 경쟁 환경', '전체 경쟁 카페', 'B').findByText(
+    '401곳',
+  );
   const paths = (kind: string) =>
     fetch.mock.calls.filter(([path]) => path.includes(kind));
   const regions = paths('/regions/').length;
   const cafes = paths('/cafes/').length;
-  const aCafes = within(
-    screen.getByRole('region', { name: '후보지 A 주변 경쟁 환경' }),
-  );
-  expect(aCafes.getByText('2026년 11월 17일')).toBeVisible();
-  expect(
-    within(
-      screen.getByRole('region', { name: '후보지 B 주변 경쟁 환경' }),
-    ).getByText('2026년 11월 18일'),
-  ).toBeVisible();
+  expect(cafeDate('A').getByText('2026년 11월 17일')).toBeVisible();
+  expect(cafeDate('B').getByText('2026년 11월 18일')).toBeVisible();
   view.rerender(<Fixture quarter="20261" />);
   expect(statistics('A').queryByText('0개')).not.toBeInTheDocument();
   expect(
@@ -715,9 +762,11 @@ test('분기 변경은 같은 동의 통계만 한 번씩 갱신한다', async (
   ).not.toBeInTheDocument();
   await statistics('A').findByText('17개');
   await statistics('B').findByText('17개');
-  expect(statistics('B').getByText('예시동 전체 · 2026년 1분기')).toBeVisible();
+  expect(
+    screen.getByRole('region', { name: '소속 행정동 전체 통계' }),
+  ).toHaveTextContent('2026년 1분기');
   expect(statistics('A').getByText('2026년 8월 1일')).toBeVisible();
-  expect(aCafes.getByText('2026년 11월 17일')).toBeVisible();
+  expect(cafeDate('A').getByText('2026년 11월 17일')).toBeVisible();
   expect(paths('/stats/')).toHaveLength(6);
   expect(
     paths('/stats/')
@@ -733,14 +782,15 @@ test('서로 다른 행정동은 각각 조회하고 반경 변경·이름 변�
   const fetch = analysisApi({ differentDong: true });
   render(<Fixture />);
   await within(
-    screen.getByRole('region', { name: '후보지 B 행정동 통계' }),
-  ).findByText('다른동 전체 · 2026년 2분기');
+    screen.getByRole('region', { name: '후보지 B 요약' }),
+  ).findByText(/다른동/);
   await waitFor(() =>
     expect(
       fetch.mock.calls.filter(([p]) => p.includes('/stats/')),
     ).toHaveLength(6),
   );
   const requests = fetch.mock.calls.length;
+  openDetails('A');
   const name = screen.getByRole('textbox', { name: '후보지 A 이름' });
   name.focus();
   fireEvent.change(name, { target: { value: '변경된 후보지' } });
@@ -753,7 +803,7 @@ test('서로 다른 행정동은 각각 조회하고 반경 변경·이름 변�
   expect(select).toHaveAttribute('aria-pressed', 'true');
   expect(
     within(screen.getByRole('region', { name: '후보지 A 요약' })).getByText(
-      '선택됨',
+      '지도 선택됨',
     ),
   ).toBeVisible();
   expect(fetch.mock.calls).toHaveLength(requests);
@@ -792,33 +842,41 @@ test('한 후보지의 반경 오류는 다른 결과를 가리지 않고 해당
   const options = { failCafe: true, empty: false, nullSales: true };
   const fetch = analysisApi(options);
   render(<Fixture />);
-  const a = screen.getByRole('region', { name: '후보지 A 주변 경쟁 환경' });
-  await within(a).findByRole('alert');
+  const count = (slot: string) =>
+    comparisonCell('주변 경쟁 환경', '전체 경쟁 카페', slot);
+  await count('A').findByRole('alert');
+  expect(await count('B').findByText('401곳')).toBeVisible();
   expect(
-    await within(
-      screen.getByRole('region', { name: '후보지 B 주변 경쟁 환경' }),
-    ).findByText('401곳'),
-  ).toBeVisible();
-  expect(
-    await within(
-      screen.getByRole('region', { name: '후보지 A 행정동 통계' }),
+    await comparisonCell(
+      '소속 행정동 전체 통계',
+      '당월 추정매출액',
+      'A',
     ).findByText('자료 없음'),
   ).toBeVisible();
   options.failCafe = false;
   options.empty = true;
   const before = fetch.mock.calls.length;
   fireEvent.click(
-    within(a).getByRole('button', { name: 'A 경쟁 카페 다시 시도' }),
+    count('A').getByRole('button', { name: 'A 경쟁 카페 다시 시도' }),
   );
-  await within(a).findByText('선택한 반경 내에 카페가 없습니다.');
-  expect(within(a).getByText('0곳')).toBeVisible();
-  expect(within(a).getByText('2026년 10월')).toBeVisible();
-  expect(within(a).getByText('2026년 11월 17일')).toBeVisible();
+  expect(await count('A').findByText('0곳')).toBeVisible();
+  expect(
+    comparisonCell('주변 경쟁 환경', '카페 원천 기준년월', 'A').getByText(
+      '2026년 10월',
+    ),
+  ).toBeVisible();
+  expect(
+    comparisonCell('주변 경쟁 환경', '서비스 DB 게시일', 'A').getByText(
+      '2026년 11월 17일',
+    ),
+  ).toBeVisible();
   expect(fetch.mock.calls).toHaveLength(before + 1);
+  expect(count('B').getByText('401곳')).toBeVisible();
+  openDetails('A');
   expect(
     within(
-      screen.getByRole('region', { name: '후보지 B 주변 경쟁 환경' }),
-    ).getByText('401곳'),
+      screen.getByRole('region', { name: '후보지 A 주변 경쟁 환경' }),
+    ).getByText('선택한 반경 내에 카페가 없습니다.'),
   ).toBeVisible();
 });
 
@@ -836,14 +894,79 @@ test('후보지 추가가 기존 분석을 재조회하지 않고 삭제 후 다
   const initial = count();
   fireEvent.click(screen.getByRole('button', { name: '등록 1' }));
   await screen.findByText('후보지 B를 등록했습니다.');
-  await within(
-    screen.getByRole('region', { name: '후보지 B 주변 경쟁 환경' }),
-  ).findByText('401곳');
+  await comparisonCell('주변 경쟁 환경', '전체 경쟁 카페', 'B').findByText(
+    '401곳',
+  );
   expect(count()).toBe(initial);
+  openDetails('A');
   fireEvent.click(screen.getByRole('button', { name: '후보지 A 삭제' }));
   expect(
-    screen.getByRole('button', { name: '후보지 B 지도에서 위치 확인' }),
+    screen.getByRole('button', { name: '후보지 B 이름 저장' }),
   ).toHaveFocus();
   fireEvent.click(screen.getByRole('button', { name: '후보지 B 삭제' }));
   expect(screen.getByRole('heading', { name: '후보지 등록' })).toHaveFocus();
+});
+
+test('공유 통계의 대표 슬롯을 삭제해도 같은 동의 응답을 남기고 관리 버튼으로 포커스를 돌린다', async () => {
+  saveItems(3);
+  const fetch = analysisApi({ differentDong: true });
+  render(<Fixture mapReady={false} />);
+  const metric = (slot: string) =>
+    comparisonCell('소속 행정동 전체 통계', '카페 업종 점포 수', slot);
+  for (const slot of ['A', 'B', 'C']) await metric(slot).findByText('0개');
+  const calls = fetch.mock.calls.length;
+  openDetails('A');
+  expect(fetch.mock.calls).toHaveLength(calls);
+  fireEvent.click(screen.getByRole('button', { name: '후보지 A 삭제' }));
+  expect(metric('C').getByText('0개')).toBeVisible();
+  expect(metric('C').getByText('2026년 10월 1일')).toBeVisible();
+  expect(
+    screen.getByRole('button', { name: '후보지 B 지도에서 위치 확인' }),
+  ).toBeDisabled();
+  expect(
+    screen.getByRole('button', { name: '후보지 B 상세 및 관리 열기' }),
+  ).toHaveFocus();
+  await act(async () => {});
+  expect(fetch.mock.calls).toHaveLength(calls);
+});
+
+test('화면 폭을 바꿔도 같은 값을 지표별 카드에서 표시하고 빈 슬롯과 요청을 유지한다', async () => {
+  saveItems(3);
+  const items = readCandidates().filter(({ slot }) => slot !== 'B');
+  items[0].name = '긴후보지이름'.repeat(10);
+  sessionStorage.setItem(
+    candidateStorageKey,
+    JSON.stringify({ version: 1, items }),
+  );
+  let wide = true;
+  const listeners = new Set<() => void>();
+  vi.stubGlobal('matchMedia', () => ({
+    get matches() {
+      return wide;
+    },
+    addEventListener: (_event: string, callback: () => void) =>
+      listeners.add(callback),
+    removeEventListener: (_event: string, callback: () => void) =>
+      listeners.delete(callback),
+  }));
+  const fetch = analysisApi();
+  render(<Fixture />);
+  await comparisonCell(
+    '소속 행정동 전체 통계',
+    '당월 추정매출액',
+    'A',
+  ).findByText('9,223,372,036,854,775,807원');
+  const before = fetch.mock.calls.length;
+  act(() => {
+    wide = false;
+    listeners.forEach((listener) => listener());
+  });
+  expect(screen.queryByRole('table')).toBeNull();
+  const sales = within(screen.getByRole('region', { name: '당월 추정매출액' }));
+  expect(
+    sales.getAllByRole('term').map((term) => term.textContent?.slice(0, 1)),
+  ).toEqual(['A', 'C']);
+  expect(sales.getByText(`A · ${items[0].name}`)).toBeVisible();
+  expect(sales.getAllByText('9,223,372,036,854,775,807원')).toHaveLength(2);
+  expect(fetch.mock.calls).toHaveLength(before);
 });
