@@ -5,70 +5,6 @@
 
 @custom-variant dark (&:is(.dark *));
 
-@layer components {
-  /* DOM은 유지하고 공간만 접어 닫기·빠른 재열기에도 같은 전환을 이어갑니다. */
-  .explore-panel-shell {
-    display: grid;
-    grid-template-rows: minmax(0, 0fr);
-    width: 100%;
-    flex-shrink: 0;
-    overflow: clip;
-    transition: grid-template-rows 220ms ease-in-out;
-  }
-
-  .explore-panel-shell[data-open='true'] {
-    grid-template-rows: minmax(0, 1fr);
-  }
-
-  .explore-panel {
-    max-height: min(45dvh, 24rem);
-    opacity: 0;
-    transform: translateX(-1rem);
-    transition:
-      transform 220ms ease-in-out,
-      opacity 220ms ease-in-out;
-  }
-
-  .explore-panel-shell[data-open='true'] .explore-panel {
-    opacity: 1;
-    transform: translateX(0);
-  }
-
-  @media (width >= 48rem) {
-    .explore-panel-shell {
-      --explore-panel-width: 20rem;
-      /* 검색창 48px와 위·아래 여백 16px씩을 확보하고 지도 높이는 유지합니다. */
-      margin-top: 5rem;
-      grid-template-rows: minmax(0, 1fr);
-      width: 0;
-      transition: width 220ms ease-in-out;
-    }
-
-    .explore-panel-shell[data-open='true'] {
-      width: var(--explore-panel-width);
-    }
-
-    .explore-panel {
-      width: var(--explore-panel-width);
-      max-height: none;
-    }
-  }
-
-  @media (width >= 64rem) {
-    .explore-panel-shell {
-      --explore-panel-width: 22.5rem;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .explore-panel-shell,
-    .explore-panel {
-      transition: none;
-      transform: none;
-    }
-  }
-}
-
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: 'Geist Variable', sans-serif;
@@ -223,14 +159,19 @@
   --explore-action: #8be26e;
   --explore-action-hover: #77d657;
   --explore-action-active: #66c747;
-  --explore-panel-width: 20rem;
   --explore-top: max(0.75rem, env(safe-area-inset-top));
-  --explore-nav-height: calc(4.5rem + 1px + env(safe-area-inset-bottom));
-  --explore-mobile-panel-height: min(
-    46dvh,
-    26rem,
-    max(4rem, calc(100dvh - var(--explore-nav-height) - 13rem))
+  --explore-left: max(0.75rem, env(safe-area-inset-left));
+  --explore-right: max(0.75rem, env(safe-area-inset-right));
+  /* 하단의 SDK 저작권 표시와 안전 영역을 위한 공간입니다. */
+  --explore-bottom: calc(2rem + env(safe-area-inset-bottom));
+  --explore-dock-height: 4.25rem;
+  --explore-panel-bottom: calc(
+    var(--explore-bottom) + var(--explore-dock-height) + 0.5rem
   );
+  --explore-controls-top: calc(var(--explore-top) + 7rem);
+  --explore-panel-top: calc(var(--explore-controls-top) + 3.5rem);
+  --explore-sheet-limit: 50dvh;
+  --explore-overlay-height: 100dvh;
   font-family:
     'Geist Variable', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
 }
@@ -271,7 +212,7 @@
   position: absolute;
   z-index: 35;
   top: var(--explore-top);
-  left: max(0.75rem, env(safe-area-inset-left));
+  left: var(--explore-left);
   display: grid;
   width: 2.75rem;
   height: 3rem;
@@ -290,40 +231,52 @@
   background: var(--accent);
 }
 
-.explore-navigation {
-  z-index: 20;
-  padding: 0.25rem max(0.25rem, env(safe-area-inset-right))
-    max(0.25rem, env(safe-area-inset-bottom))
-    max(0.25rem, env(safe-area-inset-left));
-  border-top: 1px solid var(--border);
+.explore-dock,
+.explore-panel-shell {
+  position: absolute;
+  left: calc((100% + var(--explore-left) - var(--explore-right)) / 2);
+  translate: -50% 0;
 }
 
-.explore-menu-list {
-  gap: 0.25rem;
+.explore-dock {
+  z-index: 21;
+  bottom: var(--explore-bottom);
+  width: min(24rem, calc(100% - var(--explore-left) - var(--explore-right)));
+  height: var(--explore-dock-height);
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--background);
+  box-shadow: 0 6px 22px rgb(23 54 41 / 16%);
 }
 
-.explore-navigation [data-slot='button'] {
+.explore-dock ul {
+  height: 100%;
+}
+
+.explore-dock [data-slot='button'] {
   position: relative;
-  min-height: 4rem;
-  gap: 0.35rem;
+  height: 100%;
+  min-height: 0;
+  gap: 0.25rem;
   border-radius: 0.625rem;
   color: var(--muted-foreground);
   font-size: 0.75rem;
   line-height: 1.4;
 }
 
-.explore-navigation [data-slot='button']:hover {
+.explore-dock [data-slot='button']:hover {
   background: var(--muted);
   color: var(--foreground);
 }
 
-.explore-navigation [data-slot='button'][aria-expanded='true'] {
+.explore-dock [data-slot='button'][aria-expanded='true'] {
   background: var(--accent);
   color: var(--primary);
   font-weight: 700;
 }
 
-.explore-navigation [aria-expanded='true']::before {
+.explore-dock [aria-expanded='true']::before {
   position: absolute;
   top: 0;
   left: calc(50% - 0.6rem);
@@ -334,16 +287,70 @@
   content: '';
 }
 
-.explore-app .explore-panel {
-  max-height: var(--explore-mobile-panel-height);
-  border: 0;
-  border-top: 1px solid var(--border);
-  border-radius: 1rem 1rem 0 0;
+.explore-panel-shell {
+  z-index: 20;
+  bottom: var(--explore-panel-bottom);
+  width: calc(100% - var(--explore-left) - var(--explore-right));
+  pointer-events: none;
+}
+
+.explore-panel {
+  max-height: min(
+    var(--explore-sheet-limit),
+    max(
+      3.5rem,
+      calc(100dvh - var(--explore-panel-bottom) - var(--explore-panel-top))
+    )
+  );
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--background);
+  box-shadow: 0 8px 28px rgb(23 54 41 / 16%);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(12px);
+  transition:
+    opacity 140ms ease-in,
+    transform 140ms ease-in,
+    visibility 0s 140ms;
+}
+
+.explore-panel-shell[data-open='true'] .explore-panel {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+  transition:
+    opacity 180ms ease-out,
+    transform 180ms ease-out;
+}
+
+.explore-panel-view {
+  animation: explore-panel-content-enter 120ms ease-out;
+}
+
+@keyframes explore-panel-content-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .explore-panel,
+  .explore-panel-shell[data-open='true'] .explore-panel,
+  .explore-panel-view {
+    transition: none;
+    animation: none;
+    transform: none;
+  }
 }
 
 .explore-panel-heading {
-  min-height: 4rem;
-  padding: 0.5rem 1.25rem;
+  min-height: 3.5rem;
+  padding: 0.3rem 1.25rem;
   border-bottom: 1px solid var(--border);
 }
 
@@ -382,8 +389,8 @@
   position: absolute;
   z-index: 30;
   top: var(--explore-top);
-  left: calc(max(0.75rem, env(safe-area-inset-left)) + 3.5rem);
-  right: max(0.75rem, env(safe-area-inset-right));
+  left: calc(var(--explore-left) + 3.5rem);
+  right: var(--explore-right);
   min-width: 0;
 }
 
@@ -414,33 +421,31 @@
   min-height: 2.375rem;
 }
 
-.explore-search-results {
+.explore-search-results,
+.explore-search-error {
   position: absolute;
-  top: calc(100% + 0.5rem);
-  left: 0;
-  display: flex;
-  width: calc(100% - 3.75rem);
-  max-height: min(
-    34rem,
-    calc(100dvh - var(--explore-nav-height) - var(--explore-top) - 5.5rem)
+  top: calc(var(--explore-panel-top) - var(--explore-top));
+  right: 0;
+  width: 100%;
+  max-height: max(
+    4.5rem,
+    calc(
+      var(--explore-overlay-height) - var(--explore-panel-top) -
+        var(--explore-bottom)
+    )
   );
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.explore-search-results {
+  display: flex;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 0.875rem;
   background: var(--background);
   box-shadow: 0 4px 16px rgb(23 54 41 / 8%);
-  transition: max-height 220ms ease-in-out;
-}
-
-.explore-search[data-panel-open='true'] .explore-search-results {
-  max-height: max(
-    5rem,
-    calc(
-      100dvh - var(--explore-nav-height) - var(--explore-mobile-panel-height) -
-        var(--explore-top) - 5.5rem
-    )
-  );
 }
 
 .explore-search-heading {
@@ -488,12 +493,15 @@
 
 .explore-location-toast,
 .explore-location-error {
-  position: fixed;
+  position: absolute;
   z-index: 24;
-  top: calc(var(--explore-top) + 4rem);
+  top: calc(var(--explore-controls-top) + 3.25rem);
   left: 50%;
   width: max-content;
-  max-width: min(23rem, calc(100vw - 2rem));
+  max-width: min(
+    23rem,
+    calc(100% - var(--explore-left) - var(--explore-right))
+  );
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: 0.75rem;
@@ -504,7 +512,6 @@
 }
 
 .explore-location-toast {
-  top: calc(var(--explore-top) + 3.5rem);
   width: 19rem;
   padding: 0.75rem 1rem;
   font-size: 0.9375rem;
@@ -519,25 +526,12 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
+  max-height: max(
+    4.5rem,
+    calc(100dvh - var(--explore-panel-bottom) - var(--explore-panel-top))
+  );
+  overflow-y: auto;
   border-color: var(--destructive);
-}
-
-@media (width < 48rem) {
-  .explore-location-error {
-    top: calc(var(--explore-top) + 7rem);
-  }
-  .explore-location-toast {
-    top: calc(var(--explore-top) + 7rem);
-    /* 오른쪽 지도 조작 버튼 너비만큼 양쪽에 같은 여백을 둡니다. */
-    max-width: calc(100% - 8rem);
-  }
-}
-
-/* 검색창과 지역 필터 사이에 Toast가 들어가는 화면 폭에서 상단을 맞춥니다. */
-@media (width >= 75rem) {
-  .explore-location-toast {
-    top: var(--explore-top);
-  }
 }
 
 /* 지역 선택은 업종·패널과 독립적인 지도 공통 도구로 배치합니다. */
@@ -545,7 +539,7 @@
   position: absolute;
   z-index: 32;
   top: calc(var(--explore-top) + 3.75rem);
-  right: max(0.75rem, env(safe-area-inset-right));
+  right: var(--explore-right);
 }
 .region-filter > [data-slot='button'] {
   height: 2.75rem;
@@ -569,7 +563,8 @@
   right: 0;
   width: min(22rem, calc(100vw - 5.25rem));
   max-height: calc(
-    100dvh - var(--explore-nav-height) - var(--explore-top) - 7.5rem
+    var(--explore-overlay-height) - var(--explore-panel-bottom) -
+      var(--explore-top) - 7.5rem
   );
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -680,9 +675,10 @@
   margin-top: 0.5rem;
 }
 
-.explore-app .explore-map-controls {
-  right: max(0.75rem, env(safe-area-inset-right));
-  bottom: 2rem;
+.explore-map-controls {
+  top: var(--explore-controls-top);
+  right: var(--explore-right);
+  flex-direction: row;
   gap: 0;
   padding: 0.125rem;
   border: 1px solid var(--border);
@@ -691,60 +687,29 @@
 }
 
 .explore-map-controls button + button {
-  border-top: 1px solid var(--border);
-  border-radius: 0 0 0.5rem 0.5rem;
+  border-inline-start: 1px solid var(--border);
 }
+
+.explore-map-notice {
+  top: var(--explore-panel-top);
+  bottom: var(--explore-panel-bottom);
+  pointer-events: none;
+}
+
 .explore-map-notice [role='alert'] {
+  pointer-events: auto;
   border-color: var(--border);
   box-shadow: none;
 }
 
+.explore-app:has(.explore-panel-shell[data-open='true'])
+  .explore-map-notice
+  [role='alert'] {
+  padding: 0.75rem;
+  gap: 0.5rem;
+}
+
 @media (width < 48rem) {
-  .explore-map-notice {
-    top: calc(var(--explore-top) + 7rem);
-    right: 4rem;
-  }
-  .explore-search-error {
-    margin-top: 3.75rem;
-  }
-  .explore-search[data-panel-open='true'] .explore-search-error {
-    max-height: max(
-      4rem,
-      calc(
-        100dvh - var(--explore-nav-height) -
-          var(--explore-mobile-panel-height) - var(--explore-top) - 7.25rem
-      )
-    );
-    overflow-y: auto;
-  }
-  /* 검색 결과는 지역 필터 버튼 아래에, 확대·축소 버튼 왼쪽에 머뭅니다. */
-  .explore-search-results {
-    top: calc(100% + 3.75rem);
-    max-height: calc(
-      100dvh - var(--explore-nav-height) - var(--explore-top) - 8.75rem
-    );
-  }
-  .explore-search[data-panel-open='true'] .explore-search-results {
-    max-height: max(
-      5rem,
-      calc(
-        100dvh - var(--explore-nav-height) -
-          var(--explore-mobile-panel-height) - var(--explore-top) - 7.25rem
-      )
-    );
-  }
-  .region-filter-controls {
-    right: 3.75rem;
-  }
-  .region-filter[data-panel-open='true'] .region-filter-controls {
-    max-height: max(
-      4rem,
-      calc(
-        100dvh - var(--explore-nav-height) -
-          var(--explore-mobile-panel-height) - var(--explore-top) - 7.5rem
-      )
-    );
-  }
   .explore-app [data-slot='button']:not([data-size='navigation']) {
     min-height: 2.75rem;
   }
@@ -753,85 +718,163 @@
   }
 }
 
-@media (width >= 48rem) {
+@media (width >= 34rem) {
+  .explore-search {
+    right: auto;
+    width: min(
+      23rem,
+      calc(100vw - var(--explore-left) - var(--explore-right) - 15rem)
+    );
+  }
   .region-filter {
     top: var(--explore-top);
-    right: 1rem;
   }
   .explore-app {
-    --explore-top: max(1rem, env(safe-area-inset-top));
-  }
-  .explore-navigation {
-    width: 4.5rem;
-    padding: calc(var(--explore-top) + 4rem) 0.25rem 0.25rem;
-    border-top: 0;
-    border-right: 1px solid var(--border);
-  }
-  .explore-menu-list {
-    gap: 0.5rem;
-  }
-  .explore-home {
-    top: var(--explore-top);
-    left: 0.875rem;
-    width: 2.75rem;
-    height: 2.75rem;
-    border: 0;
-  }
-  .explore-navigation [aria-expanded='true']::before {
-    top: calc(50% - 0.6rem);
-    left: 0;
-    width: 3px;
-    height: 1.2rem;
-  }
-  .explore-app .explore-panel-shell {
-    margin-top: calc(var(--explore-top) + 4rem);
-  }
-  /* SDK 오류 안내가 두 줄로 표시돼도 패널 제목·닫기 버튼을 덮지 않게 합니다. */
-  .explore-app:has(.explore-search-error) .explore-panel-shell {
-    margin-top: calc(var(--explore-top) + 12rem);
-  }
-  .explore-app .explore-panel {
-    max-height: none;
-    border-radius: 0;
-    border-top: 0;
-    border-right: 1px solid var(--border);
-  }
-  .explore-search {
-    left: 5.5rem;
-    right: auto;
-    width: calc(var(--explore-panel-width) - 2rem);
-  }
-  .explore-search-form input {
-    font-size: 0.875rem;
-  }
-  .explore-search-results {
-    left: 0;
-    width: 100%;
-    max-height: min(36rem, calc(100dvh - 6rem));
-    transition: left 220ms ease-in-out;
-  }
-  .explore-search[data-panel-open='true'] .explore-search-results {
-    /* 결과를 상세 패널 옆에 배치해 두 닫기 버튼을 모두 사용할 수 있게 합니다. */
-    left: calc(100% + 2rem);
-    max-height: min(36rem, calc(100dvh - 6rem));
-  }
-  .explore-search-error {
-    margin-left: 0;
-  }
-  .explore-app .explore-map-controls {
-    right: 1rem;
+    --explore-controls-top: calc(var(--explore-top) + 3.75rem);
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .explore-search-results {
-    transition: none;
+@media (width < 64rem) {
+  .explore-app:has(
+    [data-picking='true'],
+    .explore-search:focus-within,
+    .explore-search-results,
+    .region-filter[data-open='true'],
+    .explore-map-notice [role='alert'],
+    .explore-location-error
+  ) {
+    --explore-sheet-limit: min(36dvh, 12rem);
   }
+  .explore-app:has(.explore-panel-shell[data-open='true']) .explore-map-notice {
+    bottom: calc(var(--explore-panel-bottom) + var(--explore-sheet-limit));
+  }
+  .explore-app:has(.explore-panel-shell[data-open='true'])
+    .explore-location-error {
+    max-height: max(
+      3rem,
+      calc(
+        100dvh - var(--explore-panel-top) - var(--explore-panel-bottom) -
+          var(--explore-sheet-limit)
+      )
+    );
+  }
+  .explore-app:has(.explore-panel-shell[data-open='true'])
+    .explore-search-results {
+    max-height: max(
+      5rem,
+      min(
+        calc(
+          var(--explore-overlay-height) - var(--explore-panel-top) -
+            var(--explore-bottom)
+        ),
+        calc(
+          100dvh - var(--explore-panel-top) - var(--explore-panel-bottom) -
+            var(--explore-sheet-limit) - 0.5rem
+        )
+      )
+    );
+  }
+}
+
+@media (width < 64rem) and (height <= 32rem) {
+  .explore-app {
+    --explore-dock-height: 3.5rem;
+  }
+  .explore-dock [data-slot='button'] {
+    padding-block: 0.125rem;
+  }
+}
+
+.explore-app[data-compact-keyboard] .explore-search:focus-within {
+  z-index: 34;
+}
+
+.explore-app[data-compact-keyboard]
+  .explore-search:focus-within
+  .explore-search-results {
+  top: calc(100% + 0.5rem);
+  max-height: max(
+    3rem,
+    calc(var(--explore-overlay-height) - var(--explore-top) - 4rem)
+  );
 }
 
 @media (width >= 64rem) {
   .explore-app {
-    --explore-panel-width: 22.5rem;
+    --explore-top: max(1rem, env(safe-area-inset-top));
+    --explore-panel-top: calc(var(--explore-top) + 5rem);
+  }
+  .explore-panel-shell {
+    width: min(
+      var(--panel-width),
+      calc(
+        100% - 2 * max(var(--explore-left), calc(var(--explore-right) + 4rem))
+      )
+    );
+  }
+  .explore-panel-shell[data-menu='cafes'] {
+    --panel-width: 400px;
+    --panel-limit: 55dvh;
+  }
+  .explore-panel-shell[data-menu='analysis'] {
+    --panel-width: 520px;
+    --panel-limit: 65dvh;
+  }
+  .explore-panel-shell[data-menu='compare'] {
+    --panel-width: 840px;
+    --panel-limit: 70dvh;
+  }
+  .explore-panel {
+    max-height: min(
+      var(--panel-limit),
+      max(
+        3.5rem,
+        calc(100dvh - var(--explore-panel-bottom) - var(--explore-panel-top))
+      )
+    );
+  }
+  .explore-search-results,
+  .explore-search-error {
+    top: calc(100% + 0.5rem);
+    max-height: min(
+      34rem,
+      calc(
+        var(--explore-overlay-height) - var(--explore-panel-top) -
+          var(--explore-bottom)
+      )
+    );
+  }
+  .explore-map-controls {
+    top: auto;
+    bottom: var(--explore-bottom);
+    flex-direction: column;
+  }
+  .explore-map-controls button + button {
+    border-inline-start: 0;
+    border-top: 1px solid var(--border);
+  }
+  .explore-location-toast,
+  .explore-location-error {
+    top: calc(var(--explore-top) + 3.75rem);
+  }
+  .explore-app:has(
+    .explore-map-notice [role='alert'],
+    .explore-location-error
+  ) {
+    --explore-panel-top: calc(var(--explore-top) + 12rem);
+  }
+  .explore-app:has(.explore-panel-shell[data-open='true']) .explore-map-notice {
+    top: calc(var(--explore-top) + 3.75rem);
+    right: var(--explore-right);
+    bottom: auto;
+    left: auto;
+    width: min(24rem, 45vw);
+    max-height: 8rem;
+    padding: 0;
+  }
+  .explore-app:has(.explore-panel-shell[data-open='true'])
+    .explore-location-error {
+    max-height: 8rem;
   }
   .region-filter-controls {
     position: relative;

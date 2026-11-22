@@ -9,7 +9,6 @@ import type { MapConnection } from './kakao-map';
 export function PlaceSearch({
   search,
   connection,
-  panelOpen,
   onSelect,
   onAnalysis,
   onNearby,
@@ -17,7 +16,6 @@ export function PlaceSearch({
 }: {
   search: PlaceSearchState;
   connection: MapConnection | null;
-  panelOpen: boolean;
   onSelect?: (place: PlaceSearchResult) => void;
   onAnalysis?: () => void;
   onNearby: (place: PlaceSearchResult) => void;
@@ -47,7 +45,6 @@ export function PlaceSearch({
       role="search"
       aria-label="장소 검색"
       className="explore-search"
-      data-panel-open={panelOpen}
       onKeyDown={(event) => {
         if (event.key === 'Escape' && resultsVisible) {
           event.preventDefault();

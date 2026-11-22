@@ -271,6 +271,7 @@ export function CandidatePanel({
   >({});
   const headingRef = useRef<HTMLHeadingElement>(null);
   const afterRemoval = useRef<CandidateSlot | 'heading' | null>(null);
+  const previousSelection = useRef(candidates.selected);
   useEffect(() => {
     const target = afterRemoval.current;
     if (!target) return;
@@ -281,7 +282,9 @@ export function CandidatePanel({
     afterRemoval.current = null;
   }, [items]);
   useEffect(() => {
-    if (active && candidates.selected)
+    const changed = previousSelection.current !== candidates.selected;
+    previousSelection.current = candidates.selected;
+    if (active && changed && candidates.selected)
       selectionRefs.current[candidates.selected]?.scrollIntoView?.({
         block: 'nearest',
       });

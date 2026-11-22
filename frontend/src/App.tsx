@@ -1,14 +1,9 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import {
-  BarChart3,
-  ChevronLeft,
-  Compass,
-  GitCompareArrows,
-  MapPin,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { MapPin } from 'lucide-react';
 import { ExplorePanel, type ExploreMenu } from '@/components/explore-panel';
+import { FloatingDock } from '@/components/floating-dock';
+import { FloatingPanel } from '@/components/floating-panel';
 import { PlaceSearch } from '@/components/place-search';
 import { RegionFilter } from '@/components/region-filter';
 import { usePlaceSearch } from '@/hooks/use-place-search';
@@ -23,11 +18,7 @@ import { sameCandidateLocation, type Candidate } from '@/lib/candidates';
 import { StatisticsQuarterSelect } from '@/components/statistics-quarter-select';
 import { useStatisticsQuarters } from '@/hooks/use-statistics-quarters';
 
-const menus = [
-  { id: 'cafes', label: '주변 탐색', Icon: Compass },
-  { id: 'analysis', label: '상권 분석', Icon: BarChart3 },
-  { id: 'compare', label: '후보지 분석', Icon: GitCompareArrows },
-] as const;
+const panelId = 'explore-panel';
 
 export default function App() {
   const region = useRegionExplorer();
@@ -48,12 +39,32 @@ export default function App() {
   const [selectedMenu, setSelectedMenu] = useState<ExploreMenu | null>(null);
   // 닫는 전환이 끝날 때까지 마지막 내용을 유지해 깜빡임을 방지합니다.
   const [panelMenu, setPanelMenu] = useState<ExploreMenu>('cafes');
+  const workspaceRef = useRef<HTMLDivElement>(null);
   const menuRefs = useRef<
     Partial<Record<ExploreMenu, HTMLButtonElement | null>>
   >({});
   const panelRef = useRef<HTMLElement>(null);
   const panelTitleRef = useRef<HTMLHeadingElement>(null);
   const focusPanelTitle = useRef(false);
+  useLayoutEffect(() => {
+    const viewport = window.visualViewport;
+    const workspace = workspaceRef.current;
+    if (!viewport || !workspace) return;
+    const update = () => {
+      const short =
+        viewport.scale === 1 && workspace.clientHeight - viewport.height > 80;
+      workspace.toggleAttribute('data-compact-keyboard', short);
+      if (viewport.scale === 1)
+        workspace.style.setProperty(
+          '--explore-overlay-height',
+          `${viewport.height}px`,
+        );
+      else workspace.style.removeProperty('--explore-overlay-height');
+    };
+    update();
+    viewport.addEventListener('resize', update);
+    return () => viewport.removeEventListener('resize', update);
+  }, []);
   useLayoutEffect(() => {
     if (selectedMenu && focusPanelTitle.current) {
       focusPanelTitle.current = false;
@@ -62,6 +73,7 @@ export default function App() {
   }, [selectedMenu]);
   const candidates = useCandidates();
   const candidatePicking = selectedMenu === 'compare' && candidates.picking;
+  const centerPicking = selectedMenu === 'cafes';
   const searchedPlace = search.selected?.place;
   const searchMarkerHidden =
     !!searchedPlace &&
@@ -84,8 +96,6 @@ export default function App() {
       if (candidatePicking) void candidates.add(center);
     },
   );
-  const selectedLabel = menus.find(({ id }) => id === panelMenu)!.label;
-
   function closePanel() {
     // 패널 안에 있던 키보드 포커스가 숨겨지지 않도록 메뉴로 돌려보냅니다.
     if (selectedMenu && panelRef.current?.contains(document.activeElement))
@@ -93,8 +103,22 @@ export default function App() {
     if (selectedMenu === 'compare') candidates.leave();
     setSelectedMenu(null);
   }
+  function openPanel(menu: ExploreMenu, moveFocus = false) {
+    if (selectedMenu === 'compare' && menu !== 'compare') candidates.leave();
+    focusPanelTitle.current = moveFocus;
+    setPanelMenu(menu);
+    setSelectedMenu(menu);
+  }
+  function openFromSearch(menu: ExploreMenu) {
+    openPanel(menu);
+    search.close();
+    menuRefs.current[menu]?.focus({ preventScroll: true });
+  }
   return (
-    <div className="explore-app flex h-dvh min-h-80 flex-col overflow-hidden bg-background">
+    <div
+      ref={workspaceRef}
+      className="explore-app relative h-dvh overflow-hidden bg-background"
+    >
       <a
         href="#explore-main"
         className="sr-only z-50 rounded-lg bg-background p-3 focus:not-sr-only focus:absolute focus:top-2 focus:left-2"
@@ -105,9 +129,18 @@ export default function App() {
         id="explore-main"
         aria-label="여기 창업해도 돼? 탐색 화면"
         tabIndex={-1}
-        className="relative flex min-h-0 flex-1 flex-col outline-none md:flex-row"
+        className="relative isolate h-full outline-none"
+        data-picking={
+          candidatePicking ||
+          (centerPicking && cafes.mode === 'nearby' && !cafes.center)
+        }
         onKeyDown={(event) => {
-          if (event.key === 'Escape' && selectedMenu) {
+          if (
+            event.key === 'Escape' &&
+            selectedMenu &&
+            !event.defaultPrevented &&
+            !event.nativeEvent.isComposing
+          ) {
             event.preventDefault();
             closePanel();
           }
@@ -121,77 +154,20 @@ export default function App() {
         >
           <MapPin aria-hidden="true" />
         </Link>
-        <nav
-          aria-label="탐색 메뉴"
-          className="explore-navigation order-3 shrink-0 bg-background md:order-0"
-        >
-          <ul className="explore-menu-list grid grid-cols-3 md:flex md:flex-col">
-            {menus.map(({ id, label, Icon }) => (
-              <li key={id}>
-                <Button
-                  ref={(node) => {
-                    menuRefs.current[id] = node;
-                  }}
-                  variant="navigation"
-                  size="navigation"
-                  aria-label={label}
-                  aria-expanded={selectedMenu === id}
-                  aria-controls="explore-panel"
-                  onClick={(event) => {
-                    if (selectedMenu === id) {
-                      closePanel();
-                      return;
-                    }
-                    focusPanelTitle.current =
-                      event.detail === 0 ||
-                      panelRef.current?.contains(document.activeElement) ===
-                        true;
-                    if (selectedMenu === 'compare') candidates.leave();
-                    setPanelMenu(id);
-                    setSelectedMenu(id);
-                  }}
-                >
-                  <Icon aria-hidden="true" />
-                  <span>{label}</span>
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <RegionFilter
-          region={region}
-          onOpen={search.close}
-          onSelection={() => {
-            resetNearby();
-            search.close();
-          }}
-          panelOpen={selectedMenu !== null}
-        />
         <PlaceSearch
           search={search}
           connection={connection}
-          panelOpen={selectedMenu !== null}
           onSelect={(place) => {
             if (candidatePicking) candidates.setPicking(false);
             resetNearby();
             region.selectPlace(place);
           }}
-          onAnalysis={() => {
-            if (selectedMenu === 'compare') candidates.leave();
-            setPanelMenu('analysis');
-            setSelectedMenu('analysis');
-            search.close();
-            menuRefs.current.analysis?.focus({ preventScroll: true });
-          }}
+          onAnalysis={() => openFromSearch('analysis')}
           onCandidate={(place) => {
-            setPanelMenu('compare');
-            setSelectedMenu('compare');
-            search.close();
-            menuRefs.current.compare?.focus({ preventScroll: true });
+            openFromSearch('compare');
             void candidates.add(place);
           }}
           onNearby={(place) => {
-            if (selectedMenu === 'compare') candidates.leave();
             cafes.setMode('nearby');
             cafes.selectCenter(
               {
@@ -200,80 +176,74 @@ export default function App() {
               },
               place,
             );
-            setPanelMenu('cafes');
-            setSelectedMenu('cafes');
-            search.close();
-            menuRefs.current.cafes?.focus({ preventScroll: true });
+            openFromSearch('cafes');
           }}
         />
-        <div
-          className="explore-panel-shell order-2 md:order-0"
-          data-open={selectedMenu !== null}
-        >
-          <aside
-            ref={panelRef}
-            id="explore-panel"
-            aria-labelledby="explore-panel-title"
-            aria-hidden={selectedMenu === null}
-            inert={selectedMenu === null}
-            className="explore-panel flex min-h-0 flex-col overflow-hidden border-t bg-background md:border-t-0 md:border-r"
-          >
-            <div className="explore-panel-heading flex shrink-0 items-center justify-between gap-3">
-              <h2
-                ref={panelTitleRef}
-                id="explore-panel-title"
-                tabIndex={-1}
-                className="text-base font-semibold"
-              >
-                {selectedLabel ?? '탐색 도구'}
-              </h2>
-              <Button
-                variant="ghost"
-                size="icon-lg"
-                aria-label={`${selectedLabel ?? '상세'} 패널 닫기`}
-                onClick={closePanel}
-              >
-                <ChevronLeft aria-hidden="true" />
-              </Button>
-            </div>
-            <div className="explore-panel-content min-h-0 flex-1 overflow-y-auto overscroll-contain">
-              {panelMenu !== 'cafes' && (
-                <StatisticsQuarterSelect catalog={quarterCatalog} />
-              )}
-              {panelMenu === 'compare' ? (
-                <CandidatePanel
-                  candidates={candidates}
-                  active={selectedMenu === 'compare'}
-                  quarter={quarterCatalog.selected}
-                  mapReady={connection?.status === 'ready'}
-                  onSelect={selectCandidate}
-                  onStartPicking={search.close}
-                />
-              ) : (
-                <ExplorePanel
-                  key={panelMenu}
-                  menu={panelMenu}
-                  region={region}
-                  cafes={cafes}
-                  active={selectedMenu !== null}
-                  quarter={quarterCatalog.selected}
-                />
-              )}
-            </div>
-          </aside>
-        </div>
+        <RegionFilter
+          region={region}
+          onOpen={search.close}
+          onSelection={() => {
+            resetNearby();
+            search.close();
+          }}
+        />
         <KakaoMapView
           regionRevision={region.revision}
-          searchOpen={search.isOpen}
           target={region.target}
           cafes={cafes}
           connectionChanged={setConnection}
           searchSelection={search.selected}
           searchMarkerHidden={searchMarkerHidden}
           onSearchMarkerClick={search.showSelection}
-          centerPicking={selectedMenu === 'cafes'}
+          centerPicking={centerPicking}
           candidatePicking={candidatePicking}
         />
+        <FloatingDock
+          selected={selectedMenu}
+          panelId={panelId}
+          registerButton={(menu, node) => {
+            menuRefs.current[menu] = node;
+          }}
+          onSelect={(menu, keyboard) => {
+            if (selectedMenu === menu) {
+              closePanel();
+              return;
+            }
+            if (!keyboard)
+              menuRefs.current[menu]?.focus({ preventScroll: true });
+            openPanel(menu, keyboard);
+          }}
+        />
+        <FloatingPanel
+          id={panelId}
+          menu={panelMenu}
+          open={selectedMenu !== null}
+          panelRef={panelRef}
+          titleRef={panelTitleRef}
+          onClose={closePanel}
+        >
+          {panelMenu !== 'cafes' && (
+            <StatisticsQuarterSelect catalog={quarterCatalog} />
+          )}
+          {panelMenu === 'compare' ? (
+            <CandidatePanel
+              candidates={candidates}
+              active={selectedMenu === 'compare'}
+              quarter={quarterCatalog.selected}
+              mapReady={connection?.status === 'ready'}
+              onSelect={selectCandidate}
+              onStartPicking={search.close}
+            />
+          ) : (
+            <ExplorePanel
+              menu={panelMenu}
+              region={region}
+              cafes={cafes}
+              active={selectedMenu === panelMenu}
+              quarter={quarterCatalog.selected}
+            />
+          )}
+        </FloatingPanel>
       </main>
     </div>
   );

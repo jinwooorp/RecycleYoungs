@@ -23,7 +23,7 @@ import {
   type KakaoClustererOptions,
   type KakaoCluster,
 } from '@/lib/kakao-maps';
-import { KakaoMapView } from './kakao-map';
+import { KakaoMapView, type MapConnection } from './kakao-map';
 import ExploreApp from '@/App';
 import { MemoryRouter } from 'react-router';
 import { useCafeMap } from '@/hooks/use-cafe-map';
@@ -84,6 +84,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
+
+function resizeMap(width: number) {
+  Object.defineProperty(
+    screen.getByLabelText('Kakao Maps 지도'),
+    'clientWidth',
+    {
+      configurable: true,
+      value: width,
+    },
+  );
+  act(() => resize([], {} as ResizeObserver));
+}
 
 /** 지도 API 경계만 대체하고 컴포넌트의 실제 비동기 흐름과 사용자 조작을 검증합니다. */
 function createSdk() {
@@ -839,7 +851,7 @@ test.each([false, true])(
       <div className="explore-app">
         <form className="explore-search-form" />
         <div className="explore-search-results" />
-        <KakaoMapView searchSelection={locationSearch} searchOpen />
+        <KakaoMapView searchSelection={locationSearch} />
       </div>,
     );
     if (reduced) {
@@ -848,11 +860,10 @@ test.each([false, true])(
       expect(map.setCenter.mock.calls.at(-1)![0].getLng()).toBe(127.031);
     } else await waitFor(() => expect(map.panBy).toHaveBeenCalledWith(-155, 0));
     const count = project.mock.calls.length;
+    resizeMap(390);
+    expect(project).toHaveBeenCalledTimes(count);
     fireEvent.pointerDown(screen.getByLabelText('Kakao Maps 지도'));
-    act(() => {
-      resize([], {} as ResizeObserver);
-      resize([], {} as ResizeObserver);
-    });
+    resizeMap(320);
     await act(async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 20));
     });
@@ -862,6 +873,52 @@ test.each([false, true])(
     measure.mockRestore();
   },
 );
+
+test('후보지 지도 확인은 가려진 표식만 한 번 보정하고 뒤늦은 보정은 취소한다', async () => {
+  const { maps, map } = createSdk();
+  load.mockResolvedValue(maps);
+  const connect = vi.fn<(connection: MapConnection) => void>();
+  const measure = vi
+    .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+    .mockImplementation(function (this: HTMLElement) {
+      if (this.getAttribute('aria-label') === 'Kakao Maps 지도')
+        return new DOMRect(0, 0, 390, 520);
+      return new DOMRect(10, 190, 370, 230);
+    });
+  let y = 220;
+  map.getProjection.mockImplementation(() => ({
+    containerPointFromCoords: vi.fn(() => ({ x: 195, y })),
+    coordsFromContainerPoint: vi.fn(() => map.getCenter()),
+  }));
+  render(
+    <div className="explore-app">
+      <div className="explore-panel-shell" data-open="true" />
+      <KakaoMapView connectionChanged={connect} />
+    </div>,
+  );
+  await waitFor(() => expect(connect.mock.lastCall?.[0].status).toBe('ready'));
+  const { focusLocation } = connect.mock.lastCall![0];
+  const location = { longitude: 127.02, latitude: 37.57 };
+  act(() => focusLocation!(location, null));
+  await waitFor(() => expect(map.panBy).toHaveBeenCalledWith(0, 42));
+  resizeMap(390);
+  expect(map.panBy).toHaveBeenCalledOnce();
+
+  y = 130;
+  act(() => focusLocation!(location, null));
+  await waitFor(() => expect(map.setLevel).toHaveBeenCalledTimes(2));
+  expect(map.panBy).toHaveBeenCalledOnce();
+
+  y = 220;
+  act(() => focusLocation!(location, null));
+  fireEvent.pointerDown(screen.getByLabelText('Kakao Maps 지도'));
+  await act(async () => {
+    await new Promise((resolve) => window.setTimeout(resolve, 20));
+  });
+  expect(map.setLevel).toHaveBeenCalledTimes(2);
+  expect(map.panBy).toHaveBeenCalledOnce();
+  measure.mockRestore();
+});
 
 test('최초 영역·idle 재조회와 목록 선택은 마커·안전한 정보창을 표시하고 전체 자원을 정리한다', async () => {
   const { maps, map } = createSdk();
@@ -1194,7 +1251,7 @@ test('로딩 중 상태를 표시한 뒤 StrictMode에서도 지도를 한 번 �
   expect(map.setLevel).toHaveBeenLastCalledWith(4);
   fireEvent.click(screen.getByRole('button', { name: '지도 축소' }));
   expect(map.setLevel).toHaveBeenLastCalledWith(5);
-  act(() => resize([], {} as ResizeObserver));
+  resizeMap(390);
   expect(map.relayout).toHaveBeenCalledOnce();
   expect(map.setCenter).toHaveBeenCalledWith(map.getCenter());
   view.unmount();
@@ -1214,7 +1271,7 @@ test('경계 범위로 이동한 뒤 relayout에도 중심을 유지하고 전�
   expect(maps.LatLng).toHaveBeenCalledWith(37.5, 126.9);
   expect(maps.LatLng).toHaveBeenCalledWith(37.6, 127.1);
   const fittedCenter = map.getCenter();
-  act(() => resize([], {} as ResizeObserver));
+  resizeMap(390);
   expect(map.setCenter).toHaveBeenLastCalledWith(fittedCenter);
   view.rerender(<KakaoMapView target={{ kind: 'default' }} />);
   await waitFor(() => expect(map.getCenter().getLat()).toBe(37.5665));
@@ -1301,7 +1358,7 @@ test('MultiPolygon의 각 영역과 내부 링을 위도·경도 순서로 그�
       <KakaoMapView target={target} />
     </StrictMode>,
   );
-  act(() => resize([], {} as ResizeObserver));
+  resizeMap(390);
   fireEvent.click(screen.getByRole('button', { name: '지도 확대' }));
   expect(maps.Polygon).toHaveBeenCalledTimes(2);
   view.unmount();
@@ -1526,23 +1583,42 @@ test('지도 생성 자체가 실패해도 오류 안내와 재시도를 제공�
   expect(maps.Map).toHaveBeenCalledTimes(2);
 });
 
-test('상세 패널을 열고 전환하고 닫아도 같은 지도에서 크기와 중심을 갱신한다', async () => {
+test('플로팅 패널을 열고 전환하고 닫아도 지도·카메라와 지도 영역 요청이 유지된다', async () => {
   const { maps, map } = createSdk();
+  const fetch = vi.mocked(globalThis.fetch);
   load.mockResolvedValue(maps);
   render(<App />);
   await waitFor(() =>
     expect(screen.getByRole('button', { name: '지도 확대' })).toBeEnabled(),
   );
+  await waitFor(() => expect(map.setCenter).toHaveBeenCalled());
+  fireEvent.click(screen.getByRole('button', { name: '지도 확대' }));
+  const idle = maps.event.addListener.mock.calls.find(
+    ([target, type]) => target === map && type === 'idle',
+  )![2];
+  act(() => idle());
+  const cafeRequests = () =>
+    fetch.mock.calls.filter(([url]) =>
+      String(url).startsWith('/api/v1/cafes/viewport'),
+    );
+  await waitFor(() => expect(cafeRequests()).toHaveLength(1));
   const container = screen.getByLabelText('Kakao Maps 지도');
-  for (const name of ['주변 탐색', '상권 분석', '상권 분석']) {
+  const center = map.getCenter();
+  const level = map.getLevel();
+  map.setCenter.mockClear();
+  map.setLevel.mockClear();
+  for (const name of ['주변 탐색', '상권 분석', '후보지 분석', '후보지 분석']) {
     fireEvent.click(screen.getByRole('button', { name }));
-    // jsdom에는 레이아웃이 없어 브라우저의 크기 변경 알림을 직접 전달합니다.
-    act(() => resize([], {} as ResizeObserver));
     expect(screen.getByLabelText('Kakao Maps 지도')).toBe(container);
   }
+  await act(async () => {});
   expect(maps.Map).toHaveBeenCalledOnce();
-  expect(map.relayout).toHaveBeenCalledTimes(3);
-  expect(map.setCenter).toHaveBeenLastCalledWith(map.getCenter());
+  expect(map.relayout).not.toHaveBeenCalled();
+  expect(map.setCenter).not.toHaveBeenCalled();
+  expect(map.setLevel).not.toHaveBeenCalled();
+  expect(map.getCenter()).toEqual(center);
+  expect(map.getLevel()).toBe(level);
+  expect(cafeRequests()).toHaveLength(1);
 });
 
 test('크기 변경으로 SDK 중심이 바뀌어도 마지막 사용자 탐색 위치를 유지한다', async () => {
@@ -1581,7 +1657,7 @@ test('크기 변경으로 SDK 중심이 바뀌어도 마지막 사용자 탐색 
   );
 });
 
-test('같은 크기의 반복 relayout에서도 SDK 반올림 좌표가 누적되지 않는다', async () => {
+test('실제 크기 변경만 relayout하며 SDK 반올림 좌표가 누적되지 않는다', async () => {
   const { maps, map } = createSdk();
   load.mockResolvedValue(maps);
   render(<KakaoMapView />);
@@ -1594,8 +1670,10 @@ test('같은 크기의 반복 relayout에서도 SDK 반올림 좌표가 누적�
     getLat: () => 37.56649,
     getLng: () => 126.97799,
   });
-  act(() => resize([], {} as ResizeObserver));
-  act(() => resize([], {} as ResizeObserver));
+  resizeMap(390);
+  resizeMap(390);
+  resizeMap(320);
+  expect(map.relayout).toHaveBeenCalledTimes(2);
   expect(map.setCenter).toHaveBeenLastCalledWith(original);
 });
 
@@ -1872,8 +1950,11 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
   const oldMarker = maps.Marker.mock.results.at(-1)!.value;
   fireEvent.click(screen.getByRole('button', { name: '주변 탐색' }));
   await screen.findByText('현재 지도 영역 · 종로구 · 청운효자동 경계 적용');
+  const workspace = screen.getByRole('main');
+  expect(workspace).toHaveAttribute('data-picking', 'false');
   expect(screen.getByText('2026년 9월')).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: '선택 지점 주변' }));
+  expect(workspace).toHaveAttribute('data-picking', 'true');
   expect(screen.queryByText('2026년 9월')).not.toBeInTheDocument();
   expect(oldMarker.setMap).toHaveBeenLastCalledWith(null);
   expect(maps.Circle).not.toHaveBeenCalled();
@@ -1888,6 +1969,7 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
   act(() =>
     mapClick()({ latLng: { getLat: () => 37.5665, getLng: () => 126.978 } }),
   );
+  expect(workspace).toHaveAttribute('data-picking', 'false');
   await screen.findByText('반경 내 201곳 · 1곳 표시');
   expect(
     screen.getByText('선택 지점 중심 500m 반경 · 구·동 필터와 독립 조회'),
@@ -1941,6 +2023,7 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
   fireEvent.change(screen.getByRole('combobox', { name: '탐색 반경' }), {
     target: { value: '1000' },
   });
+  expect(workspace).toHaveAttribute('data-picking', 'false');
   expect(screen.queryByText('2026년 11월 3일')).not.toBeInTheDocument();
   await screen.findByText('2026년 11월 4일');
   await waitFor(() => expect(nearbyCalls()).toHaveLength(2));
@@ -1993,6 +2076,7 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
   ).toHaveLength(clickRegistrations);
   fireEvent.click(screen.getByRole('button', { name: '주변 탐색' }));
   fireEvent.click(screen.getByRole('button', { name: '중심점 해제' }));
+  expect(workspace).toHaveAttribute('data-picking', 'true');
   expect(
     maps.Circle.mock.results.at(-1)!.value.setMap,
   ).toHaveBeenLastCalledWith(null);
@@ -2246,10 +2330,7 @@ test('검색 좌표로 행정동 통계를 연결하고 검색·지역 필터의
   expect(keywordSearch).toHaveBeenCalledOnce();
   expect(screen.getByRole('region', { name: '장소 검색 결과' })).toBe(results);
   expect(regionPanel).not.toContainElement(results);
-  expect(screen.getByRole('search', { name: '장소 검색' })).toHaveAttribute(
-    'data-panel-open',
-    'true',
-  );
+  expect(results).toBeVisible();
   expect(
     screen
       .getByRole('button', { name: '검색 결과 닫기' })
@@ -2515,6 +2596,7 @@ test('지역 필터를 적용한 채 지도와 검색에서 후보지를 등록�
     )?.[2];
   expect(mapClick()).toBeUndefined();
   fireEvent.click(mode);
+  expect(screen.getByRole('main')).toHaveAttribute('data-picking', 'true');
   expect(boundary.setMap).toHaveBeenLastCalledWith(null);
   expect(filter).toHaveValue('11140');
   const firstClick = mapClick()!;
@@ -2522,6 +2604,7 @@ test('지역 필터를 적용한 채 지도와 검색에서 후보지를 등록�
     firstClick({ latLng: { getLat: () => 37.5, getLng: () => 126.99 } }),
   );
   await screen.findByText('후보지 A를 등록했습니다.');
+  expect(screen.getByRole('main')).toHaveAttribute('data-picking', 'false');
   expect(maps.event.removeListener).toHaveBeenCalledWith(
     map,
     'click',

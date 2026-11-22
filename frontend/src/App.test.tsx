@@ -151,6 +151,22 @@ test('패널 밖에서 Escape로 닫으면 현재 도구의 포커스를 유지�
   expect(home).toHaveFocus();
 });
 
+test('지도 클릭과 패널 내부 조작은 스크롤을 유지하고 메뉴 재진입만 처음으로 이동한다', () => {
+  render(<App />);
+  const cafes = screen.getByRole('button', { name: '주변 탐색' });
+  fireEvent.click(cafes);
+  const panel = screen.getByRole('complementary', { name: '주변 탐색' });
+  const scroll = panel.querySelector('.explore-panel-content')!;
+  scroll.scrollTop = 140;
+  fireEvent.click(screen.getByLabelText('Kakao Maps 지도'));
+  fireEvent.click(screen.getByRole('button', { name: '선택 지점 주변' }));
+  expect(cafes).toHaveAttribute('aria-expanded', 'true');
+  expect(scroll.scrollTop).toBe(140);
+  fireEvent.click(cafes);
+  fireEvent.click(cafes);
+  expect(scroll.scrollTop).toBe(0);
+});
+
 test('공통 지역 필터와 반경 입력·행정구역 전체 통계를 구분한다', () => {
   const fetch = vi.spyOn(globalThis, 'fetch');
   render(<App />);
