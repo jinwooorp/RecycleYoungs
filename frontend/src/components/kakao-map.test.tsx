@@ -2652,7 +2652,15 @@ test('지역 필터를 적용한 채 지도와 검색에서 후보지를 등록�
   )!.value;
   fireEvent.click(screen.getByRole('button', { name: '후보지로 추가' }));
   await screen.findByText('후보지 B를 등록했습니다.');
-  expect(placeMarker.setMap).toHaveBeenLastCalledWith(null);
+  const registeredMarker = await waitFor(() => {
+    expect(placeMarker.setMap).toHaveBeenLastCalledWith(null);
+    const candidate = maps.Marker.mock.results.findLast(
+      (_, index) =>
+        maps.Marker.mock.calls[index][0].title === '후보지 B: 검색 장소',
+    )?.value;
+    expect(candidate?.setMap).toHaveBeenLastCalledWith(map);
+    return candidate!;
+  });
   expect(
     screen.getByRole('button', { name: '후보지 A 지도에서 위치 확인' }),
   ).toBeVisible();
@@ -2660,12 +2668,11 @@ test('지역 필터를 적용한 채 지도와 검색에서 후보지를 등록�
     screen.getByRole('region', { name: '후보지 A 요약' }),
   ).toHaveTextContent('지도로 등록');
   expect(screen.getByRole('region', { name: '후보지 요약' })).toBeVisible();
-  const removed = maps.Marker.mock.results.at(-1)!.value;
   fireEvent.click(
     screen.getByRole('button', { name: '후보지 B 상세 및 관리 열기' }),
   );
   fireEvent.click(screen.getByRole('button', { name: '후보지 B 삭제' }));
-  expect(removed.setMap).toHaveBeenLastCalledWith(null);
+  expect(registeredMarker.setMap).toHaveBeenLastCalledWith(null);
   const remaining = maps.Marker.mock.results.at(-1)!.value;
   expect(maps.Map).toHaveBeenCalledOnce();
   vi.stubEnv('VITE_KAKAO_MAP_APP_KEY', 'replacement-key');
