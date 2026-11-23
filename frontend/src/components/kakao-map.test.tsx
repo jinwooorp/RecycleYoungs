@@ -1997,13 +1997,24 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
       clickable: true,
     }),
   );
-  const markerIndex = maps.Marker.mock.calls.findLastIndex(
-    ([options]) => options.title === cafe.storeName,
-  );
-  const cafeMarker = maps.Marker.mock.results[markerIndex].value;
-  const markerClick = maps.event.addListener.mock.calls.find(
-    ([target, type]) => target === cafeMarker && type === 'click',
-  )![2];
+  const { cafeMarker, markerClick } = await waitFor(() => {
+    const markerIndex = maps.Marker.mock.calls.findLastIndex(
+      ([options]) => options.title === cafe.storeName,
+    );
+    const cafeMarker = maps.Marker.mock.results[markerIndex]?.value;
+    expect(
+      cafeMarker,
+      '반경 조회 결과의 카페 마커가 생성되어야 합니다.',
+    ).toBeDefined();
+    const markerClick = maps.event.addListener.mock.calls.find(
+      ([target, type]) => target === cafeMarker && type === 'click',
+    )?.[2];
+    expect(
+      markerClick,
+      '카페 마커의 클릭 리스너가 등록되어야 합니다.',
+    ).toBeTypeOf('function');
+    return { cafeMarker: cafeMarker!, markerClick: markerClick! };
+  });
   act(() => markerClick());
   expect(maps.event.preventMap).toHaveBeenCalledOnce();
   expect(nearbyCalls()).toHaveLength(1);
