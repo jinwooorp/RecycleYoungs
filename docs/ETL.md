@@ -110,18 +110,18 @@ Sheet 미리보기와 공개 API의 작은 표본으로 전체 기간이나 포�
 Node.js 24와 npm 11을 준비한 후 저장소 루트에서 시작합니다.
 
 ```bash
-cd etl
+cd apps/etl
 npm ci
 npm run dev -- --help
 ```
 
-이후 명령은 `etl/`에서 실행합니다.
+이후 명령은 `apps/etl/`에서 실행합니다.
 
 빌드 결과를 사용할 때는 `npm run build` 뒤에 `npm start -- …`로 같은 인자를 전달합니다.
 
 인자 없이 실행하거나 `--help`를 지정하면 DB 연결 없이 도움말을 표시합니다.
 
-[CLI 도움말 구현](../etl/src/cli/help.ts)
+[CLI 도움말 구현](../apps/etl/src/cli/help.ts)
 
 파일 검사만 한다면 원본과 해당 판본의 기대 행 수를 준비합니다.
 
@@ -141,11 +141,11 @@ URL의 비밀번호에 예약 문자가 있으면 인코딩합니다.
 
 두 곳에 같은 변수가 있으면 셸 값이 우선합니다.
 
-루트의 공통 설정을 사용하려면 `etl/`에서 다음 명령을 실행합니다.
+루트의 공통 설정을 사용하려면 `apps/etl/`에서 다음 명령을 실행합니다.
 
 ```bash
 set -a
-source ../.env
+source ../../.env
 set +a
 ```
 
@@ -155,7 +155,7 @@ DB 연결 수를 정하는 `DB_POOL_MAX`의 기본값은 10입니다.
 
 두 값은 양의 정수입니다.
 
-[ETL 환경변수 예시](../etl/.env.example)
+[ETL 환경변수 예시](../apps/etl/.env.example)
 
 실제 키는 서버 측 환경변수로만 전달합니다.
 
@@ -387,7 +387,7 @@ HTTP에서는 키와 응답이 노출되거나 변조될 수 있습니다.
 
 공식 Sheet CSV나 파일을 내려받아 검사하는 경로도 사용할 수 있습니다.
 
-[수집 설정](../etl/src/common/config.ts) · [서울시 Open API 이용안내](https://data.seoul.go.kr/together/guide/useGuide.do)
+[수집 설정](../apps/etl/src/common/config.ts) · [서울시 Open API 이용안내](https://data.seoul.go.kr/together/guide/useGuide.do)
 
 ### 검사와 게시에 쓰는 인자
 
@@ -871,7 +871,7 @@ ZIP 포장·파일명·`shx`는 제외합니다.
 
 통계 CSV는 내부 CSV 바이트를, 통계 API는 정규화한 행을 해시합니다.
 
-[경계 판독 구현](../etl/src/domains/boundaries/boundary-source.ts) · [수집·비교 조건](#서울시-open-api-전체-수집-probe)
+[경계 판독 구현](../apps/etl/src/domains/boundaries/boundary-source.ts) · [수집·비교 조건](#서울시-open-api-전체-수집-probe)
 
 ### 당시 확인한 공식 PDF
 

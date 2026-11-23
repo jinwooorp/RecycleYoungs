@@ -21,7 +21,7 @@ services:
 
   backend:
     profiles: [full]
-    build: ./backend
+    build: ./apps/api
     depends_on:
       db:
         condition: service_healthy
@@ -35,7 +35,7 @@ services:
   frontend:
     profiles: [full]
     build:
-      context: ./frontend
+      context: ./apps/web
       args:
         VITE_KAKAO_MAP_APP_KEY: ${VITE_KAKAO_MAP_APP_KEY:-}
     depends_on:

@@ -10,7 +10,7 @@ DB 통합 검사는 Docker의 일회용 PostGIS에서 실행합니다.
 
 ## 빌드·테스트·품질 검사
 
-`frontend/`와 `etl/`에서 각각 `npm ci` 후 실행합니다.
+`apps/web/`와 `apps/etl/`에서 각각 `npm ci` 후 실행합니다.
 
 Frontend의 Vitest는 브라우저 DOM·Kakao SDK·API를 모의합니다.
 
@@ -29,7 +29,7 @@ ETL 린트에는 TypeScript 검사도 포함됩니다.
 
 테스트를 감시하려면 `npm run test:watch`, 포맷을 수정하려면 `npm run format`을 사용합니다.
 
-`backend/`에서 단위·MVC 테스트와 Spotless 포맷 확인은 `./gradlew build`에 포함됩니다.
+`apps/api/`에서 단위·MVC 테스트와 Spotless 포맷 확인은 `./gradlew build`에 포함됩니다.
 
 검사만 분리하려면 `./gradlew test`, `./gradlew spotlessCheck`를 사용합니다.
 
@@ -37,7 +37,7 @@ ETL 린트에는 TypeScript 검사도 포함됩니다.
 
 ## Backend 통합 테스트
 
-Docker를 먼저 실행한 뒤 `backend/`에서 실행합니다.
+Docker를 먼저 실행한 뒤 `apps/api/`에서 실행합니다.
 
 ```bash
 ./gradlew integrationTest
@@ -51,11 +51,11 @@ Testcontainers가 `postgis/postgis:17-3.5`의 일회용 DB를 띄우고 서비�
 
 ARM64에서 이미지 판본이 없으면 `docker pull --platform linux/amd64 postgis/postgis:17-3.5`와 AMD64 에뮬레이션을 확인합니다.
 
-[Gradle 태스크 설정](../backend/build.gradle)
+[Gradle 태스크 설정](../apps/api/build.gradle)
 
 ## ETL 격리 DB 통합 테스트
 
-Docker를 실행한 뒤 `etl/`에서 아래 플래그를 지정하면 일회용 PostGIS의 10개 그룹이 실행됩니다.
+Docker를 실행한 뒤 `apps/etl/`에서 아래 플래그를 지정하면 일회용 PostGIS의 10개 그룹이 실행됩니다.
 
 CLI probe 검사나 일부 도메인 검증은 해당 테스트 파일을 지정해 범위를 좁힐 수 있습니다.
 
@@ -84,9 +84,9 @@ E2E는 화면 흐름을 처음부터 끝까지 확인하는 검사입니다.
 
 Playwright Chromium은 GitHub-hosted Linux Runner에서만 실행하도록 설정돼 있습니다.
 
-로컬의 `frontend/`에서 아래 두 명령을 실행하면 브라우저를 띄우지 않고 타입·Mock과 테스트 목록을 검사합니다.
+로컬의 `apps/web/`에서 아래 두 명령을 실행하면 브라우저를 띄우지 않고 타입·Mock과 테스트 목록을 검사합니다.
 
-[Playwright 설정](../frontend/playwright.config.ts)
+[Playwright 설정](../apps/web/playwright.config.ts)
 
 ```bash
 npm run e2e:check
@@ -95,7 +95,7 @@ npm run test:e2e:list
 
 ### 공통 합성 환경
 
-1. `frontend/`에서 `npm run e2e:serve`를 시작합니다.
+1. `apps/web/`에서 `npm run e2e:serve`를 시작합니다.
 
    테스트 웹은 `127.0.0.1:4173`, Mock API는 `127.0.0.1:4174`입니다.
 
@@ -103,13 +103,13 @@ npm run test:e2e:list
 
    등록되지 않은 Mock 경로는 404입니다.
 
-2. 테스트 사이트의 `ry-e2e-scenario` 쿠키로 `normal`, `sales-error`, `sales-empty`, `districts-error`, `quarters-error`를 선택합니다.
+2. 테스트 사이트의 `ry-e2e-scenario` 쿠키로 `normal`, `sales-error`, `sales-empty`, `districts-error`, `district-boundary-error`, `quarters-error` 등을 선택합니다.
 
    변경 후 지역이나 패널을 다시 고릅니다.
 
    복구 시험은 `normal`로 돌린 뒤 화면에서 재시도합니다.
 
-3. 후보지 복원은 [예시 좌표 A·B·C](../frontend/e2e/fixtures.ts)와 `localStorage`의 `recycleyoungs.candidates` 버전 2를 사용합니다. 이전 시나리오에서는 같은 키의 `sessionStorage`에 버전 1을 한 번만 넣고 로컬 버전 2가 검증된 뒤에만 탭 원본이 없어지는지 확인합니다.
+3. 후보지 복원은 [예시 좌표 A·B·C](../apps/web/e2e/fixtures.ts)와 `localStorage`의 `recycleyoungs.candidates` 버전 2를 사용합니다. 이전 시나리오에서는 같은 키의 `sessionStorage`에 버전 1을 한 번만 넣고 로컬 버전 2가 검증된 뒤에만 탭 원본이 없어지는지 확인합니다.
 
    각 시나리오는 별도 브라우저 컨텍스트에서 시작합니다. 브라우저 수동 검증에서는 테스트에 사용하는 사이트의 후보지 키와 시나리오 쿠키만 초기화합니다.
 
@@ -131,6 +131,10 @@ npm run test:e2e:list
 
 8. 후보지 메모를 입력하고 다른 메뉴로 갔다 돌아오면 초안이 남고 저장값은 그대로인지 확인합니다. **메모 저장**을 누른 뒤 새로고침과 같은 브라우저의 새 탭에서 복원하고, 빈 메모 저장과 후보지 삭제·슬롯 재사용도 확인합니다. 다른 탭에서 저장한 값을 편집 중인 초안으로 덮어쓸 수 없는지 검사합니다. 단위 검사는 빈 목록, 저장 예외, 손상된 저장본 보존, StrictMode 이전을 검증합니다. 메모 전용 변경에서 지도 마커·리스너와 지역·카페·통계 요청이 늘지 않는지도 확인합니다.
 
+9. **지역 필터**를 Enter로 열고 Tab과 Space로 구 버튼을 선택합니다. 선택 강조와 현재 지역 요약이 즉시 바뀌며, Escape나 바깥 클릭 뒤에도 선택한 구가 유지됩니다. 한 구에서만 **행정동**으로 들어가며, 이전 단계로 돌아가도 동 선택이 남습니다. 두 구에서 행정동 버튼이 비활성화되고 **서울 전체**나 초기화로 모든 제한이 즉시 해제되는지 확인합니다. `district-boundary-error`에서는 마포구와 성동구를 선택하고, `normal`로 전환한 뒤 성동구 경계만 재시도합니다. 상권 분석에서 성동구 240개, 마포구 120개, 서교동 30개를 각각 확인합니다.
+
+   SDK를 사용하는 컴포넌트 테스트에서는 공식 경계의 링과 여러 도형, 연속 선택의 마지막 범위만 맞춤, 수동 지도 이동 우선, 반복 `districtCodes`가 담긴 단일 요청과 서버 값 보존을 검사합니다. 실제 지도에서는 1440px의 필터·위치 안내 수직 중심, 320px·390px의 2열 목록과 스크롤, 위치 안내·Dock·검색창과의 간격을 확인합니다.
+
 지도 영역과 반경 조회의 기준년월 응답은 `./gradlew integrationTest --tests '*CafeApiIntegrationTests'`로 검증합니다. 실제 카카오 지도 환경에서는 적용 지역 필터가 있는 지도 영역, 선택 지점의 독립 반경, 0건과 조회 실패에서 카페 출처를 확인합니다.
 
 ### 로컬 UI 확인
@@ -149,7 +153,7 @@ npm run test:e2e:list
 
    도구·데이터 환경을 명시하고 실제 확인은 `PASS`, 재현한 제품 결함은 `FAIL`, 연결·권한·환경으로 끝내지 못하면 `BLOCKED`로 기록합니다.
 
-   실패 증거는 재현 단계·시나리오와 함께 Git에서 제외되는 `frontend/test-results/`에 둡니다.
+   실패 증거는 재현 단계·시나리오와 함께 Git에서 제외되는 `apps/web/test-results/`에 둡니다.
 
 4. 플로팅 탐색 화면을 1440px, 1024px·768px 전환, 390px·320px에서 확인합니다. 패널 개폐 전후 지도 컨테이너의 크기가 같고, Dock과 닫기 버튼, 검색·필터, 지도 컨트롤이 서로 가리지 않는지 검사합니다. 키보드로 포커스 복귀·내부 스크롤·출처 링크·통계 탭을 확인하고, 모션 감소에서는 패널 전환이 즉시 적용되는지 확인합니다.
 

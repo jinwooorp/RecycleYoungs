@@ -66,9 +66,9 @@
 | 설정 | 읽는 위치와 용도 |
 | --- | --- |
 | [루트 예시](../.env.example) | Compose는 루트 `.env`를 읽습니다. `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`는 DB 설정이고, `FRONTEND_PORT`와 `VITE_KAKAO_MAP_APP_KEY`는 `full` 프로필에 사용합니다. |
-| [Frontend 예시](../frontend/.env.example) | 호스트 Vite는 `frontend/.env.local` 등에서 지도 키와 개발 서버의 API 전달 주소를 읽습니다. |
-| [Backend 예시](../backend/.env.example) | 호스트 Backend의 `db` 프로필은 실행 셸에서 `DB_USER`, `DB_PASSWORD`, `DB_JDBC_URL`을 읽습니다. |
-| [ETL 예시](../etl/.env.example) | ETL은 실행 위치의 `.env`에서 DB 연결 설정과 `SEMAS_API_KEY`, `SEOUL_OPEN_API_KEY`를 읽습니다. 실행 셸의 값이 우선합니다. |
+| [Frontend 예시](../apps/web/.env.example) | 호스트 Vite는 `apps/web/.env.local` 등에서 지도 키와 개발 서버의 API 전달 주소를 읽습니다. |
+| [Backend 예시](../apps/api/.env.example) | 호스트 Backend의 `db` 프로필은 실행 셸에서 `DB_USER`, `DB_PASSWORD`, `DB_JDBC_URL`을 읽습니다. |
+| [ETL 예시](../apps/etl/.env.example) | ETL은 실행 위치의 `.env`에서 DB 연결 설정과 `SEMAS_API_KEY`, `SEOUL_OPEN_API_KEY`를 읽습니다. 실행 셸의 값이 우선합니다. |
 
 실제 키·비밀번호·접속 URL은 Git이나 로그에 남기지 않습니다.
 
@@ -144,7 +144,7 @@ Nginx는 루프백의 `FRONTEND_PORT`(기본 8081)에 게시됩니다.
 
 Compose는 [루트의 개발용 Nginx 설정](../nginx/default-dev.conf) 한 파일을 컨테이너에 읽기 전용으로 연결합니다.
 
-Frontend 빌드 컨텍스트는 `frontend/`입니다.
+Frontend 빌드 컨텍스트는 `apps/web/`입니다.
 
 [홈](http://127.0.0.1:8081/)과 [탐색 화면](http://127.0.0.1:8081/explore)을 엽니다.
 
@@ -299,7 +299,7 @@ Node.js 24를 준비한 뒤 저장소 루트에서 실행합니다.
 Vite는 기본 포트 5173을 사용하며 이미 사용 중이면 기동 오류가 납니다.
 
 ```bash
-cd frontend
+cd apps/web
 npm ci
 npm run dev
 ```
@@ -325,7 +325,7 @@ npm run dev
 
    호스트명이나 포트가 다르면 실제 사용할 주소를 등록합니다.
 
-3. 호스트 Vite는 [Frontend 예시](../frontend/.env.example)에 따라 `frontend/.env.local`에 `VITE_KAKAO_MAP_APP_KEY`를 설정합니다.
+3. 호스트 Vite는 [Frontend 예시](../apps/web/.env.example)에 따라 `apps/web/.env.local`에 `VITE_KAKAO_MAP_APP_KEY`를 설정합니다.
 
    설정 후 Vite를 재시작합니다.
 
@@ -333,7 +333,7 @@ npm run dev
 
    `docker compose -f docker-compose.yml --profile full up -d --no-deps --build frontend`로 다시 빌드합니다.
 
-   Docker 빌드는 `frontend/.env.local`을 읽지 않습니다.
+   Docker 빌드는 `apps/web/.env.local`을 읽지 않습니다.
 
 JavaScript 키는 브라우저 번들에서 확인할 수 있습니다.
 
@@ -353,13 +353,13 @@ JavaScript 키는 브라우저 번들에서 확인할 수 있습니다.
 
 Vite는 `/api`를 기본적으로 `http://localhost:8080`에 전달합니다.
 
-대상 변경은 `frontend/.env` 또는 실행 환경의 `API_PROXY_TARGET`으로 설정합니다.
+대상 변경은 `apps/web/.env` 또는 실행 환경의 `API_PROXY_TARGET`으로 설정합니다.
 
 이는 개발 서버 설정입니다.
 
 지도는 뜨지만 지역·상권 데이터가 로드되지 않으면 프록시 주소, Backend의 `db` 프로필, 정상 게시 데이터를 차례로 확인합니다.
 
-[Vite 설정](../frontend/vite.config.ts)
+[Vite 설정](../apps/web/vite.config.ts)
 
 ## 3. Backend
 
@@ -372,7 +372,7 @@ Vite는 `/api`를 기본적으로 `http://localhost:8080`에 전달합니다.
 기본 프로필에서는 DataSource·JdbcClient·Flyway 없이 실행됩니다.
 
 ```bash
-cd backend
+cd apps/api
 ./gradlew bootRun
 ```
 
@@ -388,11 +388,11 @@ cd backend
 set -a
 source .env
 set +a
-cd backend
+cd apps/api
 ./gradlew bootRun --args='--spring.profiles.active=db'
 ```
 
-[프로필 설정](../backend/src/main/resources/application-db.yaml)은 서비스용 Hikari DataSource·JdbcClient와 별도 Flyway 연결을 같은 DB 환경변수로 구성합니다.
+[프로필 설정](../apps/api/src/main/resources/application-db.yaml)은 서비스용 Hikari DataSource·JdbcClient와 별도 Flyway 연결을 같은 DB 환경변수로 구성합니다.
 
 계정을 분리할 때는 `spring.datasource.*`와 `spring.flyway.*`를 외부 설정으로 지정합니다.
 

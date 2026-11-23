@@ -61,7 +61,7 @@ out/
 .gradle/
 build/
 target/
-backend/bin/
+apps/api/bin/
 
 # ==========================================
 # Logs / Temporary files
