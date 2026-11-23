@@ -208,21 +208,22 @@ export function useRegionExplorer() {
     )
       return false;
     setSelection((current) => {
-      const district =
-        next.length === 1
-          ? next[0]
-          : next.includes(current.analysisDistrictCode)
-            ? current.analysisDistrictCode
-            : '';
+      // 단일 구의 분석 대상은 자동 지정입니다. 다중 구끼리 바뀔 때만 명시 선택을 보존합니다.
+      const keepAnalysis =
+        current.districtCodes.length > 1 &&
+        next.length > 1 &&
+        next.includes(current.analysisDistrictCode);
       return {
         ...current,
         districtCodes: next,
         dongCode: '',
-        analysisDistrictCode: district,
-        analysisDongCode:
-          next.length > 1 && district === current.analysisDistrictCode
-            ? current.analysisDongCode
-            : '',
+        analysisDistrictCode:
+          next.length === 1
+            ? next[0]
+            : keepAnalysis
+              ? current.analysisDistrictCode
+              : '',
+        analysisDongCode: keepAnalysis ? current.analysisDongCode : '',
         place: null,
         usePlaceAnalysis: false,
         revision: current.revision + 1,

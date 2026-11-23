@@ -7,6 +7,7 @@ afterEach(() => vi.unstubAllGlobals());
 const districts = [
   { districtCode: '00110', districtName: '가구' },
   { districtCode: '00140', districtName: '나구' },
+  { districtCode: '00170', districtName: '다구' },
 ];
 const dong = (districtCode: string) => ({
   districtCode,
@@ -51,6 +52,68 @@ function install(overrides: Record<string, () => Promise<Response>> = {}) {
   vi.stubGlobal('fetch', fetch);
   return fetch;
 }
+
+test('단일 구의 자동 분석 대상을 다중 구에서 해제하고 명시 선택만 유지한다', async () => {
+  const fetch = install();
+  const { result } = renderHook(useRegionExplorer);
+  await waitFor(() => expect(result.current.districts.status).toBe('ready'));
+  function expectAnalysis(districtCode: string, dongCode = '') {
+    expect(result.current.analysis).toMatchObject({ districtCode, dongCode });
+  }
+
+  expectAnalysis('');
+  act(() => result.current.applyDistricts(['00110']));
+  expectAnalysis('00110');
+  await waitFor(() => expect(result.current.dongs.status).toBe('ready'));
+  act(() => result.current.selectDong('00110001'));
+  expectAnalysis('00110', '00110001');
+
+  act(() => result.current.applyDistricts(['00110', '00140']));
+  expectAnalysis('');
+  expect(result.current.dongCode).toBe('');
+  expect(result.current.analysisDongs.status).toBe('idle');
+  await waitFor(() => expect(result.current.boundary.status).toBe('ready'));
+
+  const { districtCodes, cameraKey, overlays, target } = result.current;
+  const mapRequests = () =>
+    fetch.mock.calls.filter(([url]) => url.endsWith('/boundary'));
+  const boundaryRequests = mapRequests().length;
+  act(() => result.current.selectAnalysisDistrict('00140'));
+  await waitFor(() =>
+    expect(result.current.analysisDongs.data?.[0].districtCode).toBe('00140'),
+  );
+  act(() => result.current.selectAnalysisDong('00140001'));
+  expectAnalysis('00140', '00140001');
+  expect(result.current.districtCodes).toBe(districtCodes);
+  expect(result.current.cameraKey).toBe(cameraKey);
+  expect(result.current.overlays).toBe(overlays);
+  expect(result.current.target).toBe(target);
+  expect(mapRequests()).toHaveLength(boundaryRequests);
+
+  act(() => result.current.applyDistricts(['00110', '00140', '00170']));
+  expectAnalysis('00140', '00140001');
+  act(() => result.current.selectAnalysisDistrict('00170'));
+  expectAnalysis('00170');
+  await waitFor(() =>
+    expect(result.current.analysisDongs.data?.[0].districtCode).toBe('00170'),
+  );
+  act(() => result.current.selectAnalysisDong('00140001'));
+  expectAnalysis('00170');
+  act(() => result.current.selectAnalysisDong('00170001'));
+  expectAnalysis('00170', '00170001');
+
+  act(() => result.current.applyDistricts(['00110', '00140']));
+  expectAnalysis('');
+  act(() => result.current.selectAnalysisDistrict('00110'));
+  expectAnalysis('00110');
+  act(() => result.current.applyDistricts(['00140']));
+  expectAnalysis('00140');
+  act(() => result.current.applyDistricts(['00110', '00140', '00170']));
+  expectAnalysis('');
+  act(() => result.current.selectAnalysisDistrict('00140'));
+  act(() => result.current.applyDistricts([]));
+  expectAnalysis('');
+});
 
 test('자치구 선택·행정동 조회·전체 선택과 구 변경 시 동 초기화를 처리한다', async () => {
   const fetch = install();

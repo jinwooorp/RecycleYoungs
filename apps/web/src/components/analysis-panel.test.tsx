@@ -350,6 +350,88 @@ test('빠른 지역 변경·닫기·메뉴 전환은 요청을 취소하고 늦�
   expect(pending.every((p) => p.signal.aborted)).toBe(true);
 });
 
+test('여러 구에서는 분석 구를 직접 고를 때만 세 지표를 조회하고 늦은 이전 구 응답은 버린다', async () => {
+  const pending: {
+    url: string;
+    signal: AbortSignal;
+    finish: (response: Response) => void;
+  }[] = [];
+  const fetch = mockApi(
+    (url, { signal }) =>
+      new Promise((finish) => pending.push({ url, signal: signal!, finish })),
+  );
+  render(<App />);
+  await chooseDistrict();
+  selectTestDistricts('11110', '11140');
+  fireEvent.click(screen.getByRole('button', { name: '상권 분석' }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole('combobox', { name: '통계 기준 분기' }),
+    ).toHaveValue('20262'),
+  );
+  expect(pending).toHaveLength(0);
+  const district = screen.getByRole('combobox', { name: '분석할 자치구' });
+  expect(district).toHaveValue('');
+  expect(
+    screen.getByRole('heading', { name: '지역을 선택해 주세요' }),
+  ).toBeVisible();
+  const boundaryRequests = fetch.mock.calls.filter(([url]) =>
+    url.endsWith('/boundary'),
+  );
+
+  function selectAnalysisDistrict(code: string) {
+    fireEvent.change(district, { target: { value: code } });
+    const requests = pending.splice(0);
+    expect(
+      requests
+        .map(({ url }) => new URL(url, 'http://localhost').pathname)
+        .sort(),
+    ).toEqual(
+      ['foot-traffic', 'sales', 'stores'].map(
+        (metric) => `/api/v1/districts/${code}/stats/${metric}`,
+      ),
+    );
+    return requests;
+  }
+
+  const previous = selectAnalysisDistrict('11110');
+  const current = selectAnalysisDistrict('11140');
+  expect(previous.every(({ signal }) => signal.aborted)).toBe(true);
+  await act(async () => {
+    for (const { url, finish } of current)
+      finish(
+        statistic(
+          url,
+          url.includes('/stores')
+            ? { ...stores, storeCount: '42' }
+            : url.includes('/sales')
+              ? { ...sales, monthlySalesAmount: '88' }
+              : { ...foot, totalFootTraffic: '99' },
+        ),
+      );
+  });
+  await act(async () => {
+    for (const { url, finish } of previous)
+      finish(
+        statistic(
+          url,
+          url.includes('/stores')
+            ? stores
+            : url.includes('/sales')
+              ? sales
+              : foot,
+        ),
+      );
+  });
+  expect(within(summary('점포 수')).getByText('42')).toBeVisible();
+  expect(within(summary('당월 추정매출액')).getByText('88')).toBeVisible();
+  expect(within(summary('지역 전체 유동인구')).getByText('99')).toBeVisible();
+  expect(pending).toHaveLength(0);
+  expect(fetch.mock.calls.filter(([url]) => url.endsWith('/boundary'))).toEqual(
+    boundaryRequests,
+  );
+});
+
 test('세 핵심 지표의 로딩은 독립적이며 먼저 완료된 요약은 다른 응답을 기다리지 않는다', async () => {
   const pending: { url: string; finish: (response: Response) => void }[] = [];
   mockApi(

@@ -716,6 +716,11 @@ test('두 구를 함께 탐색하고 경계만 재시도한 뒤 통계는 한 �
   const failed = '/api/v1/districts/11200/boundary';
   const success = '/api/v1/districts/11440/boundary';
   allowHttpErrors.add(failed);
+  const statisticsRequests: string[] = [];
+  page.on('request', (request) => {
+    const { pathname } = new URL(request.url());
+    if (pathname.includes('/stats/')) statisticsRequests.push(pathname);
+  });
   const requests: string[] = [];
   page.on('response', (response) => {
     requests.push(new URL(response.url()).pathname);
@@ -757,16 +762,42 @@ test('두 구를 함께 탐색하고 경계만 재시도한 뒤 통계는 한 �
   await expect(retry).toBeHidden();
   await filter.press('Escape');
   await page.getByRole('button', { name: '상권 분석', exact: true }).click();
-  expect(requests.filter((path) => path.includes('/stats/'))).toHaveLength(0);
   const district = page.getByRole('combobox', { name: '분석할 자치구' });
+  await expect(
+    page.getByRole('combobox', { name: '통계 기준 분기' }),
+  ).toHaveValue('20262');
+  await expect(district).toHaveValue('');
+  await expect(
+    page.getByRole('heading', { name: '지역을 선택해 주세요' }),
+  ).toBeVisible();
+  expect(requests.filter((path) => path.includes('/stats/'))).toHaveLength(0);
+  expect(statisticsRequests).toHaveLength(0);
+
   const summary = page.getByRole('region', { name: '점포 수 요약' });
+  async function expectStatisticsFor(scope: string, start: number) {
+    const expected = ['foot-traffic', 'sales', 'stores'].map(
+      (metric) => `/api/v1/${scope}/stats/${metric}`,
+    );
+    await expect
+      .poll(() =>
+        requests
+          .filter((path) => path.includes('/stats/'))
+          .slice(start)
+          .sort(),
+      )
+      .toEqual(expected);
+    expect(statisticsRequests.slice(start).sort()).toEqual(expected);
+  }
   await district.selectOption('11200');
   await expect(summary.getByText('240', { exact: true })).toBeVisible();
+  await expectStatisticsFor('districts/11200', 0);
   await district.selectOption('11440');
   await expect(summary.getByText('120', { exact: true })).toBeVisible();
+  await expectStatisticsFor('districts/11440', 3);
   const dong = page.getByRole('combobox', { name: '분석할 행정동' });
   await dong.selectOption('11440660');
   await expect(summary.getByText('30', { exact: true })).toBeVisible();
+  await expectStatisticsFor('dongs/11440660', 6);
   expect(requests.filter((path) => path.endsWith('/boundary'))).toHaveLength(3);
   await openRegionFilter(page);
   await page.getByRole('button', { name: '지역 필터 초기화' }).click();
