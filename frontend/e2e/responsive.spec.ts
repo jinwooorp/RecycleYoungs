@@ -42,6 +42,9 @@ test('320×568에서 키보드로 상세 패널을 열고 스크롤하며 지역
   await page.setViewportSize({ width: 320, height: 568 });
   await page.goto('/explore');
 
+  const dock = page.getByRole('navigation', { name: '탐색 메뉴' });
+  await expect(dock).toHaveCSS('width', '296px');
+  await expect(dock).toHaveCSS('height', '62px');
   const menu = page.getByRole('button', { name: '상권 분석', exact: true });
   const panel = page.getByRole('complementary', { name: '상권 분석' });
   const title = panel.getByRole('heading', { name: '상권 분석', level: 2 });

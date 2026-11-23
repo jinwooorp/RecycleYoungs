@@ -1,4 +1,4 @@
-import type { Candidate } from '../src/lib/candidates.ts';
+import type { StoredCandidate } from '../src/lib/candidates.ts';
 import type { CafePage } from '../src/lib/cafes.ts';
 
 // 실제 원천·승인 자료가 아닌 브라우저 회귀 테스트 전용 합성 값입니다.
@@ -14,10 +14,28 @@ export const dongs = [
   { dongCode: '11440660', districtCode: '11440', dongName: '서교동' },
   { dongCode: '11200650', districtCode: '11200', dongName: '성수1가1동' },
 ];
-export const candidates: Candidate[] = [
-  { slot: 'A', name: '합성 홍대 후보지', longitude: 126.923, latitude: 37.556 },
-  { slot: 'B', name: '합성 성수 후보지', longitude: 127.048, latitude: 37.546 },
-  { slot: 'C', name: '합성 서교 후보지', longitude: 126.924, latitude: 37.555 },
+export const candidates: StoredCandidate[] = [
+  {
+    slot: 'A',
+    name: '합성 홍대 후보지',
+    longitude: 126.923,
+    latitude: 37.556,
+    note: '',
+  },
+  {
+    slot: 'B',
+    name: '합성 성수 후보지',
+    longitude: 127.048,
+    latitude: 37.546,
+    note: '',
+  },
+  {
+    slot: 'C',
+    name: '합성 서교 후보지',
+    longitude: 126.924,
+    latitude: 37.555,
+    note: '',
+  },
 ];
 const metrics = ['stores', 'sales', 'foot-traffic'];
 export const quarterCatalog = {

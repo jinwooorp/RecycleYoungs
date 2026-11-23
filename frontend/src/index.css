@@ -164,7 +164,7 @@
   --explore-right: max(0.75rem, env(safe-area-inset-right));
   /* 하단의 SDK 저작권 표시와 안전 영역을 위한 공간입니다. */
   --explore-bottom: calc(2rem + env(safe-area-inset-bottom));
-  --explore-dock-height: 4.25rem;
+  --explore-dock-height: 3.875rem;
   --explore-panel-bottom: calc(
     var(--explore-bottom) + var(--explore-dock-height) + 0.5rem
   );
@@ -241,9 +241,9 @@
 .explore-dock {
   z-index: 21;
   bottom: var(--explore-bottom);
-  width: min(24rem, calc(100% - var(--explore-left) - var(--explore-right)));
+  width: min(22rem, calc(100% - var(--explore-left) - var(--explore-right)));
   height: var(--explore-dock-height);
-  padding: 0.25rem;
+  padding: 0.1875rem;
   border: 1px solid var(--border);
   border-radius: 1rem;
   background: var(--background);
@@ -258,7 +258,8 @@
   position: relative;
   height: 100%;
   min-height: 0;
-  gap: 0.25rem;
+  gap: 0.1875rem;
+  padding-block: 0.25rem;
   border-radius: 0.625rem;
   color: var(--muted-foreground);
   font-size: 0.75rem;
@@ -748,7 +749,7 @@
 
 @media (width < 64rem) and (height <= 32rem) {
   .explore-app {
-    --explore-dock-height: 3.5rem;
+    --explore-dock-height: 3.25rem;
   }
   .explore-dock [data-slot='button'] {
     padding-block: 0.125rem;

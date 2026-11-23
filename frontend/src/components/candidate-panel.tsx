@@ -10,6 +10,7 @@ import {
 } from '@/hooks/use-candidate-analysis';
 import {
   candidateNameLimit,
+  candidateNoteLimit,
   type Candidate,
   type CandidateSlot,
 } from '@/lib/candidates';
@@ -382,6 +383,13 @@ export function CandidatePanel({
   }
 
   function candidateManagement(item: Candidate) {
+    const draft = candidates.drafts[item.slot];
+    const note =
+      draft?.note ??
+      candidates.records.find(({ slot }) => slot === item.slot)?.note ??
+      '';
+    const noteId = `${detailsId}-${item.slot}-note`;
+    const result = candidates.noteResults[item.slot];
     return (
       <>
         <details className="text-xs leading-5 text-muted-foreground">
@@ -396,17 +404,16 @@ export function CandidatePanel({
           className="flex min-w-0 flex-wrap gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            const input = event.currentTarget.elements.namedItem(
-              'name',
-            ) as HTMLInputElement;
-            candidates.rename(item.slot, input.value);
-            input.value = input.value.trim() || item.name;
+            candidates.rename(item, draft?.name ?? item.name);
           }}
         >
           <input
             name="name"
             aria-label={`후보지 ${item.slot} 이름`}
-            defaultValue={item.name}
+            value={draft?.name ?? item.name}
+            onChange={(event) =>
+              candidates.edit(item, 'name', event.target.value)
+            }
             required
             maxLength={candidateNameLimit}
             className="h-8 min-w-0 flex-1 rounded-md border px-2 text-sm"
@@ -439,6 +446,56 @@ export function CandidatePanel({
           >
             삭제
           </Button>
+        </form>
+        <form
+          className="min-w-0 space-y-2 text-sm"
+          onSubmit={(event) => {
+            event.preventDefault();
+            candidates.saveNote(item, note);
+          }}
+        >
+          <label htmlFor={noteId} className="block font-medium">
+            후보지 {item.slot} 메모
+          </label>
+          <textarea
+            id={noteId}
+            rows={3}
+            maxLength={candidateNoteLimit}
+            aria-describedby={`${noteId}-length`}
+            value={note}
+            onChange={(event) =>
+              candidates.edit(
+                item,
+                'note',
+                event.target.value.slice(0, candidateNoteLimit),
+              )
+            }
+            className="block w-full min-w-0 resize-y rounded-md border border-input bg-background p-2 text-base outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p
+              id={`${noteId}-length`}
+              className="text-xs text-muted-foreground"
+            >
+              {note.length} / {candidateNoteLimit}자 · 비워서 저장하면
+              삭제됩니다.
+            </p>
+            <Button
+              type="submit"
+              size="sm"
+              variant="outline"
+              aria-label={`후보지 ${item.slot} 메모 저장`}
+            >
+              메모 저장
+            </Button>
+          </div>
+          {result && (
+            <p role="status" className="text-xs">
+              {result === 'saved'
+                ? `후보지 ${item.slot} 메모를 저장했습니다.`
+                : `후보지 ${item.slot} 메모를 지속 저장하지 못했습니다. 이 화면에 내용을 유지합니다.`}
+            </p>
+          )}
         </form>
       </>
     );
@@ -494,10 +551,51 @@ export function CandidatePanel({
           )}
         </div>
       )}
-      {candidates.storageUnavailable && (
-        <p role="alert" className="text-sm">
-          탭 저장소를 사용할 수 없어 새로고침하면 목록이 사라집니다.
-        </p>
+      {candidates.storageIssue && (
+        <div className="space-y-2 rounded-lg border p-3 text-sm">
+          <p role="alert">
+            {
+              {
+                'read-failed':
+                  '이 브라우저의 후보지 저장소를 읽을 수 없습니다.',
+                'write-failed':
+                  '후보지 변경 사항을 브라우저에 저장하지 못했습니다.',
+                invalid:
+                  '저장된 후보지 데이터가 손상되었습니다. 기존 저장본을 보존합니다.',
+                unsupported:
+                  '저장된 후보지 데이터 버전을 지원하지 않습니다. 기존 저장본을 보존합니다.',
+                conflict:
+                  '다른 탭의 저장본이 변경되었습니다. 이 탭의 편집 내용을 유지하며 자동으로 덮어쓰지 않습니다.',
+              }[candidates.storageIssue]
+            }
+          </p>
+          <p className="text-xs text-muted-foreground">
+            저장하지 못한 변경은 현재 화면에 남아 있으며 다시 열면 사라질 수
+            있습니다.
+          </p>
+          {candidates.storageIssue === 'conflict' ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                headingRef.current?.focus();
+                candidates.loadLatest();
+              }}
+            >
+              이 탭 변경을 버리고 최신 목록 불러오기
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={candidates.retryStorage}
+            >
+              저장소 다시 확인
+            </Button>
+          )}
+        </div>
       )}
       <label className="flex flex-wrap items-center justify-between gap-2 text-sm">
         공통 탐색 반경

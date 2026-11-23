@@ -10,7 +10,12 @@ import {
 import { afterEach, expect, test, vi } from 'vitest';
 import { CandidatePanel } from './candidate-panel';
 import { useCandidates } from '@/hooks/use-candidates';
-import { candidateStorageKey, readCandidates } from '@/lib/candidates';
+import {
+  candidateStorageKey,
+  candidateSlots,
+  readCandidateStorage,
+  type Candidate,
+} from '@/lib/candidates';
 
 const center = { longitude: 127, latitude: 37.5 };
 const sourceBatch = {
@@ -85,8 +90,25 @@ function comparisonCell(group: string, label: string, slot: string) {
   return within(within(row).getAllByRole('cell')[column - 1]);
 }
 
+function seedCandidates(items: Candidate[]) {
+  localStorage.setItem(
+    candidateStorageKey,
+    JSON.stringify({
+      version: 2,
+      items: items.map((item) => ({ ...item, note: '' })),
+    }),
+  );
+}
+
+function savedCandidates() {
+  const result = readCandidateStorage('localStorage');
+  expect(result.status).toBe('ready');
+  return result.status === 'ready' ? result.items : [];
+}
+
 afterEach(() => {
-  sessionStorage.clear();
+  localStorage.removeItem(candidateStorageKey);
+  sessionStorage.removeItem(candidateStorageKey);
   vi.unstubAllGlobals();
 });
 
@@ -130,13 +152,19 @@ test('서버 소속 판정, 재시도, 중복·최대 세 곳 제한, 이름 변
   fireEvent.click(screen.getByRole('button', { name: '후보지 A 이름 저장' }));
   openDetails('B');
   fireEvent.click(screen.getByRole('button', { name: '후보지 B 삭제' }));
-  expect(readCandidates()).toEqual([
-    { slot: 'A', name: '새 이름', ...center },
-    { slot: 'C', name: '후보지 C', longitude: 127.02, latitude: 37.5 },
+  expect(savedCandidates()).toEqual([
+    { slot: 'A', name: '새 이름', ...center, note: '' },
+    {
+      slot: 'C',
+      name: '후보지 C',
+      longitude: 127.02,
+      latitude: 37.5,
+      note: '',
+    },
   ]);
   fireEvent.click(screen.getByRole('button', { name: '등록 3' }));
   await screen.findByText('후보지 B를 등록했습니다.');
-  const saved = JSON.parse(sessionStorage.getItem(candidateStorageKey)!);
+  const saved = JSON.parse(localStorage.getItem(candidateStorageKey)!);
   expect(saved.items.map((item: { slot: string }) => item.slot)).toEqual([
     'A',
     'B',
@@ -144,7 +172,7 @@ test('서버 소속 판정, 재시도, 중복·최대 세 곳 제한, 이름 변
   ]);
 
   view.unmount();
-  sessionStorage.setItem(
+  localStorage.setItem(
     candidateStorageKey,
     JSON.stringify({
       ...saved,
@@ -186,7 +214,9 @@ test.each([
   }),
 ])('손상되거나 지원하지 않는 탭 데이터는 무시합니다: %s', (raw) => {
   sessionStorage.setItem(candidateStorageKey, raw);
-  expect(readCandidates()).toEqual([]);
+  expect(readCandidateStorage('sessionStorage').status).toMatch(
+    /invalid|unsupported/,
+  );
 });
 
 test('반경 안에 있더라도 중심점을 덮는 서울 구가 없으면 등록하지 않는다', async () => {
@@ -202,20 +232,14 @@ test('반경 안에 있더라도 중심점을 덮는 서울 구가 없으면 등
   render(<Fixture />);
   fireEvent.click(screen.getByRole('button', { name: '등록 0' }));
   await screen.findByText(/서울 경계에 속하지 않는 위치/);
-  expect(readCandidates()).toEqual([]);
+  expect(readCandidateStorage('localStorage').status).toBe('missing');
 });
 
 test('동 경계 후보지는 반경 카페만 비교하고 다른 후보지는 정확한 원천 통계를 조회한다', async () => {
-  sessionStorage.setItem(
-    candidateStorageKey,
-    JSON.stringify({
-      version: 1,
-      items: [
-        { slot: 'A', name: '동 내부', ...center },
-        { slot: 'B', name: '동 경계', longitude: 127.01, latitude: 37.5 },
-      ],
-    }),
-  );
+  seedCandidates([
+    { slot: 'A', name: '동 내부', ...center },
+    { slot: 'B', name: '동 경계', longitude: 127.01, latitude: 37.5 },
+  ]);
   let retrySales = false;
   const fetch = vi.fn(async (path: string) => {
     const url = new URL(path, 'http://localhost');
@@ -325,13 +349,7 @@ test('동 경계 후보지는 반경 카페만 비교하고 다른 후보지는 
 });
 
 test('후보지 삭제와 비활성 패널은 요청을 취소하고 늦은 응답을 표시하지 않는다', async () => {
-  sessionStorage.setItem(
-    candidateStorageKey,
-    JSON.stringify({
-      version: 1,
-      items: [{ slot: 'A', name: '대기 위치', ...center }],
-    }),
-  );
+  seedCandidates([{ slot: 'A', name: '대기 위치', ...center }]);
   const requests: {
     signal: AbortSignal;
     resolve: (response: Response) => void;
@@ -366,17 +384,11 @@ test('후보지 삭제와 비활성 패널은 요청을 취소하고 늦은 응�
     requests.forEach(({ resolve }) => resolve(Response.json(membership))),
   );
   expect(screen.queryByText('예시동')).not.toBeInTheDocument();
-  expect(readCandidates()).toEqual([]);
+  expect(savedCandidates()).toEqual([]);
 });
 
 test('반경을 변경하면 이전 카페 응답이 늦게 도착해도 새 건수를 유지한다', async () => {
-  sessionStorage.setItem(
-    candidateStorageKey,
-    JSON.stringify({
-      version: 1,
-      items: [{ slot: 'A', name: '반경 비교', ...center }],
-    }),
-  );
+  seedCandidates([{ slot: 'A', name: '반경 비교', ...center }]);
   const pending = new Map<
     string,
     { signal: AbortSignal; resolve: (response: Response) => void }
@@ -458,8 +470,14 @@ test('등록 검증 중 A를 삭제하면 응답 이후 새 위치를 A에 등�
   expect(screen.getByText(/서울 경계에 속하는지 확인 중/)).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: '후보지 A 삭제' }));
   await act(async () => finish(Response.json(membership)));
-  expect(readCandidates()).toEqual([
-    { slot: 'A', name: '후보지 A', longitude: 127.01, latitude: 37.5 },
+  expect(savedCandidates()).toEqual([
+    {
+      slot: 'A',
+      name: '후보지 A',
+      longitude: 127.01,
+      latitude: 37.5,
+      note: '',
+    },
   ]);
 });
 
@@ -481,13 +499,7 @@ test.each([
     reason: '자치구와 행정동의 소속 코드가 일치하지 않아 비교할 수 없습니다.',
   },
 ])('$label 반경 카페만 조회한다', async ({ regions, reason }) => {
-  sessionStorage.setItem(
-    candidateStorageKey,
-    JSON.stringify({
-      version: 1,
-      items: [{ slot: 'A', name: '경계 위치', ...center }],
-    }),
-  );
+  seedCandidates([{ slot: 'A', name: '경계 위치', ...center }]);
   const fetch = vi.fn(async (path: string) => {
     if (path.includes('/regions/nearby')) return Response.json(regions);
     if (path.includes('/cafes/nearby'))
@@ -533,17 +545,13 @@ const cafeItems = Array.from({ length: 4 }, (_, index) => ({
   distanceM: [0, 12.25, 100, 101][index],
 }));
 function saveItems(count: number) {
-  sessionStorage.setItem(
-    candidateStorageKey,
-    JSON.stringify({
-      version: 1,
-      items: Array.from({ length: count }, (_, index) => ({
-        slot: ['A', 'B', 'C'][index],
-        name: `검증 후보지 ${index + 1}`,
-        longitude: 127 + index / 100,
-        latitude: 37.5,
-      })),
-    }),
+  seedCandidates(
+    Array.from({ length: count }, (_, index) => ({
+      slot: candidateSlots[index],
+      name: `검증 후보지 ${index + 1}`,
+      longitude: 127 + index / 100,
+      latitude: 37.5,
+    })),
   );
 }
 function analysisApi(
@@ -635,6 +643,72 @@ function analysisApi(
   vi.stubGlobal('fetch', fetch);
   return fetch;
 }
+
+test('각 후보지의 메모를 편집·저장·비워도 분석을 다시 조회하지 않는다', async () => {
+  saveItems(2);
+  const fetch = analysisApi();
+  const view = render(<Fixture />);
+  await waitFor(() =>
+    expect(
+      fetch.mock.calls.filter(([path]) => path.includes('/stats/')),
+    ).toHaveLength(3),
+  );
+  const requests = fetch.mock.calls.length;
+  openDetails('A');
+  const field = screen.getByRole('textbox', { name: '후보지 A 메모' });
+  field.focus();
+  const plainText = '<strong>현장</strong>\n다시 방문';
+  fireEvent.change(field, { target: { value: plainText } });
+  expect(savedCandidates()[0].note).toBe('');
+  const save = screen.getByRole('button', { name: '후보지 A 메모 저장' });
+  fireEvent.click(save);
+  expect(field).toHaveFocus();
+  expect(screen.getByText('후보지 A 메모를 저장했습니다.')).toBeVisible();
+  expect(savedCandidates().map(({ note }) => note)).toEqual([plainText, '']);
+  openDetails('B');
+  expect(screen.getByRole('textbox', { name: '후보지 B 메모' })).toHaveValue(
+    '',
+  );
+  expect(fetch.mock.calls).toHaveLength(requests);
+  const name = screen.getByRole('textbox', { name: '후보지 A 이름' });
+  fireEvent.change(name, { target: { value: '새 후보지 이름' } });
+  fireEvent.submit(name.closest('form')!);
+  expect(savedCandidates()[0].note).toBe(plainText);
+  view.unmount();
+  render(<Fixture />);
+  openDetails('A');
+  const restored = screen.getByRole('textbox', { name: '후보지 A 메모' });
+  expect(restored).toHaveValue(plainText);
+  expect(restored).toHaveAttribute('maxlength', '800');
+  fireEvent.change(restored, { target: { value: '가'.repeat(801) } });
+  expect(restored).toHaveValue('가'.repeat(800));
+  fireEvent.change(restored, { target: { value: '' } });
+  fireEvent.click(screen.getByRole('button', { name: '후보지 A 메모 저장' }));
+  expect(savedCandidates()[0].note).toBe('');
+});
+
+test('메모 쓰기 실패를 알리고 입력한 값을 유지한다', () => {
+  saveItems(1);
+  analysisApi();
+  render(<Fixture />);
+  const field = screen.getByRole('textbox', { name: '후보지 A 메모' });
+  const write = vi
+    .spyOn(Storage.prototype, 'setItem')
+    .mockImplementation(() => {
+      throw new DOMException('quota', 'QuotaExceededError');
+    });
+  fireEvent.change(field, { target: { value: '실패해도 남는 내용' } });
+  fireEvent.click(screen.getByRole('button', { name: '후보지 A 메모 저장' }));
+  expect(field).toHaveValue('실패해도 남는 내용');
+  expect(screen.getByText(/메모를 지속 저장하지 못했습니다/)).toBeVisible();
+  expect(
+    screen.queryByText('후보지 A 메모를 저장했습니다.'),
+  ).not.toBeInTheDocument();
+  write.mockRestore();
+  fireEvent.click(screen.getByRole('button', { name: '저장소 다시 확인' }));
+  expect(screen.getByText('후보지 A 메모를 저장했습니다.')).toBeVisible();
+  expect(savedCandidates()[0].note).toBe('실패해도 남는 내용');
+});
 
 test('후보지 0개는 등록 안내와 공통 반경만 제공하고 조회하지 않는다', () => {
   const fetch = analysisApi();
@@ -932,11 +1006,11 @@ test('공유 통계의 대표 슬롯을 삭제해도 같은 동의 응답을 남
 
 test('화면 폭을 바꿔도 같은 값을 지표별 카드에서 표시하고 빈 슬롯과 요청을 유지한다', async () => {
   saveItems(3);
-  const items = readCandidates().filter(({ slot }) => slot !== 'B');
+  const items = savedCandidates().filter(({ slot }) => slot !== 'B');
   items[0].name = '긴후보지이름'.repeat(10);
-  sessionStorage.setItem(
+  localStorage.setItem(
     candidateStorageKey,
-    JSON.stringify({ version: 1, items }),
+    JSON.stringify({ version: 2, items }),
   );
   let wide = true;
   const listeners = new Set<() => void>();
