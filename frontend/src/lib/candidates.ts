@@ -6,8 +6,17 @@ export interface Candidate extends CafeCenter {
   slot: CandidateSlot;
   name: string;
 }
+export interface StoredCandidate extends Candidate {
+  note: string;
+}
 export const candidateStorageKey = 'recycleyoungs.candidates';
 export const candidateNameLimit = 60;
+export const candidateNoteLimit = 800;
+
+export type CandidateStorageRead =
+  | { status: 'missing'; raw: null }
+  | { status: 'ready'; raw: string; items: StoredCandidate[] }
+  | { status: 'invalid' | 'unsupported' | 'read-failed' };
 
 export function validCandidateCenter(center: CafeCenter) {
   return (
@@ -26,24 +35,34 @@ export function sameCandidateLocation(a: CafeCenter, b: CafeCenter) {
   );
 }
 
-export function sortCandidates(items: Candidate[]): Candidate[] {
+export function sortCandidates<T extends Candidate>(items: T[]): T[] {
   return items.sort(
     (a, b) => candidateSlots.indexOf(a.slot) - candidateSlots.indexOf(b.slot),
   );
 }
 
-export function readCandidates(): Candidate[] {
+export function readCandidateStorage(
+  area: 'localStorage' | 'sessionStorage',
+): CandidateStorageRead {
+  let raw: string | null;
   try {
-    const value = JSON.parse(
-      sessionStorage.getItem(candidateStorageKey) ?? 'null',
-    );
+    raw = window[area].getItem(candidateStorageKey);
+  } catch {
+    return { status: 'read-failed' };
+  }
+  if (raw === null) return { status: 'missing', raw };
+  try {
+    const value = JSON.parse(raw);
+    if (!value || typeof value !== 'object' || !Number.isInteger(value.version))
+      return { status: 'invalid' };
+    const version = area === 'localStorage' ? 2 : 1;
+    if (value.version !== version) return { status: 'unsupported' };
     if (
-      value?.version !== 1 ||
       !Array.isArray(value.items) ||
       value.items.length > candidateSlots.length
     )
-      return [];
-    const items: Candidate[] = [];
+      return { status: 'invalid' };
+    const items: StoredCandidate[] = [];
     for (const row of value.items) {
       if (
         !row ||
@@ -52,16 +71,25 @@ export function readCandidates(): Candidate[] {
         row.name.length > candidateNameLimit ||
         !row.name.trim() ||
         !validCandidateCenter(row) ||
+        (version === 2 &&
+          (typeof row.note !== 'string' ||
+            row.note.length > candidateNoteLimit)) ||
         items.some(
           (item) => item.slot === row.slot || sameCandidateLocation(item, row),
         )
       )
-        return [];
+        return { status: 'invalid' };
       const { slot, name, longitude, latitude } = row;
-      items.push({ slot, name, longitude, latitude });
+      items.push({
+        slot,
+        name,
+        longitude,
+        latitude,
+        note: version === 1 ? '' : row.note,
+      });
     }
-    return sortCandidates(items);
+    return { status: 'ready', raw, items: sortCandidates(items) };
   } catch {
-    return [];
+    return { status: 'invalid' };
   }
 }

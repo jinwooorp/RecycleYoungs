@@ -1,5 +1,6 @@
 import type { Page, Request } from '@playwright/test';
 import { candidates } from './fixtures';
+import type { StoredCandidate } from '../src/lib/candidates';
 import {
   test,
   expect,
@@ -8,6 +9,16 @@ import {
   selectDistrict,
   noOverflow,
 } from './test-support';
+
+async function seedCandidates(page: Page, items: StoredCandidate[]) {
+  await page.goto('/');
+  await page.evaluate((items) => {
+    localStorage.setItem(
+      'recycleyoungs.candidates',
+      JSON.stringify({ version: 2, items }),
+    );
+  }, items);
+}
 
 async function candidateValue(
   page: Page,
@@ -94,10 +105,15 @@ test('전체 화면 지도 위에서 세 메뉴를 열고 닫아도 지도 크�
   const fullScreen = page.viewportSize()!;
   const mapBox = { x: 0, y: 0, ...fullScreen };
   await expect.poll(() => map.boundingBox()).toEqual(mapBox);
+  await expect(dock).toHaveCSS('width', '352px');
+  await expect(dock).toHaveCSS('height', '62px');
   await expect(page.getByRole('complementary')).toHaveCount(0);
   let panelBox: Awaited<ReturnType<typeof map.boundingBox>> = null;
   for (const name of ['주변 탐색', '상권 분석', '후보지 분석']) {
     const menu = dock.getByRole('button', { name, exact: true });
+    const target = (await menu.boundingBox())!;
+    expect(target.height).toBeGreaterThanOrEqual(44);
+    expect(target.width).toBeGreaterThanOrEqual(44);
     await menu.click();
     const panel = page.getByRole('complementary', { name });
     await expect(
@@ -119,9 +135,9 @@ test('전체 화면 지도 위에서 세 메뉴를 열고 닫아도 지도 크�
       .poll(async () => {
         const panelBox = (await panel.boundingBox())!;
         const dockBox = (await dock.boundingBox())!;
-        return panelBox.y + panelBox.height < dockBox.y;
+        return dockBox.y - (panelBox.y + panelBox.height);
       })
-      .toBe(true);
+      .toBeCloseTo(8);
     await page.getByRole('button', { name: `${name} 패널 닫기` }).click();
     await expect(menu).toHaveAttribute('aria-expanded', 'false');
     await expect(menu).toBeFocused();
@@ -239,14 +255,7 @@ test('매출 API 오류는 독립 표시하고 사용자 재시도로 복구', a
 test('선택 분기가 지역과 두 분석 패널에 유지되며 새로고침하면 기본 분기로 돌아간다', async ({
   page,
 }) => {
-  await page.addInitScript(
-    (items) =>
-      sessionStorage.setItem(
-        'recycleyoungs.candidates',
-        JSON.stringify({ version: 1, items }),
-      ),
-    candidates.slice(0, 2),
-  );
+  await seedCandidates(page, candidates.slice(0, 2));
   const started = new Set<string>();
   const pending = new Map<Request, string>();
   const completed: string[] = [];
@@ -379,14 +388,7 @@ test('분기 목록 실패 상태에서 반경 조회가 유지되고 목록 재
 }) => {
   allowHttpErrors.add('/api/v1/statistics/quarters');
   await scenario(page, 'quarters-error');
-  await page.addInitScript(
-    (items) =>
-      sessionStorage.setItem(
-        'recycleyoungs.candidates',
-        JSON.stringify({ version: 1, items }),
-      ),
-    candidates.slice(0, 1),
-  );
+  await seedCandidates(page, candidates.slice(0, 1));
   await page.goto('/explore');
   await page.getByRole('button', { name: '후보지 분석', exact: true }).click();
   const quarter = page.getByRole('combobox', { name: '통계 기준 분기' });
@@ -455,15 +457,99 @@ test('후보지 빈 목록 안내', async ({ page }) => {
   ).toBeDisabled();
 });
 
-test('합성 후보지 세 곳 복원, 공통 반경 변경과 삭제', async ({ page }) => {
-  await page.addInitScript(
-    (items) =>
-      sessionStorage.setItem(
-        'recycleyoungs.candidates',
-        JSON.stringify({ version: 1, items }),
+test('탭의 v1을 한 번 이전하고 메뉴 전환·새로고침·새 탭에서 메모를 확인한다', async ({
+  page,
+  context,
+}) => {
+  await page.goto('/');
+  await page.evaluate(({ slot, name, longitude, latitude }) => {
+    sessionStorage.setItem(
+      'recycleyoungs.candidates',
+      JSON.stringify({
+        version: 1,
+        items: [{ slot, name, longitude, latitude }],
+      }),
+    );
+  }, candidates[0]);
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto('/explore');
+  const openCandidates = (tab: Page) =>
+    tab.getByRole('button', { name: '후보지 분석', exact: true }).click();
+  await openCandidates(page);
+  await expect
+    .poll(() =>
+      page.evaluate(() => sessionStorage.getItem('recycleyoungs.candidates')),
+    )
+    .toBeNull();
+  const noteField = page.getByRole('textbox', { name: '후보지 A 메모' });
+  await expect(noteField).toHaveValue('');
+  const note = '평일 점심에 방문\n<em>간판 확인</em>';
+  await noteField.fill(note);
+  await page.getByRole('button', { name: '주변 탐색', exact: true }).click();
+  await openCandidates(page);
+  await expect(noteField).toHaveValue(note);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          JSON.parse(localStorage.getItem('recycleyoungs.candidates')!).items[0]
+            .note,
       ),
-    candidates,
-  );
+    )
+    .toBe('');
+  await noteField.press('Tab');
+  const save = page.getByRole('button', { name: '후보지 A 메모 저장' });
+  await expect(save).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('후보지 A 메모를 저장했습니다.')).toBeVisible();
+  await noOverflow(page);
+  await page.reload();
+  await openCandidates(page);
+  await expect(noteField).toHaveValue(note);
+  const nextTab = await context.newPage();
+  await nextTab.goto('/explore');
+  await openCandidates(nextTab);
+  await expect(
+    nextTab.getByRole('textbox', { name: '후보지 A 메모' }),
+  ).toHaveValue(note);
+  await nextTab.close();
+});
+
+test('다른 탭에서 메모가 바뀌면 입력 중인 메모를 보호한다', async ({
+  page,
+  context,
+}) => {
+  await seedCandidates(page, candidates.slice(0, 1));
+  await page.goto('/explore');
+  const peer = await context.newPage();
+  await peer.goto('/explore');
+  for (const tab of [page, peer])
+    await tab.getByRole('button', { name: '후보지 분석', exact: true }).click();
+  const field = page.getByRole('textbox', { name: '후보지 A 메모' });
+  const peerField = peer.getByRole('textbox', { name: '후보지 A 메모' });
+  const save = { name: '후보지 A 메모 저장' };
+  await peerField.fill('첫 저장');
+  await peer.getByRole('button', save).click();
+  await expect(field).toHaveValue('첫 저장');
+  await field.fill('이 탭의 초안');
+  await peerField.fill('다른 탭 최신 메모');
+  await peer.getByRole('button', save).click();
+  await expect(
+    page.getByText(/다른 탭의 저장본이 변경되었습니다/),
+  ).toBeVisible();
+  await expect(field).toHaveValue('이 탭의 초안');
+  await page.getByRole('button', save).click();
+  await expect(page.getByText(/메모를 지속 저장하지 못했습니다/)).toBeVisible();
+  await expect(peerField).toHaveValue('다른 탭 최신 메모');
+  await page
+    .getByRole('button', { name: '이 탭 변경을 버리고 최신 목록 불러오기' })
+    .click();
+  await expect(field).toHaveValue('다른 탭 최신 메모');
+  await peer.close();
+});
+
+test('합성 후보지 세 곳 복원, 공통 반경 변경과 삭제', async ({ page }) => {
+  await seedCandidates(page, candidates);
   await page.goto('/explore');
   await page.getByRole('button', { name: '후보지 분석', exact: true }).click();
   await expect(
@@ -554,7 +640,7 @@ test('합성 후보지 세 곳 복원, 공통 반경 변경과 삭제', async ({
   expect(
     await page.evaluate(
       () =>
-        JSON.parse(sessionStorage.getItem('recycleyoungs.candidates')!).items
+        JSON.parse(localStorage.getItem('recycleyoungs.candidates')!).items
           .length,
     ),
   ).toBe(2);
@@ -567,14 +653,7 @@ test('한 후보지의 반경 오류와 통계 행 부재를 다른 후보지의
 }) => {
   allowHttpErrors.add('/api/v1/cafes/nearby');
   await scenario(page, 'candidate-partial');
-  await page.addInitScript(
-    (items) =>
-      sessionStorage.setItem(
-        'recycleyoungs.candidates',
-        JSON.stringify({ version: 1, items }),
-      ),
-    candidates.slice(0, 2),
-  );
+  await seedCandidates(page, candidates.slice(0, 2));
   await page.goto('/explore');
   await page.getByRole('button', { name: '후보지 분석', exact: true }).click();
   const cafe = (slot: string) =>
@@ -597,16 +676,18 @@ test('한 후보지의 반경 오류와 통계 행 부재를 다른 후보지의
 });
 
 test('최대 세 곳을 넘는 저장 데이터는 복원하지 않음', async ({ page }) => {
-  await page.addInitScript(
+  await page.goto('/');
+  await page.evaluate(
     (items) =>
-      sessionStorage.setItem(
+      localStorage.setItem(
         'recycleyoungs.candidates',
         JSON.stringify({
-          version: 1,
+          version: 2,
           items: [
             ...items,
             {
               slot: 'D',
+              note: '',
               name: '초과 후보지',
               longitude: 126.925,
               latitude: 37.55,

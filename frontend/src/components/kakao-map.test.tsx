@@ -1997,13 +1997,24 @@ test('반경 탐색의 지도 클릭·거리 표시·방식 분리·패널 비�
       clickable: true,
     }),
   );
-  const markerIndex = maps.Marker.mock.calls.findLastIndex(
-    ([options]) => options.title === cafe.storeName,
-  );
-  const cafeMarker = maps.Marker.mock.results[markerIndex].value;
-  const markerClick = maps.event.addListener.mock.calls.find(
-    ([target, type]) => target === cafeMarker && type === 'click',
-  )![2];
+  const { cafeMarker, markerClick } = await waitFor(() => {
+    const markerIndex = maps.Marker.mock.calls.findLastIndex(
+      ([options]) => options.title === cafe.storeName,
+    );
+    const cafeMarker = maps.Marker.mock.results[markerIndex]?.value;
+    expect(
+      cafeMarker,
+      '반경 조회 결과의 카페 마커가 생성되어야 합니다.',
+    ).toBeDefined();
+    const markerClick = maps.event.addListener.mock.calls.find(
+      ([target, type]) => target === cafeMarker && type === 'click',
+    )?.[2];
+    expect(
+      markerClick,
+      '카페 마커의 클릭 리스너가 등록되어야 합니다.',
+    ).toBeTypeOf('function');
+    return { cafeMarker: cafeMarker!, markerClick: markerClick! };
+  });
   act(() => markerClick());
   expect(maps.event.preventMap).toHaveBeenCalledOnce();
   expect(nearbyCalls()).toHaveLength(1);
@@ -2671,6 +2682,21 @@ test('지역 필터를 적용한 채 지도와 검색에서 후보지를 등록�
   fireEvent.click(
     screen.getByRole('button', { name: '후보지 B 상세 및 관리 열기' }),
   );
+  const markerInstances = maps.Marker.mock.calls.length;
+  const listenerAdds = maps.event.addListener.mock.calls.length;
+  const listenerRemovals = maps.event.removeListener.mock.calls.length;
+  const centerBeforeNote = map.getCenter();
+  const levelBeforeNote = map.getLevel();
+  fireEvent.change(screen.getByRole('textbox', { name: '후보지 B 메모' }), {
+    target: { value: '입지 메모' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '후보지 B 메모 저장' }));
+  expect(screen.getByText('후보지 B 메모를 저장했습니다.')).toBeVisible();
+  expect(maps.Marker).toHaveBeenCalledTimes(markerInstances);
+  expect(maps.event.addListener).toHaveBeenCalledTimes(listenerAdds);
+  expect(maps.event.removeListener).toHaveBeenCalledTimes(listenerRemovals);
+  expect(map.getCenter()).toBe(centerBeforeNote);
+  expect(map.getLevel()).toBe(levelBeforeNote);
   fireEvent.click(screen.getByRole('button', { name: '후보지 B 삭제' }));
   expect(registeredMarker.setMap).toHaveBeenLastCalledWith(null);
   const remaining = maps.Marker.mock.results.at(-1)!.value;
@@ -2688,7 +2714,7 @@ test('지역 필터를 적용한 채 지도와 검색에서 후보지를 등록�
   expect(restored.setMap).toHaveBeenLastCalledWith(map);
   view.unmount();
   expect(restored.setMap).toHaveBeenLastCalledWith(null);
-  sessionStorage.removeItem('recycleyoungs.candidates');
+  localStorage.removeItem('recycleyoungs.candidates');
 });
 
 test('선택한 후보지에서 서울 외부 위치가 반환되어도 후보지 선택·이름·마커를 유지한다', async () => {
@@ -2696,12 +2722,18 @@ test('선택한 후보지에서 서울 외부 위치가 반환되어도 후보�
   const geo = pendingPositions();
   const storageKey = 'recycleyoungs.candidates';
   const saved = JSON.stringify({
-    version: 1,
+    version: 2,
     items: [
-      { slot: 'A', name: '서교동 후보지', longitude: 126.92, latitude: 37.55 },
+      {
+        slot: 'A',
+        name: '서교동 후보지',
+        longitude: 126.92,
+        latitude: 37.55,
+        note: '',
+      },
     ],
   });
-  sessionStorage.setItem(storageKey, saved);
+  localStorage.setItem(storageKey, saved);
   try {
     load.mockResolvedValue(maps);
     render(<App />);
@@ -2744,9 +2776,9 @@ test('선택한 후보지에서 서울 외부 위치가 반환되어도 후보�
     );
     expect(marker.setMap).toHaveBeenCalledTimes(markerCalls);
     expect(marker.setMap).toHaveBeenLastCalledWith(map);
-    expect(sessionStorage.getItem(storageKey)).toBe(saved);
+    expect(localStorage.getItem(storageKey)).toBe(saved);
   } finally {
-    sessionStorage.removeItem(storageKey);
+    localStorage.removeItem(storageKey);
   }
 });
 

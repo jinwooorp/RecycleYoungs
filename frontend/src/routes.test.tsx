@@ -22,7 +22,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  sessionStorage.clear();
+  localStorage.removeItem('recycleyoungs.candidates');
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
@@ -93,14 +93,15 @@ test('랜딩은 서비스 소개와 탐색 링크를 표시하며 SDK와 API를 
 });
 
 test('탐색 CTA와 뒤로·앞으로 이동 후 탭에 저장된 후보지를 복원한다', async () => {
-  sessionStorage.setItem(
+  localStorage.setItem(
     'recycleyoungs.candidates',
     JSON.stringify({
-      version: 1,
+      version: 2,
       items: [
         {
           slot: 'A',
           name: '복원 후보지',
+          note: '',
           longitude: 126.978,
           latitude: 37.5665,
         },
@@ -185,17 +186,18 @@ test('알 수 없는 경로에서 홈과 탐색 링크를 제공한다', async (
 
 test('탐색의 홈 링크로 랜딩에 돌아와도 후보지를 보존하고 재진입에서 복원한다', async () => {
   const saved = JSON.stringify({
-    version: 1,
+    version: 2,
     items: [
       {
         slot: 'A',
         name: '홈 이동 후 후보지',
+        note: '',
         longitude: 126.978,
         latitude: 37.5665,
       },
     ],
   });
-  sessionStorage.setItem('recycleyoungs.candidates', saved);
+  localStorage.setItem('recycleyoungs.candidates', saved);
   renderRoute('/explore');
   const home = await screen.findByRole('link', {
     name: '여기 창업해도 돼? 홈으로',
@@ -207,7 +209,7 @@ test('탐색의 홈 링크로 랜딩에 돌아와도 후보지를 보존하고 �
       name: '창업할 곳, 감으로만 고르지 마세요.',
     }),
   ).toBeVisible();
-  expect(sessionStorage.getItem('recycleyoungs.candidates')).toBe(saved);
+  expect(localStorage.getItem('recycleyoungs.candidates')).toBe(saved);
   fireEvent.click(
     within(screen.getByRole('banner')).getByRole('link', { name: '시작하기' }),
   );

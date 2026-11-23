@@ -1,24 +1,36 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CafeCenter, CafeRadius } from '@/lib/cafes';
 import { fetchContainingRegions } from '@/lib/regions';
+import { useCandidateStorage } from './use-candidate-storage';
 import {
   candidateNameLimit,
+  candidateNoteLimit,
   candidateSlots,
-  candidateStorageKey,
-  readCandidates,
   sameCandidateLocation,
-  sortCandidates,
   validCandidateCenter,
   type Candidate,
   type CandidateSlot,
 } from '@/lib/candidates';
 
 export function useCandidates() {
-  const [items, setItems] = useState(readCandidates);
-  const [selected, setSelected] = useState<CandidateSlot | null>(null);
+  const storage = useCandidateStorage();
+  const { items, records, drafts } = storage;
+  const [selection, setSelection] = useState<Candidate | null>(null);
+  const selected =
+    selection &&
+    items.some(
+      (item) =>
+        item.slot === selection.slot &&
+        item.longitude === selection.longitude &&
+        item.latitude === selection.latitude,
+    )
+      ? selection.slot
+      : null;
+  function setSelected(slot: CandidateSlot | null) {
+    setSelection(storage.latest().find((item) => item.slot === slot) ?? null);
+  }
   const [picking, setPicking] = useState(false);
   const [radius, setRadius] = useState<CafeRadius>(500);
-  const [storageUnavailable, setStorageUnavailable] = useState(false);
   const [notice, setNotice] = useState<{
     message: string;
     error?: boolean;
@@ -36,33 +48,13 @@ export function useCandidates() {
     setNotice(null);
   }, []);
 
-  function persist(next: Candidate[]) {
-    setItems(next);
-    try {
-      sessionStorage.setItem(
-        candidateStorageKey,
-        JSON.stringify({ version: 1, items: next }),
-      );
-      setStorageUnavailable(false);
-    } catch {
-      setStorageUnavailable(true);
-    }
-  }
-
-  // 등록 검증 중에도 이름 변경·삭제가 가능하므로 완료 시점의 목록을 사용합니다.
-  const currentItems = useRef(items);
-  function update(next: Candidate[]) {
-    const ordered = sortCandidates(next);
-    currentItems.current = ordered;
-    persist(ordered);
-  }
-
   const add = async (draft: CafeCenter & { name?: string }) => {
     if (request.current) return;
     const { longitude, latitude } = draft;
     const center = { longitude, latitude };
     function availableSlot() {
-      const latest = currentItems.current;
+      // 경계 확인 중 편집이 끝날 수 있으므로 완료 시점의 목록을 사용합니다.
+      const latest = storage.latest();
       const slot = candidateSlots.find(
         (letter) => !latest.some((item) => item.slot === letter),
       );
@@ -107,7 +99,7 @@ export function useCandidates() {
       if (!slot) return;
       const name =
         draft.name?.trim().slice(0, candidateNameLimit) || `후보지 ${slot}`;
-      update([...currentItems.current, { ...center, slot, name }]);
+      storage.add({ ...center, slot, name, note: '' });
       setSelected(slot);
       setNotice({ message: `후보지 ${slot}를 등록했습니다.` });
     } catch (error) {
@@ -128,23 +120,27 @@ export function useCandidates() {
     }
   };
 
-  function rename(slot: CandidateSlot, name: string) {
-    const trimmed = name.trim().slice(0, candidateNameLimit);
-    if (trimmed)
-      update(
-        currentItems.current.map((item) =>
-          item.slot === slot ? { ...item, name: trimmed } : item,
-        ),
-      );
+  function rename(item: Candidate, name: string) {
+    const trimmed = name.trim();
+    if (trimmed && trimmed.length <= candidateNameLimit)
+      storage.saveField(item, 'name', trimmed);
+    else storage.edit(item, 'name', item.name);
+  }
+
+  function saveNote(item: Candidate, note: string) {
+    if (note.length <= candidateNoteLimit)
+      storage.saveField(item, 'note', note);
   }
 
   function remove(slot: CandidateSlot) {
-    update(currentItems.current.filter((item) => item.slot !== slot));
-    setSelected((value) => (value === slot ? null : value));
+    storage.remove(slot);
+    setSelection((value) => (value?.slot === slot ? null : value));
   }
 
   return {
     items,
+    records,
+    drafts,
     selected,
     setSelected,
     picking,
@@ -153,7 +149,14 @@ export function useCandidates() {
     setRadius,
     notice,
     pending,
-    storageUnavailable,
+    storageIssue: storage.issue,
+    retryStorage: storage.retryStorage,
+    loadLatest: () => {
+      if (storage.loadLatest()) leave();
+    },
+    noteResults: storage.noteResults,
+    edit: storage.edit,
+    saveNote,
     add,
     rename,
     remove,
