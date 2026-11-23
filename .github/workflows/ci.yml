@@ -28,16 +28,16 @@ jobs:
     timeout-minutes: 15
     defaults:
       run:
-        working-directory: frontend
+        working-directory: apps/web
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version-file: frontend/.nvmrc
+          node-version-file: apps/web/.nvmrc
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: apps/web/package-lock.json
       - name: Set npm version
         run: |
           npm install --global npm@11.19.1
@@ -57,16 +57,16 @@ jobs:
     timeout-minutes: 20
     defaults:
       run:
-        working-directory: frontend
+        working-directory: apps/web
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version-file: frontend/.nvmrc
+          node-version-file: apps/web/.nvmrc
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: apps/web/package-lock.json
       - name: Set npm version
         run: |
           npm install --global npm@11.19.1
@@ -100,8 +100,8 @@ jobs:
         with:
           name: frontend-e2e-failure-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            frontend/playwright-report/
-            frontend/test-results/
+            apps/web/playwright-report/
+            apps/web/test-results/
           retention-days: 7
           if-no-files-found: warn
 
@@ -111,7 +111,7 @@ jobs:
     timeout-minutes: 20
     defaults:
       run:
-        working-directory: backend
+        working-directory: apps/api
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -122,8 +122,8 @@ jobs:
           java-version: "21"
           cache: gradle
           cache-dependency-path: |
-            backend/*.gradle
-            backend/gradle/wrapper/gradle-wrapper.properties
+            apps/api/*.gradle
+            apps/api/gradle/wrapper/gradle-wrapper.properties
       - run: java -version
       - run: ./gradlew --no-daemon --console=plain test
       - run: ./gradlew --no-daemon --console=plain spotlessCheck
@@ -136,7 +136,7 @@ jobs:
     timeout-minutes: 30
     defaults:
       run:
-        working-directory: backend
+        working-directory: apps/api
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -147,8 +147,8 @@ jobs:
           java-version: "21"
           cache: gradle
           cache-dependency-path: |
-            backend/*.gradle
-            backend/gradle/wrapper/gradle-wrapper.properties
+            apps/api/*.gradle
+            apps/api/gradle/wrapper/gradle-wrapper.properties
       - name: Check Docker and prepare the test image
         run: |
           docker version --format '{{.Server.Version}}'
@@ -181,16 +181,16 @@ jobs:
     timeout-minutes: 15
     defaults:
       run:
-        working-directory: etl
+        working-directory: apps/etl
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version-file: etl/.nvmrc
+          node-version-file: apps/etl/.nvmrc
           cache: npm
-          cache-dependency-path: etl/package-lock.json
+          cache-dependency-path: apps/etl/package-lock.json
       - name: Set npm version
         run: |
           npm install --global npm@11.19.1

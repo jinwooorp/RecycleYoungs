@@ -16,7 +16,7 @@ Flyway는 DB 스키마 변경을 버전순으로 적용하고 이력과 체크�
 
 새 DB에 스키마를 적용한 뒤 [ETL](ETL.md)이나 합성 Demo로 조회 데이터를 준비합니다.
 
-[마이그레이션 파일](../backend/src/main/resources/db/migration/)
+[마이그레이션 파일](../apps/api/src/main/resources/db/migration/)
 
 | 버전 | 적용 내용 |
 | --- | --- |

@@ -58,7 +58,7 @@ Backend의 `db` 프로필은 `/api/v1` 아래에서 행정구역, 점포·추정
 화면부터 확인하려면 Node.js 24와 npm 11을 준비하고, 저장소 루트에서 웹 앱을 실행합니다.
 
 ```bash
-cd frontend
+cd apps/web
 npm ci
 npm run dev
 ```

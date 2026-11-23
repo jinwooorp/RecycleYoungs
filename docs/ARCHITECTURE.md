@@ -21,10 +21,10 @@ flowchart LR
 
 | 구성 요소 | 역할과 코드 위치 |
 | --- | --- |
-| Frontend | React·TypeScript로 랜딩과 탐색 화면을 제공합니다. Kakao Maps JavaScript SDK는 지도와 장소 검색에, Spring Boot API는 지역·카페·상권 데이터 조회에 사용합니다. [라우팅](../frontend/src/routes.tsx) |
+| Frontend | React·TypeScript로 랜딩과 탐색 화면을 제공합니다. Kakao Maps JavaScript SDK는 지도와 장소 검색에, Spring Boot API는 지역·카페·상권 데이터 조회에 사용합니다. [라우팅](../apps/web/src/routes.tsx) |
 | Backend | Java 21의 Spring Boot와 Spring JDBC를 사용합니다. Controller가 요청을 검증하고, Service가 데이터 준비 상태를 판정하며, Repository가 SQL로 조회합니다. [REST API](API.md) |
 | DB | PostgreSQL에 지역·카페·통계·적재 배치를 저장합니다. PostGIS는 경계·반경 검색을 담당하고, Flyway는 스키마(테이블 구조) 변경을 적용합니다. [테이블과 인덱스](DATABASE.md) |
-| ETL | Node.js·TypeScript CLI로 공공데이터 파일·API를 수집하고 검사합니다. 검증된 데이터를 게시해 조회할 수 있게 합니다. [ETL 진입점](../etl/src/index.ts) · [ETL 절차](ETL.md) |
+| ETL | Node.js·TypeScript CLI로 공공데이터 파일·API를 수집하고 검사합니다. 검증된 데이터를 게시해 조회할 수 있게 합니다. [ETL 진입점](../apps/etl/src/index.ts) · [ETL 절차](ETL.md) |
 
 ## 웹 요청과 배치 게시
 
@@ -36,7 +36,7 @@ Backend의 조회 API는 `db` 프로필에서 게시된 데이터를 읽습니�
 
 공공데이터 수집은 별도의 수동 CLI 작업입니다.
 
-[Vite 설정](../frontend/vite.config.ts) · [Nginx 설정](../nginx/default-dev.conf) · [개발용 Compose](../docker-compose.yml)
+[Vite 설정](../apps/web/vite.config.ts) · [Nginx 설정](../nginx/default-dev.conf) · [개발용 Compose](../docker-compose.yml)
 
 ## 개발 환경과 향후 배포
 

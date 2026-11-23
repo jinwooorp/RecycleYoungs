@@ -10,7 +10,7 @@ const publishWarning = 'ETL이 DB에 데이터를 게시합니다. 대상 로컬
 const apiWarning = 'ETL이 인증키를 보내는 외부 API 요청을 할 수 있습니다. 전송 대상·방식과 승인 범위를 확인하세요.';
 const readWarning = 'ETL이 게시 DB를 읽기 전용으로 대조합니다. 대상 로컬 DB를 확인하세요.';
 const approvalReminder = '실행하려면 사용자 승인과 작업 범위를 확인하세요.';
-const etlDirectory = fileURLToPath(new URL('../../etl', import.meta.url));
+const etlDirectory = fileURLToPath(new URL('../../apps/etl', import.meta.url));
 const statistics = new Set(['stores', 'sales', 'foot-traffic', 'district-stores', 'district-sales', 'district-foot-traffic']);
 const fileProbes = new Set(['district-stores', 'district-sales', 'district-foot-traffic']);
 

@@ -85,15 +85,15 @@ test('직접 SQL 실행과 Docker 볼륨 삭제를 구분합니다', () => {
 });
 
 test('ETL 파일 검사, DB 대조, 외부 API와 게시를 구분합니다', () => {
-  const cwd = join(repository, 'etl');
+  const cwd = join(repository, 'apps', 'etl');
   const fileOptions = '--source "원본 파일.csv" --expected-rows 3';
   assert.equal(pre('npm run dev -- district-stores --probe ' + fileOptions, cwd), '');
   assert.equal(pre('npm run dev -- official-sources --probe --manifest manifest.json', cwd), '');
   assert.equal(pre('npm run dev -- stores --help', cwd), '');
   assert.equal(pre('npm run dev -- stores ' + fileOptions, repository), '');
   assert.match(pre('npm run dev -- stores ' + fileOptions, cwd), /DB에 데이터를 게시/);
-  assert.match(pre('npm --prefix etl run start -- district-stores ' + fileOptions), /쓰기 승인/);
-  assert.match(pre('cd etl && npm --silent run dev -- stores ' + fileOptions), /쓰기 승인/);
+  assert.match(pre('npm --prefix apps/etl run start -- district-stores ' + fileOptions), /쓰기 승인/);
+  assert.match(pre('cd apps/etl && npm --silent run dev -- stores ' + fileOptions), /쓰기 승인/);
   const read = pre('npm run dev -- district-foot-traffic --probe --compare-db ' + fileOptions, cwd);
   assert.match(read, /읽기 전용/);
   assert.doesNotMatch(read, /외부 API|쓰기 승인/);
@@ -248,7 +248,7 @@ test('공식 이벤트 두 개만 등록하고 하위 경로에서 스크립트�
     assert.ok(handler.timeout > 0 && handler.timeout <= 6);
     if (process.platform !== 'win32') {
       const result = spawnSync('/bin/sh', ['-c', handler.command], {
-        cwd: join(repository, 'frontend'), env: fixtureEnv, input: '{}', encoding: 'utf8', timeout: 6_000,
+        cwd: join(repository, 'apps', 'web'), env: fixtureEnv, input: '{}', encoding: 'utf8', timeout: 6_000,
       });
       assert.ifError(result.error);
       assert.equal(result.status, 0, result.stderr);
