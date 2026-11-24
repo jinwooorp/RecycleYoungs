@@ -180,6 +180,18 @@
   --explore-filter-top: calc(var(--explore-top) + 3.75rem);
   --explore-filter-body-top: calc(var(--explore-filter-top) + 3.25rem);
   --explore-filter-error-height: 7rem;
+  --explore-panel-clear-height: max(
+    3.5rem,
+    calc(
+      min(100dvh, var(--explore-visible-end, var(--explore-overlay-height))) -
+        var(--explore-panel-bottom) -
+        max(var(--explore-panel-top), var(--explore-cafe-panel-top, 0px))
+    )
+  );
+  --explore-panel-available-height: min(
+    var(--explore-sheet-limit),
+    var(--explore-panel-clear-height)
+  );
   font-family:
     'Geist Variable', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
 }
@@ -306,20 +318,12 @@
 }
 
 .explore-panel {
-  --explore-panel-available-height: min(
-    var(--explore-sheet-limit),
-    max(
-      3.5rem,
-      calc(
-        min(100dvh, var(--explore-overlay-height)) -
-          var(--explore-panel-bottom) -
-          max(var(--explore-panel-top), var(--explore-cafe-panel-top, 0px))
-      )
-    )
-  );
   flex: none;
   width: 100%;
-  height: var(--explore-panel-available-height);
+  height: var(
+    --explore-sheet-drag-height,
+    var(--explore-sheet-selected-height, var(--explore-panel-available-height))
+  );
   border: 1px solid var(--border);
   border-radius: 1rem;
   background: var(--background);
@@ -336,8 +340,19 @@
 main:not([data-picking='true'])
   .explore-panel-shell[data-compact='true']
   .explore-panel {
-  height: auto;
-  max-height: var(--explore-panel-available-height);
+  height: var(
+    --explore-sheet-drag-height,
+    var(--explore-sheet-selected-height, auto)
+  );
+  max-height: var(
+    --explore-sheet-active-limit,
+    var(--explore-panel-available-height)
+  );
+}
+
+.explore-sheet-handle,
+.explore-sheet-probes {
+  display: none;
 }
 
 .explore-panel-shell[data-open='true'] .explore-panel {
@@ -824,11 +839,118 @@ main:not([data-picking='true'])
 }
 
 @media (width < 64rem) {
+  .explore-app {
+    --explore-top: calc(
+      max(0.75rem, env(safe-area-inset-top)) + var(--explore-viewport-top, 0px)
+    );
+    --explore-visible-end: var(--explore-viewport-end, 100dvh);
+    --explore-sheet-limit: min(
+      55dvh,
+      var(--explore-sheet-obstacle-limit, 100dvh)
+    );
+  }
+  .explore-dock {
+    bottom: calc(var(--explore-bottom) + var(--explore-viewport-bottom, 0px));
+  }
+  .explore-panel-shell {
+    bottom: calc(
+      var(--explore-panel-bottom) + var(--explore-viewport-bottom, 0px)
+    );
+  }
+  .explore-app[data-compact-keyboard] {
+    --explore-panel-top: calc(var(--explore-filter-top) + 3.25rem);
+  }
+  .explore-panel {
+    --explore-sheet-maximum: min(
+      var(--explore-panel-clear-height),
+      var(--explore-sheet-obstacle-limit, 100dvh)
+    );
+    --explore-sheet-minimum: min(9rem, var(--explore-sheet-maximum));
+    --explore-sheet-middle: var(--explore-panel-available-height);
+    max-height: var(--explore-sheet-maximum);
+  }
+  .explore-panel-shell:is([data-sheet-level], [data-size-transition='sheet'])
+    .explore-panel {
+    --explore-sheet-active-limit: var(--explore-sheet-maximum);
+  }
+  .explore-app:has(.explore-panel-shell[data-size-transition='sheet'])
+    .cafe-map-info,
+  .explore-app:has(.explore-panel-shell[data-size-transition='sheet'])
+    .explore-map
+    div:has(> div > .cafe-map-info) {
+    visibility: hidden;
+  }
+  .explore-panel-shell[data-sheet-level='minimum'] .explore-panel {
+    --explore-sheet-selected-height: var(--explore-sheet-minimum);
+  }
+  .explore-panel-shell[data-sheet-level='middle'] .explore-panel {
+    --explore-sheet-selected-height: var(--explore-sheet-middle);
+  }
+  .explore-panel-shell[data-sheet-level='maximum'] .explore-panel {
+    --explore-sheet-selected-height: var(--explore-sheet-maximum);
+  }
+  .explore-sheet-handle {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    display: grid;
+    width: 3.5rem;
+    height: 2.75rem;
+    justify-items: center;
+    align-items: start;
+    padding-top: 0.5rem;
+    border-radius: 0.5rem;
+    translate: -50% 0;
+    touch-action: none;
+    cursor: ns-resize;
+    user-select: none;
+  }
+  .explore-sheet-handle:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+  .explore-sheet-handle[aria-disabled='true'] {
+    cursor: default;
+  }
+  .explore-sheet-handle span {
+    width: 1.75rem;
+    height: 0.3125rem;
+    border-radius: 999px;
+    background: var(--muted-foreground);
+  }
+  .explore-sheet-probes {
+    position: absolute;
+    display: block;
+    width: 0;
+    height: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .explore-sheet-probes span {
+    position: absolute;
+  }
+  [data-sheet-size='minimum'] {
+    height: var(--explore-sheet-minimum);
+  }
+  [data-sheet-size='middle'] {
+    height: var(--explore-sheet-middle);
+  }
+  [data-sheet-size='maximum'] {
+    height: var(--explore-sheet-maximum);
+  }
   .explore-app:has(.region-filter[data-open='true']) .explore-location-toast {
     clip-path: inset(50%);
   }
   .explore-app:has(.region-filter[data-open='true']) {
     --explore-panel-filter-limited: 1;
+  }
+  .explore-app:has(.explore-panel-shell[data-open='true'])
+    .region-filter-controls {
+    max-height: calc(
+      var(--explore-visible-end) - var(--explore-panel-bottom) -
+        var(--explore-filter-body-top) - var(--explore-panel-available-height) -
+        0.5rem
+    );
   }
   .explore-app:has(.region-filter[data-open='true']):has(
       .explore-location-error
@@ -846,7 +968,7 @@ main:not([data-picking='true'])
     .explore-location-error
   ),
   .explore-app:not([data-cafe-detail]):has(.explore-location-toast) {
-    --explore-sheet-limit: min(36dvh, 12rem);
+    --explore-sheet-obstacle-limit: min(36dvh, 12rem);
   }
   .explore-app:has(.explore-panel-shell[data-open='true']) .explore-map-notice {
     bottom: calc(var(--explore-panel-bottom) + var(--explore-sheet-limit));

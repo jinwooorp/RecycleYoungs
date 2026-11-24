@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type RefObject } from 'react';
+import { useCallback, useLayoutEffect, useRef, type RefObject } from 'react';
 
 const reducedMotion = '(prefers-reduced-motion: reduce)';
 
@@ -14,6 +14,7 @@ interface TransitionState {
   size: Size | null;
   animation: Animation | null;
   waitingForFilter: boolean;
+  dragging: boolean;
 }
 
 function cancelAnimation(state: TransitionState) {
@@ -28,6 +29,7 @@ function animateSize(
   state: TransitionState,
   from: Size | null,
   to: Size,
+  kind = '',
 ) {
   state.size = to;
   if (
@@ -49,7 +51,7 @@ function animateSize(
     { duration: 230, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'both' },
   );
   state.animation = animation;
-  shell.setAttribute('data-size-transition', '');
+  shell.setAttribute('data-size-transition', kind);
   const finish = () => {
     if (state.animation !== animation) return;
     cancelAnimation(state);
@@ -66,13 +68,16 @@ export function usePanelSizeTransition(
   open: boolean,
   compact: boolean,
   picking: boolean,
+  snap: object | null = null,
 ) {
+  const previousSnap = useRef(snap);
   const stateRef = useRef<TransitionState>({
     open: false,
     compact,
     size: null,
     animation: null,
     waitingForFilter: false,
+    dragging: false,
   });
 
   useLayoutEffect(() => {
@@ -81,12 +86,14 @@ export function usePanelSizeTransition(
     if (!shell || !(panel instanceof HTMLElement)) return;
     const state = stateRef.current;
     const rememberSize = () => {
-      if (!state.animation) state.size = sizeOf(panel);
+      if (!state.animation && !state.dragging) state.size = sizeOf(panel);
     };
     const stop = () => {
       state.waitingForFilter = false;
-      if (!state.animation) return;
+      if (!state.animation && !state.dragging) return;
       cancelAnimation(state);
+      state.dragging = false;
+      panel.style.removeProperty('--explore-sheet-drag-height');
       shell.removeAttribute('data-size-transition');
       rememberSize();
     };
@@ -131,15 +138,22 @@ export function usePanelSizeTransition(
     const panel = shell?.firstElementChild;
     if (!shell || !(panel instanceof HTMLElement)) return;
     const state = stateRef.current;
+    const movedByUser = snap !== previousSnap.current;
     const shouldAnimate =
-      open && state.open && state.compact !== compact && !picking;
+      open &&
+      state.open &&
+      (state.compact !== compact || movedByUser) &&
+      !picking;
+    previousSnap.current = snap;
     state.open = open;
     state.compact = compact;
     if (!shouldAnimate && open && !picking && state.animation) return;
 
     // 반대 방향으로 전환할 때는 화면에 표시된 중간 크기를 시작점으로 사용합니다.
-    const from = state.animation ? sizeOf(panel) : state.size;
+    const from = state.animation || state.dragging ? sizeOf(panel) : state.size;
     cancelAnimation(state);
+    state.dragging = false;
+    panel.style.removeProperty('--explore-sheet-drag-height');
     const to = sizeOf(panel);
     if (
       shouldAnimate &&
@@ -150,12 +164,44 @@ export function usePanelSizeTransition(
       state.waitingForFilter = true;
     } else if (shouldAnimate) {
       state.waitingForFilter = false;
-      animateSize(shell, panel, state, from, to);
+      animateSize(shell, panel, state, from, to, movedByUser ? 'sheet' : '');
       return;
     } else if (!open || picking) {
       state.waitingForFilter = false;
     }
     shell.removeAttribute('data-size-transition');
     state.size = to;
-  }, [shellRef, open, compact, picking]);
+  }, [shellRef, open, compact, picking, snap]);
+
+  const dragHeight = useCallback(
+    (height?: number) => {
+      const shell = shellRef.current;
+      const panel = shell?.firstElementChild;
+      if (!shell || !(panel instanceof HTMLElement)) return 0;
+      const state = stateRef.current;
+      const next = height ?? sizeOf(panel).height;
+      if (!state.dragging) {
+        cancelAnimation(state);
+        state.waitingForFilter = false;
+        state.dragging = true;
+        shell.setAttribute('data-size-transition', 'sheet');
+      }
+      panel.style.setProperty('--explore-sheet-drag-height', `${next}px`);
+      return next;
+    },
+    [shellRef],
+  );
+
+  const cancelDrag = useCallback(() => {
+    const shell = shellRef.current;
+    const panel = shell?.firstElementChild;
+    const state = stateRef.current;
+    if (!shell || !(panel instanceof HTMLElement) || !state.dragging) return;
+    state.dragging = false;
+    panel.style.removeProperty('--explore-sheet-drag-height');
+    shell.removeAttribute('data-size-transition');
+    state.size = sizeOf(panel);
+  }, [shellRef]);
+
+  return { dragHeight, cancelDrag };
 }

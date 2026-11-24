@@ -1,17 +1,23 @@
-import { act, fireEvent, render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { FloatingPanel } from './floating-panel';
+import type { ExploreMenu } from './explore-menu';
 
 afterEach(() => vi.unstubAllGlobals());
 
 function fixture(reduce = false) {
   vi.stubGlobal('matchMedia', () => ({ matches: reduce }));
-  const panelView = (open: boolean, compact: boolean, picking = false) => (
+  const panelView = (
+    open: boolean,
+    compact: boolean,
+    picking = false,
+    menu: ExploreMenu = 'analysis',
+  ) => (
     <main>
       <div className="region-filter" data-open="false" />
       <FloatingPanel
         id="test-panel"
-        menu="analysis"
+        menu={menu}
         open={open}
         compact={compact}
         picking={picking}
@@ -136,4 +142,90 @@ test('모바일 지역 필터가 열린 동안에는 높이를 제한하고 닫�
     ],
     expect.anything(),
   );
+});
+
+test('시트 키보드 단계는 같은 화면에서 유지되고 메뉴·데이터 상태·닫기에 따라 돌아간다', () => {
+  const { panel, shell, change } = fixture(true);
+  const heights = [144, 464, 562];
+  panel.querySelectorAll('[data-sheet-size]').forEach((probe, index) => {
+    vi.spyOn(probe, 'getBoundingClientRect').mockImplementation(
+      () => new DOMRect(0, 0, 0, heights[index]),
+    );
+  });
+  fireEvent.resize(window);
+  const handle = screen.getByRole('slider', { name: '패널 높이' });
+  handle.focus();
+  expect(handle).toHaveAttribute('aria-valuemax', '3');
+  fireEvent.keyDown(handle, { key: 'Home' });
+  expect(shell).toHaveAttribute('data-sheet-level', 'minimum');
+  fireEvent.keyDown(handle, { key: 'ArrowUp' });
+  expect(handle).toHaveAttribute('aria-valuetext', '중간');
+  expect(handle).toHaveFocus();
+  fireEvent.keyDown(handle, { key: 'End' });
+  expect(handle).toHaveAttribute('aria-valuetext', '최대');
+  change(true, true);
+  expect(shell).toHaveAttribute('data-sheet-level', 'maximum');
+  change(true, true, true);
+  expect(handle).toHaveAttribute('aria-disabled', 'true');
+  expect(shell).not.toHaveAttribute('data-sheet-level');
+  change(true, true);
+  expect(shell).toHaveAttribute('data-sheet-level', 'maximum');
+  change(true, false);
+  expect(handle).toHaveAttribute('aria-valuetext', '자동 높이');
+  fireEvent.keyDown(handle, { key: 'End' });
+  change(true, false, false, 'compare');
+  expect(shell).not.toHaveAttribute('data-sheet-level');
+  fireEvent.keyDown(handle, { key: 'End' });
+  change(false, false, false, 'compare');
+  change(true, false, false, 'compare');
+  expect(shell).not.toHaveAttribute('data-sheet-level');
+  heights.fill(100);
+  fireEvent.resize(window);
+  expect(handle).toHaveAttribute('aria-valuemax', '1');
+  expect(handle).toHaveAttribute('aria-disabled', 'true');
+});
+
+test('핸들의 작은 움직임은 무시하고 드래그·취소·회전에서 임시 높이를 정리한다', () => {
+  const { panel, shell, frame } = fixture(true);
+  panel.querySelectorAll('[data-sheet-size]').forEach((probe, index) => {
+    vi.spyOn(probe, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(0, 0, 0, [144, 464, 562][index]),
+    );
+  });
+  fireEvent.resize(window);
+  const handle = screen.getByRole('slider', { name: '패널 높이' });
+  frame(366, 144);
+  const pointer = { pointerId: 4, button: 0, isPrimary: true };
+  function down() {
+    fireEvent.pointerDown(handle, { ...pointer, clientY: 600 });
+  }
+  function move(clientY: number) {
+    fireEvent.pointerMove(handle, { ...pointer, clientY });
+  }
+  const height = () =>
+    panel.style.getPropertyValue('--explore-sheet-drag-height');
+  down();
+  move(597);
+  expect(height()).toBe('');
+  move(450);
+  expect(height()).toBe('294px');
+  expect(shell).toHaveAttribute('data-size-transition', 'sheet');
+  move(0);
+  expect(height()).toBe('562px');
+  move(780);
+  expect(height()).toBe('144px');
+  fireEvent.pointerCancel(handle, pointer);
+  expect(height()).toBe('');
+  expect(shell).not.toHaveAttribute('data-sheet-level');
+  down();
+  move(250);
+  fireEvent.pointerUp(handle, { ...pointer, clientY: 250 });
+  expect(shell).toHaveAttribute('data-sheet-level', 'middle');
+  expect(height()).toBe('');
+  down();
+  move(450);
+  fireEvent.resize(window);
+  move(250);
+  expect(height()).toBe('');
+  expect(shell).not.toHaveAttribute('data-size-transition');
 });

@@ -348,7 +348,7 @@ export function useCafeMap(
       workspace?.style.removeProperty('--explore-cafe-panel-top');
     function readLayout() {
       const mapBounds = area?.getBoundingClientRect();
-      const viewport =
+      const mapViewport =
         mapBounds?.width && mapBounds.height
           ? mapBounds
           : {
@@ -357,6 +357,20 @@ export function useCafeMap(
               top: 0,
               bottom: window.innerHeight,
             };
+      const viewport =
+        visualViewport &&
+        workspace?.hasAttribute('data-compact-keyboard') &&
+        window.innerWidth < 1024
+          ? {
+              left: mapViewport.left,
+              right: mapViewport.right,
+              top: Math.max(mapViewport.top, visualViewport.offsetTop),
+              bottom: Math.min(
+                mapViewport.bottom,
+                visualViewport.offsetTop + visualViewport.height,
+              ),
+            }
+          : mapViewport;
       const obstacles = visibleBoxes(
         workspace ?? document,
         '.explore-search-form, [role="search"][aria-label="장소 검색"], .explore-search-results, .explore-search-error, .region-filter > button, .region-filter-controls:not([hidden]), .explore-home, .explore-map-controls, .explore-dock, .explore-location-toast, .explore-location-error',
@@ -365,12 +379,12 @@ export function useCafeMap(
         workspace ?? document,
         '.explore-panel-shell[data-open="true"] .explore-panel',
       );
-      return { viewport, obstacles, panel };
+      return { viewport, mapViewport, obstacles, panel };
     }
     function placeInfo(content: HTMLElement, bounds: Box) {
       // 이전에 확보한 공간을 빼고 현재 패널의 원래 크기로 다시 판단합니다.
       const hadRoom = Boolean(clearRoom());
-      const { viewport, obstacles, panel } = readLayout();
+      const { viewport, mapViewport, obstacles, panel } = readLayout();
       const searchLoading = searchForm?.getAttribute('aria-busy') === 'true';
       const shiftsCard = (target: Box) =>
         Math.abs(bounds.left - target.left) > 0.5 ||
@@ -437,8 +451,8 @@ export function useCafeMap(
             .getProjection()
             .coordsFromContainerPoint(
               new maps.Point(
-                (viewport.right - viewport.left) / 2 + x,
-                (viewport.bottom - viewport.top) / 2 + y,
+                (mapViewport.right - mapViewport.left) / 2 + x,
+                (mapViewport.bottom - mapViewport.top) / 2 + y,
               ),
             ),
         );
@@ -832,6 +846,7 @@ export function useCafeMap(
     };
     window.addEventListener('resize', resize);
     visualViewport?.addEventListener('resize', repositionSelected);
+    visualViewport?.addEventListener('scroll', repositionSelected);
     search?.addEventListener('focusin', repositionSelected);
     search?.addEventListener('focusout', repositionSelected);
     area?.addEventListener('wheel', cancelForMapInput, { passive: true });
@@ -847,6 +862,7 @@ export function useCafeMap(
       observer.disconnect();
       window.removeEventListener('resize', resize);
       visualViewport?.removeEventListener('resize', repositionSelected);
+      visualViewport?.removeEventListener('scroll', repositionSelected);
       search?.removeEventListener('focusin', repositionSelected);
       search?.removeEventListener('focusout', repositionSelected);
       area?.removeEventListener('wheel', cancelForMapInput);
