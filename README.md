@@ -45,7 +45,9 @@ React 화면은 Spring Boot의 조회 API를 사용하고, 별도 ETL이 조회�
 
 구성 요소와 저장·조회 흐름은 아키텍처 문서에서 확인할 수 있습니다.
 
-[시스템 아키텍처](docs/ARCHITECTURE.md)
+웹 앱은 역할별로 정리되어 있습니다. 탐색 페이지가 지도와 패널을 조합하고, 주변 탐색·상권 분석·후보지 관리 코드는 각각의 기능 디렉터리에서 찾을 수 있습니다.
+
+[시스템 아키텍처](docs/ARCHITECTURE.md) · [웹 소스 구조](docs/ARCHITECTURE.md#웹-소스-구조)
 
 ## REST API
 

@@ -172,3 +172,35 @@ test('지도 영역의 반복 구 필터·하나의 결과 페이지·경계 오
   );
   assert.equal((await get(boundary)).status, 200);
 });
+
+test('합성 카페 목록의 200건 다음 묶음·오류·게시본을 재현한다', async (t) => {
+  const get = await fixture(t);
+  const url =
+    '/api/v1/cafes/nearby?longitude=126.978&latitude=37.5665&radiusM=500&limit=200&offset=';
+  const first = await (
+    await get(url + '0', 'ry-e2e-scenario=cafe-pagination')
+  ).json();
+  const extra = await (
+    await get(url + '200', 'ry-e2e-scenario=cafe-pagination')
+  ).json();
+  assert.equal(first.items.length, 200);
+  assert.equal(first.totalCount, 231);
+  assert.equal(first.hasMore, true);
+  assert.equal(extra.items.length, 31);
+  assert.equal(extra.items[0].storeName, '합성 카페 201');
+  assert.equal(extra.items[0].distanceM, 201);
+  assert.equal(extra.hasMore, false);
+  assert.equal(extra.sourceBatch.batchId, first.sourceBatch.batchId);
+  assert.equal(
+    (await get(url + '200', 'ry-e2e-scenario=cafe-pagination-error')).status,
+    503,
+  );
+  const republished = await (
+    await get(url + '200', 'ry-e2e-scenario=cafe-pagination-republished')
+  ).json();
+  assert.notEqual(republished.sourceBatch.batchId, first.sourceBatch.batchId);
+  assert.equal(
+    (await get(url + '100001', 'ry-e2e-scenario=cafe-pagination')).status,
+    400,
+  );
+});

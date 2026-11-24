@@ -26,6 +26,7 @@ RecycleYoungs의 목표는 다양한 업종의 예비 창업자가 상권 정보
 작업에 필요한 문서부터 확인한다. 문서별 역할과 읽는 순서는 [문서 안내](docs/README.md)를 따른다.
 
 - 제품과 구조는 [제품 요구사항](docs/PRD.md)과 [시스템 아키텍처](docs/ARCHITECTURE.md)를 참고한다.
+- 웹 코드는 [웹 소스 구조](docs/ARCHITECTURE.md#웹-소스-구조)의 계층 방향을 따른다. 기능 간 상태와 콜백은 페이지나 위젯에서 연결한다.
 - 코드 작성과 협업은 [개발 규칙](docs/CONVENTIONS.md)을 따른다.
 - 계약과 데이터 정책은 [REST API](docs/API.md), [DB 설계](docs/DATABASE.md), [ETL 가이드](docs/ETL.md)에서 확인한다.
 - 개발 환경과 검증 방법은 [환경 설정](docs/SETUP.md), [테스트와 CI](docs/TESTING.md)에서 확인한다.

@@ -1,6 +1,7 @@
+import { fileURLToPath } from 'node:url';
 import type { Page, Request } from '@playwright/test';
 import { candidates } from './fixtures';
-import type { StoredCandidate } from '../src/lib/candidates';
+import type { StoredCandidate } from '../src/entities/candidate/candidates';
 import {
   test,
   expect,
@@ -149,7 +150,7 @@ test('전체 화면 지도 위에서 세 메뉴를 열고 닫아도 지도 크�
   await noOverflow(page);
 });
 
-test('구·동 선택, 통계 갱신, 탭과 미검증 숫자 차단', async ({ page }) => {
+test('구·동 선택, 다중 분석 선택과 미검증 숫자 차단', async ({ page }) => {
   const statisticsRequests: string[] = [];
   page.on('request', (request) => {
     if (request.url().includes('/stats/'))
@@ -167,7 +168,21 @@ test('구·동 선택, 통계 갱신, 탭과 미검증 숫자 차단', async ({ 
   });
   await expect(summary.getByText('120', { exact: true })).toBeVisible();
   const storeChart = page.getByRole('region', { name: '일반·프랜차이즈 점포' });
-  await expect(storeChart).toContainText('마포구 · 자치구 전체');
+  const tools = page
+    .getByRole('complementary', { name: '상권 분석' })
+    .locator('header');
+  const charts = page.locator('.analysis-detail-graphs');
+  await expect(
+    tools.getByRole('heading', { name: '마포구', exact: true }),
+  ).toBeVisible();
+  await expect(tools.getByText('자치구 전체', { exact: true })).toBeVisible();
+  await expect(
+    tools.getByRole('combobox', { name: '통계 기준 분기' }),
+  ).toHaveValue('20262');
+  await expect(
+    storeChart.getByText('카페·음료 업종 · 단위 개', { exact: true }),
+  ).toBeVisible();
+  await expect(charts).not.toContainText(/마포구|자치구 전체|2026년 2분기/);
   await expect(storeChart.getByText('상한 110 개')).toBeVisible();
   await expect(
     page.getByRole('region', { name: '당월 추정매출액 요약' }),
@@ -189,25 +204,30 @@ test('구·동 선택, 통계 갱신, 탭과 미검증 숫자 차단', async ({ 
     page.getByText('전분기 비교 준비 중', { exact: true }),
   ).toHaveCount(1);
   const count = statisticsRequests.length;
-  await page.getByRole('tab', { name: '추정매출', exact: true }).click();
-  await expect(page.getByRole('tabpanel')).toContainText(
-    '9,007,199,254,740,993',
-  );
+  await page.getByRole('button', { name: '추정매출', exact: true }).click();
+  await expect(
+    page.getByRole('region', { name: '선택한 세부 분석' }),
+  ).toContainText('9,007,199,254,740,993');
   await expect(
     page.getByRole('region', { name: '주중·주말 추정매출액' }),
   ).toContainText('상한 6,000,000,000,000,000 원');
   await noOverflow(page);
-  await page.getByRole('tab', { name: '유동인구', exact: true }).click();
-  await expect(page.getByRole('tabpanel')).toContainText('123,456.78');
+  await page.getByRole('button', { name: '유동인구', exact: true }).click();
+  await expect(
+    page.getByRole('region', { name: '선택한 세부 분석' }),
+  ).toContainText('123,456.78');
   await expect(
     page.getByRole('region', { name: '남성·여성 유동인구' }),
   ).toContainText('길 단위 유동인구 추정 규모');
-  await expect(page.getByRole('tabpanel')).not.toContainText(/전분기|↑|↓/);
-  await page.getByRole('tab', { name: '유동인구', exact: true }).press('Home');
-  await expect(page.getByRole('tab', { name: '점포 현황' })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
+  await expect(
+    page.getByRole('region', { name: '선택한 세부 분석' }),
+  ).not.toContainText(/전분기|↑|↓/);
+  await page
+    .getByRole('button', { name: '점포 현황', exact: true })
+    .press('Enter');
+  await expect(
+    page.getByRole('button', { name: '모두', exact: true }),
+  ).toHaveAttribute('aria-pressed', 'true');
   expect(statisticsRequests.length).toBe(count);
   await selectDistrict(page, '11200');
   await expect(summary.getByText('240', { exact: true })).toBeVisible();
@@ -224,7 +244,16 @@ test('구·동 선택, 통계 갱신, 탭과 미검증 숫자 차단', async ({ 
     page.getByRole('heading', { name: '마포구 · 서교동', exact: true }),
   ).toBeVisible();
   await expect(summary.getByText('30', { exact: true })).toBeVisible();
-  await expect(storeChart).toContainText('마포구 · 서교동 · 행정동 전체');
+  await expect(tools.getByText('행정동 전체', { exact: true })).toBeVisible();
+  await expect(
+    tools.getByRole('combobox', { name: '통계 기준 분기' }),
+  ).toHaveValue('20262');
+  await expect(
+    storeChart.getByText('카페·음료 업종 · 단위 개', { exact: true }),
+  ).toBeVisible();
+  await expect(charts).not.toContainText(
+    /마포구|서교동|행정동 전체|2026년 2분기/,
+  );
   await expect(storeChart.getByText('상한 20 개')).toBeVisible();
   await noOverflow(page);
 });
@@ -339,7 +368,16 @@ test('선택 분기가 지역과 두 분석 패널에 유지되며 새로고침�
   await selectDistrict(page, '11200');
   await expect(quarter).toHaveValue('20261');
   await expect(stores).toContainText('230');
-  await expect(storeChart).toContainText('성동구 · 자치구 전체');
+  const tools = page
+    .getByRole('complementary', { name: '상권 분석' })
+    .locator('header');
+  await expect(
+    tools.getByRole('heading', { name: '성동구', exact: true }),
+  ).toBeVisible();
+  await expect(tools.getByText('자치구 전체', { exact: true })).toBeVisible();
+  await expect(
+    storeChart.getByText('카페·음료 업종 · 단위 개', { exact: true }),
+  ).toBeVisible();
   await expect(generalStoreCount.getByText(/^220\s*개$/)).toBeVisible();
   await expect(franchiseBar).toHaveAttribute('width', '454');
   await page.getByRole('button', { name: '후보지 분석', exact: true }).click();
@@ -422,10 +460,10 @@ test('매출 자료 없음은 조회 오류와 구분', async ({ page }) => {
   const sales = page.getByRole('region', { name: '당월 추정매출액 요약' });
   await expect(sales).toContainText('자료 없음');
   await expect(sales.getByRole('alert')).toHaveCount(0);
-  await page.getByRole('tab', { name: '추정매출', exact: true }).click();
-  await expect(page.getByRole('tabpanel')).toContainText(
-    '선택한 지역·조회 조건의 통계 자료가 없습니다.',
-  );
+  await page.getByRole('button', { name: '추정매출', exact: true }).click();
+  await expect(
+    page.getByRole('region', { name: '선택한 세부 분석' }),
+  ).toContainText('선택한 지역·조회 조건의 통계 자료가 없습니다.');
   await expect(
     page.getByRole('region', { name: '주중·주말 추정매출액' }),
   ).toHaveCount(0);
@@ -475,8 +513,12 @@ test('탭의 v1을 한 번 이전하고 메뉴 전환·새로고침·새 탭에�
   }, candidates[0]);
   await page.setViewportSize({ width: 320, height: 568 });
   await page.goto('/explore');
-  const openCandidates = (tab: Page) =>
-    tab.getByRole('button', { name: '후보지 분석', exact: true }).click();
+  const openCandidates = async (tab: Page) => {
+    await tab.getByRole('button', { name: '후보지 분석', exact: true }).click();
+    await tab
+      .getByRole('button', { name: '후보지 A 상세 및 관리 열기' })
+      .press('Enter');
+  };
   await openCandidates(page);
   await expect
     .poll(() =>
@@ -525,8 +567,12 @@ test('다른 탭에서 메모가 바뀌면 입력 중인 메모를 보호한다'
   await page.goto('/explore');
   const peer = await context.newPage();
   await peer.goto('/explore');
-  for (const tab of [page, peer])
+  for (const tab of [page, peer]) {
     await tab.getByRole('button', { name: '후보지 분석', exact: true }).click();
+    await tab
+      .getByRole('button', { name: '후보지 A 상세 및 관리 열기' })
+      .press('Enter');
+  }
   const field = page.getByRole('textbox', { name: '후보지 A 메모' });
   const peerField = peer.getByRole('textbox', { name: '후보지 A 메모' });
   const save = { name: '후보지 A 메모 저장' };
@@ -810,4 +856,146 @@ test('두 구를 함께 탐색하고 경계만 재시도한 뒤 통계는 한 �
   );
   await expect(summary).toHaveCount(0);
   await noOverflow(page);
+});
+
+test('카페 페이지 교체와 추가 묶음 재시도는 지도 마커와 확대 수준을 유지한다', async ({
+  page,
+  allowHttpErrors,
+}, testInfo) => {
+  const fixture = fileURLToPath(
+    new URL('./location-map.fixture.js', import.meta.url),
+  );
+  await page.route(/\/src\/shared\/kakao\/kakao-maps\.ts(?:\?.*)?$/, (route) =>
+    route.fulfill({ path: fixture, contentType: 'text/javascript' }),
+  );
+  const apiPath = '/api/v1/cafes/viewport';
+  allowHttpErrors.add(apiPath);
+  await scenario(page, 'cafe-pagination-error');
+  const offsets: string[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === apiPath)
+      offsets.push(url.searchParams.get('offset') ?? '');
+  });
+  await page.goto('/explore');
+  const map = page.getByLabel('Kakao Maps 지도', { exact: true });
+  await page.getByRole('button', { name: '지도 확대' }).click();
+  const menu = page.getByRole('button', { name: '주변 탐색', exact: true });
+  await menu.click();
+  const panel = page.getByRole('complementary', { name: '주변 탐색' });
+  const heading = panel.getByRole('heading', { name: '조회된 카페' });
+  const list = panel.getByRole('list', { name: '현재 페이지 카페' });
+  const nav = panel.getByRole('navigation', { name: '카페 목록 페이지' });
+  const number = (value: number) =>
+    nav.getByRole('button', { name: `${value}페이지`, exact: true });
+  const next = nav.getByRole('button', { name: '다음 페이지' });
+  const previous = nav.getByRole('button', { name: '이전 페이지' });
+  const first = nav.getByRole('button', { name: '첫 페이지' });
+  const backFive = nav.getByRole('button', { name: '5페이지 이전' });
+  const forwardFive = nav.getByRole('button', { name: '5페이지 다음' });
+  const last = nav.getByRole('button', { name: '마지막 페이지' });
+  const cafe = (value: number) =>
+    list.getByRole('button', { name: new RegExp(`^합성 카페 ${value}\\b`) });
+
+  await expect(cafe(1)).toBeVisible();
+  await expect(list.getByRole('listitem')).toHaveCount(10);
+  await expect(first).toBeDisabled();
+  await expect(backFive).toBeDisabled();
+  await expect(previous).toBeDisabled();
+  await expect(number(1)).toHaveAttribute('aria-current', 'page');
+  await expect(map).toHaveAttribute('data-marker-count', '200');
+  await number(2).press('Space');
+  await expect(heading).toBeFocused();
+  await expect(heading).toBeInViewport({ ratio: 1 });
+  await expect(cafe(11)).toBeVisible();
+  await expect(cafe(1)).toHaveCount(0);
+  await expect(list.getByRole('listitem')).toHaveCount(10);
+  await expect(panel.getByText(/2\/24페이지 · 11~20번째 표시/)).toBeVisible();
+  await forwardFive.press('Enter');
+  await expect(heading).toBeFocused();
+  await expect(number(7)).toHaveAttribute('aria-current', 'page');
+  await expect(number(5)).toHaveCount(0);
+  await expect(cafe(61)).toBeVisible();
+  await noOverflow(page);
+  await backFive.click();
+  await expect(number(2)).toHaveAttribute('aria-current', 'page');
+  await backFive.click();
+  await expect(number(1)).toHaveAttribute('aria-current', 'page');
+  await next.click();
+  await menu.click();
+  await menu.click();
+  await expect(number(2)).toHaveAttribute('aria-current', 'page');
+  for (const value of [5, 10, 15, 20]) {
+    await number(value).click();
+    await next.click();
+  }
+  await expect(number(21)).toHaveAttribute('aria-current', 'page');
+  await expect(panel.getByRole('alert')).toContainText(
+    '카페 데이터가 아직 준비되지 않았습니다.',
+  );
+  expect(offsets).toEqual(['0', '200']);
+
+  await scenario(page, 'cafe-pagination-republished');
+  await panel.getByRole('button', { name: '이 페이지 다시 시도' }).click();
+  await expect(panel.getByRole('alert')).toContainText(
+    '카페 자료가 갱신되었습니다.',
+  );
+  await expect(map).toHaveAttribute('data-marker-count', '200');
+  await scenario(page, 'cafe-pagination');
+  await panel.getByRole('button', { name: '첫 페이지부터 다시 조회' }).click();
+  await expect(cafe(1)).toBeVisible();
+  expect(offsets).toEqual(['0', '200', '200', '0']);
+
+  for (const value of [5, 10, 15, 20]) {
+    await number(value).click();
+    await next.click();
+  }
+  await expect(cafe(201)).toBeVisible();
+  await cafe(201).click();
+  await expect(cafe(201)).toHaveAttribute('aria-pressed', 'true');
+  await expect(panel.getByText(/지도 마커 표시 범위 밖/)).toBeVisible();
+  await last.click();
+  await expect(list.getByRole('listitem')).toHaveCount(1);
+  await expect(cafe(231)).toBeVisible();
+  await expect(next).toBeDisabled();
+  await expect(forwardFive).toBeDisabled();
+  await expect(last).toBeDisabled();
+  await previous.click();
+  await expect(cafe(221)).toBeVisible();
+  await forwardFive.click();
+  await expect(number(24)).toHaveAttribute('aria-current', 'page');
+  await first.click();
+  await expect(cafe(1)).toBeVisible();
+  expect(offsets).toEqual(['0', '200', '200', '0', '200']);
+  await expect(map).toHaveAttribute('data-marker-count', '200');
+  await expect(map).toHaveAttribute('data-map-level', '4');
+  await noOverflow(page);
+  const expectPageControlsToFit = async () => {
+    await expect
+      .poll(() =>
+        nav.evaluate((navigation) => {
+          const { left, right } = navigation.getBoundingClientRect();
+          return Array.from(navigation.querySelectorAll('button')).every(
+            (button) => {
+              const box = button.getBoundingClientRect();
+              return (
+                box.left >= left &&
+                box.right <= right &&
+                box.width >= 44 &&
+                box.height >= 44
+              );
+            },
+          );
+        }),
+      )
+      .toBe(true);
+  };
+  await expectPageControlsToFit();
+  if (testInfo.project.use.isMobile) {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await expectPageControlsToFit();
+    await noOverflow(page);
+  }
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeFocused();
 });
