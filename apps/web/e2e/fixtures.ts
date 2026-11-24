@@ -1,5 +1,5 @@
-import type { StoredCandidate } from '../src/lib/candidates.ts';
-import type { CafePage } from '../src/lib/cafes.ts';
+import type { StoredCandidate } from '../src/entities/candidate/candidates.ts';
+import type { CafePage } from '../src/entities/cafe/cafes.ts';
 
 // 실제 원천·승인 자료가 아닌 브라우저 회귀 테스트 전용 합성 값입니다.
 export const sourceBatch = {
