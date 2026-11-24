@@ -63,19 +63,44 @@ export default function ExplorePage() {
     const workspace = workspaceRef.current;
     if (!viewport || !workspace) return;
     const update = () => {
-      const short =
-        viewport.scale === 1 && workspace.clientHeight - viewport.height > 80;
-      workspace.toggleAttribute('data-compact-keyboard', short);
-      if (viewport.scale === 1)
+      const actualSize = viewport.scale === 1;
+      const height = workspace.clientHeight;
+      workspace.toggleAttribute(
+        'data-compact-keyboard',
+        actualSize && height - viewport.height > 80,
+      );
+      if (actualSize) {
+        const top = Math.max(0, viewport.offsetTop);
+        const end = Math.min(height, top + viewport.height);
         workspace.style.setProperty(
           '--explore-overlay-height',
           `${viewport.height}px`,
         );
-      else workspace.style.removeProperty('--explore-overlay-height');
+        workspace.style.setProperty('--explore-viewport-top', `${top}px`);
+        workspace.style.setProperty('--explore-viewport-end', `${end}px`);
+        workspace.style.setProperty(
+          '--explore-viewport-bottom',
+          `${height - end}px`,
+        );
+      } else {
+        for (const property of [
+          '--explore-overlay-height',
+          '--explore-viewport-top',
+          '--explore-viewport-end',
+          '--explore-viewport-bottom',
+        ])
+          workspace.style.removeProperty(property);
+      }
     };
     update();
     viewport.addEventListener('resize', update);
-    return () => viewport.removeEventListener('resize', update);
+    viewport.addEventListener('scroll', update);
+    window.addEventListener('resize', update);
+    return () => {
+      viewport.removeEventListener('resize', update);
+      viewport.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
   }, []);
   useLayoutEffect(() => {
     if (selectedMenu && focusPanelTitle.current) {

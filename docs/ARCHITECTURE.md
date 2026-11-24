@@ -43,6 +43,8 @@ flowchart LR
 
 `@/`는 `apps/web/src/`를 가리킵니다. 단위·컴포넌트 테스트는 대상 코드 옆에 두고, E2E와 브라우저용 합성 데이터는 `apps/web/e2e`에서 관리합니다.
 
+모바일 하단 시트는 `explore-workspace`에서 현재 메뉴의 높이 단계와 포인터 입력을 관리합니다. 단계별 높이는 상단 도구와 Dock 사이 공간을 기준으로 CSS에서 계산합니다. 핸들의 드래그와 정착은 기존 패널 크기 전환을 공유하고, 지도 정보창은 정착 후 최종 영역을 기준으로 위치를 확인합니다. 탐색 페이지는 `visualViewport`를 관찰해 가상 키보드가 가린 영역을 패널 배치에 전달합니다.
+
 [탐색 페이지](../apps/web/src/pages/explore/explore-page.tsx) · [지도 위젯](../apps/web/src/widgets/explore-map/) · [공통 스타일](../apps/web/src/shared/styles/index.css) · [테스트](TESTING.md)
 
 ## 웹 요청과 배치 게시

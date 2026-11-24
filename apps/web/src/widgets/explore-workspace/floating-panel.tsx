@@ -1,8 +1,15 @@
-import { useLayoutEffect, useRef, type ReactNode, type Ref } from 'react';
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import { X } from 'lucide-react';
 import { Button } from '@/shared/ui/button';
 import type { ExploreMenu } from './explore-menu';
 import { usePanelSizeTransition } from './use-panel-size-transition';
+import { useMobileSheet, type SheetLevel } from './use-mobile-sheet';
 
 const titles: Record<ExploreMenu, string> = {
   cafes: '주변 탐색',
@@ -33,7 +40,28 @@ export function FloatingPanel({
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
-  usePanelSizeTransition(shellRef, open, compact, picking);
+  const [selection, setSelection] = useState<{
+    menu: ExploreMenu;
+    compact: boolean;
+    level: SheetLevel;
+  } | null>(null);
+  const validSelection =
+    open && selection?.menu === menu && selection.compact === compact
+      ? selection
+      : null;
+  if (selection && !validSelection) setSelection(null);
+  const snap = picking ? null : validSelection;
+  const motion = usePanelSizeTransition(shellRef, open, compact, picking, snap);
+  const sheet = useMobileSheet({
+    shellRef,
+    open,
+    menu,
+    compact,
+    picking,
+    selected: snap?.level,
+    onSelect: (level) => setSelection({ menu, compact, level }),
+    ...motion,
+  });
   useLayoutEffect(() => {
     if (open && scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [open, menu]);
@@ -46,6 +74,7 @@ export function FloatingPanel({
       data-menu={menu}
       data-open={open}
       data-compact={compact}
+      data-sheet-level={snap?.level}
     >
       <aside
         ref={panelRef}
@@ -55,7 +84,7 @@ export function FloatingPanel({
         inert={!open}
         className="explore-panel flex min-h-0 flex-col overflow-hidden"
       >
-        <div className="explore-panel-heading flex shrink-0 items-center justify-between gap-3">
+        <div className="explore-panel-heading relative flex shrink-0 items-center justify-between gap-3">
           <h2
             ref={titleRef}
             id={`${id}-title`}
@@ -72,6 +101,31 @@ export function FloatingPanel({
           >
             <X aria-hidden="true" />
           </Button>
+          <div
+            className="explore-sheet-handle"
+            role="slider"
+            aria-label="패널 높이"
+            aria-orientation="vertical"
+            aria-valuemin={1}
+            aria-valuemax={Math.max(1, sheet.count)}
+            aria-valuenow={sheet.current + 1}
+            aria-valuetext={picking ? '지도에서 위치 선택 중' : sheet.valueText}
+            aria-disabled={!sheet.enabled}
+            tabIndex={sheet.enabled ? 0 : -1}
+            onKeyDown={sheet.onKeyDown}
+            onPointerDown={sheet.onPointerDown}
+            onPointerMove={sheet.onPointerMove}
+            onPointerUp={sheet.onPointerUp}
+            onPointerCancel={sheet.onPointerCancel}
+            onLostPointerCapture={sheet.onPointerCancel}
+          >
+            <span aria-hidden="true" />
+          </div>
+        </div>
+        <div className="explore-sheet-probes" aria-hidden="true">
+          <span data-sheet-size="minimum" />
+          <span data-sheet-size="middle" />
+          <span data-sheet-size="maximum" />
         </div>
         <div
           ref={scrollRef}

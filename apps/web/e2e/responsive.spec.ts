@@ -681,6 +681,121 @@ test('상권 도구와 선택 조합별 지표·그래프가 패널 너비에 �
   await noOverflow(page);
 });
 
+test('모바일 시트의 키보드와 핸들 드래그를 본문 스크롤·지도 조회와 분리한다', async ({
+  page,
+}) => {
+  const fixture = fileURLToPath(
+    new URL('./location-map.fixture.js', import.meta.url),
+  );
+  await page.route(/\/src\/shared\/kakao\/kakao-maps\.ts(?:\?.*)?$/, (route) =>
+    route.fulfill({ path: fixture, contentType: 'text/javascript' }),
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  const requests: string[] = [];
+  page.on('request', (request) => {
+    if (/\/stats\/|\/cafes\//.test(request.url())) requests.push(request.url());
+  });
+  await page.goto('/explore');
+  await expect(page.getByText(/위치 권한이 거부되었습니다/)).toBeVisible();
+  await expect(page.locator('.explore-location-toast')).toBeHidden();
+  await selectDistrict(page);
+  const menu = page.getByRole('button', { name: '상권 분석', exact: true });
+  await menu.press('Enter');
+  const panel = page.getByRole('complementary', {
+    name: '상권 분석',
+    exact: true,
+  });
+  const handle = panel.getByRole('slider', { name: '패널 높이' });
+  const shell = panel.locator('..');
+  const map = page.getByLabel('Kakao Maps 지도', { exact: true });
+  const level = await map.getAttribute('data-map-level');
+  await expect(
+    panel.getByRole('region', { name: '남성·여성 유동인구' }),
+  ).toBeVisible();
+  await expect
+    .poll(() => requests.some((url) => url.includes('/cafes/viewport')))
+    .toBe(true);
+  const initialRequests = requests.length;
+  const expectStage = async (name: string, level: string) => {
+    await expect(handle).toHaveAttribute('aria-valuetext', name);
+    await expect(shell).toHaveAttribute('data-sheet-level', level);
+    await expect(shell).not.toHaveAttribute('data-size-transition');
+    const geometry = await panel.evaluate(
+      (el, level) => ({
+        height: el.getBoundingClientRect().height,
+        point: el
+          .querySelector(`[data-sheet-size="${level}"]`)!
+          .getBoundingClientRect().height,
+        gap:
+          document.querySelector('.explore-dock')!.getBoundingClientRect().top -
+          el.getBoundingClientRect().bottom,
+      }),
+      level,
+    );
+    expect(geometry.height).toBeCloseTo(geometry.point);
+    expect(geometry.gap).toBeCloseTo(8);
+    return geometry.height;
+  };
+  await expect(handle).toHaveAttribute('aria-valuemax', '3');
+  await handle.press('Home');
+  const minimum = await expectStage('최소', 'minimum');
+  await page.keyboard.press('ArrowUp');
+  const middle = await expectStage('중간', 'middle');
+  await page.keyboard.press('End');
+  const maximum = await expectStage('최대', 'maximum');
+  expect(minimum).toBeLessThan(middle);
+  expect(middle).toBeLessThan(maximum);
+  await expect(handle).toBeFocused();
+  const filter = await openRegionFilter(page);
+  await expect
+    .poll(() =>
+      panel.evaluate((element) => {
+        const controls = document.querySelector('.region-filter-controls')!;
+        return (
+          element.getBoundingClientRect().top -
+          controls.getBoundingClientRect().bottom
+        );
+      }),
+    )
+    .toBeGreaterThanOrEqual(8);
+  await filter.press('Escape');
+  expect(await expectStage('최대', 'maximum')).toBe(maximum);
+  await handle.press('Home');
+  await expectStage('최소', 'minimum');
+  const box = (await handle.boundingBox())!;
+  expect(box.width).toBeGreaterThanOrEqual(44);
+  expect(box.height).toBeGreaterThanOrEqual(44);
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y - 35);
+  await expect(shell).toHaveAttribute('data-size-transition', 'sheet');
+  const intermediate = (await panel.boundingBox())!.height;
+  expect(intermediate).toBeGreaterThan(minimum);
+  expect(intermediate).toBeLessThan(middle);
+  await page.mouse.move(x, y - (middle - minimum));
+  await page.mouse.up();
+  await expectStage('중간', 'middle');
+  const body = panel.locator('.explore-panel-content');
+  const bodyBox = (await body.boundingBox())!;
+  await page.mouse.move(bodyBox.x + bodyBox.width / 2, bodyBox.y + 70);
+  await page.mouse.wheel(0, 200);
+  await expect
+    .poll(() => body.evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(0);
+  await expectStage('중간', 'middle');
+  await panel.getByRole('button', { name: '점포 현황', exact: true }).click();
+  await expectStage('중간', 'middle');
+  expect(requests).toHaveLength(initialRequests);
+  await expect(map).toHaveAttribute('data-map-level', level!);
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeFocused();
+  await menu.press('Enter');
+  await expect(handle).toHaveAttribute('aria-valuetext', '자동 높이');
+  await noOverflow(page);
+});
+
 test('320×568에서 키보드로 상세 패널을 열고 스크롤하며 지역 필터를 조작한다', async ({
   page,
 }) => {
@@ -755,6 +870,8 @@ test('320×568에서 키보드로 상세 패널을 열고 스크롤하며 지역
   await expect(stores).not.toBeInViewport();
   await page.keyboard.press('Tab');
   await expect(close).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(panel.getByRole('slider', { name: '패널 높이' })).toBeFocused();
   await page.keyboard.press('Tab');
   const quarter = panel.getByRole('combobox', { name: '통계 기준 분기' });
   await expect(quarter).toBeFocused();
