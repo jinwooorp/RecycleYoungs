@@ -109,45 +109,87 @@ test('전체 화면 지도 위에서 세 메뉴를 열고 닫아도 지도 크�
   await expect(dock).toHaveCSS('width', '352px');
   await expect(dock).toHaveCSS('height', '62px');
   await expect(page.getByRole('complementary')).toHaveCount(0);
-  let panelBox: Awaited<ReturnType<typeof map.boundingBox>> = null;
-  for (const name of ['주변 탐색', '상권 분석', '후보지 분석']) {
+  const desktop = fullScreen.width >= 1024;
+  const panels = [
+    ['주변 탐색', '지도를 확대하거나 자치구를 선택하세요.'],
+    [
+      '상권 분석',
+      '장소를 검색하거나 지역 필터에서 자치구·행정동을 선택해 주세요.',
+    ],
+    [
+      '후보지 분석',
+      '등록된 후보지가 없습니다. 지도 또는 장소 검색에서 추가하세요.',
+    ],
+  ];
+  for (const [name, notice] of panels) {
     const menu = dock.getByRole('button', { name, exact: true });
     const target = (await menu.boundingBox())!;
     expect(target.height).toBeGreaterThanOrEqual(44);
     expect(target.width).toBeGreaterThanOrEqual(44);
     await menu.click();
     const panel = page.getByRole('complementary', { name });
-    await expect(
-      panel.getByRole('heading', { name, exact: true }),
-    ).toBeVisible();
+    const heading = panel.getByRole('heading', { name, exact: true });
+    await expect(heading).toBeVisible();
+    await expect(panel.getByText(notice, { exact: true })).toBeVisible();
+    await expect(menu).toHaveAttribute('aria-expanded', 'true');
+    await expect(panel.locator('..')).toHaveAttribute('data-compact', 'true');
     await expect.poll(() => map.boundingBox()).toEqual(mapBox);
     await expect
       .poll(() =>
-        panel.evaluate((el) =>
-          el
-            .getAnimations()
-            .some((animation) => animation.playState === 'running'),
+        panel.evaluate(
+          (el) =>
+            el.parentElement!.hasAttribute('data-size-transition') ||
+            el
+              .getAnimations()
+              .some(
+                ({ pending, playState }) => pending || playState === 'running',
+              ),
         ),
       )
       .toBe(false);
-    if (panelBox === null) panelBox = (await panel.boundingBox())!;
-    else expect(await panel.boundingBox()).toEqual(panelBox);
-    await expect
-      .poll(async () => {
-        const panelBox = (await panel.boundingBox())!;
-        const dockBox = (await dock.boundingBox())!;
-        return dockBox.y - (panelBox.y + panelBox.height);
-      })
-      .toBeCloseTo(8);
+    const geometry = await panel.evaluate((el) => {
+      const { top, bottom, left, right, width, height } =
+        el.getBoundingClientRect();
+      const dock = document
+        .querySelector('.explore-dock')!
+        .getBoundingClientRect();
+      const search = document
+        .querySelector('.explore-search-form')!
+        .getBoundingClientRect();
+      return {
+        width,
+        height,
+        top,
+        bottom,
+        centerOffset: Math.abs((left + right - dock.left - dock.right) / 2),
+        dockGap: dock.top - bottom,
+        searchGap: top - search.bottom,
+      };
+    });
+    expect(geometry.width).toBeCloseTo(desktop ? 520 : fullScreen.width - 24);
+    expect(geometry.centerOffset).toBeLessThanOrEqual(1);
+    expect(geometry.dockGap).toBeCloseTo(8);
+    expect(geometry.searchGap).toBeGreaterThan(0);
+    expect(geometry.top).toBeGreaterThanOrEqual(0);
+    expect(geometry.bottom).toBeLessThanOrEqual(fullScreen.height);
+    expect(geometry.height).toBeGreaterThan(0);
+    if (!desktop)
+      expect(geometry.height).toBeLessThanOrEqual(fullScreen.height * 0.55);
+    await noOverflow(page);
     await page.getByRole('button', { name: `${name} 패널 닫기` }).click();
     await expect(menu).toHaveAttribute('aria-expanded', 'false');
+    await expect(panel).toBeHidden();
     await expect(menu).toBeFocused();
-    await menu.click();
+    await menu.press('Enter');
+    await expect(menu).toHaveAttribute('aria-expanded', 'true');
+    await expect(heading).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(menu).toHaveAttribute('aria-expanded', 'false');
+    await expect(panel).toBeHidden();
+    await expect(menu).toBeFocused();
     await expect.poll(() => map.boundingBox()).toEqual(mapBox);
+    await noOverflow(page);
   }
-  await noOverflow(page);
 });
 
 test('구·동 선택, 다중 분석 선택과 미검증 숫자 차단', async ({ page }) => {
