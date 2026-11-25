@@ -25,6 +25,7 @@ import type { PlaceSelection } from '@/features/place-search/use-place-search';
 import type { CafeCenter } from '@/entities/cafe/cafes';
 import { useCurrentLocation } from './use-current-location';
 import { locationMessages } from './current-location';
+import { searchMarkerImage } from './map-marker-style';
 
 type MapStatus = KakaoConnection['status'];
 type BoundaryOverlay = { key: string; geometry: BoundaryGeometry };
@@ -564,18 +565,12 @@ export function KakaoMapView({
       return;
     const { map, maps } = context;
     const place = searchSelection.place;
-    const svg =
-      '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40"><path d="M16 39C12 32 1 25 1 16a15 15 0 1 1 30 0c0 9-11 16-15 23Z" fill="#B45309" stroke="white" stroke-width="2"/><circle cx="14" cy="14" r="6" fill="none" stroke="white" stroke-width="2"/><path d="m19 19 6 6" stroke="white" stroke-width="3"/></svg>';
     const marker = new maps.Marker({
       position: new maps.LatLng(place.latitude, place.longitude),
       title: `검색 위치: ${place.name}`,
       clickable: true,
       zIndex: 4,
-      image: new maps.MarkerImage(
-        `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
-        new maps.Size(32, 40),
-        { offset: new maps.Point(16, 40) },
-      ),
+      image: searchMarkerImage(maps),
     });
     const click = () => {
       maps.event.preventMap();

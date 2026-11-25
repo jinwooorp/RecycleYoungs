@@ -90,7 +90,7 @@ export function StatisticsQuarterSelect({
           id="statistics-quarter-coverage"
           className="space-y-1 text-xs leading-5 text-muted-foreground"
         >
-          <p>서울 전체 게시 현황</p>
+          <p className="text-warning">서울 전체 게시 현황</p>
           <ul>
             <li>자치구 · {coverage(selected.districtMetrics)}</li>
             <li>행정동 · {coverage(selected.dongMetrics)}</li>
@@ -99,7 +99,11 @@ export function StatisticsQuarterSelect({
         </div>
       )}
       {loading && <p role="status">통계 분기 목록 불러오는 중…</p>}
-      {catalog.status === 'error' && <p role="alert">{catalog.error}</p>}
+      {catalog.status === 'error' && (
+        <p role="alert" className="text-destructive">
+          {catalog.error}
+        </p>
+      )}
       {catalog.status === 'ready' && !catalog.options.length && (
         <p role="status">조회 가능한 통계 분기가 없습니다.</p>
       )}

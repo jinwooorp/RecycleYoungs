@@ -134,7 +134,7 @@ function Competition({
   return (
     <section
       aria-label={`후보지 ${analysis.item.slot} 주변 경쟁 환경`}
-      className="min-w-0 space-y-3 rounded-xl border p-4 text-sm [overflow-wrap:anywhere]"
+      className="min-w-0 space-y-3 rounded-xl border bg-card p-4 text-sm text-card-foreground [overflow-wrap:anywhere]"
     >
       <h4 className="font-semibold">
         {analysis.item.slot} · {analysis.item.name}
@@ -277,7 +277,7 @@ function DongMetrics({
   return (
     <section
       aria-label={`후보지 ${item.slot} 행정동 통계`}
-      className="min-w-0 space-y-3 rounded-xl border p-4 text-sm [overflow-wrap:anywhere]"
+      className="min-w-0 space-y-3 rounded-xl border bg-card p-4 text-sm text-card-foreground [overflow-wrap:anywhere]"
     >
       <h4 className="font-semibold">
         {item.slot} · {item.name}
@@ -416,7 +416,7 @@ export function CandidatePanel({
             }
             required
             maxLength={candidateNameLimit}
-            className="h-8 min-w-0 flex-1 rounded-md border px-2 text-sm"
+            className="form-control h-8 min-w-0 flex-1 rounded-md border px-2 text-sm"
           />
           <Button
             type="submit"
@@ -429,7 +429,7 @@ export function CandidatePanel({
           <Button
             type="button"
             size="sm"
-            variant="outline"
+            variant="destructive"
             aria-label={`후보지 ${item.slot} 삭제`}
             onClick={() => {
               const index = items.findIndex(
@@ -467,7 +467,7 @@ export function CandidatePanel({
                 event.target.value.slice(0, candidateNoteLimit),
               )
             }
-            className="block w-full min-w-0 resize-y rounded-md border border-input bg-background p-2 text-base outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
+            className="form-control block w-full min-w-0 resize-y rounded-md border p-2 text-base"
           />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p
@@ -487,7 +487,14 @@ export function CandidatePanel({
             </Button>
           </div>
           {result && (
-            <p role="status" className="text-xs">
+            <p
+              role="status"
+              className={
+                result === 'saved'
+                  ? 'text-xs text-success'
+                  : 'text-xs text-destructive'
+              }
+            >
               {result === 'saved'
                 ? `후보지 ${item.slot} 메모를 저장했습니다.`
                 : `후보지 ${item.slot} 메모를 지속 저장하지 못했습니다. 이 화면에 내용을 유지합니다.`}
@@ -554,7 +561,9 @@ export function CandidatePanel({
       )}
       {notice && (
         <div role={notice.error ? 'alert' : 'status'} className="text-sm">
-          <p>{notice.message}</p>
+          <p className={notice.error ? 'text-destructive' : 'text-success'}>
+            {notice.message}
+          </p>
           {notice.retry && (
             <Button
               size="sm"
@@ -568,7 +577,7 @@ export function CandidatePanel({
       )}
       {candidates.storageIssue && (
         <div className="space-y-2 rounded-lg border p-3 text-sm">
-          <p role="alert">
+          <p role="alert" className="text-warning">
             {
               {
                 'read-failed':
@@ -633,15 +642,15 @@ export function CandidatePanel({
                       key={item.slot}
                       aria-label={`후보지 ${item.slot} 요약`}
                       data-selected={selected}
-                      className="flex min-w-0 flex-col gap-2 rounded-xl border p-3 [overflow-wrap:anywhere] data-[selected=true]:border-primary data-[selected=true]:bg-primary/5"
+                      className="flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-3 text-card-foreground [overflow-wrap:anywhere] data-[selected=true]:border-candidate-selected data-[selected=true]:bg-candidate-selected/5"
                     >
-                      <h4 className="text-sm font-semibold">
+                      <h4 className="text-sm font-semibold text-primary">
                         {item.slot} · {item.name}
                       </h4>
                       <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
                         <CandidateRegion analysis={analysis} />
                         {selected && (
-                          <span className="text-xs font-medium text-primary">
+                          <span className="rounded-md bg-candidate-selected/10 px-1.5 text-xs font-semibold text-candidate-selected">
                             지도 선택됨
                           </span>
                         )}
@@ -790,7 +799,7 @@ export function CandidatePanel({
                   ref={(node) => {
                     detailsRefs.current[item.slot] = node;
                   }}
-                  className="min-w-0 rounded-xl border p-3 [overflow-wrap:anywhere]"
+                  className="min-w-0 rounded-xl border bg-card p-3 text-card-foreground [overflow-wrap:anywhere]"
                 >
                   <summary className="cursor-pointer rounded text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring">
                     {item.slot} · {item.name} 상세 및 관리

@@ -1,16 +1,22 @@
 import { useRef } from 'react';
 import { useLandingMotion } from './use-landing-motion';
-import { ArrowRight, MapPin } from 'lucide-react';
+import {
+  ArrowRight,
+  ChartNoAxesCombined,
+  Compass,
+  GitCompareArrows,
+  Search,
+} from 'lucide-react';
 import { Link } from 'react-router';
 import { Button } from '@/shared/ui/button';
+import { BrandLogo, brandName } from '@/shared/ui/brand-logo';
 import nearbyCafes from '@/pages/landing/assets/nearby-cafes.webp';
 import nearbyCafesMobile from '@/pages/landing/assets/nearby-cafes-mobile.webp';
 import placeSearch from '@/pages/landing/assets/place-search.webp';
 import districtAnalysis from '@/pages/landing/assets/district-analysis.webp';
 import candidateComparison from '@/pages/landing/assets/candidate-comparison.webp';
+import { LandingMapArt } from './landing-map-art';
 import './landing-page.css';
-
-const brand = '여기 창업해도 돼?';
 
 const sections = [
   { id: 'features', label: '지도 탐색' },
@@ -20,24 +26,59 @@ const sections = [
 ];
 
 const steps = [
-  ['장소 검색', '관심 있는 동네나 역 이름을 검색하세요.'],
-  ['상권 분석', '주변 카페와 행정구역별 상권 통계를 살펴보세요.'],
-  ['후보지 등록', '지도나 검색 결과에서 다시 보고 싶은 위치를 추가하세요.'],
-  ['후보지 비교', '같은 반경의 카페 수와 행정동 통계를 나란히 보세요.'],
+  ['장소 찾기', '관심 있는 동네, 주소 또는 역 이름을 검색하세요.'],
+  ['주변 카페 확인', '선택한 지점에서 500m나 1km 이내의 카페를 확인하세요.'],
+  ['상권 지표 확인', '기준 분기를 고르고 점포·추정매출·유동인구를 살펴보세요.'],
+  [
+    '후보지 저장 및 비교',
+    '후보지를 저장하고 같은 반경의 카페 수와 행정동 통계를 비교하세요.',
+  ],
 ];
 
-// 프리뷰 이미지에 표시된 500m 조회 결과를 읽을 수 있는 텍스트로도 제공합니다.
+// 조회를 완료한 프리뷰의 숫자를 이미지 밖에서도 읽을 수 있게 제공합니다.
+const districtPreviewMetrics = [
+  { label: '점포 수', value: '2,306', unit: '개', published: '11월 17일' },
+  {
+    label: '당월 추정매출액',
+    value: '63,712,527,241',
+    unit: '원',
+    published: '11월 13일',
+  },
+  {
+    label: '지역 전체 유동인구',
+    value: '111,570,753',
+    unit: '명',
+    published: '11월 13일',
+  },
+];
+
+const candidateMetricLabels = [
+  '카페 점포',
+  '당월 추정매출',
+  '지역 전체 유동인구',
+];
 const candidatePreviewResults = [
-  ['A · 홍대입구역 2호선', '마포구 서교동 · 289곳'],
-  ['B · 서울특별시청', '중구 명동 · 187곳'],
-  ['C · 성수역 2호선', '성동구 성수2가3동 · 117곳'],
+  {
+    name: 'A · 홍대입구역',
+    result: '마포구 서교동 · 278곳',
+    metrics: ['702개', '29,055,188,146원', '17,256,069명'],
+  },
+  {
+    name: 'B · 합정역',
+    result: '마포구 서교동 · 171곳',
+    metrics: ['702개', '29,055,188,146원', '17,256,069명'],
+  },
+  {
+    name: 'C · 상수역',
+    result: '마포구 서강동 · 148곳',
+    metrics: ['118개', '3,294,383,412원', '6,024,315명'],
+  },
 ];
 
 function Brand() {
   return (
     <Link to="/" className="landing-brand">
-      <MapPin aria-hidden="true" size={24} />
-      {brand}
+      <BrandLogo />
     </Link>
   );
 }
@@ -56,31 +97,70 @@ function ExploreLink({ className = '' }: { className?: string }) {
 function PreviewBar({ label }: { label: string }) {
   return (
     <div className="landing-preview-bar" aria-hidden="true">
-      <span className="landing-preview-dots">
-        <i />
-        <i />
-        <i />
-      </span>
-      <span>
-        {brand} / {label}
-      </span>
-      <span>실제 화면</span>
+      {label}
     </div>
   );
 }
 
-function SectionLabel({
-  number,
-  children,
-}: {
-  number: string;
-  children: string;
-}) {
+function SectionLabel({ children }: { children: string }) {
+  return <p className="landing-section-label">{children}</p>;
+}
+
+function NearbyPreview() {
   return (
-    <p className="landing-section-label">
-      <span aria-hidden="true">{number}</span>
-      {children}
-    </p>
+    <figure className="landing-hero-stage">
+      <div className="landing-preview landing-preview-hero">
+        <div className="landing-hero-map">
+          <LandingMapArt purpose="nearby" />
+          <div className="landing-map-query">
+            <Search size={16} aria-hidden="true" /> 홍대입구역
+          </div>
+          <span className="landing-map-key">지도 개념도</span>
+        </div>
+        <div className="landing-preview-sheet">
+          <div className="landing-sheet-heading">
+            <strong>주변 탐색</strong>
+            <span>500m 반경</span>
+          </div>
+          <p>
+            홍대입구역 주변 카페 <strong>289곳</strong>
+          </p>
+          <picture>
+            <source
+              media="(width < 600px)"
+              srcSet={nearbyCafesMobile}
+              width={340}
+              height={78}
+            />
+            <img
+              src={nearbyCafes}
+              width={340}
+              height={160}
+              fetchPriority="high"
+              alt="홍대입구역 500m 반경의 경쟁 카페 거리순 목록 일부"
+            />
+          </picture>
+        </div>
+        <div className="landing-preview-dock" aria-hidden="true">
+          <span>
+            <Compass />
+            주변 탐색
+          </span>
+          <span>
+            <ChartNoAxesCombined />
+            상권 분석
+          </span>
+          <span>
+            <GitCompareArrows />
+            후보지 분석
+          </span>
+        </div>
+      </div>
+      <figcaption>
+        지도 개념도와 실제 카페 조회 예시 · 홍대입구역 2호선 검색 결과 중심 ·
+        원천 기준 2026년 9월
+      </figcaption>
+    </figure>
   );
 }
 
@@ -98,23 +178,29 @@ function ProductPreview({
         className="landing-map-stage"
       >
         <div className="landing-preview">
-          <PreviewBar label="장소 검색" />
-          <img
-            src={placeSearch}
-            width={1200}
-            height={750}
-            loading="lazy"
-            decoding="async"
-            alt={
-              decorative
-                ? ''
-                : '성수역 검색 결과 목록과 성동구 경계를 표시한 실제 지도 탐색 화면'
-            }
-          />
+          <div className="landing-search-map">
+            <LandingMapArt purpose="search" />
+            <img
+              src={placeSearch}
+              width={352}
+              height={40}
+              loading="lazy"
+              decoding="async"
+              alt={decorative ? '' : '홍대입구역을 입력한 실제 장소 검색창'}
+            />
+            <span className="landing-map-key">지도 개념도</span>
+          </div>
+          <div className="landing-search-actions">
+            <p>
+              <strong>홍대입구역</strong> <span>선택한 장소 예시</span>
+            </p>
+            <ul>
+              <li>이 위치 상권 분석</li>
+              <li>이 위치 주변 카페 보기</li>
+              <li>후보지로 추가</li>
+            </ul>
+          </div>
         </div>
-        <figcaption>
-          성수역 장소 검색 예시 <span>지도 © Kakao</span>
-        </figcaption>
       </figure>
     );
   if (kind === 1)
@@ -124,21 +210,38 @@ function ProductPreview({
         className="landing-analysis-stage"
       >
         <div className="landing-preview">
-          <PreviewBar label="상권 분석" />
-          <img
-            src={districtAnalysis}
-            width={360}
-            height={655}
-            loading="lazy"
-            decoding="async"
-            alt={
-              decorative
-                ? ''
-                : '용답동의 2026년 2분기 카페 점포 수와 당월 추정매출, 전분기 점포 수 비교를 보류한 사유가 표시된 상권 분석 화면'
-            }
-          />
+          <PreviewBar label="마포구 전체 · 2026년 2분기" />
+          <div className="landing-analysis-preview">
+            <dl className="landing-preview-metrics">
+              {districtPreviewMetrics.map(
+                ({ label, value, unit, published }) => (
+                  <div key={label}>
+                    <dt>{label}</dt>
+                    <dd>
+                      <strong>{value}</strong> {unit}
+                    </dd>
+                    <dd className="landing-preview-date">
+                      DB 게시 2026년 {published}
+                    </dd>
+                  </div>
+                ),
+              )}
+            </dl>
+            <img
+              src={districtAnalysis}
+              width={332}
+              height={240}
+              loading="lazy"
+              decoding="async"
+              alt={
+                decorative
+                  ? ''
+                  : '마포구의 2026년 2분기 일반 점포 1,937개와 프랜차이즈 점포 369개를 같은 축에 표시한 막대그래프'
+              }
+            />
+          </div>
         </div>
-        <figcaption>성동구 용답동 · 2026년 2분기 상권 분석</figcaption>
+        <figcaption>마포구 · 2026년 2분기 · 서울시 상권분석서비스</figcaption>
       </figure>
     );
   return (
@@ -146,6 +249,35 @@ function ProductPreview({
       data-landing-reveal={decorative ? undefined : ''}
       className="landing-candidate-preview"
     >
+      {!decorative && (
+        <div className="landing-candidate-overview">
+          <p>
+            후보지별 저장 위치 중심 500m · 카페 원천 2026년 9월 / 행정동 통계 ·
+            2026년 2분기
+          </p>
+          <ul
+            aria-label="후보지 500m 조회 결과"
+            className="landing-candidate-summary"
+          >
+            {candidatePreviewResults.map(({ name, result, metrics }) => (
+              <li key={name}>
+                <strong>{name}</strong> <span>{result}</span>
+                <dl className="landing-candidate-metrics">
+                  {candidateMetricLabels.map((label, index) => (
+                    <div key={label}>
+                      <dt>{label}</dt>
+                      <dd>{metrics[index]}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </li>
+            ))}
+          </ul>
+          <p className="landing-scroll-note">
+            아래 비교표는 좌우로 움직여 자세히 볼 수 있어요.
+          </p>
+        </div>
+      )}
       <div className="landing-preview">
         <PreviewBar label="후보지 비교" />
         <div
@@ -156,35 +288,18 @@ function ProductPreview({
         >
           <img
             src={candidateComparison}
-            width={1440}
-            height={900}
+            width={892}
+            height={849}
             loading="lazy"
             decoding="async"
             alt={
               decorative
                 ? ''
-                : '서울 지도에 표시된 후보지 A·B·C와 왼쪽 후보지 요약 패널'
+                : '홍대입구역, 합정역, 상수역의 경쟁 카페와 행정동 통계를 나란히 표시한 비교표. 홍대입구역이 선택되어 있습니다.'
             }
           />
         </div>
       </div>
-      <figcaption>
-        <span>500m 내 경쟁 카페 조회 예시</span>
-        <span>지도 © Kakao</span>
-        <ul
-          aria-label="후보지 500m 조회 결과"
-          className="landing-candidate-summary"
-        >
-          {candidatePreviewResults.map(([place, result]) => (
-            <li key={place}>
-              <strong>{place}</strong> <span>{result}</span>
-            </li>
-          ))}
-        </ul>
-        <span className="landing-scroll-note">
-          화면을 좌우로 움직여 확인할 수 있어요.
-        </span>
-      </figcaption>
     </figure>
   );
 }
@@ -219,42 +334,18 @@ export default function LandingPage() {
         <section aria-labelledby="landing-heading" className="landing-hero">
           <div className="landing-shell landing-hero-inner">
             <div className="landing-hero-copy">
-              <p className="landing-eyebrow">
-                서울의 창업 후보지를 데이터로 탐색
-              </p>
+              <p className="landing-eyebrow">공공데이터 기반 창업 입지 탐색</p>
               <h1 id="landing-heading">
                 <span>창업할 곳,</span> <span>감으로만 고르지 마세요.</span>
               </h1>
               <p className="landing-hero-description">
-                서울의 상권 데이터를 확인하고 관심 있는 후보지를 비교해 보세요.
-                현재는 카페 업종을 지원합니다.
+                서울의 주변 카페와 상권 지표를 살펴보고 창업 후보지를
+                비교하세요. 현재는 카페 업종을 지원합니다.
               </p>
               <ExploreLink />
             </div>
 
-            <figure className="landing-hero-stage">
-              <div className="landing-preview landing-preview-hero">
-                <PreviewBar label="주변 탐색" />
-                <picture>
-                  <source
-                    media="(width < 600px)"
-                    srcSet={nearbyCafesMobile}
-                    width={390}
-                    height={680}
-                  />
-                  <img
-                    src={nearbyCafes}
-                    width={1200}
-                    height={750}
-                    fetchPriority="high"
-                    alt="홍대입구역 500m 주변 카페를 지도에 묶어 표시하고 조회 건수와 거리순 목록을 보여주는 탐색 화면"
-                  />
-                </picture>
-              </div>
-              <figcaption>
-                홍대입구역 500m 주변 카페 조회 예시 <span>지도 © Kakao</span>
-              </figcaption>
-            </figure>
+            <NearbyPreview />
           </div>
         </section>
 
@@ -294,15 +385,15 @@ export default function LandingPage() {
                 className="landing-feature"
               >
                 <div data-landing-reveal className="landing-feature-copy">
-                  <SectionLabel number="01">지도·장소 탐색</SectionLabel>
+                  <SectionLabel>지도·장소 탐색</SectionLabel>
                   <h2 id="features-heading">
                     관심 있는 동네를 <br />
                     지도에서 찾으세요
                   </h2>
                   <p>
                     자치구·행정동을 선택하거나 장소·주소·지하철역을 검색해 관심
-                    위치로 이동하세요. 선택한 지점 주변의 카페도 확인할 수
-                    있어요.
+                    위치로 이동하세요. 현재 지도 영역의 카페를 둘러보거나, 선택
+                    지점에서 500m·1km 반경으로 조회할 수 있습니다.
                   </p>
                 </div>
                 <ProductPreview kind={0} />
@@ -319,14 +410,14 @@ export default function LandingPage() {
                     data-landing-reveal
                     className="landing-feature-copy landing-analysis-copy"
                   >
-                    <SectionLabel number="02">상권 분석</SectionLabel>
+                    <SectionLabel>상권 분석</SectionLabel>
                     <h2 id="analysis-heading">
                       숫자가 가리키는 <br />
                       범위부터 살펴보세요
                     </h2>
                     <p>
-                      화면에 표시된 기준 분기와 자료 게시 시점을 확인하고,
-                      지표마다 어떤 범위를 집계했는지 살펴보세요.
+                      기준 분기를 선택하고 공공데이터의 출처와 게시 시점을
+                      확인하세요. 지표마다 집계하는 범위가 다릅니다.
                     </p>
                     <dl className="landing-scope-list">
                       <div>
@@ -336,8 +427,9 @@ export default function LandingPage() {
                       <div>
                         <dt>행정구역 전체</dt>
                         <dd>
-                          자치구·행정동의 카페 업종 점포 현황과 당월 추정매출,
-                          업종 구분 없는 지역 전체 유동인구를 표시합니다.
+                          자치구·행정동의 카페 점포 수와 개업률·폐업률, 당월
+                          추정매출, 업종 구분 없는 지역 전체 유동인구를
+                          표시합니다.
                         </dd>
                       </div>
                     </dl>
@@ -358,14 +450,16 @@ export default function LandingPage() {
                     className="landing-comparison-heading"
                   >
                     <div>
-                      <SectionLabel number="03">후보지 비교</SectionLabel>
+                      <SectionLabel>후보지 비교</SectionLabel>
                       <h2 id="comparison-heading">
                         후보지를 같은 기준으로 비교하세요
                       </h2>
                     </div>
                     <p>
-                      후보지를 최대 세 곳(A·B·C)까지 등록해 같은 반경의 카페
-                      수와 각 후보지가 속한 행정동의 상권 통계를 비교하세요.
+                      후보지를 이 브라우저에 최대 세 곳까지 저장하고 이름과
+                      메모를 관리하세요. 지도에서 위치를 확인하며 경쟁 카페 수와
+                      행정동 통계를 비교할 수 있습니다. 같은 행정동에 속한
+                      후보지는 행정동 통계를 공유합니다.
                     </p>
                   </div>
                   <ProductPreview kind={2} />
@@ -391,7 +485,7 @@ export default function LandingPage() {
             className="landing-shell landing-workflow"
           >
             <div data-landing-reveal>
-              <SectionLabel number="04">이용 방법</SectionLabel>
+              <SectionLabel>이용 방법</SectionLabel>
               <h2 id="steps-heading">검색에서 비교까지</h2>
             </div>
             <ol>
@@ -414,8 +508,11 @@ export default function LandingPage() {
         >
           <div className="landing-final-inner">
             <div>
-              <p>{brand}</p>
+              <p>{brandName}</p>
               <h2 id="final-heading">첫 후보지를 찾아보세요</h2>
+              <p className="landing-final-description">
+                서울에서 관심 있는 동네나 역을 검색해 주변 카페부터 살펴보세요.
+              </p>
             </div>
             <ExploreLink />
           </div>
@@ -429,8 +526,8 @@ export default function LandingPage() {
             소상공인시장진흥공단 상가(상권)정보
           </p>
           <p>
-            프리뷰는 실제 조회 화면을 캡처한 예시입니다. 분석 결과는 창업 검토를
-            위한 참고 자료입니다.
+            프리뷰의 지도는 가상으로 그린 개념도이며, 목록과 통계는 실제 조회
+            예시입니다. 분석 결과는 창업 검토를 위한 참고 자료입니다.
           </p>
         </div>
       </footer>

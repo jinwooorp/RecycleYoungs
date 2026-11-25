@@ -98,6 +98,7 @@ export async function loadKakaoMaps() {
     LatLngBounds,
     Marker: class {
       setMap() {}
+      setImage() {}
       setZIndex() {}
     },
     Circle: class {

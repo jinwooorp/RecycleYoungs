@@ -19,10 +19,10 @@ export function StatisticBars({
   return (
     <section
       aria-labelledby={titleId}
-      className="min-w-0 space-y-2 rounded-xl border px-3 py-2"
+      className="min-w-0 space-y-2 rounded-xl border bg-card px-3 py-2 text-card-foreground"
     >
       <div className="space-y-0.5">
-        <h5 id={titleId} className="text-sm font-semibold">
+        <h5 id={titleId} className="text-sm font-semibold text-primary">
           {title}
         </h5>
         <p className="text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
@@ -52,7 +52,7 @@ export function StatisticBars({
                     focusable="false"
                     viewBox={`0 0 ${BAR_AXIS_WIDTH} 8`}
                     preserveAspectRatio="none"
-                    className="block h-2 w-full rounded-sm bg-muted text-primary"
+                    className="block h-2 w-full rounded-sm bg-accent/75 text-primary"
                   >
                     <rect width={bar.width} height="8" fill="currentColor" />
                     {bar.zero && (

@@ -45,7 +45,7 @@ export function CandidateComparison({
           className="w-full table-fixed border-collapse text-sm [overflow-wrap:anywhere]"
         >
           <thead>
-            <tr className="border-y bg-muted/50">
+            <tr className="border-y bg-muted text-primary">
               <th
                 scope="col"
                 className="w-1/5 px-3 py-2 text-left font-semibold"
@@ -57,9 +57,12 @@ export function CandidateComparison({
                   key={slot}
                   scope="col"
                   data-selected={selected === slot}
-                  className="px-3 py-2 text-left font-semibold data-[selected=true]:bg-accent"
+                  className="px-3 py-2 text-left font-semibold data-[selected=true]:bg-candidate-selected/10 data-[selected=true]:text-candidate-selected data-[selected=true]:underline data-[selected=true]:underline-offset-4"
                 >
                   {slot} · {name}
+                  {selected === slot && (
+                    <span className="sr-only"> · 지도 선택됨</span>
+                  )}
                 </th>
               ))}
             </tr>
@@ -74,7 +77,7 @@ export function CandidateComparison({
                   <td
                     key={slot}
                     data-selected={selected === slot}
-                    className="px-3 py-3 data-[selected=true]:bg-accent/50"
+                    className="px-3 py-3 tabular-nums data-[selected=true]:bg-candidate-selected/5"
                   >
                     {cells[index]}
                   </td>
@@ -89,20 +92,25 @@ export function CandidateComparison({
             <section
               key={label}
               aria-label={label}
-              className="min-w-0 rounded-xl border text-sm [overflow-wrap:anywhere]"
+              className="min-w-0 rounded-xl border bg-card text-sm text-card-foreground [overflow-wrap:anywhere]"
             >
-              <h4 className="border-b px-3 py-2 font-semibold">{label}</h4>
+              <h4 className="rounded-t-xl border-b bg-muted px-3 py-2 font-semibold text-primary">
+                {label}
+              </h4>
               <dl className="divide-y">
                 {candidates.map(({ slot, name }, index) => (
                   <div
                     key={slot}
                     data-selected={selected === slot}
-                    className="grid min-w-0 grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-2 px-3 py-2 data-[selected=true]:bg-accent/50"
+                    className="group grid min-w-0 grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-2 px-3 py-2 data-[selected=true]:bg-candidate-selected/5"
                   >
-                    <dt className="font-medium">
+                    <dt className="font-medium group-data-[selected=true]:text-candidate-selected group-data-[selected=true]:underline group-data-[selected=true]:underline-offset-4">
                       {slot} · {name}
+                      {selected === slot && (
+                        <span className="sr-only"> · 지도 선택됨</span>
+                      )}
                     </dt>
-                    <dd className="min-w-0">{cells[index]}</dd>
+                    <dd className="min-w-0 tabular-nums">{cells[index]}</dd>
                   </div>
                 ))}
               </dl>

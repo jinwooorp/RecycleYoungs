@@ -83,7 +83,7 @@ export function PlaceSearch({
           placeholder="장소·주소·지하철역"
           aria-describedby="place-search-help"
           aria-controls={resultsVisible ? 'place-search-results' : undefined}
-          className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none disabled:text-muted-foreground"
+          className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:text-muted-foreground"
         />
         <Button
           type="submit"
@@ -190,7 +190,7 @@ export function PlaceSearch({
                           <button
                             type="button"
                             aria-label={`${place.name} · ${place.address} · ${place.kind}${place.isSeoul ? '' : ' · 서울 서비스 범위 밖 또는 소재 확인 필요'}`}
-                            className="flex w-full flex-col gap-1 rounded-lg p-3 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                            className="flex w-full flex-col gap-1 rounded-lg border bg-card p-3 text-left text-card-foreground outline-none hover:border-ring hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
                             onClick={(event) => {
                               focusSelectedResult.current =
                                 event.detail === 0 ||
@@ -199,7 +199,7 @@ export function PlaceSearch({
                               onSelect?.(place);
                             }}
                           >
-                            <span className="text-sm font-medium [overflow-wrap:anywhere]">
+                            <span className="text-sm font-semibold text-primary [overflow-wrap:anywhere]">
                               {place.name}
                             </span>
                             <span className="text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
@@ -220,7 +220,7 @@ export function PlaceSearch({
             ) : (
               search.selected && (
                 <>
-                  <h3 className="text-sm font-semibold [overflow-wrap:anywhere]">
+                  <h3 className="text-sm font-semibold text-primary [overflow-wrap:anywhere]">
                     {search.selected.place.name}
                   </h3>
                   <p className="text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">

@@ -208,7 +208,12 @@ function createSdk() {
       zIndex?: number;
       image?: object;
     }) {
-      return { ...options, setMap: vi.fn(), setZIndex: vi.fn() };
+      return {
+        ...options,
+        setMap: vi.fn(),
+        setImage: vi.fn(),
+        setZIndex: vi.fn(),
+      };
     }),
     MarkerClusterer: vi.fn(function (options: KakaoClustererOptions) {
       const managed = new Set<KakaoMarker>();
@@ -3285,6 +3290,16 @@ test('목록 선택 핀은 묶음에서 분리하고 재조회·축소에는 카
   expect(clusterer.managed.has(marker)).toBe(false);
   expect(marker.setMap).toHaveBeenLastCalledWith(map);
   expect(marker.setZIndex).toHaveBeenLastCalledWith(2);
+  const selectedImage = marker.setImage.mock.lastCall?.[0];
+  expect(marker.image).toMatchObject({
+    size: { width: 28, height: 34 },
+    offset: { x: 14, y: 34 },
+  });
+  expect(selectedImage).toMatchObject({
+    size: marker.image.size,
+    offset: marker.image.offset,
+  });
+  expect(decodeURIComponent(selectedImage.src)).toContain('stroke="#8be26e"');
   const info = maps.InfoWindow.mock.results[0].value;
   expect(info.open).toHaveBeenLastCalledWith(map, marker);
   const moves = map.setCenter.mock.calls.length;
@@ -3305,6 +3320,8 @@ test('목록 선택 핀은 묶음에서 분리하고 재조회·축소에는 카
   view.rerender({ cafes: value });
   expect(info.close).toHaveBeenCalled();
   expect(clusterer.managed.has(marker)).toBe(true);
+  expect(marker.setImage).toHaveBeenLastCalledWith(marker.image);
+  expect(maps.Marker).toHaveBeenCalledTimes(2);
   view.unmount();
 });
 
@@ -3680,6 +3697,55 @@ test('지역·반경 변경과 오류·빈 결과·지도 교체에서 기존 �
   expect(second.maps.MarkerClusterer.mock.results[0].value.managed.size).toBe(
     0,
   );
+});
+
+test('후보지 선택을 바꿀 때 같은 마커와 앵커를 사용하고 선택 외곽선과 우선순위만 바꾼다', () => {
+  const { maps, map } = createSdk();
+  const context = { maps, map };
+  const candidates = [
+    {
+      slot: 'A' as const,
+      name: '첫 후보지',
+      longitude: 126.978,
+      latitude: 37.5665,
+    },
+    {
+      slot: 'B' as const,
+      name: '둘째 후보지',
+      longitude: 126.979,
+      latitude: 37.5665,
+    },
+    {
+      slot: 'C' as const,
+      name: '셋째 후보지',
+      longitude: 126.98,
+      latitude: 37.5665,
+    },
+  ];
+  const select = vi.fn();
+  const add = vi.fn();
+  const view = renderHook(
+    ({ selected }) =>
+      useCandidateMap(context, candidates, selected, false, select, add),
+    { initialProps: { selected: 'A' as 'A' | 'B' } },
+  );
+  const [a, b, c] = maps.Marker.mock.results.map(({ value }) => value);
+  expect(decodeURIComponent(a.image.src)).toContain('<rect');
+  expect(decodeURIComponent(b.image.src)).not.toContain('<rect');
+  const listeners = maps.event.addListener.mock.calls.length;
+  view.rerender({ selected: 'B' });
+  expect(maps.Marker).toHaveBeenCalledTimes(3);
+  expect(maps.event.addListener).toHaveBeenCalledTimes(listeners);
+  expect(a.setZIndex).toHaveBeenLastCalledWith(6);
+  expect(b.setZIndex).toHaveBeenLastCalledWith(7);
+  const image = b.setImage.mock.lastCall?.[0];
+  expect(image).toMatchObject({ size: b.image.size, offset: { x: 20, y: 42 } });
+  expect(decodeURIComponent(image.src)).toContain('fill="#4338ca"');
+  expect(decodeURIComponent(image.src)).toContain('<rect');
+  expect(decodeURIComponent(image.src)).toContain('>B</text>');
+  expect(c.setImage).not.toHaveBeenCalled();
+  view.unmount();
+  expect(maps.event.removeListener).toHaveBeenCalledTimes(listeners);
 });
 
 test('카페만 묶고 후보지 A·B·C와 반경 중심 표식은 별도 계층에 유지한다', () => {
