@@ -188,9 +188,9 @@ npm run test:e2e:list
 
 ## GitHub Actions CI
 
-`project-upgrade` Push와 이 브랜치 대상 PR의 열기·동기화·재열기·수정·검토 준비 전환에 실행합니다.
+`main` 또는 `project-upgrade`에 푸시하면 해당 브랜치의 새 커밋을 검사합니다. 두 브랜치를 대상으로 한 PR을 열거나 다시 열 때, 커밋을 추가하거나 PR을 수정할 때, 검토 준비 상태로 바꿀 때는 브랜치를 합친 결과를 검사합니다.
 
-동일 브랜치나 PR의 이전 실행을 취소합니다.
+예를 들어 `project-upgrade`에서 `main`으로 보내는 PR에서는 병합 전에 합쳐질 코드를 검사합니다. PR을 병합하면 `main`에 반영된 커밋도 푸시 검사 대상이 됩니다. 동일한 브랜치나 PR에서 새 검사가 시작되면 진행 중인 이전 실행을 취소합니다.
 
 [워크플로](../.github/workflows/ci.yml)
 
