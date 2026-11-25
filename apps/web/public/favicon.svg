@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 110 110">
+  <style>
+    .pin { fill: #173629; }
+    .question { color: #8be26e; }
+    @media (prefers-color-scheme: dark) {
+      .pin { fill: #8be26e; }
+      .question { color: #173629; }
+    }
+  </style>
+  <defs>
+    <path id="pin" d="M50 104C39 87 9 61 9 42a41 41 0 0 1 82 0c0 19-30 45-41 62Z" />
+    <g id="question">
+      <path d="M35 29a15 15 0 1 1 24 12c-7 5-9 8-9 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" />
+      <circle cx="50" cy="71" r="5" fill="currentColor" />
+    </g>
+  </defs>
+  <use href="#pin" x="5" class="pin" />
+  <use href="#question" x="5" class="question" />
+</svg>

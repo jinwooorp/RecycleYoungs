@@ -55,6 +55,7 @@ export interface KakaoPolygon {
 
 export interface KakaoMarker {
   setMap(map: KakaoMap | null): void;
+  setImage(image: object): void;
   setZIndex(zIndex: number): void;
 }
 /** Cluster는 SDK 이벤트에서만 제공되며 직접 생성하지 않습니다. */

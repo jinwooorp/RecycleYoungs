@@ -18,6 +18,11 @@ import {
 
 import { cafeBrandLabel } from '@/entities/cafe/cafe-brand';
 import {
+  cafeMarkerImages,
+  radiusColor,
+  radiusMarkerImage,
+} from './map-marker-style';
+import {
   boxesOverlap,
   cafeWindowBounds,
   fitCafeWindow,
@@ -64,7 +69,8 @@ function cafeContent(cafe: Cafe, close?: () => void) {
   const header = document.createElement('div');
   header.className = 'cafe-map-info-header';
   const purpose = document.createElement('p');
-  purpose.className = 'text-xs font-medium text-primary';
+  purpose.className =
+    'rounded-md bg-accent px-2 py-1 text-xs font-semibold text-accent-foreground';
   purpose.textContent = '기존 경쟁 카페';
   header.append(purpose);
   if (close) {
@@ -96,7 +102,7 @@ function cafeContent(cafe: Cafe, close?: () => void) {
   const body = document.createElement('div');
   body.className = 'cafe-map-info-body';
   const title = document.createElement('strong');
-  title.className = 'block font-semibold';
+  title.className = 'block font-semibold text-primary';
   title.textContent = [cafe.storeName, cafe.branchName?.trim()]
     .filter(Boolean)
     .join(' · ');
@@ -111,7 +117,8 @@ function cafeContent(cafe: Cafe, close?: () => void) {
   ]) {
     if (!text) continue;
     const line = document.createElement('p');
-    line.className = 'mt-1 text-xs leading-5 text-muted-foreground';
+    line.className =
+      'mt-1 text-xs leading-5 text-muted-foreground tabular-nums';
     line.textContent = text;
     body.append(line);
   }
@@ -153,6 +160,7 @@ export function useCafeMap(
   const cafeLayerEnabled = scopeKey !== undefined && !overlaysHidden;
   const layerRef = useRef<{
     markers: Map<string, CafeMarkerEntry>;
+    normalImage: object;
     selectedId: string | null;
     onSelect?: (id: string) => void;
     onClearSelection?: () => void;
@@ -185,29 +193,22 @@ export function useCafeMap(
       return;
     const { map, maps } = context;
     const position = new maps.LatLng(center.latitude, center.longitude);
-    // 카페 기본 핀과 다른 고정 SVG 표식을 사용합니다. 외부 문자열을 포함하지 않습니다.
-    const svg =
-      '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40"><path d="M16 39C12 32 1 25 1 16a15 15 0 1 1 30 0c0 9-11 16-15 23Z" fill="#23513F" stroke="white" stroke-width="2"/><circle cx="16" cy="16" r="7" fill="none" stroke="white" stroke-width="2"/><path d="M16 6v20M6 16h20" stroke="white" stroke-width="2"/></svg>';
     const marker = new maps.Marker({
       position,
       title: '임시 관심 위치',
       // 중심 표식을 클릭해도 지도 클릭으로 전파되지 않게 합니다.
       clickable: true,
       zIndex: 3,
-      image: new maps.MarkerImage(
-        `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
-        new maps.Size(32, 40),
-        { offset: new maps.Point(16, 40) },
-      ),
+      image: radiusMarkerImage(maps),
     });
     const circle = new maps.Circle({
       center: position,
       radius: radiusM,
-      strokeColor: '#23513F',
+      strokeColor: radiusColor,
       strokeOpacity: 0.9,
       strokeWeight: 2,
       strokeStyle: 'dash',
-      fillColor: '#23513F',
+      fillColor: radiusColor,
       fillOpacity: 0.08,
     });
     marker.setMap(map);
@@ -300,6 +301,7 @@ export function useCafeMap(
     const clusterer = clustererRef.current;
     if (!context || !clusterer || scopeKey === undefined) return;
     const { map, maps } = context;
+    const images = cafeMarkerImages(maps);
     // 카메라 보정은 SDK 바깥 프레임까지 측정한 뒤 한 번만 실행합니다.
     const info = new maps.InfoWindow({
       disableAutoPan: true,
@@ -536,6 +538,7 @@ export function useCafeMap(
     const markers = new Map<string, CafeMarkerEntry>();
     const layer = {
       markers,
+      normalImage: images.normal,
       selectedId: null as string | null,
       onSelect: undefined as ((id: string) => void) | undefined,
       onClearSelection: undefined as (() => void) | undefined,
@@ -708,12 +711,14 @@ export function useCafeMap(
             ? markers.get(layer.selectedId)
             : undefined;
           if (previous) {
+            previous.marker.setImage(images.normal);
             previous.marker.setZIndex(0);
             previous.marker.setMap(null);
             clusterer.addMarkers([previous.marker], true);
           }
           // 선택 핀은 클러스터에서 분리해 이후 축소·재집계에도 정보창의 앵커를 보장합니다.
           clusterer.removeMarkers([entry.marker], true);
+          entry.marker.setImage(images.selected);
           entry.marker.setZIndex(2);
           entry.marker.setMap(map);
           layer.selectedId = id;
@@ -747,6 +752,7 @@ export function useCafeMap(
         const previous = markers.get(layer.selectedId);
         layer.selectedId = null;
         if (previous) {
+          previous.marker.setImage(images.normal);
           previous.marker.setZIndex(0);
           previous.marker.setMap(null);
           clusterer.addMarkers([previous.marker], true);
@@ -939,6 +945,7 @@ export function useCafeMap(
         position: new maps.LatLng(cafe.latitude, cafe.longitude),
         title: cafe.storeName,
         clickable: true,
+        image: layer.normalImage,
       });
       const click = () => {
         if (layer.markers.get(cafe.bizesId)?.marker !== marker) return;

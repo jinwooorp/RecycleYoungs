@@ -15,6 +15,7 @@
 | API 연동 또는 DB 변경을 검토 | [API.md](API.md)에서 요청·응답 계약을 확인한 뒤 [DATABASE.md](DATABASE.md)에서 테이블·저장·마이그레이션을 살펴봅니다. |
 | 공공데이터를 적재하거나 검증 | [ETL.md](ETL.md)에서 수집·검증·게시 절차와 원천 판본·통계 비교의 검증 근거를 확인합니다. |
 | 코드 변경을 준비하거나 CI 실패를 조사 | [CONVENTIONS.md](CONVENTIONS.md)에서 작성·협업 규칙을 확인한 뒤 [TESTING.md](TESTING.md)에서 필요한 검사를 골라 실행합니다. |
+| 웹 화면에 브랜드나 공통 UI를 적용 | [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)에서 로고, 색상, 글자, 접근성 및 공통 컴포넌트 규칙을 확인합니다. |
 
 ## 기능을 추가할 때 수정할 문서
 

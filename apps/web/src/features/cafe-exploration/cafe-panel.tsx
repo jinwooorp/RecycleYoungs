@@ -39,9 +39,9 @@ function ResourceNotice({
     return (
       <div
         role="alert"
-        className="flex flex-col items-start gap-2 text-xs leading-5 text-muted-foreground"
+        className="flex flex-col items-start gap-2 text-xs leading-5"
       >
-        <p>
+        <p className="text-destructive">
           {label}: {resource.error}
         </p>
         <Button
@@ -211,7 +211,10 @@ export function CafePanel({
         {cafes.status === 'ready' && cafes.data && (
           <>
             <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-              <p role="status" className="text-sm font-medium">
+              <p
+                role="status"
+                className="text-sm font-semibold text-primary tabular-nums"
+              >
                 {nearby ? '반경 내 ' : '지도 영역 '}
                 {cafes.data.totalCount.toLocaleString('ko-KR')}곳
                 {!!pagination.items.length &&
@@ -219,7 +222,10 @@ export function CafePanel({
                   ` · ${pagination.items.length.toLocaleString('ko-KR')}곳 표시`}
               </p>
               {totalPages > 0 && (
-                <p role="status" className="text-xs text-muted-foreground">
+                <p
+                  role="status"
+                  className="text-xs text-muted-foreground tabular-nums"
+                >
                   {page}/{totalPages.toLocaleString('ko-KR')}페이지
                   {!!pagination.items.length &&
                     ` · ${pagination.firstIndex + 1}~${pagination.firstIndex + pagination.items.length}번째 표시`}
@@ -251,7 +257,7 @@ export function CafePanel({
             )}
             {pagination.changed && (
               <div role="alert" className="space-y-2 text-xs">
-                <p>
+                <p className="text-warning">
                   카페 자료가 갱신되었습니다. 첫 페이지부터 다시 조회해 주세요.
                 </p>
                 <Button
@@ -265,7 +271,7 @@ export function CafePanel({
             )}
             {pagination.error && !pagination.changed && (
               <div role="alert" className="space-y-2 text-xs">
-                <p>
+                <p className="text-destructive">
                   {page}페이지 카페 목록: {pagination.error}
                 </p>
                 <Button
@@ -285,7 +291,7 @@ export function CafePanel({
                 {pagination.items.map((cafe) => (
                   <li
                     key={cafe.bizesId}
-                    className="flex min-w-0 flex-col rounded-lg border px-2.5 py-1.5 [overflow-wrap:anywhere]"
+                    className="cafe-result-card flex min-w-0 flex-col rounded-lg border bg-card px-2.5 py-1.5 text-card-foreground [overflow-wrap:anywhere]"
                   >
                     <button
                       type="button"
@@ -294,13 +300,13 @@ export function CafePanel({
                         cafes.selected?.bizesId === cafe.bizesId ||
                         cafes.listOnlyCafe?.bizesId === cafe.bizesId
                       }
-                      className="block w-full flex-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring aria-pressed:bg-accent/40"
+                      className="block w-full flex-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      <span className="block text-sm font-medium text-primary">
+                      <span className="block text-sm font-semibold text-primary">
                         {cafe.storeName}
                         {cafe.branchName ? ` · ${cafe.branchName}` : ''}
                       </span>
-                      <span className="flex flex-wrap gap-x-2 text-xs leading-4 text-muted-foreground">
+                      <span className="flex flex-wrap gap-x-2 text-xs leading-4 text-muted-foreground tabular-nums">
                         <span>
                           {cafe.semasIndustryName}
                           {nearby &&
@@ -384,7 +390,7 @@ function CafePageNavigation({
             aria-current={number === page ? 'page' : undefined}
             onClick={() => goTo(number)}
           >
-            {number}
+            <span className="tabular-nums">{number}</span>
           </Button>
         ))}
       </div>

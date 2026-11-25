@@ -2,12 +2,13 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 @import '@fontsource-variable/geist';
+@import './tokens.css';
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --font-heading: var(--font-sans);
-  --font-sans: 'Geist Variable', sans-serif;
+  --font-sans: var(--font-ui);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -22,6 +23,14 @@
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
   --color-ring: var(--ring);
+  --color-action: var(--action);
+  --color-action-hover: var(--action-hover);
+  --color-action-active: var(--action-active);
+  --color-action-foreground: var(--action-foreground);
+  --color-control: var(--control-border);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-candidate-selected: var(--candidate-selected);
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
@@ -49,30 +58,11 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.39 0.066 164);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.96 0.017 164);
-  --accent-foreground: oklch(0.39 0.066 164);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -129,36 +119,21 @@
   }
 }
 
-/* 랜딩과 404에서는 모션 감소 설정에 따라 CTA의 누름 이동과 전환을 제거합니다. */
-@media (prefers-reduced-motion: reduce) {
-  [data-public-page] [data-slot='button'] {
-    transition: none;
-    translate: none;
+@layer components {
+  .form-control {
+    border-color: var(--control-border);
+    background: var(--background);
+    color: var(--foreground);
+  }
+
+  .form-control:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 }
 
-/* 탐색 화면의 토큰과 도구 UI만 바꿉니다. 지도 오버레이·랜딩에는 적용하지 않습니다. */
+/* 지도 도구와 패널의 배치는 탐색 화면에 한정합니다. */
 .explore-app {
-  --background: #ffffff;
-  --foreground: #202824;
-  --card: #ffffff;
-  --card-foreground: #202824;
-  --popover: #ffffff;
-  --popover-foreground: #202824;
-  --primary: #173629;
-  --primary-foreground: #ffffff;
-  --secondary: #f4f5f3;
-  --secondary-foreground: #173629;
-  --muted: #f4f5f3;
-  --muted-foreground: #59635d;
-  --accent: #e6f9df;
-  --accent-foreground: #173629;
-  --border: #e0e5df;
-  --input: #d3dbd1;
-  --ring: #3c7844;
-  --explore-action: #8be26e;
-  --explore-action-hover: #77d657;
-  --explore-action-active: #66c747;
   --explore-top: max(0.75rem, env(safe-area-inset-top));
   --explore-left: max(0.75rem, env(safe-area-inset-left));
   --explore-right: max(0.75rem, env(safe-area-inset-right));
@@ -192,30 +167,10 @@
     var(--explore-sheet-limit),
     var(--explore-panel-clear-height)
   );
-  font-family:
-    'Geist Variable', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
 }
 
 .explore-app [data-slot='button'] {
   min-height: 2.25rem;
-  transition:
-    background-color 150ms ease,
-    box-shadow 150ms ease,
-    translate 150ms ease;
-}
-
-.explore-app [data-slot='button'][data-variant='default'] {
-  background: var(--explore-action);
-  color: var(--primary);
-}
-
-.explore-app [data-slot='button'][data-variant='default']:hover:not(:disabled) {
-  background: var(--explore-action-hover);
-}
-
-.explore-app
-  [data-slot='button'][data-variant='default']:active:not(:disabled) {
-  background: var(--explore-action-active);
 }
 
 .explore-app [data-slot='button'][data-size^='icon'] {
@@ -223,7 +178,7 @@
   height: 2.75rem;
 }
 
-.explore-app :where(button, a, select, input):focus-visible {
+.explore-app :where(button, a):not([data-slot='button']):focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
@@ -267,7 +222,7 @@
   border: 1px solid var(--border);
   border-radius: 1rem;
   background: var(--background);
-  box-shadow: 0 6px 22px rgb(23 54 41 / 16%);
+  box-shadow: var(--shadow-popover);
 }
 
 .explore-dock ul {
@@ -293,7 +248,8 @@
 
 .explore-dock [data-slot='button'][aria-expanded='true'] {
   background: var(--accent);
-  color: var(--primary);
+  color: var(--accent-foreground);
+  border-color: var(--brand-focus-ring);
   font-weight: 700;
 }
 
@@ -304,7 +260,7 @@
   width: 1.2rem;
   height: 3px;
   border-radius: 3px;
-  background: var(--primary);
+  background: var(--ring);
   content: '';
 }
 
@@ -392,12 +348,22 @@ main:not([data-picking='true'])
   min-height: 3.5rem;
   padding: 0.3rem 1.25rem;
   border-bottom: 1px solid var(--border);
+  background: var(--muted);
+  color: var(--primary);
 }
 
 .explore-panel-heading h2 {
   font-size: 1.0625rem;
   font-weight: 650;
   letter-spacing: -0.025em;
+}
+
+.explore-panel-heading button {
+  color: var(--primary);
+}
+
+.explore-panel-heading button:hover {
+  background: var(--accent);
 }
 .explore-panel-content {
   scrollbar-width: thin;
@@ -411,7 +377,6 @@ main:not([data-picking='true'])
 }
 .explore-panel :where(input, select) {
   min-height: 2.75rem;
-  border-color: var(--input);
 }
 .analysis-detail-options [aria-pressed='true'] {
   background: var(--accent);
@@ -461,15 +426,19 @@ main:not([data-picking='true'])
   align-items: center;
   gap: 0.5rem;
   padding: 0.25rem 0.3rem 0.25rem 0.8rem;
-  border: 1px solid var(--input);
+  border: 1px solid var(--control-border);
   border-radius: 0.75rem;
   background: var(--background);
-  box-shadow: 0 2px 8px rgb(23 54 41 / 6%);
+  box-shadow: var(--shadow-control);
 }
 
 .explore-search-form:focus-within {
   border-color: var(--ring);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 18%, transparent);
+}
+
+.explore-search-form:has(input:focus-visible) {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 .explore-search-form input {
   font-size: 1rem;
@@ -506,7 +475,7 @@ main:not([data-picking='true'])
   border: 1px solid var(--border);
   border-radius: 0.875rem;
   background: var(--background);
-  box-shadow: 0 4px 16px rgb(23 54 41 / 8%);
+  box-shadow: var(--shadow-popover);
 }
 
 .explore-search-heading {
@@ -526,11 +495,17 @@ main:not([data-picking='true'])
   scroll-padding-block: 0.75rem;
 }
 .explore-search-list {
-  gap: 0.25rem;
+  gap: 0.375rem;
 }
 .explore-search-list button {
   min-height: 4.5rem;
   padding: 0.75rem;
+}
+
+.cafe-result-card:has(> button[aria-pressed='true']) {
+  border-color: var(--ring);
+  background: var(--accent);
+  box-shadow: inset 3px 0 0 var(--ring);
 }
 .explore-search-error {
   margin-left: 0;
@@ -542,7 +517,10 @@ main:not([data-picking='true'])
   flex-direction: column;
   overflow: hidden;
   padding: 0.5rem 0.75rem;
-  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--card);
+  color: var(--card-foreground);
   font-size: 0.875rem;
   line-height: 1.25rem;
   white-space: normal;
@@ -565,7 +543,7 @@ main:not([data-picking='true'])
   color: var(--foreground);
 }
 .cafe-map-info-close:hover {
-  background: var(--muted);
+  background: var(--accent);
 }
 .cafe-map-info-close svg {
   width: 1rem;
@@ -664,13 +642,13 @@ main:not([data-picking='true'])
 .region-filter > [data-slot='button'] {
   height: 2.75rem;
   max-width: var(--explore-filter-max-width);
-  border-color: var(--input);
   background: var(--background);
-  box-shadow: 0 2px 8px rgb(23 54 41 / 6%);
+  box-shadow: var(--shadow-control);
 }
 .region-filter > [aria-expanded='true'] {
   background: var(--accent);
   border-color: var(--primary);
+  color: var(--accent-foreground);
 }
 .region-filter-summary {
   overflow: hidden;
@@ -695,7 +673,7 @@ main:not([data-picking='true'])
   border: 1px solid var(--border);
   border-radius: 0.875rem;
   background: var(--background);
-  box-shadow: 0 4px 16px rgb(23 54 41 / 8%);
+  box-shadow: var(--shadow-popover);
   scrollbar-width: thin;
 }
 .region-filter-controls[hidden] {
@@ -736,7 +714,7 @@ main:not([data-picking='true'])
 }
 .region-filter-steps button[aria-current='step'],
 .region-filter-choices > button[aria-pressed='true'] {
-  border-color: var(--input);
+  border-color: var(--control-border);
   background: var(--accent);
   color: var(--accent-foreground);
   font-weight: 650;
@@ -787,9 +765,9 @@ main:not([data-picking='true'])
   flex-direction: row;
   gap: 0;
   padding: 0.125rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 0.75rem;
-  box-shadow: 0 2px 8px rgb(23 54 41 / 7%);
+  box-shadow: var(--shadow-control);
 }
 
 .explore-map-controls button + button {
@@ -917,6 +895,10 @@ main:not([data-picking='true'])
     height: 0.3125rem;
     border-radius: 999px;
     background: var(--muted-foreground);
+  }
+  .explore-sheet-handle:not([aria-disabled='true']):is(:hover, :focus-visible)
+    span {
+    background: var(--primary);
   }
   .explore-sheet-probes {
     position: absolute;
@@ -1160,7 +1142,6 @@ main:not([data-picking='true'])
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .explore-app [data-slot='button'],
   .explore-home {
     transition: none;
     translate: none;
@@ -1169,21 +1150,22 @@ main:not([data-picking='true'])
 
 /* 클러스터 숫자는 SDK가 전달한 현재 마커 개수이며 일반 카페 핀과 구분합니다. */
 .explore-app .cafe-cluster-button {
-  display: block;
+  display: grid;
   width: 100%;
   height: 100%;
   padding: 0;
+  place-items: center;
   border: 0;
   border-radius: 50%;
-  background: var(--explore-action);
-  color: var(--primary);
-  font:
-    700 0.9375rem/1 'Geist Variable',
-    sans-serif;
+  background: var(--action);
+  color: var(--action-foreground);
+  box-shadow: inset 0 0 0 1px var(--primary);
+  font: 700 0.9375rem/1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
 .explore-app .cafe-cluster-button:hover {
-  background: var(--explore-action-hover);
+  background: var(--action-hover);
 }
 .explore-app .cafe-cluster-button:focus-visible {
   outline: 2px solid var(--primary);

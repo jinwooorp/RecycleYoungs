@@ -32,7 +32,7 @@ function StatisticValue({
     <>
       <span>{formatStatistic(value, { trimTrailingZeros: true })}</span>
       {value !== null && (
-        <span className="ml-1 text-xs font-normal text-muted-foreground">
+        <span className="ml-1 text-xs font-normal tracking-normal text-muted-foreground">
           {unit}
         </span>
       )}
@@ -56,11 +56,8 @@ function StatisticsNotice({
     );
   if (resource.status === 'error')
     return (
-      <div
-        role="alert"
-        className="space-y-2 text-xs leading-5 text-muted-foreground"
-      >
-        <p>
+      <div role="alert" className="space-y-2 text-xs leading-5">
+        <p className="text-destructive">
           {label}: {resource.error}
         </p>
         <Button
@@ -415,7 +412,10 @@ export function AnalysisPanel({
           aria-labelledby="statistics-summary-heading"
           className="min-w-0 space-y-2"
         >
-          <h4 id="statistics-summary-heading" className="text-sm font-semibold">
+          <h4
+            id="statistics-summary-heading"
+            className="text-sm font-semibold text-primary"
+          >
             핵심 지표
           </h4>
           <div className="grid min-w-0 gap-2 lg:grid-cols-3">
@@ -424,13 +424,13 @@ export function AnalysisPanel({
                 key={metric.label}
                 aria-label={`${metric.label} 요약`}
                 aria-busy={metric.resource.status === 'loading'}
-                className="min-w-0 rounded-xl border border-primary/15 bg-primary/5 px-3 py-2"
+                className="min-w-0 rounded-xl border border-primary/20 bg-accent/55 px-3 py-2"
               >
                 <dl className="min-w-0">
                   <dt className="text-xs font-medium text-primary">
                     {metric.label}
                   </dt>
-                  <dd className="mt-1 flex min-h-9 min-w-0 flex-col justify-center text-xl leading-7 font-semibold tabular-nums [overflow-wrap:anywhere]">
+                  <dd className="mt-1 flex min-h-9 min-w-0 flex-col justify-center text-xl leading-7 font-semibold tracking-tight text-primary tabular-nums [overflow-wrap:anywhere]">
                     {metric.resource.status === 'ready' ? (
                       metric.resource.data?.data ? (
                         <>
@@ -540,7 +540,7 @@ export function AnalysisPanel({
                 {details.map(({ label, value, unit }) => (
                   <div
                     key={label}
-                    className="min-w-0 rounded-xl border px-3 py-2"
+                    className="min-w-0 rounded-xl border bg-card px-3 py-2 text-card-foreground"
                   >
                     <dt className="text-xs leading-5 text-muted-foreground">
                       {label}

@@ -247,15 +247,71 @@ test('비교 프리뷰의 세 후보지와 조회 건수를 이미지 밖에서�
   render(page());
 
   const results = screen.getByRole('list', { name: '후보지 500m 조회 결과' });
+  expect(screen.getByText(/후보지별 저장 위치 중심 500m/)).toBeVisible();
+  const items = within(results).getAllByRole('listitem');
+  expect(items).toHaveLength(3);
+  expect(items[0]).toHaveTextContent('A · 홍대입구역 마포구 서교동 · 278곳');
+  expect(items[1]).toHaveTextContent('B · 합정역 마포구 서교동 · 171곳');
+  expect(items[2]).toHaveTextContent('C · 상수역 마포구 서강동 · 148곳');
+  for (const item of items.slice(0, 2)) {
+    expect(within(item).getByText('29,055,188,146원')).toBeVisible();
+  }
+  expect(within(items[2]).getByText('3,294,383,412원')).toBeVisible();
   expect(
-    within(results)
+    screen.getByRole('region', { name: '후보지 요약 프리뷰' }),
+  ).toHaveAttribute('tabindex', '0');
+});
+
+test('지도 개념도를 명시하고 실제 선택 흐름과 통계 값을 텍스트로 설명한다', () => {
+  motionEnvironment({ reduced: true });
+  render(page());
+
+  const hero = screen.getByRole('region', { name: /창업할 곳/ });
+  expect(within(hero).getByText('지도 개념도')).toBeVisible();
+  expect(within(hero).getByText('289곳')).toBeVisible();
+  expect(
+    within(hero).getByText(/홍대입구역 2호선 검색 결과 중심/),
+  ).toBeVisible();
+
+  const search = screen.getByRole('region', { name: /관심 있는 동네를/ });
+  expect(within(search).getByText('지도 개념도')).toBeVisible();
+  expect(within(search).getByText('홍대입구역')).toBeVisible();
+  expect(
+    within(search)
       .getAllByRole('listitem')
       .map((item) => item.textContent),
-  ).toEqual([
-    'A · 홍대입구역 2호선 마포구 서교동 · 289곳',
-    'B · 서울특별시청 중구 명동 · 187곳',
-    'C · 성수역 2호선 성동구 성수2가3동 · 117곳',
-  ]);
+  ).toEqual(['이 위치 상권 분석', '이 위치 주변 카페 보기', '후보지로 추가']);
+  expect(within(search).queryByRole('button')).not.toBeInTheDocument();
+
+  const analysis = screen.getByRole('region', { name: /숫자가 가리키는/ });
+  for (const value of ['2,306', '63,712,527,241', '111,570,753']) {
+    expect(within(analysis).getByText(value)).toBeVisible();
+  }
+  expect(
+    within(analysis).getByText(/2026년 2분기 · 서울시 상권분석서비스/),
+  ).toBeVisible();
+});
+
+test('첫 프리뷰를 우선 로딩하고 기능 프리뷰에는 대체 텍스트를 제공한다', () => {
+  motionEnvironment({ reduced: true });
+  render(page());
+
+  const hero = screen.getByRole('img', { name: /홍대입구역 500m 반경/ });
+  expect(hero).toHaveAttribute('fetchpriority', 'high');
+  expect(hero.closest('picture')?.querySelector('source')).toHaveAttribute(
+    'media',
+    '(width < 600px)',
+  );
+  for (const name of [
+    /실제 장소 검색창/,
+    /마포구의 2026년 2분기/,
+    /경쟁 카페와 행정동 통계/,
+  ]) {
+    expect(screen.getByRole('img', { name })).toHaveAttribute(
+      'loading',
+      'lazy',
+    );
+  }
 });
 
 test('StrictMode·언마운트에서 리스너·관찰·예약 프레임을 모두 정리한다', () => {

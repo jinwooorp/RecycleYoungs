@@ -1,10 +1,12 @@
-import { useEffect, useEffectEvent } from 'react';
+import { useEffect, useEffectEvent, useRef } from 'react';
 import type {
   KakaoMapContext,
+  KakaoMarker,
   KakaoMouseEvent,
 } from '@/shared/kakao/kakao-maps';
 import type { Candidate, CandidateSlot } from '@/entities/candidate/candidates';
 import type { CafeCenter } from '@/entities/cafe/cafes';
+import { candidateMarkerImage } from './map-marker-style';
 
 export function useCandidateMap(
   context: KakaoMapContext | null,
@@ -16,24 +18,23 @@ export function useCandidateMap(
 ) {
   const selectCandidate = useEffectEvent(select);
   const addCandidate = useEffectEvent(add);
+  const readSelection = useEffectEvent(() => selected);
+  const markers = useRef<{ marker: KakaoMarker; slot: CandidateSlot }[]>([]);
+  const previousSelection = useRef<CandidateSlot | null>(null);
 
   useEffect(() => {
     if (!context || picking) return;
     const { maps, map } = context;
+    const selected = readSelection();
+    previousSelection.current = selected;
     const overlays = items.map((item) => {
-      const color = item.slot === selected ? '#4338CA' : '#475569';
-      // 표식에는 검증된 A·B·C 슬롯만 넣고 사용자 이름은 SDK 제목으로 전달합니다.
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="42" viewBox="0 0 40 42"><path d="M20 41 12 31H4V1H36V31H28Z" fill="${color}" stroke="white" stroke-width="2"/><text x="20" y="22" text-anchor="middle" font-family="sans-serif" font-size="19" font-weight="bold" fill="white">${item.slot}</text></svg>`;
+      const active = item.slot === selected;
       const marker = new maps.Marker({
         position: new maps.LatLng(item.latitude, item.longitude),
         title: `후보지 ${item.slot}: ${item.name}`,
-        zIndex: item.slot === selected ? 7 : 6,
+        zIndex: active ? 7 : 6,
         clickable: true,
-        image: new maps.MarkerImage(
-          `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
-          new maps.Size(40, 42),
-          { offset: new maps.Point(20, 42) },
-        ),
+        image: candidateMarkerImage(maps, item.slot, active),
       });
       const click = () => {
         maps.event.preventMap();
@@ -41,15 +42,31 @@ export function useCandidateMap(
       };
       maps.event.addListener(marker, 'click', click);
       marker.setMap(map);
-      return { marker, click };
+      return { marker, click, slot: item.slot };
     });
+    markers.current = overlays;
     return () => {
+      markers.current = [];
       for (const { marker, click } of overlays) {
         maps.event.removeListener(marker, 'click', click);
         marker.setMap(null);
       }
     };
-  }, [context, items, selected, picking]);
+  }, [context, items, picking]);
+
+  useEffect(() => {
+    const previous = previousSelection.current;
+    if (!context || previous === selected) return;
+    previousSelection.current = selected;
+    for (const entry of markers.current) {
+      if (entry.slot !== previous && entry.slot !== selected) continue;
+      const active = entry.slot === selected;
+      entry.marker.setImage(
+        candidateMarkerImage(context.maps, entry.slot, active),
+      );
+      entry.marker.setZIndex(active ? 7 : 6);
+    }
+  }, [context, selected]);
 
   useEffect(() => {
     if (!context || !picking) return;

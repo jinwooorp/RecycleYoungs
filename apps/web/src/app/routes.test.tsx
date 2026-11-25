@@ -81,11 +81,13 @@ test('랜딩은 서비스 소개와 탐색 링크를 표시하며 SDK와 API를 
     screen.getByRole('region', { name: '후보지를 같은 기준으로 비교하세요' }),
   ).toBeVisible();
   const heroPreview = screen.getByRole('img', {
-    name: /홍대입구역 500m 주변 카페/,
+    name: /홍대입구역 500m 반경의 경쟁 카페 거리순 목록/,
   });
   expect(heroPreview).toHaveAttribute('fetchpriority', 'high');
   expect(
-    screen.getByRole('img', { name: /서울 지도에 표시된 후보지 A·B·C/ }),
+    screen.getByRole('img', {
+      name: /홍대입구역, 합정역, 상수역의 경쟁 카페와 행정동 통계를 나란히 표시한 비교표/,
+    }),
   ).toHaveAttribute('loading', 'lazy');
   expect(document.title).toBe('여기 창업해도 돼? | 서울 창업 입지 탐색');
   expect(loadKakaoMaps).not.toHaveBeenCalled();
