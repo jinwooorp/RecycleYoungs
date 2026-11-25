@@ -1,34 +1,28 @@
 # 개발 규칙
 
-코드를 작성하거나 변경을 검토하는 팀원을 위한 문서입니다.
-
-실제로 적용되는 포맷 설정과 코드의 이름 사용 방식, 저장소 협업 규칙을 정리합니다.
-
-[저장소 지침](../AGENTS.md) · [검사 명령](TESTING.md)
+이 문서에서 앱별 포맷과 이름을 확인하고, 변경에 필요한 검사와 협업 절차를 찾을 수 있습니다. [저장소 지침](../AGENTS.md) · [검사 명령](TESTING.md)
 
 ## 작성과 포맷
 
-| 영역                | 적용 기준                                                                                                                                                                                                                                                                                                    |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Frontend TypeScript | ESLint와 Prettier로 검사합니다. 문자열은 작은따옴표를 쓰고 Prettier의 후행 쉼표 설정을 따릅니다. 화면 코드는 색상 리터럴 대신 디자인 토큰을 사용하고 기본 UI 컴포넌트의 스타일을 화면에서 덮어쓰는 대신 배치를 조정합니다. [ESLint](../apps/web/eslint.config.js) · [Prettier](../apps/web/.prettierrc.json) |
-| ETL TypeScript      | ESLint·Prettier를 사용하며 `npm run lint`에 TypeScript 검사도 포함됩니다. Prettier에 작은따옴표가 설정돼 있습니다. [ESLint](../apps/etl/eslint.config.js) · [Prettier](../apps/etl/.prettierrc.json) · [스크립트](../apps/etl/package.json)                                                                  |
-| Backend Java        | Gradle Spotless가 `src/**/*.java`에 Google Java Format을 적용합니다. [Gradle 설정](../apps/api/build.gradle)                                                                                                                                                                                                 |
+| 영역 | 적용 기준 |
+| --- | --- |
+| Frontend TypeScript | ESLint와 Prettier로 검사합니다. 문자열은 작은따옴표를 쓰고 후행 쉼표는 Prettier 설정을 따릅니다. [ESLint](../apps/web/eslint.config.js) · [Prettier](../apps/web/.prettierrc.json) |
+| ETL TypeScript | ESLint와 Prettier를 사용합니다. `npm run lint`에는 TypeScript 검사도 포함되며, Prettier는 문자열에 작은따옴표를 사용합니다. [ESLint](../apps/etl/eslint.config.js) · [Prettier](../apps/etl/.prettierrc.json) · [스크립트](../apps/etl/package.json) |
+| Backend Java | Gradle의 Spotless가 `src/**/*.java`에 Google Java Format을 적용합니다. [Gradle 설정](../apps/api/build.gradle) |
 
-변경한 범위의 기존 스타일을 따릅니다.
+화면을 작성할 때는 색상을 디자인 토큰으로 지정합니다. 기본 UI 컴포넌트의 스타일을 유지하고 필요한 배치를 화면에서 조정합니다. [웹 디자인 시스템](DESIGN_SYSTEM.md)
 
-검사 통과를 위해 규칙을 완화하거나 무관한 파일을 한꺼번에 포맷하지 않습니다.
+수정한 범위에 기존 스타일과 검사 규칙을 적용합니다. 검사를 통과시키기 위해 규칙을 완화하거나 관련 없는 파일까지 포맷하면 변경 범위가 달라지므로 피합니다.
 
 ## 이름과 파일 위치
 
-아래 이름은 현재 코드에서 사용하는 패턴입니다.
+기존 모듈을 수정할 때는 해당 모듈의 이름과 위치를 따릅니다. 아래는 역할별로 파일을 찾을 때 볼 수 있는 이름의 예입니다.
 
-기존 모듈을 수정할 때는 그 모듈의 이름과 위치를 따릅니다.
-
-| 영역     | 현재 사용하는 패턴                                                                                                                                                                                                                                                                                                                  |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Frontend | `kakao-map.tsx`처럼 컴포넌트 파일은 하이픈으로 단어를 구분하는 사례가 많고, React 컴포넌트는 `KakaoMapView`처럼 이름의 각 단어를 대문자로 시작합니다. 화면 상태나 동작을 재사용하는 Hook은 `useCurrentLocation`처럼 `use`로 시작합니다. [웹 소스 구조](ARCHITECTURE.md#웹-소스-구조)                                                |
-| Backend  | `kr.ac.recycleyoungs` 아래 업무 영역별 패키지를 둡니다. 같은 영역의 파일은 `CafeController`, `CafeService`, `CafeRepository`, `CafeResponse`처럼 역할을 이름에 표시합니다. [카페 패키지](../apps/api/src/main/java/kr/ac/recycleyoungs/cafe/)                                                                                       |
-| ETL·DB   | ETL 기능은 `domains/`, 여러 단계를 잇는 흐름은 `workflows/`에 둡니다. 테이블·컬럼은 `dong_store_stat`, `source_batch_id`처럼 밑줄로 구분합니다. Flyway 파일은 `V7__create_district_foot_traffic_stat.sql`처럼 버전과 변경을 표시합니다. [ETL 소스](../apps/etl/src/) · [마이그레이션](../apps/api/src/main/resources/db/migration/) |
+| 영역 | 현재 사용하는 패턴 |
+| --- | --- |
+| Frontend | 파일명에서 단어를 하이픈으로 구분하는 예로 `kakao-map.tsx`가 있습니다. React 컴포넌트는 `KakaoMapView`처럼 각 단어를 대문자로 시작하고, 화면 상태나 동작을 재사용하는 훅은 `useCurrentLocation`처럼 `use`로 시작합니다. [웹 소스 구조](ARCHITECTURE.md#웹-소스-구조) |
+| Backend | `kr.ac.recycleyoungs` 아래에 업무 영역별 패키지를 두고, `CafeController`, `CafeService`, `CafeRepository`, `CafeResponse`처럼 역할을 이름에 표시합니다. [카페 패키지](../apps/api/src/main/java/kr/ac/recycleyoungs/cafe/) |
+| ETL·DB | ETL의 개별 기능은 `domains/`에, 여러 단계를 잇는 흐름은 `workflows/`에 둡니다. 테이블·컬럼은 `dong_store_stat`, `source_batch_id`처럼 밑줄로 구분합니다. Flyway 파일은 `V7__create_district_foot_traffic_stat.sql`처럼 버전과 변경을 표시합니다. [ETL 소스](../apps/etl/src/) · [마이그레이션](../apps/api/src/main/resources/db/migration/) |
 
 ## 주석과 마이그레이션
 

@@ -1,22 +1,15 @@
 # 데이터 설계
 
-테이블을 조회하거나 마이그레이션을 다루는 개발자를 위한 문서입니다.
+PostgreSQL의 프로젝트 테이블 11개는 지역·업종 기준, 구·동 통계, 개별 카페, ETL 실행 이력을 저장합니다. PostGIS는 좌표·경계·거리 검색을 제공하고, Flyway는 테이블 구조의 변경 이력을 관리합니다. [로컬 마이그레이션 적용](SETUP.md#3-backend) · [API 응답](API.md)
 
-PostgreSQL에 저장하는 11개 테이블과 제약을 설명합니다.
-
-PostGIS는 PostgreSQL에 좌표·경계·거리 검색을 추가하는 확장입니다.
-
-[로컬 마이그레이션 적용](SETUP.md#3-backend) · [API 응답](API.md)
+- [마이그레이션 버전](#db-마이그레이션-방향)
+- [지역·업종 기준과 출처 배치](#기본-테이블과-관계)
+- [통계 키와 측정값](#통계-테이블)
+- [공간 데이터](#공간-데이터) · [개별 카페](#v4-카페-테이블)
 
 ## DB 마이그레이션 방향
 
-Flyway는 DB 스키마 변경을 버전순으로 적용하고 이력과 체크섬을 기록합니다.
-
-적용된 파일은 보존하고, 후속 구조 변경은 새 버전으로 추가합니다.
-
-새 DB에 스키마를 적용한 뒤 [ETL](ETL.md)이나 합성 Demo로 조회 데이터를 준비합니다.
-
-[마이그레이션 파일](../apps/api/src/main/resources/db/migration/)
+Flyway는 DB 스키마 변경을 버전순으로 적용하고 이력과 체크섬을 기록합니다. 적용한 파일은 보존하고 후속 변경은 새 버전으로 추가합니다. 새 DB에 스키마를 적용한 뒤 ETL 또는 합성 Demo로 조회 데이터를 준비합니다. [마이그레이션 파일](../apps/api/src/main/resources/db/migration/) · [ETL](ETL.md) · [합성 Demo](SETUP.md#합성-demo)
 
 | 버전 | 적용 내용 |
 | --- | --- |
@@ -30,11 +23,7 @@ Flyway는 DB 스키마 변경을 버전순으로 적용하고 이력과 체크�
 
 ## 기본 테이블과 관계
 
-기본키(PK)는 행을 유일하게 식별합니다.
-
-외래키(FK)는 기준 행을 참조합니다.
-
-지역·업종·분기 코드는 문자열이며 선행 0을 보존합니다.
+기본키(PK)는 행을 유일하게 식별하고 외래키(FK)는 다른 테이블의 행을 참조합니다. 지역·업종·분기 코드는 문자열로 저장해 선행 0을 보존합니다.
 
 | 테이블 | 기본키 | 주요 컬럼과 관계 |
 | --- | --- | --- |
@@ -43,19 +32,17 @@ Flyway는 DB 스키마 변경을 버전순으로 적용하고 이력과 체크�
 | `administrative_dong` | `dong_code` ASCII 8자리 | 소속 구 FK, 이름, 경계, 대표점, 원본 면적, 경계 배치 FK. 동 코드의 앞 5자리와 소속 구 코드가 일치해야 함 |
 | `service_industry` | `industry_code` | 서울시 업종명과 출처 배치 FK. 소진공 업종 체계는 카페 테이블에서 따로 관리 |
 
-`etl_batch.source_type`은 `CSV`, `API`, `SHAPEFILE`입니다.
+### ETL 배치의 출처와 범위
 
-`scope_type=SEOUL`의 `scope_code`는 NULL이며, 구 범위(`DISTRICT`)에는 ASCII 5자리 코드가 필요합니다.
+| 컬럼 | 저장 규칙 |
+| --- | --- |
+| `source_type` | `CSV`, `API`, `SHAPEFILE` |
+| `scope_type`, `scope_code` | 서울 전체(`SEOUL`)는 `scope_code`가 NULL입니다. 구 범위(`DISTRICT`)는 ASCII 숫자 5자리 코드가 필요합니다. |
+| `period_from`, `period_to` | 값이 있으면 `YYYYQ` 형식과 순서를 검사합니다. |
+| `published_at` | 서비스 DB에서 게시를 확정한 시각입니다. 제공기관의 원본 생성·배포 시각은 별도로 관리합니다. |
+| `source_reference` | TEXT로 저장합니다. JSON 메타데이터를 읽을 때 유효성을 확인한 뒤 변환합니다. |
 
-`period_from`과 `period_to`는 값이 있으면 `YYYYQ` 형식과 순서를 검사합니다.
-
-`published_at`은 서비스 DB에서 게시를 확정한 시각입니다.
-
-제공기관의 원본 생성·배포 시각은 별도로 관리합니다.
-
-`source_reference`는 TEXT이고, JSON 메타데이터를 읽을 때 유효성을 확인한 뒤 변환합니다.
-
-[ETL 배치 상태와 재실행](ETL.md#공통-입력-검증과-게시)
+[ETL 배치 상태와 재실행](ETL.md#배치-상태와-재실행)
 
 ## 통계 테이블
 
@@ -65,13 +52,9 @@ Flyway는 DB 스키마 변경을 버전순으로 적용하고 이력과 체크�
 | 추정매출 | `dong_sales_stat` · `SEOUL_DONG_SALES_STAT` | `district_sales_stat` · `SEOUL_DISTRICT_SALES_STAT` | 지역, `industry_code`, `quarter_code` |
 | 유동인구 | `dong_foot_traffic_stat` · `SEOUL_DONG_FOOT_TRAFFIC_STAT` | `district_foot_traffic_stat` · `SEOUL_DISTRICT_FOOT_TRAFFIC_STAT` | 지역, `quarter_code` |
 
-지역 키는 각각 `dong_code`와 `district_code`이며 기준 테이블을 참조합니다.
+행정동 통계의 `dong_code`와 자치구 통계의 `district_code`는 각 지역 기준 테이블을 참조합니다. 점포·매출은 업종 FK도 가지며, 모든 통계 행은 `source_batch_id`로 실제 출처 배치를 참조합니다.
 
-점포·매출은 업종 FK도 가지며, 모든 통계 행의 `source_batch_id`는 실제 출처 배치를 참조합니다.
-
-분기는 `YYYYQ`(연도 4자리·분기 1~4), 업종은 `CS`와 ASCII 숫자 6자리입니다.
-
-통계는 기본키 인덱스를 사용합니다.
+분기는 `YYYYQ`(연도 4자리·분기 1~4), 업종은 `CS`와 ASCII 숫자 6자리입니다. 통계는 기본키 인덱스를 사용합니다.
 
 ### 통계 분기 목록
 
@@ -108,13 +91,7 @@ Flyway는 DB 스키마 변경을 버전순으로 적용하고 이력과 체크�
 | 측정값 NULL | 행은 있지만 해당 값이 제공되지 않음 |
 | 실제 0 | 원천이 제공한 유효 수치. 저장된 소수 자릿수를 유지 |
 
-측정값은 모두 기본값 없이 NULL을 허용하고 유한한 비음수만 저장합니다.
-
-BIGINT는 큰 정수를 저장합니다.
-
-고정 소수 자릿수가 없는 NUMERIC은 비율과 인구의 소수 자릿수 및 후행 0을 보존합니다.
-
-비율 100% 상한이나 세부 합계 일치 제약을 두지 않습니다.
+측정값은 기본값 없이 NULL을 허용합니다. 값이 있으면 유한한 0 이상의 수만 저장합니다. BIGINT는 정수에, 고정 소수 자릿수가 없는 NUMERIC은 비율과 인구에 사용합니다. NUMERIC은 소수 자릿수와 후행 0을 보존합니다. 비율이 100%를 넘거나 합계가 세부 값의 합과 달라도 원본 수치를 저장합니다.
 
 [입력 형식 검증](ETL.md#공통-입력-검증과-게시) · [API의 응답과 결측](API.md#응답과-결측)
 

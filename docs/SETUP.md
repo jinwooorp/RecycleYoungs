@@ -1,40 +1,8 @@
 # 개발 환경 설정과 실행
 
-처음 개발 환경을 준비하거나 로컬에서 앱을 실행하는 개발자를 위한 문서입니다.
+첫 화면은 Frontend만으로 열 수 있습니다. 지역·상권 API는 테스트용 예시 데이터를 담은 합성 Demo로 확인하거나, 개발 DB에 조회용 데이터를 준비해 연동합니다. [전체 구성](ARCHITECTURE.md)
 
-웹 앱의 첫 화면은 Frontend만으로 열 수 있습니다.
-
-지역·상권 API를 확인하는 방법은 두 가지입니다.
-
-테스트용 예시 데이터로 실행하는 합성 Demo를 쓰거나, 로컬 DB에 조회용 데이터를 준비합니다.
-
-[전체 구성](ARCHITECTURE.md)
-
-## 목차
-
-- [실행 방식 선택](#팀원-클론과-실행-방식)
-- [로컬 DB 준비](#로컬-db-준비)
-- [전체 Docker 스택](#전체-docker-스택)
-- [합성 Demo](#합성-demo)
-- [개발 DB 게시 데이터](#개발-db-게시-데이터)
-- [Frontend 실행과 지도 설정](#2-frontend)
-- [Backend 실행과 DB 구조 확인](#3-backend)
-- [문제 해결](#문제-해결)
-- [테스트와 CI](TESTING.md)
-
-## 1. 개발 도구
-
-명령은 macOS 또는 Linux 셸(Windows의 WSL 포함)을 기준으로 합니다.
-
-네이티브 Windows는 현재 지원 범위 밖입니다.
-
-| 대상                    | 필요한 도구                                                                                                      |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Frontend·ETL            | Node.js 24 LTS·npm 11. `nvm`을 사용하면 각 디렉터리에서 `nvm use`로 버전을 선택합니다. CI와 맞출 때는 npm 11.19.1을 사용합니다. |
-| Backend                 | Java 21과 저장소의 Gradle Wrapper(`./gradlew`)                                                                   |
-| 전체 스택·Demo·DB 통합 테스트 | Docker와 Docker Compose. Demo의 REST 자동 검증에는 Node.js 24도 필요합니다. |
-
-### 팀원 클론과 실행 방식
+## 팀원 클론과 실행 방식
 
 저장소를 클론하고 작업할 브랜치를 체크아웃합니다.
 
@@ -47,21 +15,29 @@
 | 웹 앱 변경을 바로 보면서 로컬 데이터 연동 | [하이브리드 실행](#로컬-db-준비)으로 PostGIS는 Docker에서, Vite와 Spring Boot는 로컬에서 직접 실행합니다. | `http://localhost:5173` |
 | Nginx를 포함한 개발 스택 확인 | [전체 Docker 스택](#전체-docker-스택)을 실행합니다. | `http://127.0.0.1:8081` |
 
-하이브리드와 전체 Docker 방식은 루트 `.env`를 사용합니다.
+하이브리드와 전체 Docker는 루트 `.env`를 사용합니다. 실제 지도를 표시하려면 실행 방식에 맞게 JavaScript 키를 설정하고, 공공데이터 통계를 보려면 개발 DB에 조회용 데이터를 준비합니다. [Kakao Maps 설정](#kakao-maps-설정) · [개발 DB 게시 데이터](#개발-db-게시-데이터)
 
-실제 지도는 실행 방식에 맞게 JavaScript 키를 설정합니다.
+## 목차
 
-실제 통계까지 보려면 조회용 데이터를 준비합니다.
+- [개발 도구](#1-개발-도구) · [Docker 실행과 조회 데이터](#docker-실행과-조회-데이터)
+- [Frontend 실행과 지도 설정](#2-frontend) · [Backend 실행과 마이그레이션 확인](#3-backend)
+- [문제 해결](#문제-해결) · [테스트와 CI](TESTING.md)
 
-[Kakao Maps 설정](#kakao-maps-설정) · [개발 DB 게시 데이터](#개발-db-게시-데이터)
+## 1. 개발 도구
+
+명령은 macOS 또는 Linux 셸을 기준으로 합니다. 현재 Windows에서는 WSL을 사용합니다.
+
+| 대상 | 필요한 도구 |
+| --- | --- |
+| Frontend·ETL | Node.js 24 LTS와 npm 11. `nvm`으로 버전을 관리한다면 각 앱 디렉터리에서 `nvm use`를 실행합니다. CI의 npm 버전은 11.19.1입니다. |
+| Backend | Java 21과 저장소의 Gradle Wrapper(`./gradlew`) |
+| 하이브리드·전체 스택·Demo·DB 통합 테스트 | Docker와 Docker Compose. 합성 Demo에서 REST 자동 검증을 실행할 때는 Node.js 24도 필요합니다. |
+
+## Docker 실행과 조회 데이터
 
 ### 로컬 DB 준비
 
-루트의 `.env`를 준비합니다.
-
-아래 명령 중 `cp -n`은 기존 `.env`를 유지합니다.
-
-복사한 뒤 DB 이름·사용자·비밀번호·포트가 사용할 로컬 DB 설정인지 확인합니다.
+하이브리드 방식에서는 루트 `.env`를 준비한 뒤 DB 이름·사용자·비밀번호·포트가 대상 로컬 DB와 일치하는지 확인합니다. 아래 실행 예시의 `cp -n`은 기존 `.env`를 보존합니다. 설정 파일을 읽는 프로그램과 실행 위치는 다음 표에서 확인할 수 있습니다.
 
 | 설정 | 읽는 위치와 용도 |
 | --- | --- |
@@ -94,9 +70,7 @@ docker compose -f docker-compose.yml up -d --wait db
 docker compose -f docker-compose.yml ps db
 ```
 
-DB가 준비되면 별도 터미널에서 [Backend의 `db` 프로필](#db를-사용하는-db-프로필-실행)과 [Frontend](#2-frontend)를 실행합니다.
-
-두 서버를 띄운 뒤 [개발 DB 게시 데이터](#개발-db-게시-데이터)를 확인합니다.
+DB가 준비되면 별도 터미널에서 Backend의 `db` 프로필과 Frontend를 실행합니다. 두 서버를 띄운 뒤 지역·상권 조회에 필요한 게시 데이터를 확인합니다. [Backend의 `db` 프로필](#db를-사용하는-db-프로필-실행) · [Frontend](#2-frontend) · [개발 DB 게시 데이터](#개발-db-게시-데이터)
 
 루트에서 다음 명령으로 접속한 뒤 `psql`에서 `SELECT version(), PostGIS_Version();`을 실행하고 `\q`로 종료합니다.
 
@@ -106,15 +80,7 @@ DB가 준비되면 별도 터미널에서 [Backend의 `db` 프로필](#db를-사
 docker compose -f docker-compose.yml exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 ```
 
-호스트 Frontend와 Backend는 실행한 터미널에서 `Ctrl+C`로 종료합니다.
-
-DB는 `docker compose -f docker-compose.yml stop db`로 중지합니다.
-
-기존 컨테이너는 `docker compose -f docker-compose.yml start db`로 다시 시작합니다.
-
-`recycleyoungs_postgres_data` 볼륨에 개발 데이터가 남습니다.
-
-최초 기동 때 만든 DB와 계정은 이후 `.env`를 수정해도 그대로입니다.
+호스트 Frontend와 Backend는 실행한 터미널에서 `Ctrl+C`로 종료합니다. DB는 `docker compose -f docker-compose.yml stop db`로 중지하고, 기존 컨테이너는 `docker compose -f docker-compose.yml start db`로 다시 시작합니다. 개발 데이터는 `recycleyoungs_postgres_data` 볼륨에 저장합니다. 이 볼륨을 재사용하면 최초 기동 때 만든 DB와 계정을 사용합니다.
 
 ### 전체 Docker 스택
 
@@ -262,11 +228,7 @@ Demo 화면에는 지도 키 설정 안내가 표시됩니다.
 
 ### 개발 DB 게시 데이터
 
-새 로컬 DB에는 Flyway로 테이블 구조를 적용합니다.
-
-조회할 데이터는 다음 중 하나로 준비합니다.
-
-[DB 구조 변경 이력](DATABASE.md#db-마이그레이션-방향)
+새 로컬 DB에는 Flyway로 테이블 구조를 적용하고, 아래 방식 중 하나로 조회용 데이터를 준비합니다. [DB 구조 변경 이력](DATABASE.md#db-마이그레이션-방향)
 
 1. 공공데이터 없이 조회 API를 확인하려면 [합성 Demo](#합성-demo)의 전용 DB를 사용합니다.
 

@@ -1,29 +1,19 @@
 # REST API 레퍼런스
 
-Backend와 연동하는 개발자를 위한 조회 계약입니다.
-
-API는 `db` 프로필에서 제공됩니다.
-
-표의 모든 경로는 `GET`입니다.
-
-요청할 때는 경로 앞에 `/api/v1`을 붙입니다.
+지역·상권 통계·카페를 조회하는 API입니다. Backend를 `db` 프로필로 실행한 뒤 표에 나온 경로 앞에 `/api/v1`을 붙여 `GET`으로 요청합니다.
 
 [로컬 실행](SETUP.md#3-backend) · [통계 원천과 집계 기준](ETL.md#공식-자치구-통계와-집계-정책)
 
 - [공통 오류와 데이터 상태](#공통-오류와-데이터-상태)
 - [행정구역](#행정구역-rest-api-계약)
 - [구·동 상권 통계](#구동-상권-통계-rest-api-계약)
+  - [통계 기준 분기 조회](#통계-분기-목록)
+  - [지역과 지표를 지정해 조회](#지역별-통계-조회)
 - [주변·지도 영역 카페](#카페-rest-api-계약)
 
 ## 공통 오류와 데이터 상태
 
-서비스 오류는 `application/problem+json` 형식입니다.
-
-`type`, `title`, `status`, `detail`, `instance`와 서비스 오류 `code`를 반환합니다.
-
-예외 원문, 입력 원문, SQL, 접속 정보는 노출하지 않습니다.
-
-미등록 경로의 404와 지원하지 않는 메서드의 405는 MVC 상태와 헤더를 유지하고 서비스 오류 코드는 붙이지 않습니다.
+서비스 오류는 `application/problem+json`으로 반환합니다. 응답 필드는 `type`, `title`, `status`, `detail`, `instance`와 서비스 오류 `code`입니다. 오류 메시지는 예외·입력 원문, SQL, 접속 정보를 공개하지 않습니다. 미등록 경로의 404와 지원하지 않는 메서드의 405는 Spring MVC의 상태와 헤더를 유지하고 `code`를 생략합니다.
 
 | 상태 | `code` | 의미 |
 | --- | --- | --- |
@@ -33,31 +23,17 @@ API는 `db` 프로필에서 제공됩니다.
 | 503 | `DATABASE_UNAVAILABLE` | DB 연결·자원 접근·조회 시간 초과 |
 | 500 | `INTERNAL_ERROR` | SQL·응답 매핑·무결성 오류 등 서버 구현 오류 |
 
-- 지역 코드는 선행 0을 보존하는 ASCII 숫자 문자열입니다.
+### 공통 요청 형식
 
-  `districtCode`는 5자리, `dongCode`는 8자리입니다.
+- 지역 코드는 선행 0을 보존하는 ASCII 숫자 문자열입니다. `districtCode`는 5자리, `dongCode`는 8자리입니다.
+- 값을 하나만 받는 쿼리 파라미터는 같은 값이 반복돼도 거부합니다. 선택 파라미터는 생략하면 기본값을 적용합니다.
+- 목록 필터는 `districtCodes=11110&districtCodes=11140`처럼 키를 반복합니다. 중복 코드는 제거하고 쉼표 목록, 공백, 빈 항목은 거부합니다. 지도 영역의 `dongCodes`도 같은 방식으로 전달합니다.
 
-- 단일 쿼리 값은 중복을 거부합니다.
+### 게시본과 출처
 
-  선택값의 기본값은 파라미터를 생략할 때 적용합니다.
+게시 배치는 적재 실행을 식별하는 기록입니다. `boundaryBatch`는 경계의 출처, `sourceBatch`는 조회한 데이터의 출처입니다. 두 객체는 `batchId`(UUID 문자열)와 `publishedAt`(ISO 8601 문자열)을 제공하며, `publishedAt`은 서비스 DB에서 게시를 확정한 시각입니다.
 
-  지역 목록 필터는 `districtCodes=11110&districtCodes=11140`처럼 키를 반복합니다.
-
-  중복 코드는 제거하며 쉼표 목록, 공백, 빈 항목은 거부합니다.
-
-  지도 영역의 `dongCodes`도 같은 방식입니다.
-
-- 게시 배치는 적재 실행을 식별하는 기록입니다.
-
-   응답의 `boundaryBatch`와 `sourceBatch`는 각각 경계와 조회 데이터의 출처입니다.
-
-   두 값은 `batchId`(UUID 문자열)와 `publishedAt`(ISO 8601 문자열)을 제공합니다.
-
-  게시 시각은 서비스 DB에서 확정한 시각입니다.
-
-- 경계·통계·카페 조회는 읽기 전용 `REPEATABLE READ` 트랜잭션에서 실행합니다.
-
-  한 응답에서 배치 선택, 데이터 준비 여부, 값과 출처를 같은 DB 시점으로 읽습니다.
+경계·통계·카페 조회는 읽기 전용 `REPEATABLE READ` 트랜잭션에서 실행합니다. 한 응답에 필요한 배치, 데이터 준비 여부, 값과 출처를 같은 DB 시점에서 읽습니다.
 
 ## 행정구역 REST API 계약
 
@@ -117,11 +93,13 @@ API는 `db` 프로필에서 제공됩니다.
 
 `GET /api/v1/statistics/quarters`는 서울 전체에서 하나 이상의 적격 통계 행이 존재하는 분기를 최신순으로 반환합니다.
 
-응답에는 점포·추정매출에 적용한 `industryCode`(`CS100010`), `defaultQuarterCode`, `quarters`가 있습니다. 각 분기는 `quarterCode`, `districtMetrics`, `dongMetrics`를 포함하며 지표 값은 `stores`, `sales`, `foot-traffic`입니다. 유동인구는 업종 구분 없이 집계합니다.
+| 응답 필드 | 의미 |
+| --- | --- |
+| `industryCode` | 점포·추정매출에 적용한 카페 업종 `CS100010`. 유동인구는 지역 전체를 집계합니다. |
+| `defaultQuarterCode` | 구·동 두 수준에 세 지표가 모두 있는 분기 중 최신 분기입니다. 해당 분기가 없으면 목록의 최신 분기를 사용합니다. |
+| `quarters` | 최신 분기부터 `quarterCode`, `districtMetrics`, `dongMetrics`를 반환합니다. 지표 값은 `stores`, `sales`, `foot-traffic`입니다. |
 
-지표 목록은 해당 수준의 현행 지역 중 하나 이상에 적격 통계 행이 있다는 의미입니다. 개별 지역의 자료 유무는 해당 지역의 통계 API가 판정합니다.
-
-기본값은 구·동 두 수준에서 세 지표 모두가 있는 최신 분기입니다. 조건을 충족하는 분기가 없으면 목록의 최신 분기를 사용합니다. 현행 경계가 준비됐으나 적격 행이 없으면 `200`과 `quarters: []`, `defaultQuarterCode: null`을 반환합니다. 경계가 미준비면 `503 DATA_NOT_READY`입니다.
+지표가 목록에 있으면 해당 수준의 현행 지역 중 하나 이상에 적격 행이 있다는 뜻입니다. 특정 구나 동의 자료는 해당 지역의 통계 API에서 확인합니다. 현행 경계가 준비됐지만 적격 행이 없으면 `200`과 `quarters: []`, `defaultQuarterCode: null`을 반환합니다. 경계가 준비되지 않았으면 `503 DATA_NOT_READY`입니다.
 
 [분기 목록의 게시 기준](DATABASE.md#통계-분기-목록)
 
@@ -133,15 +111,12 @@ API는 `db` 프로필에서 제공됩니다.
 | 추정매출 | `/districts/{districtCode}/stats/sales` | `/dongs/{dongCode}/stats/sales` |
 | 유동인구 | `/districts/{districtCode}/stats/foot-traffic` | `/dongs/{dongCode}/stats/foot-traffic` |
 
-모든 통계에 `quarterCode`가 필요합니다.
+| 파라미터 | 규칙 |
+| --- | --- |
+| `quarterCode` | 모든 지표에 필요합니다. ASCII 연도 4자리와 분기 1~4를 붙인 `YYYYQ` 형식입니다. |
+| `industryCode` | 점포·매출에 필요합니다. `CS`와 ASCII 숫자 6자리를 붙입니다. 유동인구에 전달하면 빈 값도 400입니다. |
 
-ASCII 연도 4자리와 분기 1~4를 이어 붙인 `YYYYQ` 형식입니다.
-
-점포·매출에는 `industryCode`가 필요하며 형식은 `CS`와 ASCII 숫자 6자리입니다.
-
-유동인구에 `industryCode`를 전달하면 값이 비어 있어도 400입니다.
-
-코드와 분기는 문자열 원문을 검증합니다.
+API는 코드와 분기의 문자열 원문을 검증합니다.
 
 ### 응답과 결측
 
@@ -193,21 +168,29 @@ ASCII 연도 4자리와 분기 1~4를 이어 붙인 `YYYYQ` 형식입니다.
 
 ### 통계 게시 출처
 
-경계 준비 → 경계에 요청 지역이 존재하는지 → 해당 통계 데이터셋 준비 순으로 판정합니다.
+지역별 통계 요청의 입력이 유효하면, 서비스는 현행 경계와 해당 데이터셋이 준비됐는지 확인한 뒤 요청한 지역·분기·업종의 행을 찾습니다. 유동인구는 지역·분기만 사용합니다.
 
-데이터셋의 준비 여부는 적격 출처를 가리키는 실제 통계 행이 하나 이상 있는지로 판단합니다.
+```mermaid
+flowchart TD
+    Boundary{"현행 경계가 준비됐는가?"}
+    Region{"현행 경계에 요청 지역이 있는가?"}
+    Dataset{"해당 데이터셋에 적격 행이 있는가?"}
+    Row{"요청 조건에 맞는 적격 행이 있는가?"}
+    Unavailable["503 DATA_NOT_READY"]
+    NotFound["404 REGION_NOT_FOUND"]
+    Data["200 · data 객체와 출처"]
+    Empty["200 · data: null"]
+    Boundary -->|예| Region
+    Boundary -->|아니요| Unavailable
+    Region -->|예| Dataset
+    Region -->|아니요| NotFound
+    Dataset -->|예| Row
+    Dataset -->|아니요| Unavailable
+    Row -->|예| Data
+    Row -->|아니요| Empty
+```
 
-배치만 존재하면 준비 상태가 아닙니다.
-
-통계 행은 `source_batch_id`로 출처 배치를 참조합니다.
-
-배치는 해당 데이터셋 코드, `CSV` 또는 `API` 출처, 서울 전체 범위, `PUBLISHED`, 게시 시각 존재 조건을 모두 충족해야 합니다.
-
-서비스는 전역 최신 통계 배치로 조회를 제한하지 않습니다.
-
-과거의 적격 배치에서 보존된 분기도 각 행의 출처와 함께 반환합니다.
-
-[데이터셋과 테이블](DATABASE.md#통계-테이블)
+데이터셋은 적격 출처를 참조하는 실제 행이 하나 이상 있을 때 준비 상태입니다. 각 행의 `source_batch_id`가 가리키는 배치는 해당 데이터셋 코드, `CSV` 또는 `API` 출처, 서울 전체 범위, `PUBLISHED`, 게시 시각 존재 조건을 모두 충족해야 합니다. 조회 조건에 맞으면 과거 적격 배치에서 보존한 분기도 그 행의 출처와 함께 반환합니다. [행정동 점포 조회 서비스](../apps/api/src/main/java/kr/ac/recycleyoungs/store/StoreStatService.java) · [데이터셋과 테이블](DATABASE.md#통계-테이블)
 
 ## 카페 REST API 계약
 
