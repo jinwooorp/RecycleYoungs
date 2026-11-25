@@ -1,0 +1,14 @@
+# Wrapper와 제품 소스만 허용합니다. 로컬 설정과 빌드 산출물은 전송하지 않습니다.
+**
+!build.gradle
+!settings.gradle
+!gradlew
+!gradle/
+!gradle/wrapper/
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+!src/
+!src/main/
+!src/main/**
+**/.env*
+**/application-local.*

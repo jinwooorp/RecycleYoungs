@@ -1,0 +1,14 @@
+[
+  {
+    "slot": "A",
+    "name": "[Demo 합성] 후보 A",
+    "longitude": 127,
+    "latitude": 37.57
+  },
+  {
+    "slot": "B",
+    "name": "[Demo 합성] 후보 B",
+    "longitude": 127.03,
+    "latitude": 37.57
+  }
+]

@@ -1,0 +1,206 @@
+import assert from 'node:assert/strict';
+import { test, type TestContext } from 'node:test';
+import { startMockApi } from './mock-api.ts';
+
+async function fixture(t: TestContext) {
+  const server = await startMockApi(0);
+  t.after(
+    () =>
+      new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      ),
+  );
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  return (path: string, cookie = '') =>
+    fetch(`http://127.0.0.1:${address.port}${path}`, {
+      headers: { Cookie: cookie },
+    });
+}
+
+test('합성 식별자, 구·동과 경계는 외부 연결 없이 제공', async (t) => {
+  const get = await fixture(t);
+  assert.deepEqual(await (await get('/__e2e/health')).json(), {
+    fixture: 'synthetic-v1',
+  });
+  assert.equal((await (await get('/api/v1/districts')).json()).items.length, 2);
+  const dongs = await (await get('/api/v1/districts/11440/dongs')).json();
+  assert.equal(dongs.items[0].districtCode, '11440');
+  const boundary = await (await get('/api/v1/dongs/11440660/boundary')).json();
+  assert.equal(boundary.properties.regionType, 'DONG');
+  assert.equal((await get('/api/v1/districts/99999/dongs')).status, 404);
+  const affiliation = await (
+    await get(
+      '/api/v1/regions/nearby?longitude=126.923&latitude=37.556&radiusM=1',
+    )
+  ).json();
+  assert.equal(affiliation.dongs[0].dongCode, '11440660');
+  assert.equal((await get('/api/v1/regions/nearby?radiusM=1')).status, 400);
+});
+
+test('분기·지역·업종 계약과 원본 정밀도', async (t) => {
+  const get = await fixture(t);
+  const quarters = await (await get('/api/v1/statistics/quarters')).json();
+  assert.equal(quarters.defaultQuarterCode, '20262');
+  assert.deepEqual(
+    quarters.quarters.map((row: { quarterCode: string }) => row.quarterCode),
+    ['20263', '20262', '20261'],
+  );
+  assert.deepEqual(quarters.quarters[0].districtMetrics, ['stores']);
+  assert.equal(
+    (await get('/api/v1/statistics/quarters', 'ry-e2e-scenario=quarters-error'))
+      .status,
+    503,
+  );
+  for (const kind of ['districts', 'dongs'])
+    for (const quarter of ['20261', '20262']) {
+      const code = kind === 'districts' ? '11440' : '11440660';
+      const data = await (
+        await get(
+          `/api/v1/${kind}/${code}/stats/sales?quarterCode=${quarter}&industryCode=CS100010`,
+        )
+      ).json();
+      assert.equal(
+        data[kind === 'districts' ? 'districtCode' : 'dongCode'],
+        code,
+      );
+      assert.equal(data.quarterCode, quarter);
+      assert.equal(
+        data.data.monthlySalesAmount,
+        quarter === '20261' ? '4000' : '9007199254740993',
+      );
+    }
+  const foot = await (
+    await get('/api/v1/districts/11440/stats/foot-traffic?quarterCode=20262')
+  ).json();
+  assert.equal(foot.data.totalFootTraffic, '123456.7800');
+  assert(!('industryCode' in foot));
+  assert.equal(
+    (
+      await get(
+        '/api/v1/districts/11440/stats/foot-traffic?quarterCode=20262&industryCode=CS100010',
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (await get('/api/v1/districts/11440/stats/stores?quarterCode=20262'))
+      .status,
+    400,
+  );
+});
+
+test('오류·빈 응답은 쿠키별로 격리되고 정상 재시도가 가능', async (t) => {
+  const get = await fixture(t);
+  const path =
+    '/api/v1/districts/11440/stats/sales?quarterCode=20262&industryCode=CS100010';
+  const [error, empty, normal] = await Promise.all([
+    get(path, 'ry-e2e-scenario=sales-error'),
+    get(path, 'ry-e2e-scenario=sales-empty'),
+    get(path),
+  ]);
+  assert.equal(error.status, 503);
+  assert.equal((await empty.json()).data, null);
+  assert.equal(
+    (await normal.json()).data.monthlySalesAmount,
+    '9007199254740993',
+  );
+  assert.equal(
+    (await get('/api/v1/districts', 'ry-e2e-scenario=districts-error')).status,
+    503,
+  );
+  assert.equal((await get('/api/v1/districts')).status, 200);
+});
+
+test('반경과 반환 상한·전체 건수·서버 거리 유지', async (t) => {
+  const get = await fixture(t);
+  for (const [radius, total] of [
+    [500, 3],
+    [1000, 7],
+  ]) {
+    const page = await (
+      await get(
+        `/api/v1/cafes/nearby?longitude=126.923&latitude=37.556&radiusM=${radius}&limit=200&offset=0`,
+      )
+    ).json();
+    assert.equal(page.totalCount, total);
+    assert.equal(page.items.length, 1);
+    assert.equal(page.hasMore, true);
+    assert.equal(page.items[0].distanceM, 120);
+    assert.equal(page.limit, 200);
+  }
+  assert.equal(
+    (await get('/api/v1/cafes/nearby?radiusM=2000&limit=200&offset=0')).status,
+    400,
+  );
+  assert.equal(
+    (await get('/api/v1/cafes/nearby?radiusM=500&limit=200&offset=0')).status,
+    400,
+  );
+});
+
+test('정의하지 않은 API를 404로 응답한다', async (t) => {
+  const get = await fixture(t);
+  const response = await get('/api/v1/not-defined');
+  assert.equal(response.status, 404);
+  assert.equal((await response.json()).code, 'E2E_UNEXPECTED_ENDPOINT');
+});
+
+test('지도 영역의 반복 구 필터·하나의 결과 페이지·경계 오류 정책', async (t) => {
+  const get = await fixture(t);
+  const url =
+    '/api/v1/cafes/viewport?west=126.9&east=127.1&south=37.5&north=37.6&limit=200&offset=0';
+  const page = await (
+    await get(url + '&districtCodes=11200&districtCodes=11440')
+  ).json();
+  assert.deepEqual(
+    page.items.map((cafe: { bizesId: string }) => cafe.bizesId),
+    ['synthetic-cafe-1', 'synthetic-cafe-2'],
+  );
+  assert(!('distanceM' in page.items[0]));
+  assert.equal(page.totalCount, 201);
+  assert.equal(page.hasMore, true);
+  assert.equal(page.sourceBatch.referenceMonth, '202610');
+  assert.equal(
+    (await get(url + '&districtCodes=11200&dongCodes=11440660')).status,
+    400,
+  );
+  const boundary = '/api/v1/districts/11200/boundary';
+  assert.equal(
+    (await get(boundary, 'ry-e2e-scenario=district-boundary-error')).status,
+    503,
+  );
+  assert.equal((await get(boundary)).status, 200);
+});
+
+test('합성 카페 목록의 200건 다음 묶음·오류·게시본을 재현한다', async (t) => {
+  const get = await fixture(t);
+  const url =
+    '/api/v1/cafes/nearby?longitude=126.978&latitude=37.5665&radiusM=500&limit=200&offset=';
+  const first = await (
+    await get(url + '0', 'ry-e2e-scenario=cafe-pagination')
+  ).json();
+  const extra = await (
+    await get(url + '200', 'ry-e2e-scenario=cafe-pagination')
+  ).json();
+  assert.equal(first.items.length, 200);
+  assert.equal(first.totalCount, 231);
+  assert.equal(first.hasMore, true);
+  assert.equal(extra.items.length, 31);
+  assert.equal(extra.items[0].storeName, '합성 카페 201');
+  assert.equal(extra.items[0].distanceM, 201);
+  assert.equal(extra.hasMore, false);
+  assert.equal(extra.sourceBatch.batchId, first.sourceBatch.batchId);
+  assert.equal(
+    (await get(url + '200', 'ry-e2e-scenario=cafe-pagination-error')).status,
+    503,
+  );
+  const republished = await (
+    await get(url + '200', 'ry-e2e-scenario=cafe-pagination-republished')
+  ).json();
+  assert.notEqual(republished.sourceBatch.batchId, first.sourceBatch.batchId);
+  assert.equal(
+    (await get(url + '100001', 'ry-e2e-scenario=cafe-pagination')).status,
+    400,
+  );
+});

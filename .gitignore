@@ -1,35 +1,88 @@
-# Dependencies and build output
-node_modules/
-dist/
-build/
-*.tsbuildinfo
-.gradle/
-.venv/
-venv/
 
-# Python runtime files
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.coverage
-htmlcov/
+# ==========================================
+# OS
+# ==========================================
+.DS_Store
+Thumbs.db
 
-# Local configuration
-/etl/api.env
+# ==========================================
+# IDE / Editor
+# ==========================================
+.idea/
+.vscode/
+*.iml
+.project
+.classpath
+.settings/
+
+# ==========================================
+# Environment / Secrets
+# ==========================================
 .env
 .env.*
-!frontend/.env.local.example
-.DS_Store
-.idea/
-*.log
+!.env.example
+!.env.*.example
 
-# Local datasets; keep the input directory in Git.
-/dataset.zip
-/data/archives/
-/data/processed/
-/data/raw/*
-!/data/raw/dataset/
-/data/raw/dataset/*
-!/data/raw/dataset/.gitkeep
-/codex-review-full.diff
-/.codex-local/
+# Spring Boot local configuration
+application-local.yml
+application-local.yaml
+application-local.properties
+
+# ==========================================
+# Node.js / TypeScript
+# (Frontend, ETL)
+# ==========================================
+node_modules/
+
+# Build outputs
+dist/
+coverage/
+*.tsbuildinfo
+
+# Next.js
+.next/
+out/
+
+# Vite / Other tooling
+.vite/
+.turbo/
+.cache/
+.parcel-cache/
+
+# Package manager
+.pnpm-store/
+.npm/
+.yarn/install-state.gz
+.yarn/unplugged/
+
+# ==========================================
+# Java / Spring Boot
+# ==========================================
+.gradle/
+build/
+target/
+apps/api/bin/
+
+# ==========================================
+# Logs / Temporary files
+# ==========================================
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.score-snapshot.json
+.score-snapshot-*.part
+
+# ==========================================
+# Testing
+# ==========================================
+playwright-report/
+test-results/
+
+# ==========================================
+# Miscellaneous
+# ==========================================
+*.swp
+*.swo
+*~

@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hook_root=$(git rev-parse --show-toplevel) && node \"$hook_root/.codex/hooks/check_dangerous_commands.mjs\"",
+            "timeout": 2
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^apply_patch$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hook_root=$(git rev-parse --show-toplevel) && node \"$hook_root/.codex/hooks/check_changed_files.mjs\"",
+            "timeout": 6
+          }
+        ]
+      }
+    ]
+  }
+}

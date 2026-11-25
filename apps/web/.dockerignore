@@ -1,0 +1,12 @@
+# 빌드에 필요한 파일만 허용합니다. 로컬 환경 파일과 빌드 산출물은 전송하지 않습니다.
+**
+!package.json
+!package-lock.json
+!index.html
+!tsconfig.json
+!tsconfig.app.json
+!tsconfig.node.json
+!vite.config.ts
+!src/
+!src/**
+**/.env*

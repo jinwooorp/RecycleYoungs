@@ -1,244 +1,54 @@
-name: recycleyoungs-dev
-
-x-labels: &labels
-  org.recycleyoungs.environment: local-development-v1
-x-build-labels: &build-labels
-  org.recycleyoungs.project: ${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}
-  org.recycleyoungs.artifact: local-development-v1
-x-env: &env
-  DEV_PROJECT: ${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}
-  # Seoul official HTTP is the project's selected transport; no silent fallback.
-  DEV_ALLOW_SEOUL_HTTP: ${DEV_ALLOW_SEOUL_HTTP:-true}
-x-worker: &worker
-  platform: linux/amd64
-  image: ${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-worker:local
-  # One shared worker image is built by inspect-proxy before its dependants.
-  pull_policy: never
-  user: "10001:10001"
-  labels: *labels
-  environment: *env
-  read_only: true
-  tmpfs: [/tmp]
-  restart: "no"
-  entrypoint: [python, /workspace/etl/dev_runtime.py]
+name: recycleyoungs
 
 services:
-  # Preview by default. Only --apply --confirm <project> deletes owned resources.
-  reset:
-    profiles: [tools]
-    image: python:3.12-slim@sha256:cb33f7f771ecec2ef1225cf39b159591a040391bd73e4c01f00fdfc4c47611d2
-    platform: linux/amd64
-    labels: *labels
-    environment: {DEV_PROJECT: "${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}"}
-    entrypoint: [python, -B, /bootstrap/reset_dev.py]
-    network_mode: none
-    read_only: true
-    cap_drop: [ALL]
-    volumes:
-      - type: bind
-        source: ./docker/api/reset_dev.py
-        target: /bootstrap/reset_dev.py
-        read_only: true
-        bind: {create_host_path: false}
-      - type: bind
-        source: ${DEV_DOCKER_SOCKET:-/var/run/docker.sock}
-        target: /var/run/docker.sock
-        read_only: true
-        bind: {create_host_path: false}
-
-  # Explicit opt-in utility: no DB, runtime volumes or Docker socket.
-  setup:
-    profiles: [tools]
-    image: python:3.12-slim@sha256:cb33f7f771ecec2ef1225cf39b159591a040391bd73e4c01f00fdfc4c47611d2
-    platform: linux/amd64
-    entrypoint: [python, -B, /bootstrap/setup_env.py]
-    network_mode: none
-    read_only: true
-    cap_drop: [ALL]
-    cap_add: [CHOWN, DAC_OVERRIDE]
-    volumes:
-      - type: bind
-        source: ./docker/api/setup_env.py
-        target: /bootstrap/setup_env.py
-        read_only: true
-        bind: {create_host_path: false}
-      - type: bind
-        source: ./etl
-        target: /config/etl
-        bind: {create_host_path: false}
-      - type: bind
-        source: ./frontend
-        target: /config/frontend
-        bind: {create_host_path: false}
-
-  inspect-proxy:
-    <<: *worker
-    pull_policy: build
-    build: {context: ., dockerfile: docker/api/Dockerfile, target: worker, labels: *build-labels}
-    user: "0:0"
-    entrypoint: [python, /workspace/etl/dev_inspect.py]
-    restart: unless-stopped
-    cap_drop: [ALL]
-    networks: [inspect]
-    # Linux-daemon path, including Docker Desktop's Linux VM on Windows/macOS.
-    # Never mount a Windows named pipe into this Linux container.
-    volumes:
-      - type: bind
-        source: ${DEV_DOCKER_SOCKET:-/var/run/docker.sock}
-        target: /var/run/docker.sock
-        read_only: true
-        bind: {create_host_path: false}
-    healthcheck:
-      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health',timeout=2).close()"]
-      interval: 3s
-      timeout: 3s
-      retries: 20
-
-  preflight:
-    <<: *worker
-    user: "0:0"
-    command: [preflight]
-    depends_on:
-      inspect-proxy: {condition: service_healthy}
-    networks: [inspect]
-    volumes:
-      - control:/api-control
-      - data:/api-data
-      - reader:/reader-control
-      - writer:/writer-control
-      - db:/db-check:ro
-      - type: bind
-        source: ./etl/api.env
-        target: /input/api.env
-        read_only: true
-        bind: {create_host_path: false}
-
-  api-postgres:
-    image: postgis/postgis@sha256:44126d872ac91993766c341e369c539e8196614321765d36a6f1bab0419a5fa5
-    platform: linux/amd64
-    labels: *labels
-    restart: unless-stopped
-    depends_on:
-      preflight: {condition: service_completed_successfully}
+  db:
+    image: postgis/postgis:17-3.5
     environment:
-      POSTGRES_DB: recycleyoungs_api_dev
-      POSTGRES_USER: ry_api_owner
-      POSTGRES_PASSWORD_FILE: /api-control/owner-password
-      PGDATA: /var/lib/postgresql/data/api
-    networks: [data]
-    volumes: [db:/var/lib/postgresql/data, control:/api-control:ro]
-    tmpfs: [/docker-entrypoint-initdb.d]
+      POSTGRES_DB: ${DB_NAME:?Set DB_NAME in .env}
+      POSTGRES_USER: ${DB_USER:?Set DB_USER in .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [CMD, pg_isready, -q, -h, 127.0.0.1, -U, ry_api_owner, -d, recycleyoungs_api_dev]
-      interval: 3s
-      timeout: 3s
-      retries: 60
+      test:
+        ["CMD-SHELL", 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
       start_period: 10s
 
-  identity:
-    <<: *worker
-    command: [identity]
+  backend:
+    profiles: [full]
+    build: ./apps/api
     depends_on:
-      api-postgres: {condition: service_healthy}
-    networks: [data, inspect]
-    volumes: [control:/api-control, reader:/reader-control, writer:/writer-control]
-
-  migrate:
-    platform: linux/amd64
-    image: ${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-migrator:local
-    pull_policy: build
-    build: {context: ., dockerfile: docker/api/Dockerfile, target: migrator, labels: *build-labels}
-    labels: *labels
-    user: "10001:10001"
-    read_only: true
-    tmpfs: [/tmp]
-    restart: "no"
-    depends_on:
-      identity: {condition: service_completed_successfully}
-    networks: [data]
-    volumes: [control:/api-control]
-
-  initialize:
-    <<: *worker
-    command: [initialize]
-    depends_on:
-      migrate: {condition: service_completed_successfully}
-    networks: [data, inspect, access]
-    volumes: [control:/api-control, data:/api-data]
-
-  api-backend:
-    platform: linux/amd64
-    image: ${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-backend:local
-    pull_policy: build
-    build: {context: ., dockerfile: docker/api/Dockerfile, target: backend, labels: *build-labels}
-    labels: *labels
-    user: "10001:10001"
-    read_only: true
-    tmpfs: [/tmp]
-    restart: unless-stopped
-    depends_on:
-      initialize: {condition: service_completed_successfully}
-    networks: [data, access]
-    volumes: [reader:/api-control:ro]
-    healthcheck:
-      test: [CMD, bash, -ec, "exec 3<>/dev/tcp/127.0.0.1/8080; printf 'GET /api/quarters HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3; read -r line <&3; [[ $$line == *' 200 '* ]]"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: db
+      # 컨테이너 간 연결은 호스트용 DB_JDBC_URL과 DB_PORT의 영향을 받지 않습니다.
+      DB_JDBC_URL: jdbc:postgresql://db:5432/${DB_NAME:?Set DB_NAME in .env}
+      DB_USER: ${DB_USER:?Set DB_USER in .env}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
 
   frontend:
-    platform: linux/amd64
-    image: ${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-frontend:local
-    pull_policy: build
-    build: {context: ., dockerfile: docker/api/Dockerfile, target: frontend-dev, labels: *build-labels}
-    labels: *labels
-    restart: unless-stopped
+    profiles: [full]
+    build:
+      context: ./apps/web
+      args:
+        VITE_KAKAO_MAP_APP_KEY: ${VITE_KAKAO_MAP_APP_KEY:-}
     depends_on:
-      api-backend: {condition: service_healthy}
-    env_file:
-      - path: ./frontend/.env.local
-        required: false
-    environment:
-      DEV_WATCH_POLLING: ${DEV_WATCH_POLLING:-true}
-    networks: [access]
-    ports: ["127.0.0.1:${DEV_WEB_PORT:-5173}:5173"]
+      - backend
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-8081}:8080"
     volumes:
       - type: bind
-        source: ./frontend/src
-        target: /build/src
+        source: ./nginx/default-dev.conf
+        target: /etc/nginx/conf.d/default.conf
         read_only: true
-        bind: {create_host_path: false}
-    healthcheck:
-      test: [CMD, node, -e, "fetch('http://127.0.0.1:5173').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 10s
-      timeout: 3s
-      retries: 20
-
-  api-scheduler:
-    <<: *worker
-    command: [schedule]
-    restart: unless-stopped
-    depends_on:
-      initialize: {condition: service_completed_successfully}
-    networks: [data, inspect, access]
-    volumes: [writer:/api-control:ro, data:/api-data]
-
-networks:
-  data:
-    name: ${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-data
-    internal: true
-    labels: *labels
-  inspect:
-    name: ${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-inspect
-    internal: true
-    labels: *labels
-  access:
-    name: ${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-access
-    labels: *labels
+        bind:
+          create_host_path: false
 
 volumes:
-  db: {name: "${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-db", labels: *labels}
-  control: {name: "${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-control", labels: *labels}
-  data: {name: "${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-data", labels: *labels}
-  reader: {name: "${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-reader", labels: *labels}
-  writer: {name: "${COMPOSE_PROJECT_NAME:-recycleyoungs-dev}-writer", labels: *labels}
+  postgres_data:

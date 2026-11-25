@@ -1,0 +1,288 @@
+# REST API 레퍼런스
+
+지역·상권 통계·카페를 조회하는 API입니다. Backend를 `db` 프로필로 실행한 뒤 표에 나온 경로 앞에 `/api/v1`을 붙여 `GET`으로 요청합니다.
+
+[로컬 실행](SETUP.md#3-backend) · [통계 원천과 집계 기준](ETL.md#공식-자치구-통계와-집계-정책)
+
+- [공통 오류와 데이터 상태](#공통-오류와-데이터-상태)
+- [행정구역](#행정구역-rest-api-계약)
+- [구·동 상권 통계](#구동-상권-통계-rest-api-계약)
+  - [통계 기준 분기 조회](#통계-분기-목록)
+  - [지역과 지표를 지정해 조회](#지역별-통계-조회)
+- [주변·지도 영역 카페](#카페-rest-api-계약)
+
+## 공통 오류와 데이터 상태
+
+서비스 오류는 `application/problem+json`으로 반환합니다. 응답 필드는 `type`, `title`, `status`, `detail`, `instance`와 서비스 오류 `code`입니다. 오류 메시지는 예외·입력 원문, SQL, 접속 정보를 공개하지 않습니다. 미등록 경로의 404와 지원하지 않는 메서드의 405는 Spring MVC의 상태와 헤더를 유지하고 `code`를 생략합니다.
+
+| 상태 | `code` | 의미 |
+| --- | --- | --- |
+| 400 | `INVALID_PARAMETER` | 필수값 누락·중복·형식·범위 오류 또는 지역 필터 조합 오류 |
+| 404 | `REGION_NOT_FOUND` | 준비된 최신 경계 게시본에 요청 지역이 없음 |
+| 503 | `DATA_NOT_READY` | 조회에 필요한 경계·통계·카페 게시 데이터가 준비되지 않음 |
+| 503 | `DATABASE_UNAVAILABLE` | DB 연결·자원 접근·조회 시간 초과 |
+| 500 | `INTERNAL_ERROR` | SQL·응답 매핑·무결성 오류 등 서버 구현 오류 |
+
+### 공통 요청 형식
+
+- 지역 코드는 선행 0을 보존하는 ASCII 숫자 문자열입니다. `districtCode`는 5자리, `dongCode`는 8자리입니다.
+- 값을 하나만 받는 쿼리 파라미터는 같은 값이 반복돼도 거부합니다. 선택 파라미터는 생략하면 기본값을 적용합니다.
+- 목록 필터는 `districtCodes=11110&districtCodes=11140`처럼 키를 반복합니다. 중복 코드는 제거하고 쉼표 목록, 공백, 빈 항목은 거부합니다. 지도 영역의 `dongCodes`도 같은 방식으로 전달합니다.
+
+### 게시본과 출처
+
+게시 배치는 적재 실행을 식별하는 기록입니다. `boundaryBatch`는 경계의 출처, `sourceBatch`는 조회한 데이터의 출처입니다. 두 객체는 `batchId`(UUID 문자열)와 `publishedAt`(ISO 8601 문자열)을 제공하며, `publishedAt`은 서비스 DB에서 게시를 확정한 시각입니다.
+
+경계·통계·카페 조회는 읽기 전용 `REPEATABLE READ` 트랜잭션에서 실행합니다. 한 응답에 필요한 배치, 데이터 준비 여부, 값과 출처를 같은 DB 시점에서 읽습니다.
+
+## 행정구역 REST API 계약
+
+| 경로 | 쿼리 | 응답 |
+| --- | --- | --- |
+| `/districts` | 없음 | `items[]`의 각 항목에 `districtCode`, `districtName` |
+| `/districts/{districtCode}/dongs` | 없음 | `items[]`의 각 항목에 `dongCode`, `districtCode`, `dongName`, `labelPoint` |
+| `/districts/{districtCode}/boundary` | 없음 | 자치구 GeoJSON Feature |
+| `/dongs/{dongCode}/boundary` | 없음 | 행정동 GeoJSON Feature |
+| `/regions/nearby` | `longitude`, `latitude` 필수. `radiusM`, `districtCodes` 선택 | `boundaryBatch`, `districts[]`, `dongs[]` |
+
+- 각 목록은 지역 코드 오름차순입니다.
+
+  `labelPoint`는 DB에 저장된 WGS84 대표점이며 GeoJSON `Point` 객체로 반환합니다.
+
+- 경계는 `application/geo+json`으로 반환합니다.
+
+  최상위 필드는 `type: "Feature"`, `id`(지역 코드), `geometry`, `properties`입니다.
+
+  `properties`에는 `regionType`, `regionCode`, `regionName`, `districtCode`, `boundaryBatch`가 있습니다.
+
+  좌표는 WGS84 경도·위도 순서입니다.
+
+- 주변 조회에서 경도는 `[-180,180]`, 위도는 `[-90,90]` 범위의 유한한 수입니다.
+
+  `radiusM`은 기본 500m, 허용 범위 1~1,000m이며 소수를 허용합니다.
+
+  두 지역 목록은 각각 코드와 이름을 제공하며, 동에는 소속 구 코드도 포함합니다.
+
+  `containsCenter`는 중심이 해당 경계 안이나 위에 있음을 뜻합니다.
+
+- 주변 조회는 반경과 겹치거나 접촉하는 경계를 반환합니다.
+
+  구 필터가 있으면 지정 구로 범위를 좁히고 동은 반경·구·동의 실제 교집합으로 판정합니다.
+
+  지정 구가 최신 경계에 없으면 404입니다.
+
+  경계 게시본이 준비됐으나 겹치는 지역이 없으면 두 목록이 비어 있습니다.
+
+### 경계 게시본
+
+`SEOUL_DONG_BOUNDARY`, `SHAPEFILE`, 서울 전체(`scope_type=SEOUL`, `scope_code IS NULL`), `PUBLISHED`, 게시 시각 존재 조건을 모두 충족한 배치가 대상입니다.
+
+대상 배치를 `published_at → started_at → batch_id` 내림차순으로 정렬해 첫 배치를 사용합니다.
+
+해당 배치를 참조하는 구·동만 조회하며, 동의 부모 구도 같은 게시본에 속해야 합니다.
+
+최신 적격 배치가 없거나 그 배치의 실제 경계 행이 모두 없으면 503입니다.
+
+과거 경계로 대체하지 않습니다.
+
+경계가 준비된 상태에서 없는 구·동은 404이고, 존재하는 구의 동 목록은 비어 있을 수 있습니다.
+
+## 구·동 상권 통계 REST API 계약
+
+### 통계 분기 목록
+
+`GET /api/v1/statistics/quarters`는 서울 전체에서 하나 이상의 적격 통계 행이 존재하는 분기를 최신순으로 반환합니다.
+
+| 응답 필드 | 의미 |
+| --- | --- |
+| `industryCode` | 점포·추정매출에 적용한 카페 업종 `CS100010`. 유동인구는 지역 전체를 집계합니다. |
+| `defaultQuarterCode` | 구·동 두 수준에 세 지표가 모두 있는 분기 중 최신 분기입니다. 해당 분기가 없으면 목록의 최신 분기를 사용합니다. |
+| `quarters` | 최신 분기부터 `quarterCode`, `districtMetrics`, `dongMetrics`를 반환합니다. 지표 값은 `stores`, `sales`, `foot-traffic`입니다. |
+
+지표가 목록에 있으면 해당 수준의 현행 지역 중 하나 이상에 적격 행이 있다는 뜻입니다. 특정 구나 동의 자료는 해당 지역의 통계 API에서 확인합니다. 현행 경계가 준비됐지만 적격 행이 없으면 `200`과 `quarters: []`, `defaultQuarterCode: null`을 반환합니다. 경계가 준비되지 않았으면 `503 DATA_NOT_READY`입니다.
+
+[분기 목록의 게시 기준](DATABASE.md#통계-분기-목록)
+
+### 지역별 통계 조회
+
+| 지표 | 자치구 경로 | 행정동 경로 |
+| --- | --- | --- |
+| 점포 | `/districts/{districtCode}/stats/stores` | `/dongs/{dongCode}/stats/stores` |
+| 추정매출 | `/districts/{districtCode}/stats/sales` | `/dongs/{dongCode}/stats/sales` |
+| 유동인구 | `/districts/{districtCode}/stats/foot-traffic` | `/dongs/{dongCode}/stats/foot-traffic` |
+
+| 파라미터 | 규칙 |
+| --- | --- |
+| `quarterCode` | 모든 지표에 필요합니다. ASCII 연도 4자리와 분기 1~4를 붙인 `YYYYQ` 형식입니다. |
+| `industryCode` | 점포·매출에 필요합니다. `CS`와 ASCII 숫자 6자리를 붙입니다. 유동인구에 전달하면 빈 값도 400입니다. |
+
+API는 코드와 분기의 문자열 원문을 검증합니다.
+
+### 응답과 결측
+
+최상위에 요청한 `districtCode` 또는 `dongCode`, `quarterCode`, `data`를 반환합니다.
+
+점포·매출 응답에만 `industryCode`가 포함됩니다.
+
+`data` 객체에는 아래 측정값과 실제 통계 행의 `sourceBatch`가 들어 있습니다.
+
+| 통계 | 측정값 필드 |
+| --- | --- |
+| 점포 | `storeCount`, `generalStoreCount`, `franchiseStoreCount`, `openedStoreCount`, `closedStoreCount`, `openingRate`, `closureRate` |
+| 추정매출 | `monthlySalesAmount`, `monthlySalesCount`, `weekdaySalesAmount`, `weekendSalesAmount` |
+| 유동인구 | `totalFootTraffic`, `maleFootTraffic`, `femaleFootTraffic` |
+
+| 상태 | 응답 |
+| --- | --- |
+| 적격 행과 측정값이 있음 | `200`과 정확한 숫자 문자열. 실제 0은 `"0"`, 저장된 소수 자릿수에 따라 `"0.0000"` 등으로 반환 |
+| 적격 행의 측정값이 없음 | `200`과 해당 필드의 JSON `null`. 모든 측정값이 NULL이어도 `data` 객체와 출처 유지 |
+| 데이터셋은 준비됐지만 요청 키의 적격 행이 없음 | `200`과 `data: null`. 형식이 유효한 미존재 업종도 이 경우에 포함 |
+| 유효한 경계나 통계 데이터셋이 미준비 | `503 DATA_NOT_READY` |
+| 준비된 경계에 요청 지역이 없음 | `404 REGION_NOT_FOUND` |
+
+측정값은 JSON 숫자 대신 문자열로 반환합니다.
+
+다른 분기·업종이나 임의의 0으로 대체하지 않습니다.
+
+공식 자치구 통계는 자치구 테이블에서 직접 조회합니다.
+
+[DB의 결측과 정밀도](DATABASE.md#결측과-정밀도)
+
+다음은 `GET /api/v1/districts/00110/stats/foot-traffic?quarterCode=20262`의 합성 응답 예시입니다.
+
+```json
+{
+  "districtCode": "00110",
+  "quarterCode": "20262",
+  "data": {
+    "totalFootTraffic": "9007199254740993.123456789012345678900",
+    "maleFootTraffic": "0.0000",
+    "femaleFootTraffic": null,
+    "sourceBatch": {
+      "batchId": "00000000-0000-0000-0000-000000000002",
+      "publishedAt": "2026-10-02T00:00:00Z"
+    }
+  }
+}
+```
+
+### 통계 게시 출처
+
+지역별 통계 요청의 입력이 유효하면, 서비스는 현행 경계와 해당 데이터셋이 준비됐는지 확인한 뒤 요청한 지역·분기·업종의 행을 찾습니다. 유동인구는 지역·분기만 사용합니다.
+
+```mermaid
+flowchart TD
+    Boundary{"현행 경계가 준비됐는가?"}
+    Region{"현행 경계에 요청 지역이 있는가?"}
+    Dataset{"해당 데이터셋에 적격 행이 있는가?"}
+    Row{"요청 조건에 맞는 적격 행이 있는가?"}
+    Unavailable["503 DATA_NOT_READY"]
+    NotFound["404 REGION_NOT_FOUND"]
+    Data["200 · data 객체와 출처"]
+    Empty["200 · data: null"]
+    Boundary -->|예| Region
+    Boundary -->|아니요| Unavailable
+    Region -->|예| Dataset
+    Region -->|아니요| NotFound
+    Dataset -->|예| Row
+    Dataset -->|아니요| Unavailable
+    Row -->|예| Data
+    Row -->|아니요| Empty
+```
+
+데이터셋은 적격 출처를 참조하는 실제 행이 하나 이상 있을 때 준비 상태입니다. 각 행의 `source_batch_id`가 가리키는 배치는 해당 데이터셋 코드, `CSV` 또는 `API` 출처, 서울 전체 범위, `PUBLISHED`, 게시 시각 존재 조건을 모두 충족해야 합니다. 조회 조건에 맞으면 과거 적격 배치에서 보존한 분기도 그 행의 출처와 함께 반환합니다. [행정동 점포 조회 서비스](../apps/api/src/main/java/kr/ac/recycleyoungs/store/StoreStatService.java) · [데이터셋과 테이블](DATABASE.md#통계-테이블)
+
+## 카페 REST API 계약
+
+### 주변 카페 REST API 계약
+
+`/cafes/nearby`는 중심점 주변을 조회합니다.
+
+`longitude`, `latitude`는 필수이며 범위는 행정구역 주변 조회와 같습니다.
+
+`radiusM`은 선택이며 기본 500m, 허용 범위 1~1,000m입니다.
+
+`districtCodes`를 선택할 수 있습니다.
+
+거리는 PostGIS의 `geography` 연산으로 미터 단위로 계산하며 반경에 접촉한 점도 포함합니다.
+
+지정 구가 있으면 경계 위의 점을 포함하여 카페의 실제 좌표로 판정합니다.
+
+정렬은 반올림 전 거리 오름차순이며, 거리가 같으면 업소번호 오름차순입니다.
+
+### 지도 영역 카페 REST API 계약
+
+`/cafes/viewport`는 지도 사각 영역을 조회합니다.
+
+경도 `west`·`east`와 위도 `south`·`north`가 필수입니다.
+
+각 좌표 범위는 주변 조회와 같으며 `west < east`, `south < north`여야 합니다.
+
+역전된 영역·0 면적·날짜 변경선을 가로지르는 영역은 400입니다.
+
+`districtCodes`와 `dongCodes`를 각각 선택할 수 있습니다.
+
+각 목록 안에서는 하나 이상의 코드와 일치해야 하며, 영역·구 목록·동 목록 조건은 모두 적용합니다.
+
+탐색 화면은 여러 구를 선택하면 `districtCodes=11200&districtCodes=11440`처럼 정렬한 코드를 한 요청에 반복 전달합니다. 행정동 필터는 한 구를 적용했을 때 사용합니다. 화면에는 서버 전체 건수와 현재 페이지 표시 범위를 구분해 표시합니다.
+
+두 목록을 함께 지정하면 모든 동의 부모 구가 지정 구에 포함되어야 하며, 불일치는 400입니다.
+
+영역의 변·모서리와 선택 지역 경계 위의 점은 포함하고, 도형의 구멍 내부는 제외합니다.
+
+행정동 FK와 무관하게 실제 카페 좌표를 사용하고 업소번호순으로 반환합니다.
+
+### 카페 공통 파라미터와 응답
+
+| 항목 | 규칙 |
+| --- | --- |
+| 좌표·반경 | 유한한 십진수 또는 지수 표기. 공백, Java 16진수·타입 접미사, NaN·무한대 거부 |
+| `limit` | ASCII 정수, 기본 100, 1~500 |
+| `offset` | ASCII 정수, 기본 0, 0~100,000 |
+
+구·동 필터를 적용할 때는 최신 경계 게시본이 필요합니다.
+
+미준비는 503, 현재 게시본에 없는 구·동과 동의 부모 구 미존재는 404입니다.
+
+필터를 생략하면 경계 게시본 없이도 조회할 수 있습니다.
+
+두 API 모두 `items`, `totalCount`, `limit`, `offset`, `hasMore`, `sourceBatch`를 반환합니다.
+
+`sourceBatch.referenceMonth`는 조회에 쓴 배치의 소진공 원천 기준년월을 `YYYYMM` 문자열로 제공합니다. 기준년월이 없거나 올바르지 않은 기존 배치는 `null`을 반환합니다. `sourceBatch.publishedAt`은 같은 배치가 서비스 DB에 게시된 ISO 8601 시각입니다. 원천 기준년월, 서비스 DB 게시일, 원본 갱신일은 각각 별개의 정보입니다.
+
+`totalCount`는 페이지를 나누기 전 전체 일치 건수이고 `hasMore`는 `offset + items.length < totalCount`입니다.
+
+Web 주변 탐색의 두 모드는 첫 묶음을 `limit=200&offset=0`으로 조회해 지도에 사용하고, 목록에서 10건씩 읽습니다. 21페이지부터는 필요할 때 `offset=200`, `400`처럼 다음 묶음을 조회합니다. 마지막 이동 가능 페이지는 offset 상한 100,000을 적용해 계산합니다. 추가 응답의 게시본 또는 전체 건수가 첫 묶음과 달라지면 첫 페이지부터 다시 조회하도록 안내합니다.
+
+결과가 없으면 `200`, 빈 배열, 전체 건수 0, `hasMore: false`입니다.
+
+이 경우에도 조회에 사용한 배치의 `sourceBatch`를 함께 반환합니다.
+
+`offset`이 결과 범위를 넘으면 목록만 비고 전체 건수는 유지됩니다.
+
+| 항목 필드 | 타입 |
+| --- | --- |
+| `bizesId`, `storeName`, `semasIndustryCode`, `semasIndustryName` | 문자열 |
+| `branchName`, `roadAddress`, `lotAddress` | 문자열 또는 `null` |
+| `longitude`, `latitude` | WGS84 좌표, JSON 숫자 |
+| `distanceM` | 미터 거리, JSON 숫자. 주변 조회에만 포함 |
+
+### 카페 게시본
+
+`SEMAS_CAFE_STORE`, `API`, 서울 전체 범위, `PUBLISHED`, 게시 시각 존재 조건을 충족해야 합니다.
+
+`source_reference`는 유효한 JSON이어야 합니다.
+
+`collection_mode=FULL_SEOUL`, `complete=true`, `classification_verified=true`를 확인합니다.
+
+두 플래그는 JSON 불리언입니다.
+
+적격 배치를 경계와 같은 순서로 정렬해 첫 배치를 고릅니다.
+
+적격 배치가 없거나 선택한 배치를 참조하는 카페 행이 하나도 없으면 503입니다.
+
+과거 배치로 대체하지 않습니다.
+
+실제 행이 있고 좌표가 모두 NULL이면 데이터는 준비된 상태이고, 공간 조회 결과는 빈 배열입니다.
+
+[카페 저장 구조](DATABASE.md#v4-카페-테이블) · [카페 수집과 게시](ETL.md#카페-api-수집적재)

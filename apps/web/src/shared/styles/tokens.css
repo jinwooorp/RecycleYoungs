@@ -1,0 +1,51 @@
+:root {
+  --brand-primary: #173629;
+  --brand-accent: #8be26e;
+  --brand-accent-hover: #77d657;
+  --brand-accent-active: #66c747;
+  --brand-accent-soft: #e6f9df;
+  --brand-background: #ffffff;
+  --brand-surface: #f4f5f3;
+  --brand-foreground: #202824;
+  --brand-muted-foreground: #59635d;
+  --brand-border: #e0e5df;
+  --brand-input-border: #d3dbd1;
+  --brand-focus-ring: #3c7844;
+  --brand-candidate-selected: #4338ca;
+
+  --background: var(--brand-background);
+  --foreground: var(--brand-foreground);
+  --card: var(--brand-background);
+  --card-foreground: var(--brand-foreground);
+  --popover: var(--brand-background);
+  --popover-foreground: var(--brand-foreground);
+  --primary: var(--brand-primary);
+  --primary-foreground: var(--brand-background);
+  --secondary: var(--brand-surface);
+  --secondary-foreground: var(--brand-primary);
+  --muted: var(--brand-surface);
+  --muted-foreground: var(--brand-muted-foreground);
+  --accent: var(--brand-accent-soft);
+  --accent-foreground: var(--brand-primary);
+  --border: var(--brand-border);
+  --input: var(--brand-input-border);
+  --ring: var(--brand-focus-ring);
+
+  --action: var(--brand-accent);
+  --action-hover: var(--brand-accent-hover);
+  --action-active: var(--brand-accent-active);
+  --action-foreground: var(--brand-primary);
+  --control-border: #7d887f;
+  --destructive: #a12622;
+  --success: #2e693a;
+  --warning: #744a12;
+  --candidate-selected: var(--brand-candidate-selected);
+
+  --font-ui:
+    'Geist Variable', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --radius: 0.625rem;
+  --shadow-control: 0 2px 8px
+    color-mix(in srgb, var(--brand-primary) 6%, transparent);
+  --shadow-popover: 0 4px 16px
+    color-mix(in srgb, var(--brand-primary) 8%, transparent);
+}

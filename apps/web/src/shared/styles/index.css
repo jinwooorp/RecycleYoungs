@@ -1,0 +1,1173 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+@import '@fontsource-variable/geist';
+@import './tokens.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: var(--font-ui);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-action: var(--action);
+  --color-action-hover: var(--action-hover);
+  --color-action-active: var(--action-active);
+  --color-action-foreground: var(--action-foreground);
+  --color-control: var(--control-border);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-candidate-selected: var(--candidate-selected);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@layer components {
+  .form-control {
+    border-color: var(--control-border);
+    background: var(--background);
+    color: var(--foreground);
+  }
+
+  .form-control:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/* 지도 도구와 패널의 배치는 탐색 화면에 한정합니다. */
+.explore-app {
+  --explore-top: max(0.75rem, env(safe-area-inset-top));
+  --explore-left: max(0.75rem, env(safe-area-inset-left));
+  --explore-right: max(0.75rem, env(safe-area-inset-right));
+  /* 하단의 SDK 저작권 표시와 안전 영역을 위한 공간입니다. */
+  --explore-bottom: calc(2rem + env(safe-area-inset-bottom));
+  --explore-dock-height: 3.875rem;
+  --explore-panel-bottom: calc(
+    var(--explore-bottom) + var(--explore-dock-height) + 0.5rem
+  );
+  --explore-controls-top: calc(var(--explore-top) + 7rem);
+  --explore-toolbar-height: 3rem;
+  --explore-search-left: calc(var(--explore-left) + 3.5rem);
+  --explore-search-max-width: 23rem;
+  --explore-filter-max-width: 12rem;
+  --explore-panel-top: calc(var(--explore-controls-top) + 3.5rem);
+  --explore-sheet-limit: 55dvh;
+  --explore-overlay-height: 100dvh;
+  --explore-location-top: calc(var(--explore-controls-top) + 3.25rem);
+  --explore-filter-top: calc(var(--explore-top) + 3.75rem);
+  --explore-filter-body-top: calc(var(--explore-filter-top) + 3.25rem);
+  --explore-filter-error-height: 7rem;
+  --explore-panel-clear-height: max(
+    3.5rem,
+    calc(
+      min(100dvh, var(--explore-visible-end, var(--explore-overlay-height))) -
+        var(--explore-panel-bottom) -
+        max(var(--explore-panel-top), var(--explore-cafe-panel-top, 0px))
+    )
+  );
+  --explore-panel-available-height: min(
+    var(--explore-sheet-limit),
+    var(--explore-panel-clear-height)
+  );
+}
+
+.explore-app [data-slot='button'] {
+  min-height: 2.25rem;
+}
+
+.explore-app [data-slot='button'][data-size^='icon'] {
+  width: 2.75rem;
+  height: 2.75rem;
+}
+
+.explore-app :where(button, a):not([data-slot='button']):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.explore-home {
+  position: absolute;
+  z-index: 35;
+  top: var(--explore-top);
+  left: var(--explore-left);
+  display: grid;
+  width: 2.75rem;
+  height: 3rem;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--background);
+  color: var(--primary);
+}
+
+.explore-home svg {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+.explore-home:hover {
+  background: var(--accent);
+}
+
+.explore-dock,
+.explore-panel-shell {
+  position: absolute;
+  left: calc((100% + var(--explore-left) - var(--explore-right)) / 2);
+  translate: -50% 0;
+}
+
+.explore-dock {
+  z-index: 21;
+  bottom: var(--explore-bottom);
+  width: min(22rem, calc(100% - var(--explore-left) - var(--explore-right)));
+  height: var(--explore-dock-height);
+  padding: 0.1875rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--background);
+  box-shadow: var(--shadow-popover);
+}
+
+.explore-dock ul {
+  height: 100%;
+}
+
+.explore-dock [data-slot='button'] {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  gap: 0.1875rem;
+  padding-block: 0.25rem;
+  border-radius: 0.625rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.explore-dock [data-slot='button']:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.explore-dock [data-slot='button'][aria-expanded='true'] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+  border-color: var(--brand-focus-ring);
+  font-weight: 700;
+}
+
+.explore-dock [aria-expanded='true']::before {
+  position: absolute;
+  top: 0;
+  left: calc(50% - 0.6rem);
+  width: 1.2rem;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--ring);
+  content: '';
+}
+
+.explore-panel-shell {
+  z-index: 20;
+  bottom: var(--explore-panel-bottom);
+  display: flex;
+  justify-content: center;
+  width: calc(100% - var(--explore-left) - var(--explore-right));
+  pointer-events: none;
+}
+
+.explore-panel {
+  flex: none;
+  width: 100%;
+  height: var(
+    --explore-sheet-drag-height,
+    var(--explore-sheet-selected-height, var(--explore-panel-available-height))
+  );
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--background);
+  box-shadow: 0 8px 28px rgb(23 54 41 / 16%);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(12px);
+  transition:
+    opacity 140ms ease-in,
+    transform 140ms ease-in,
+    visibility 0s 140ms;
+}
+
+main:not([data-picking='true'])
+  .explore-panel-shell[data-compact='true']
+  .explore-panel {
+  height: var(
+    --explore-sheet-drag-height,
+    var(--explore-sheet-selected-height, auto)
+  );
+  max-height: var(
+    --explore-sheet-active-limit,
+    var(--explore-panel-available-height)
+  );
+}
+
+.explore-sheet-handle,
+.explore-sheet-probes {
+  display: none;
+}
+
+.explore-panel-shell[data-open='true'] .explore-panel {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+  transition:
+    opacity 180ms ease-out,
+    transform 180ms ease-out;
+}
+
+.explore-panel-view {
+  animation: explore-panel-content-enter 120ms ease-out;
+}
+
+@keyframes explore-panel-content-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .explore-panel,
+  .explore-panel-shell[data-open='true'] .explore-panel,
+  .explore-panel-view {
+    transition: none;
+    animation: none;
+    transform: none;
+  }
+}
+
+.explore-panel-heading {
+  min-height: 3.5rem;
+  padding: 0.3rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--muted);
+  color: var(--primary);
+}
+
+.explore-panel-heading h2 {
+  font-size: 1.0625rem;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.explore-panel-heading button {
+  color: var(--primary);
+}
+
+.explore-panel-heading button:hover {
+  background: var(--accent);
+}
+.explore-panel-content {
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+  scroll-padding-block: 1rem;
+}
+.explore-panel .text-xs,
+.explore-search .text-xs {
+  font-size: 0.8125rem;
+  line-height: 1.65;
+}
+.explore-panel :where(input, select) {
+  min-height: 2.75rem;
+}
+.analysis-detail-options [aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+@container analysis (min-width: 36rem) {
+  .analysis-detail-metrics {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .analysis-detail-metrics > * {
+    grid-column: span 2;
+  }
+  .analysis-detail-metrics > :only-child,
+  .analysis-detail-graphs > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+  .analysis-detail-metrics:is(
+      :has(> :nth-child(2):last-child),
+      :has(> :nth-child(4):last-child)
+    )
+    > *,
+  .analysis-detail-metrics:has(> :nth-child(5):last-child) > :nth-child(n + 4) {
+    grid-column: span 3;
+  }
+}
+
+.explore-nearby-mode button[aria-pressed='true'] {
+  border-color: var(--primary);
+  background: var(--accent);
+  color: var(--primary);
+}
+
+.explore-search {
+  position: absolute;
+  z-index: 30;
+  top: var(--explore-top);
+  left: var(--explore-search-left);
+  right: var(--explore-right);
+  min-width: 0;
+}
+
+.explore-search-form {
+  display: flex;
+  height: 3rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.3rem 0.25rem 0.8rem;
+  border: 1px solid var(--control-border);
+  border-radius: 0.75rem;
+  background: var(--background);
+  box-shadow: var(--shadow-control);
+}
+
+.explore-search-form:focus-within {
+  border-color: var(--ring);
+}
+
+.explore-search-form:has(input:focus-visible) {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.explore-search-form input {
+  font-size: 1rem;
+}
+.explore-search-form input:focus-visible {
+  outline: none;
+}
+.explore-search-form [data-slot='button'] {
+  min-width: 2.75rem;
+  min-height: 2.375rem;
+}
+
+.explore-search-results,
+.explore-search-error {
+  position: absolute;
+  top: calc(var(--explore-panel-top) - var(--explore-top));
+  right: 0;
+  width: 100%;
+  max-height: max(
+    4.5rem,
+    calc(
+      var(--explore-overlay-height) - var(--explore-panel-top) -
+        var(--explore-bottom)
+    )
+  );
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.explore-search-results {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+  background: var(--background);
+  box-shadow: var(--shadow-popover);
+}
+
+.explore-search-heading {
+  flex-shrink: 0;
+  padding: 0.3rem 0.5rem 0.3rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.explore-search-result-body {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.75rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.875rem;
+  scrollbar-width: thin;
+  scroll-padding-block: 0.75rem;
+}
+.explore-search-list {
+  gap: 0.375rem;
+}
+.explore-search-list button {
+  min-height: 4.5rem;
+  padding: 0.75rem;
+}
+
+.cafe-result-card:has(> button[aria-pressed='true']) {
+  border-color: var(--ring);
+  background: var(--accent);
+  box-shadow: inset 3px 0 0 var(--ring);
+}
+.explore-search-error {
+  margin-left: 0;
+}
+
+.cafe-map-info {
+  display: flex;
+  max-height: min(17rem, 39dvh);
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--card);
+  color: var(--card-foreground);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  white-space: normal;
+}
+.cafe-map-info-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.cafe-map-info-close {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: none;
+  place-items: center;
+  border-radius: 0.5rem;
+  color: var(--foreground);
+}
+.cafe-map-info-close:hover {
+  background: var(--accent);
+}
+.cafe-map-info-close svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.cafe-map-info-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.cafe-map-info-obscured,
+.explore-map div:has(> div > .cafe-map-info-obscured) {
+  visibility: hidden;
+}
+.cafe-label-measurement {
+  position: absolute;
+  inset: 0 auto auto 0;
+  display: flex;
+  width: max-content;
+  flex-direction: column;
+  align-items: start;
+  visibility: hidden;
+  pointer-events: none;
+}
+.cafe-marker-label {
+  display: block;
+  width: max-content;
+  max-width: 9rem;
+  overflow: hidden;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.explore-location-toast,
+.explore-location-error {
+  position: absolute;
+  z-index: 24;
+  top: var(--explore-location-top);
+  left: 50%;
+  width: max-content;
+  max-width: min(
+    23rem,
+    calc(100% - var(--explore-left) - var(--explore-right))
+  );
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--background);
+  font-size: 0.8125rem;
+  transform: translateX(-50%);
+  box-shadow: 0 4px 16px rgb(23 54 41 / 10%);
+}
+
+.explore-location-toast {
+  width: 19rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  pointer-events: none;
+  text-align: center;
+  word-break: keep-all;
+}
+
+.explore-location-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  max-height: max(
+    4.5rem,
+    calc(100dvh - var(--explore-panel-bottom) - var(--explore-panel-top))
+  );
+  overflow-y: auto;
+  border-color: var(--destructive);
+}
+
+/* 지역 선택은 업종·패널과 독립적인 지도 공통 도구로 배치합니다. */
+.region-filter {
+  position: absolute;
+  z-index: 32;
+  top: var(--explore-filter-top);
+  right: var(--explore-right);
+}
+.region-filter > [data-slot='button'] {
+  height: 2.75rem;
+  max-width: var(--explore-filter-max-width);
+  background: var(--background);
+  box-shadow: var(--shadow-control);
+}
+.region-filter > [aria-expanded='true'] {
+  background: var(--accent);
+  border-color: var(--primary);
+  color: var(--accent-foreground);
+}
+.region-filter-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.region-filter-controls {
+  position: absolute;
+  top: calc(var(--explore-filter-body-top) - var(--explore-filter-top));
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  width: min(24rem, calc(100vw - var(--explore-left) - var(--explore-right)));
+  max-height: calc(
+    min(100dvh, var(--explore-overlay-height)) - var(--explore-panel-bottom) -
+      var(--explore-filter-body-top)
+  );
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+  background: var(--background);
+  box-shadow: var(--shadow-popover);
+  scrollbar-width: thin;
+}
+.region-filter-controls[hidden] {
+  display: none;
+}
+.region-filter-controls > :not(.region-filter-choices) {
+  flex: none;
+}
+.region-filter-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 1rem;
+  font-weight: 650;
+}
+.region-filter-current {
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--muted);
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.region-filter-steps {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.region-filter-city {
+  margin-inline-end: 0.25rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+.region-filter-steps button,
+.region-filter-back button {
+  min-height: 2.75rem;
+}
+.region-filter-steps button[aria-current='step'],
+.region-filter-choices > button[aria-pressed='true'] {
+  border-color: var(--control-border);
+  background: var(--accent);
+  color: var(--accent-foreground);
+  font-weight: 650;
+}
+.region-filter-choices > button[aria-pressed='true']:hover {
+  border-color: var(--ring);
+}
+.region-filter-choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-content: start;
+  gap: 0.25rem;
+  min-height: min(5.875rem, 100%);
+  max-height: 18rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.25rem;
+  scrollbar-width: thin;
+}
+.region-filter-choices > [data-slot='button'] {
+  justify-content: space-between;
+  height: auto;
+  min-height: 2.75rem;
+  padding-inline: 0.5rem;
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.region-filter-choices > button:focus-visible {
+  outline-offset: 0;
+}
+@media (width < 28rem) {
+  .region-filter-choices {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.region-filter-error {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 0.5rem;
+  color: var(--muted-foreground);
+}
+
+.explore-map-controls {
+  top: var(--explore-controls-top);
+  right: var(--explore-right);
+  flex-direction: row;
+  gap: 0;
+  padding: 0.125rem;
+  border: 1px solid var(--control-border);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-control);
+}
+
+.explore-map-controls button + button {
+  border-inline-start: 1px solid var(--border);
+}
+
+.explore-map-notice {
+  top: var(--explore-panel-top);
+  bottom: var(--explore-panel-bottom);
+  pointer-events: none;
+}
+
+.explore-map-notice [role='alert'] {
+  pointer-events: auto;
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.explore-app:has(.explore-panel-shell[data-open='true'])
+  .explore-map-notice
+  [role='alert'] {
+  padding: 0.75rem;
+  gap: 0.5rem;
+}
+
+@media (width < 48rem) {
+  .explore-app [data-slot='button']:not([data-size='navigation']) {
+    min-height: 2.75rem;
+  }
+  .explore-app .explore-search-form [data-slot='button'] {
+    min-height: 2.375rem;
+  }
+}
+
+@media (width >= 34rem) {
+  .explore-search {
+    right: auto;
+    width: min(
+      var(--explore-search-max-width),
+      calc(100vw - var(--explore-left) - var(--explore-right) - 16.5rem)
+    );
+  }
+  .explore-app {
+    --explore-controls-top: calc(var(--explore-top) + 3.75rem);
+    --explore-filter-top: var(--explore-top);
+  }
+}
+
+@media (width < 64rem) {
+  .explore-app {
+    --explore-top: calc(
+      max(0.75rem, env(safe-area-inset-top)) + var(--explore-viewport-top, 0px)
+    );
+    --explore-visible-end: var(--explore-viewport-end, 100dvh);
+    --explore-sheet-limit: min(
+      55dvh,
+      var(--explore-sheet-obstacle-limit, 100dvh)
+    );
+  }
+  .explore-dock {
+    bottom: calc(var(--explore-bottom) + var(--explore-viewport-bottom, 0px));
+  }
+  .explore-panel-shell {
+    bottom: calc(
+      var(--explore-panel-bottom) + var(--explore-viewport-bottom, 0px)
+    );
+  }
+  .explore-app[data-compact-keyboard] {
+    --explore-panel-top: calc(var(--explore-filter-top) + 3.25rem);
+  }
+  .explore-panel {
+    --explore-sheet-maximum: min(
+      var(--explore-panel-clear-height),
+      var(--explore-sheet-obstacle-limit, 100dvh)
+    );
+    --explore-sheet-minimum: min(9rem, var(--explore-sheet-maximum));
+    --explore-sheet-middle: var(--explore-panel-available-height);
+    max-height: var(--explore-sheet-maximum);
+  }
+  .explore-panel-shell:is([data-sheet-level], [data-size-transition='sheet'])
+    .explore-panel {
+    --explore-sheet-active-limit: var(--explore-sheet-maximum);
+  }
+  .explore-app:has(.explore-panel-shell[data-size-transition='sheet'])
+    .cafe-map-info,
+  .explore-app:has(.explore-panel-shell[data-size-transition='sheet'])
+    .explore-map
+    div:has(> div > .cafe-map-info) {
+    visibility: hidden;
+  }
+  .explore-panel-shell[data-sheet-level='minimum'] .explore-panel {
+    --explore-sheet-selected-height: var(--explore-sheet-minimum);
+  }
+  .explore-panel-shell[data-sheet-level='middle'] .explore-panel {
+    --explore-sheet-selected-height: var(--explore-sheet-middle);
+  }
+  .explore-panel-shell[data-sheet-level='maximum'] .explore-panel {
+    --explore-sheet-selected-height: var(--explore-sheet-maximum);
+  }
+  .explore-sheet-handle {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    display: grid;
+    width: 3.5rem;
+    height: 2.75rem;
+    justify-items: center;
+    align-items: start;
+    padding-top: 0.5rem;
+    border-radius: 0.5rem;
+    translate: -50% 0;
+    touch-action: none;
+    cursor: ns-resize;
+    user-select: none;
+  }
+  .explore-sheet-handle:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+  .explore-sheet-handle[aria-disabled='true'] {
+    cursor: default;
+  }
+  .explore-sheet-handle span {
+    width: 1.75rem;
+    height: 0.3125rem;
+    border-radius: 999px;
+    background: var(--muted-foreground);
+  }
+  .explore-sheet-handle:not([aria-disabled='true']):is(:hover, :focus-visible)
+    span {
+    background: var(--primary);
+  }
+  .explore-sheet-probes {
+    position: absolute;
+    display: block;
+    width: 0;
+    height: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .explore-sheet-probes span {
+    position: absolute;
+  }
+  [data-sheet-size='minimum'] {
+    height: var(--explore-sheet-minimum);
+  }
+  [data-sheet-size='middle'] {
+    height: var(--explore-sheet-middle);
+  }
+  [data-sheet-size='maximum'] {
+    height: var(--explore-sheet-maximum);
+  }
+  .explore-app:has(.region-filter[data-open='true']) .explore-location-toast {
+    clip-path: inset(50%);
+  }
+  .explore-app:has(.region-filter[data-open='true']) {
+    --explore-panel-filter-limited: 1;
+  }
+  .explore-app:has(.explore-panel-shell[data-open='true'])
+    .region-filter-controls {
+    max-height: calc(
+      var(--explore-visible-end) - var(--explore-panel-bottom) -
+        var(--explore-filter-body-top) - var(--explore-panel-available-height) -
+        0.5rem
+    );
+  }
+  .explore-app:has(.region-filter[data-open='true']):has(
+      .explore-location-error
+    ) {
+    --explore-filter-body-top: calc(
+      var(--explore-location-top) + var(--explore-filter-error-height) + 0.5rem
+    );
+  }
+  .explore-app:has(
+    [data-picking='true'],
+    .explore-search:focus-within,
+    .explore-search-results,
+    .region-filter[data-open='true'],
+    .explore-map-notice [role='alert'],
+    .explore-location-error
+  ),
+  .explore-app:not([data-cafe-detail]):has(.explore-location-toast) {
+    --explore-sheet-obstacle-limit: min(36dvh, 12rem);
+  }
+  .explore-app:has(.explore-panel-shell[data-open='true']) .explore-map-notice {
+    bottom: calc(var(--explore-panel-bottom) + var(--explore-sheet-limit));
+  }
+  .explore-app:has(.explore-panel-shell[data-open='true'])
+    .explore-location-error {
+    max-height: max(
+      3rem,
+      calc(
+        100dvh - var(--explore-panel-top) - var(--explore-panel-bottom) -
+          var(--explore-sheet-limit)
+      )
+    );
+  }
+  .explore-app:has(.region-filter[data-open='true']) .explore-location-error {
+    max-height: var(--explore-filter-error-height);
+  }
+  .explore-app:has(.explore-panel-shell[data-open='true'])
+    .explore-search-results {
+    max-height: max(
+      5rem,
+      min(
+        calc(
+          var(--explore-overlay-height) - var(--explore-panel-top) -
+            var(--explore-bottom)
+        ),
+        calc(
+          100dvh - var(--explore-panel-top) - var(--explore-panel-bottom) -
+            var(--explore-sheet-limit) - 0.5rem
+        )
+      )
+    );
+  }
+}
+
+@media (width < 64rem) and (height <= 32rem) {
+  .explore-app {
+    --explore-dock-height: 3.25rem;
+  }
+  .cafe-map-info:has(.cafe-map-info-close) {
+    max-height: 24dvh;
+  }
+  .explore-dock [data-slot='button'] {
+    padding-block: 0.125rem;
+  }
+}
+
+@media (width < 28rem) and (height <= 38rem) {
+  .explore-app {
+    --explore-filter-error-height: 4.75rem;
+  }
+  .explore-app:is([data-cafe-detail], :has(.region-filter[data-open='true']))
+    .explore-location-error {
+    flex-wrap: nowrap;
+  }
+  .cafe-map-info:has(.cafe-map-info-close) {
+    max-height: 22dvh;
+  }
+  .explore-app:has(.explore-location-error) .region-filter-controls {
+    gap: 0.375rem;
+    padding: 0.5rem;
+  }
+  .explore-app:has(.explore-location-error) .region-filter-current {
+    padding-block: 0.375rem;
+  }
+  .explore-app:has(.explore-location-error) .region-filter-choices {
+    min-height: 3.25rem;
+  }
+}
+
+.explore-app[data-compact-keyboard] .explore-search:focus-within {
+  z-index: 34;
+}
+
+.explore-app[data-compact-keyboard]
+  .explore-search:focus-within
+  .explore-search-results {
+  top: calc(100% + 0.5rem);
+  max-height: max(
+    3rem,
+    calc(var(--explore-overlay-height) - var(--explore-top) - 4rem)
+  );
+}
+
+@media (width >= 64rem) {
+  .explore-app {
+    --explore-top: max(1rem, env(safe-area-inset-top));
+    --explore-panel-top: calc(
+      var(--explore-top) + var(--explore-toolbar-height) + 0.875rem
+    );
+    --explore-sheet-limit: var(--explore-overlay-height);
+    --explore-filter-body-top: calc(
+      var(--explore-filter-top) + var(--explore-toolbar-height) + 0.5rem
+    );
+    --explore-location-inset-left: calc(
+      var(--explore-search-left) + var(--explore-search-max-width) + 0.75rem
+    );
+    --explore-location-inset-right: calc(
+      var(--explore-right) + var(--explore-filter-max-width) + 0.75rem
+    );
+    --explore-location-width: min(
+      28rem,
+      calc(
+        100% - var(--explore-location-inset-left) -
+          var(--explore-location-inset-right)
+      )
+    );
+  }
+  .explore-panel-shell {
+    width: min(
+      var(--explore-panel-max-width, 924px),
+      calc(
+        100% - 2 * max(var(--explore-left), calc(var(--explore-right) + 4rem))
+      )
+    );
+  }
+  .explore-panel-shell[data-compact='true'] {
+    --explore-panel-max-width: 520px;
+  }
+  .explore-app:has([data-picking='true']) {
+    --explore-sheet-limit: min(36dvh, 12rem);
+  }
+  .explore-search-results,
+  .explore-search-error {
+    top: calc(100% + 0.5rem);
+    max-height: min(
+      34rem,
+      calc(
+        var(--explore-overlay-height) - var(--explore-panel-top) -
+          var(--explore-bottom)
+      )
+    );
+  }
+  .explore-map-controls {
+    top: auto;
+    bottom: var(--explore-bottom);
+    flex-direction: column;
+  }
+  .explore-map-controls button + button {
+    border-inline-start: 0;
+    border-top: 1px solid var(--border);
+  }
+  .explore-location-toast,
+  .explore-location-error {
+    top: calc(var(--explore-filter-top) + var(--explore-toolbar-height) / 2);
+    /* 검색창과 가장 넓은 지역 필터 사이에서 가능한 한 화면 중앙을 유지합니다. */
+    left: clamp(
+      calc(
+        var(--explore-location-inset-left) + var(--explore-location-width) / 2
+      ),
+      50%,
+      calc(
+        100% - var(--explore-location-inset-right) -
+          var(--explore-location-width) / 2
+      )
+    );
+    width: max-content;
+    max-width: var(--explore-location-width);
+    padding: 0.5rem 0.75rem;
+    transform: translate(-50%, -50%);
+  }
+  .explore-location-error {
+    flex-wrap: nowrap;
+  }
+  .explore-app:has(.explore-map-notice [role='alert']) {
+    --explore-panel-top: calc(var(--explore-top) + 12rem);
+  }
+  .explore-app:has(.explore-location-error) {
+    --explore-panel-top: calc(
+      var(--explore-top) + var(--explore-toolbar-height) + 1.5rem
+    );
+  }
+  .explore-app:has(.explore-panel-shell[data-open='true']) .explore-map-notice {
+    top: calc(var(--explore-top) + 3.75rem);
+    right: var(--explore-right);
+    bottom: auto;
+    left: auto;
+    width: min(24rem, 45vw);
+    max-height: 8rem;
+    padding: 0;
+  }
+  .explore-app:has(.explore-panel-shell[data-open='true'])
+    .explore-location-error {
+    max-height: 8rem;
+  }
+  .region-filter > [data-slot='button'] {
+    height: var(--explore-toolbar-height);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .explore-home {
+    transition: none;
+    translate: none;
+  }
+}
+
+/* 클러스터 숫자는 SDK가 전달한 현재 마커 개수이며 일반 카페 핀과 구분합니다. */
+.explore-app .cafe-cluster-button {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--action);
+  color: var(--action-foreground);
+  box-shadow: inset 0 0 0 1px var(--primary);
+  font: 700 0.9375rem/1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.explore-app .cafe-cluster-button:hover {
+  background: var(--action-hover);
+}
+.explore-app .cafe-cluster-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
